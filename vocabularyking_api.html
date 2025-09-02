@@ -84,6 +84,26 @@
             color: #6c757d; 
             margin-top: 10px; 
         }
+        .api-input-container {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            margin-top: 10px;
+        }
+        .api-paste-btn {
+            width: auto !important;
+            padding: 8px 12px !important;
+            font-size: 14px;
+            background-color: #17a2b8;
+            margin-top: 0 !important;
+        }
+        .api-paste-btn:hover {
+            background-color: #138496;
+        }
+        #gemini-api-key {
+            flex: 1;
+            margin-top: 0 !important;
+        }
         .voice-controls { 
             margin: 15px 0; 
             padding: 15px; 
@@ -154,7 +174,10 @@
                     <input type="checkbox" id="enable-ai-api">
                     <label for="enable-ai-api">啟用 AI 生成例句與翻譯</label>
                 </div>
-                <input type="text" id="gemini-api-key" placeholder="請輸入你的 Google Gemini API Key" class="hidden">
+                <div class="api-input-container">
+                    <input type="text" id="gemini-api-key" placeholder="請輸入你的 Google Gemini API Key" class="hidden">
+                    <button type="button" id="paste-api-key" class="hidden api-paste-btn">📋 貼上 API Key</button>
+                </div>
                 <p>
                     <a href="https://aistudio.google.com/app/apikey" target="_blank">如何取得 API Key？</a>
                 </p>
@@ -7214,6 +7237,7 @@
             // API 設定
             document.getElementById('enable-ai-api').addEventListener('change', toggleAPIInput);
             document.getElementById('logout-button').addEventListener('click', logout);
+            document.getElementById('paste-api-key').addEventListener('click', pasteAPIKey);
             
             // 語音控制
             document.getElementById('speech-rate').addEventListener('input', updateSpeechRate);
@@ -7278,7 +7302,48 @@
         function toggleAPIInput() {
             const checkbox = document.getElementById('enable-ai-api');
             const input = document.getElementById('gemini-api-key');
-            input.classList.toggle('hidden', !checkbox.checked);
+            const pasteBtn = document.getElementById('paste-api-key');
+            
+            if (checkbox.checked) {
+                input.classList.remove('hidden');
+                pasteBtn.classList.remove('hidden');
+            } else {
+                input.classList.add('hidden');
+                pasteBtn.classList.add('hidden');
+            }
+        }
+
+        async function pasteAPIKey() {
+            const input = document.getElementById('gemini-api-key');
+            
+            try {
+                // 嘗試使用現代瀏覽器的 Clipboard API
+                if (navigator.clipboard && navigator.clipboard.readText) {
+                    const text = await navigator.clipboard.readText();
+                    if (text.trim()) {
+                        input.value = text.trim();
+                        input.focus();
+                        console.log('API Key 已成功貼上');
+                        return;
+                    }
+                }
+                
+                // 提供手動貼上指示
+                alert('請手動貼上 API Key：' + String.fromCharCode(10) + String.fromCharCode(10) + '1. 長按輸入框' + String.fromCharCode(10) + '2. 選擇「貼上」' + String.fromCharCode(10) + '3. 或使用鍵盤快捷鍵');
+                input.focus();
+                input.select();
+                
+            } catch (error) {
+                console.warn('自動貼上失敗:', error);
+                // 提供手動貼上指示
+                alert('手機貼上小技巧：' + String.fromCharCode(10) + String.fromCharCode(10) + '1. 長按下方輸入框' + String.fromCharCode(10) + '2. 選擇「貼上」選項' + String.fromCharCode(10) + '3. 或嘗試雙擊輸入框後貼上');
+                input.focus();
+                
+                // 嘗試觸發選擇
+                setTimeout(() => {
+                    input.select();
+                }, 100);
+            }
         }
 
         function logout() {
@@ -7454,7 +7519,7 @@
                 }
             });
             
-            // 隱藏所有結果元素
+            // 隱藏所有結果元素和按鈕
             const hideElements = ['example-sentence', 'example-translation', 'correct-answer-display', 'next-question-countdown', 'next-question-btn'];
             hideElements.forEach(id => {
                 const element = document.getElementById(id);
@@ -7464,6 +7529,16 @@
                     console.warn('重置UI時找不到元素:', id);
                 }
             });
+            
+            // 特別處理下一題按鈕 - 確保完全重置
+            const nextBtn = document.getElementById('next-question-btn');
+            if (nextBtn) {
+                nextBtn.classList.add('hidden');
+                nextBtn.textContent = '下一題';  // 重置按鈕文字
+                nextBtn.style.display = '';     // 清除inline樣式
+                nextBtn.style.visibility = '';  // 清除inline樣式
+                console.log('下一題按鈕已重置和隱藏');
+            }
             
             // 重置狀態變數
             isCorrectAnswer = false;
@@ -7647,6 +7722,7 @@
         }
 
         function goToNextQuestion() {
+            // 清理倒數計時器
             if (nextQuestionTimer) {
                 clearInterval(nextQuestionTimer);
                 nextQuestionTimer = null;
@@ -7657,7 +7733,10 @@
             const nextBtn = document.getElementById('next-question-btn');
             
             if (countdownElement) countdownElement.classList.add('hidden');
-            if (nextBtn) nextBtn.classList.add('hidden');
+            if (nextBtn) {
+                nextBtn.classList.add('hidden');
+                console.log('進入下一題時隱藏按鈕');
+            }
             
             isCorrectAnswer = false;
             currentQuestionIndex++;
@@ -7698,12 +7777,12 @@
             }
             
             try {
-                const prompt = "請為這個英文單字提供一個例句，並附上中文翻譯，格式為：\n英文例句: [例句內容]\n中文翻譯: [中文翻譯內容]\n單字: " + word;
-                const result = await getGeminiContent(prompt, geminiAPIKey);
+                var prompt = "請為這個英文單字提供一個例句，並附上中文翻譯，格式為：" + String.fromCharCode(10) + "英文例句: [例句內容]" + String.fromCharCode(10) + "中文翻譯: [中文翻譯內容]" + String.fromCharCode(10) + "單字: " + word;
+                var result = await getGeminiContent(prompt, geminiAPIKey);
                 
                 if (result) {
-                    const exampleMatch = result.match(/英文例句: (.*)/);
-                    const translationMatch = result.match(/中文翻譯: (.*)/);
+                    var exampleMatch = result.match(/英文例句: (.*)/);
+                    var translationMatch = result.match(/中文翻譯: (.*)/);
                     if (exampleMatch && translationMatch) {
                         return {
                             example: exampleMatch[1].trim(),
