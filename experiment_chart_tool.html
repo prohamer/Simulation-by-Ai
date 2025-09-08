@@ -1,0 +1,1028 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>實驗數據圖表工具</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Microsoft JhengHei', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            overflow: hidden;
+        }
+
+        .section {
+            margin: 20px;
+            padding: 20px;
+            border: 2px solid #e1f5fe;
+            border-radius: 10px;
+            background: #f8fbff;
+            position: relative;
+        }
+
+        .section-title {
+            display: flex;
+            align-items: center;
+            font-size: 18px;
+            font-weight: bold;
+            color: #1976d2;
+            margin-bottom: 15px;
+        }
+
+        .section-title::before {
+            content: "";
+            width: 20px;
+            height: 20px;
+            margin-right: 10px;
+            background-size: contain;
+        }
+
+        .axis-section .section-title::before {
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='%231976d2' viewBox='0 0 24 24'%3E%3Cpath d='M9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4zm2.5 2.25l1.25-1.25L12 9.5 9.5 12 3.75 6.25 2.5 7.5 9.5 14.5l2.5-2.5 8.5 8.5z'/%3E%3C/svg%3E");
+        }
+
+        .experiment-section .section-title::before {
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='%23388e3c' viewBox='0 0 24 24'%3E%3Cpath d='M9.4 16.6L4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0L19.2 12l-4.6-4.6L16 6l6 6-6 6-1.4-1.4z'/%3E%3C/svg%3E");
+        }
+
+        .data-section .section-title::before {
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='%23f57c00' viewBox='0 0 24 24'%3E%3Cpath d='M3 3v18h18V3H3zm16 16H5V5h14v14zm-8-2h2v-4h4v-2h-4V7h-2v4H7v2h4v4z'/%3E%3C/svg%3E");
+        }
+
+        .chart-section .section-title::before {
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='%237b1fa2' viewBox='0 0 24 24'%3E%3Cpath d='M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z'/%3E%3C/svg%3E");
+        }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        label {
+            font-weight: bold;
+            margin-bottom: 5px;
+            color: #333;
+        }
+
+        input[type="text"], input[type="number"] {
+            padding: 10px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        input[type="text"]:focus, input[type="number"]:focus {
+            outline: none;
+            border-color: #2196f3;
+        }
+
+        .experiment-group {
+            background: white;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 10px;
+        }
+
+        .experiment-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 10px;
+        }
+
+        .group-name {
+            font-weight: bold;
+            cursor: pointer;
+            padding: 5px 10px;
+            border-radius: 5px;
+            transition: background-color 0.3s;
+        }
+
+        .group-name:hover {
+            background-color: #f0f0f0;
+        }
+
+        .color-picker {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .color-swatch {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 2px solid #ddd;
+        }
+
+        .point-style {
+            padding: 5px 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background: white;
+            cursor: pointer;
+        }
+
+        .delete-group {
+            background: #f44336;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        .delete-group:hover {
+            background: #d32f2f;
+        }
+
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+
+        .data-table th {
+            background: linear-gradient(135deg, #42a5f5, #1e88e5);
+            color: white;
+            padding: 12px;
+            text-align: center;
+            border-right: 1px solid rgba(255,255,255,0.3);
+        }
+
+        .data-table th:first-child {
+            background: #37474f;
+        }
+
+        .data-table td {
+            padding: 8px;
+            text-align: center;
+            border: 1px solid #ddd;
+        }
+
+        .data-table input {
+            width: 100%;
+            padding: 5px;
+            border: none;
+            text-align: center;
+            background: transparent;
+        }
+
+        .data-table input:focus {
+            background: #fff3e0;
+            outline: 2px solid #ff9800;
+            border-radius: 3px;
+        }
+
+        .control-buttons {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-top: 15px;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #2196f3, #1976d2);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(33, 150, 243, 0.4);
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #4caf50, #388e3c);
+            color: white;
+        }
+
+        .btn-success:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(76, 175, 80, 0.4);
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, #f44336, #d32f2f);
+            color: white;
+        }
+
+        .btn-purple {
+            background: linear-gradient(135deg, #9c27b0, #7b1fa2);
+            color: white;
+        }
+
+        .btn-purple:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(156, 39, 176, 0.4);
+        }
+
+        .chart-controls {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            border: 1px solid #dee2e6;
+        }
+
+        .toggle-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .toggle-group select {
+            padding: 8px 12px;
+            border-radius: 6px;
+            border: 2px solid #ddd;
+            background: white;
+            font-size: 14px;
+            min-width: 180px;
+            cursor: pointer;
+            transition: border-color 0.3s;
+        }
+
+        .toggle-group select:focus {
+            outline: none;
+            border-color: #2196f3;
+        }
+
+        .toggle {
+            position: relative;
+            width: 50px;
+            height: 25px;
+            background: #ccc;
+            border-radius: 25px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        .toggle.active {
+            background: #2196f3;
+        }
+
+        .toggle::after {
+            content: '';
+            position: absolute;
+            width: 21px;
+            height: 21px;
+            background: white;
+            border-radius: 50%;
+            top: 2px;
+            left: 2px;
+            transition: transform 0.3s;
+        }
+
+        .toggle.active::after {
+            transform: translateX(25px);
+        }
+
+        .chart-container {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .formula-display {
+            background: #f5f5f5;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 15px;
+            font-family: 'Courier New', monospace;
+        }
+
+        .formula-group {
+            margin-bottom: 10px;
+            padding: 10px;
+            background: white;
+            border-radius: 5px;
+            border-left: 4px solid #2196f3;
+        }
+
+        .editable {
+            background: rgba(255, 235, 59, 0.3);
+            padding: 2px 4px;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+
+        .editable:hover {
+            background: rgba(255, 235, 59, 0.5);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 座標軸設定 -->
+        <div class="section axis-section">
+            <div class="section-title">📊 座標軸設定</div>
+            <div class="form-grid">
+                <div class="form-group">
+                    <label for="xAxisName">X軸名稱</label>
+                    <input type="text" id="xAxisName" name="xAxisName" value="X軸" placeholder="輸入X軸名稱" onchange="updateChart()">
+                </div>
+                <div class="form-group">
+                    <label for="xAxisMin">X軸最小值</label>
+                    <input type="number" id="xAxisMin" name="xAxisMin" value="0" onchange="updateChart()">
+                </div>
+                <div class="form-group">
+                    <label for="xAxisMax">X軸最大值</label>
+                    <input type="number" id="xAxisMax" name="xAxisMax" value="100" onchange="updateChart()">
+                </div>
+                <div class="form-group">
+                    <label for="yAxisName">Y軸名稱</label>
+                    <input type="text" id="yAxisName" name="yAxisName" value="Y軸" placeholder="輸入Y軸名稱" onchange="updateChart()">
+                </div>
+                <div class="form-group">
+                    <label for="yAxisMin">Y軸最小值</label>
+                    <input type="number" id="yAxisMin" name="yAxisMin" value="0" onchange="updateChart()">
+                </div>
+                <div class="form-group">
+                    <label for="yAxisMax">Y軸最大值</label>
+                    <input type="number" id="yAxisMax" name="yAxisMax" value="100" onchange="updateChart()">
+                </div>
+            </div>
+        </div>
+
+        <!-- 實驗組別管理 -->
+        <div class="section experiment-section">
+            <div class="section-title">🧪 實驗組別管理</div>
+            <div id="experimentGroups">
+                <!-- 實驗組會動態生成 -->
+            </div>
+            <button class="btn btn-primary" onclick="addExperimentGroup()">
+                ➕ 新增實驗組
+            </button>
+        </div>
+
+        <!-- 數據輸入 -->
+        <div class="section data-section">
+            <div class="section-title">📝 數據輸入</div>
+            <table class="data-table" id="dataTable">
+                <!-- 表格會動態生成 -->
+            </table>
+            <div class="control-buttons">
+                <button class="btn btn-success" onclick="addDataPoint()">➕ 新增數據點</button>
+                <button class="btn btn-danger" onclick="removeDataColumn()">➖ 刪除實驗組</button>
+                <button class="btn btn-purple" onclick="generateChart()">📊 生成圖表</button>
+            </div>
+        </div>
+
+        <!-- 圖表控制 -->
+        <div class="section chart-section">
+            <div class="section-title">📈 圖表控制</div>
+            <div class="chart-controls">
+                <div class="toggle-group">
+                    <span id="trendLineLabel">顯示迴歸直線：</span>
+                    <div class="toggle" id="trendLineToggle" onclick="toggleTrendLine()"></div>
+                </div>
+                <div class="toggle-group">
+                    <span>顯示公式：</span>
+                    <div class="toggle" id="formulaToggle" onclick="toggleFormula()"></div>
+                </div>
+                <div class="toggle-group">
+                    <span><strong>圖表類型：</strong></span>
+                    <select id="chartType" name="chartType" onchange="changeChartType()">
+                        <option value="linear">📈 線性圖</option>
+                        <option value="semilogx">📊 半對數圖 (X軸對數)</option>
+                        <option value="semilogy">📉 半對數圖 (Y軸對數)</option>
+                        <option value="loglog">📋 雙對數圖</option>
+                    </select>
+                </div>
+                <button class="btn btn-purple" onclick="downloadChart()">💾 下載圖表</button>
+            </div>
+            
+            <div class="chart-container">
+                <canvas id="chart" width="800" height="400"></canvas>
+            </div>
+
+            <div id="formulaDisplay" class="formula-display" style="display: none;">
+                <h4>📐 回歸公式</h4>
+                <div id="formulaContent"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 全局變數宣告
+        let chart = null;
+        let experimentGroups = [];
+        let dataPoints = 5;
+        let showTrendLine = false;
+        let showFormula = false;
+        let chartType = 'linear';
+
+        // 顏色選項
+        const colors = [
+            '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FECA57',
+            '#FF9FF3', '#54A0FF', '#5F27CD', '#00D2D3', '#FF9F43',
+            '#A55EEA', '#26DE81', '#FD79A8', '#FDCB6E', '#6C5CE7'
+        ];
+
+        // 點樣式選項
+        const pointStyles = ['circle', 'rect', 'triangle', 'rectRot'];
+
+        // 初始化
+        function init() {
+            addExperimentGroup('實驗組 1', colors[0], 'circle');
+            updateTrendLineLabel();
+            updateDataTable();
+            generateChart();
+        }
+
+        // 新增實驗組
+        function addExperimentGroup(name = '', color = '', pointStyle = 'circle') {
+            const groupIndex = experimentGroups.length;
+            const groupName = name || `實驗組 ${groupIndex + 1}`;
+            const groupColor = color || colors[groupIndex % colors.length];
+            const groupPointStyle = pointStyle || pointStyles[groupIndex % pointStyles.length];
+            
+            const group = {
+                id: Date.now() + groupIndex,
+                name: groupName,
+                color: groupColor,
+                pointStyle: groupPointStyle,
+                data: Array(dataPoints).fill('')
+            };
+            
+            experimentGroups.push(group);
+            renderExperimentGroups();
+            updateDataTable();
+        }
+
+        // 渲染實驗組
+        function renderExperimentGroups() {
+            const container = document.getElementById('experimentGroups');
+            container.innerHTML = '';
+
+            experimentGroups.forEach((group, index) => {
+                const groupDiv = document.createElement('div');
+                groupDiv.className = 'experiment-group';
+                groupDiv.innerHTML = `
+                    <div class="experiment-header">
+                        <span class="group-name editable" onclick="editGroupName(${index})">${group.name} (點擊編輯名稱)</span>
+                        <div class="color-picker">
+                            <div class="color-swatch" style="background-color: ${group.color}" onclick="changeGroupColor(${index})"></div>
+                            <select class="point-style" name="pointStyle_${index}" onchange="changePointStyle(${index}, this.value)">
+                                <option value="circle" ${group.pointStyle === 'circle' ? 'selected' : ''}>圓形</option>
+                                <option value="rect" ${group.pointStyle === 'rect' ? 'selected' : ''}>方形</option>
+                                <option value="triangle" ${group.pointStyle === 'triangle' ? 'selected' : ''}>三角形</option>
+                                <option value="rectRot" ${group.pointStyle === 'rectRot' ? 'selected' : ''}>菱形</option>
+                            </select>
+                            ${experimentGroups.length > 1 ? `<button class="delete-group" onclick="removeExperimentGroup(${index})">刪除</button>` : ''}
+                        </div>
+                    </div>
+                `;
+                container.appendChild(groupDiv);
+            });
+        }
+
+        // 編輯組別名稱
+        function editGroupName(index) {
+            const newName = prompt('請輸入新的組別名稱:', experimentGroups[index].name);
+            if (newName && newName.trim()) {
+                experimentGroups[index].name = newName.trim();
+                renderExperimentGroups();
+                updateDataTable();
+                generateChart();
+            }
+        }
+
+        // 更改組別顏色
+        function changeGroupColor(index) {
+            const input = document.createElement('input');
+            input.type = 'color';
+            input.value = experimentGroups[index].color;
+            input.onchange = function() {
+                experimentGroups[index].color = this.value;
+                renderExperimentGroups();
+                generateChart();
+            };
+            input.click();
+        }
+
+        // 更改點樣式
+        function changePointStyle(index, style) {
+            experimentGroups[index].pointStyle = style;
+            generateChart();
+        }
+
+        // 移除實驗組
+        function removeExperimentGroup(index) {
+            if (experimentGroups.length > 1) {
+                experimentGroups.splice(index, 1);
+                renderExperimentGroups();
+                updateDataTable();
+                generateChart();
+            }
+        }
+
+        // 更新數據表格
+        function updateDataTable() {
+            const table = document.getElementById('dataTable');
+            table.innerHTML = '';
+
+            // 創建表頭
+            const headerRow = table.insertRow();
+            headerRow.insertCell().innerHTML = '<strong>實驗組列</strong>';
+            for (let i = 0; i < dataPoints; i++) {
+                headerRow.insertCell().innerHTML = `<strong>數據點 ${i + 1}</strong>`;
+            }
+
+            // X軸數值行
+            const xRow = table.insertRow();
+            const xHeaderCell = xRow.insertCell();
+            xHeaderCell.innerHTML = '<span class="editable" onclick="editXAxisLabel()">X軸數值<br>(操縱變因)</span>';
+            xHeaderCell.style.cursor = 'pointer';
+            for (let i = 0; i < dataPoints; i++) {
+                const cell = xRow.insertCell();
+                cell.innerHTML = `<input type="number" id="x_${i}" name="x_${i}" value="${10 + i * 10}" onchange="updateChart()">`;
+            }
+
+            // 各實驗組行
+            experimentGroups.forEach((group, groupIndex) => {
+                const row = table.insertRow();
+                const nameCell = row.insertCell();
+                nameCell.innerHTML = `<span class="editable" onclick="editGroupNameInTable(${groupIndex})">${group.name}</span>`;
+                nameCell.style.backgroundColor = group.color;
+                nameCell.style.color = 'white';
+                nameCell.style.fontWeight = 'bold';
+                nameCell.style.cursor = 'pointer';
+
+                for (let i = 0; i < dataPoints; i++) {
+                    const cell = row.insertCell();
+                    cell.innerHTML = `<input type="number" id="y_${groupIndex}_${i}" name="y_${groupIndex}_${i}" value="${group.data[i]}" onchange="updateGroupData(${groupIndex}, ${i}, this.value)">`;
+                }
+            });
+        }
+
+        // 編輯組別名稱（在表格中）
+        function editGroupNameInTable(index) {
+            editGroupName(index);
+        }
+
+        // 編輯X軸標籤
+        function editXAxisLabel() {
+            const currentLabel = document.getElementById('xAxisName').value;
+            const newLabel = prompt('請輸入X軸名稱:', currentLabel);
+            if (newLabel && newLabel.trim()) {
+                document.getElementById('xAxisName').value = newLabel.trim();
+                updateDataTable();
+                generateChart();
+            }
+        }
+
+        // 更新組別數據
+        function updateGroupData(groupIndex, pointIndex, value) {
+            experimentGroups[groupIndex].data[pointIndex] = value;
+            if (showFormula) {
+                calculateAndDisplayFormulas();
+            }
+        }
+
+        // 新增數據點
+        function addDataPoint() {
+            dataPoints++;
+            experimentGroups.forEach(group => {
+                group.data.push('');
+            });
+            updateDataTable();
+            generateChart();
+        }
+
+        // 移除數據欄
+        function removeDataColumn() {
+            if (experimentGroups.length > 1) {
+                experimentGroups.pop();
+                renderExperimentGroups();
+                updateDataTable();
+                generateChart();
+            }
+        }
+
+        // 切換圖表類型
+        function changeChartType() {
+            chartType = document.getElementById('chartType').value;
+            updateTrendLineLabel();
+            generateChart();
+        }
+
+        // 更新趨勢線標籤
+        function updateTrendLineLabel() {
+            const label = document.getElementById('trendLineLabel');
+            if (!label) return;
+            
+            switch(chartType) {
+                case 'linear':
+                    label.textContent = '顯示迴歸直線：';
+                    break;
+                case 'semilogx':
+                    label.textContent = '顯示對數迴歸線：';
+                    break;
+                case 'semilogy':
+                    label.textContent = '顯示指數迴歸線：';
+                    break;
+                case 'loglog':
+                    label.textContent = '顯示冪次迴歸線：';
+                    break;
+                default:
+                    label.textContent = '顯示迴歸直線：';
+                    break;
+            }
+        }
+
+        // 切換趨勢線
+        function toggleTrendLine() {
+            showTrendLine = !showTrendLine;
+            document.getElementById('trendLineToggle').classList.toggle('active', showTrendLine);
+            generateChart();
+        }
+
+        // 切換公式顯示
+        function toggleFormula() {
+            showFormula = !showFormula;
+            document.getElementById('formulaToggle').classList.toggle('active', showFormula);
+            const formulaDisplay = document.getElementById('formulaDisplay');
+            formulaDisplay.style.display = showFormula ? 'block' : 'none';
+            if (showFormula) {
+                calculateAndDisplayFormulas();
+            }
+        }
+
+        // 生成圖表
+        function generateChart() {
+            const ctx = document.getElementById('chart').getContext('2d');
+            
+            // 獲取座標軸設定
+            const xAxisName = document.getElementById('xAxisName').value;
+            const yAxisName = document.getElementById('yAxisName').value;
+            const xMin = parseFloat(document.getElementById('xAxisMin').value);
+            const xMax = parseFloat(document.getElementById('xAxisMax').value);
+            const yMin = parseFloat(document.getElementById('yAxisMin').value);
+            const yMax = parseFloat(document.getElementById('yAxisMax').value);
+
+            // 準備數據
+            const datasets = [];
+
+            experimentGroups.forEach((group, index) => {
+                const xData = [];
+                const yData = [];
+
+                for (let i = 0; i < dataPoints; i++) {
+                    const xInput = document.getElementById(`x_${i}`);
+                    const yInput = document.getElementById(`y_${index}_${i}`);
+                    
+                    if (xInput && yInput && xInput.value && yInput.value) {
+                        let x = parseFloat(xInput.value);
+                        let y = parseFloat(yInput.value);
+                        
+                        // 對數轉換檢查 - 確保數值為正
+                        if ((chartType === 'semilogx' || chartType === 'loglog') && x <= 0) {
+                            continue;
+                        }
+                        if ((chartType === 'semilogy' || chartType === 'loglog') && y <= 0) {
+                            continue;
+                        }
+                        
+                        xData.push(x);
+                        yData.push(y);
+                    }
+                }
+
+                if (xData.length === 0) return;
+
+                const pointData = xData.map((x, i) => ({ x: x, y: yData[i] }));
+
+                // 主要數據集
+                datasets.push({
+                    label: group.name,
+                    data: pointData,
+                    backgroundColor: group.color,
+                    borderColor: group.color,
+                    pointStyle: group.pointStyle,
+                    pointRadius: 8,
+                    pointHoverRadius: 10,
+                    showLine: false,
+                    fill: false
+                });
+
+                // 趨勢線
+                if (showTrendLine && pointData.length > 1) {
+                    let regression;
+                    let trendData = [];
+                    
+                    if (chartType === 'linear') {
+                        regression = calculateLinearRegression(xData, yData);
+                        trendData = [
+                            { x: xMin, y: regression.slope * xMin + regression.intercept },
+                            { x: xMax, y: regression.slope * xMax + regression.intercept }
+                        ];
+                    } else if (chartType === 'semilogx') {
+                        const logXData = xData.map(x => Math.log10(x));
+                        regression = calculateLinearRegression(logXData, yData);
+                        const xValues = [];
+                        for (let x = Math.max(xMin, 0.1); x <= xMax; x *= 1.5) {
+                            xValues.push(x);
+                        }
+                        trendData = xValues.map(x => ({
+                            x: x,
+                            y: regression.slope * Math.log10(x) + regression.intercept
+                        }));
+                    } else if (chartType === 'semilogy') {
+                        const logYData = yData.map(y => Math.log10(y));
+                        regression = calculateLinearRegression(xData, logYData);
+                        trendData = [
+                            { x: xMin, y: Math.pow(10, regression.slope * xMin + regression.intercept) },
+                            { x: xMax, y: Math.pow(10, regression.slope * xMax + regression.intercept) }
+                        ];
+                    } else if (chartType === 'loglog') {
+                        const logXData = xData.map(x => Math.log10(x));
+                        const logYData = yData.map(y => Math.log10(y));
+                        regression = calculateLinearRegression(logXData, logYData);
+                        const xValues = [];
+                        for (let x = Math.max(xMin, 0.1); x <= xMax; x *= 1.5) {
+                            xValues.push(x);
+                        }
+                        trendData = xValues.map(x => ({
+                            x: x,
+                            y: Math.pow(10, regression.slope * Math.log10(x) + regression.intercept)
+                        }));
+                    }
+
+                    datasets.push({
+                        label: `${group.name} ${getTrendLineLabel()}`,
+                        data: trendData,
+                        borderColor: group.color,
+                        backgroundColor: 'transparent',
+                        borderDash: [5, 5],
+                        pointRadius: 0,
+                        showLine: true,
+                        fill: false
+                    });
+                }
+            });
+
+            // 銷毀舊圖表
+            if (chart) {
+                chart.destroy();
+            }
+
+            // 設定座標軸類型
+            const xAxisConfig = {
+                title: {
+                    display: true,
+                    text: xAxisName + (chartType === 'semilogx' || chartType === 'loglog' ? ' (對數尺度)' : ''),
+                    font: { size: 14, weight: 'bold' }
+                },
+                grid: {
+                    color: 'rgba(0,0,0,0.1)'
+                }
+            };
+
+            const yAxisConfig = {
+                title: {
+                    display: true,
+                    text: yAxisName + (chartType === 'semilogy' || chartType === 'loglog' ? ' (對數尺度)' : ''),
+                    font: { size: 14, weight: 'bold' }
+                },
+                grid: {
+                    color: 'rgba(0,0,0,0.1)'
+                }
+            };
+
+            // 根據圖表類型設定座標軸
+            if (chartType === 'semilogx' || chartType === 'loglog') {
+                xAxisConfig.type = 'logarithmic';
+                xAxisConfig.min = Math.max(xMin, 0.1);
+                xAxisConfig.max = xMax;
+            } else {
+                xAxisConfig.min = xMin;
+                xAxisConfig.max = xMax;
+            }
+
+            if (chartType === 'semilogy' || chartType === 'loglog') {
+                yAxisConfig.type = 'logarithmic';
+                yAxisConfig.min = Math.max(yMin, 0.1);
+                yAxisConfig.max = yMax;
+            } else {
+                yAxisConfig.min = yMin;
+                yAxisConfig.max = yMax;
+            }
+
+            // 創建新圖表
+            chart = new Chart(ctx, {
+                type: 'scatter',
+                data: { datasets: datasets },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: `實驗數據散佈圖 - ${getChartTypeLabel()}`,
+                            font: { size: 18, weight: 'bold' }
+                        },
+                        legend: {
+                            display: true,
+                            position: 'top'
+                        }
+                    },
+                    scales: {
+                        x: xAxisConfig,
+                        y: yAxisConfig
+                    },
+                    elements: {
+                        point: {
+                            borderWidth: 2
+                        }
+                    }
+                }
+            });
+
+            if (showFormula) {
+                calculateAndDisplayFormulas();
+            }
+        }
+
+        // 獲取趨勢線標籤
+        function getTrendLineLabel() {
+            switch(chartType) {
+                case 'linear': return '迴歸直線';
+                case 'semilogx': return '對數迴歸線';
+                case 'semilogy': return '指數迴歸線';
+                case 'loglog': return '冪次迴歸線';
+                default: return '迴歸直線';
+            }
+        }
+
+        // 獲取圖表類型標籤
+        function getChartTypeLabel() {
+            switch(chartType) {
+                case 'linear': return '線性圖';
+                case 'semilogx': return '半對數圖 (X軸對數)';
+                case 'semilogy': return '半對數圖 (Y軸對數)';
+                case 'loglog': return '雙對數圖';
+                default: return '線性圖';
+            }
+        }
+
+        // 計算線性回歸
+        function calculateLinearRegression(xData, yData) {
+            const n = xData.length;
+            const sumX = xData.reduce((a, b) => a + b, 0);
+            const sumY = yData.reduce((a, b) => a + b, 0);
+            const sumXY = xData.reduce((sum, x, i) => sum + x * yData[i], 0);
+            const sumXX = xData.reduce((sum, x) => sum + x * x, 0);
+
+            const slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
+            const intercept = (sumY - slope * sumX) / n;
+
+            // 計算 R²
+            const yMean = sumY / n;
+            const ssRes = yData.reduce((sum, y, i) => sum + Math.pow(y - (slope * xData[i] + intercept), 2), 0);
+            const ssTot = yData.reduce((sum, y) => sum + Math.pow(y - yMean, 2), 0);
+            const rSquared = 1 - (ssRes / ssTot);
+
+            return { slope, intercept, rSquared };
+        }
+
+        // 計算並顯示公式
+        function calculateAndDisplayFormulas() {
+            const formulaContent = document.getElementById('formulaContent');
+            if (!formulaContent) return;
+            
+            formulaContent.innerHTML = '';
+
+            experimentGroups.forEach((group, index) => {
+                const xData = [];
+                const yData = [];
+
+                for (let i = 0; i < dataPoints; i++) {
+                    const xInput = document.getElementById(`x_${i}`);
+                    const yInput = document.getElementById(`y_${index}_${i}`);
+                    
+                    if (xInput && yInput && xInput.value && yInput.value) {
+                        let x = parseFloat(xInput.value);
+                        let y = parseFloat(yInput.value);
+                        
+                        // 對數轉換檢查
+                        if ((chartType === 'semilogx' || chartType === 'loglog') && x <= 0) continue;
+                        if ((chartType === 'semilogy' || chartType === 'loglog') && y <= 0) continue;
+                        
+                        xData.push(x);
+                        yData.push(y);
+                    }
+                }
+
+                if (xData.length > 1) {
+                    let regression;
+                    let formulaText = '';
+                    
+                    if (chartType === 'linear') {
+                        regression = calculateLinearRegression(xData, yData);
+                        formulaText = `y = ${regression.slope.toFixed(4)}x + ${regression.intercept.toFixed(4)}`;
+                    } else if (chartType === 'semilogx') {
+                        const logXData = xData.map(x => Math.log10(x));
+                        regression = calculateLinearRegression(logXData, yData);
+                        formulaText = `y = ${regression.slope.toFixed(4)}log(x) + ${regression.intercept.toFixed(4)}`;
+                    } else if (chartType === 'semilogy') {
+                        const logYData = yData.map(y => Math.log10(y));
+                        regression = calculateLinearRegression(xData, logYData);
+                        const a = Math.pow(10, regression.intercept);
+                        const b = regression.slope;
+                        formulaText = `y = ${a.toFixed(4)} × 10^(${b.toFixed(4)}x)`;
+                    } else if (chartType === 'loglog') {
+                        const logXData = xData.map(x => Math.log10(x));
+                        const logYData = yData.map(y => Math.log10(y));
+                        regression = calculateLinearRegression(logXData, logYData);
+                        const a = Math.pow(10, regression.intercept);
+                        formulaText = `y = ${a.toFixed(4)}x^${regression.slope.toFixed(4)}`;
+                    }
+                    
+                    const formulaDiv = document.createElement('div');
+                    formulaDiv.className = 'formula-group';
+                    
+                    let chartTypeLabel = '';
+                    switch(chartType) {
+                        case 'linear': chartTypeLabel = '線性圖'; break;
+                        case 'semilogx': chartTypeLabel = '半對數圖 (X軸對數)'; break;
+                        case 'semilogy': chartTypeLabel = '半對數圖 (Y軸對數)'; break;
+                        case 'loglog': chartTypeLabel = '雙對數圖'; break;
+                        default: chartTypeLabel = '線性圖'; break;
+                    }
+                    
+                    formulaDiv.innerHTML = `
+                        <div style="color: ${group.color}; font-weight: bold;">${group.name} (${chartTypeLabel}):</div>
+                        <div><strong>${formulaText}</strong></div>
+                        <div>R² = ${regression.rSquared.toFixed(4)}</div>
+                    `;
+                    formulaContent.appendChild(formulaDiv);
+                }
+            });
+        }
+
+        // 更新圖表（用於數據輸入時）
+        function updateChart() {
+            generateChart();
+        }
+
+        // 下載圖表
+        function downloadChart() {
+            if (chart) {
+                const link = document.createElement('a');
+                link.download = 'experiment_chart.png';
+                link.href = chart.toBase64Image();
+                link.click();
+            }
+        }
+
+        // 頁面載入完成後初始化
+        window.onload = function() {
+            init();
+        };
+    </script>
+</body>
+</html>
