@@ -619,7 +619,7 @@
             }
         }
 
-        // 渲染實驗組
+        // 渲染實驗組 - 修復版本，避免直接使用onclick
         function renderExperimentGroups() {
             const container = document.getElementById('experimentGroups');
             container.innerHTML = '';
@@ -638,12 +638,93 @@
                                 <option value="triangle" ${group.pointStyle === 'triangle' ? 'selected' : ''}>三角形</option>
                                 <option value="rectRot" ${group.pointStyle === 'rectRot' ? 'selected' : ''}>菱形</option>
                             </select>
-                            ${experimentGroups.length > 1 ? `<button class="delete-group" onclick="removeExperimentGroup(${index})">刪除</button>` : ''}
+                            ${experimentGroups.length > 1 ? `<button class="delete-group" data-group-index="${index}">刪除</button>` : ''}
                         </div>
                     </div>
                     <div class="edit-hint">點擊組別名稱可編輯</div>
                 `;
                 container.appendChild(groupDiv);
+            });
+            
+            // 為所有刪除按鈕綁定事件處理器
+            const deleteButtons = container.querySelectorAll('.delete-group');
+            deleteButtons.forEach(button => {
+                button.addEventListener('click', function() {
+                    const groupIndex = parseInt(this.dataset.groupIndex);
+                    console.log(`=== 觸發刪除實驗組 ${groupIndex} ===`);
+                    
+                    if (experimentGroups.length > 1) {
+                        // 保存所有現有數據
+                        const currentXValues = [];
+                        for (let i = 0; i < dataPoints; i++) {
+                            const input = document.getElementById(`x_${i}`);
+                            currentXValues[i] = input ? input.value : '';
+                        }
+                        
+                        const currentGroupValues = [];
+                        experimentGroups.forEach((group, gIndex) => {
+                            if (gIndex !== groupIndex) { // 跳過要刪除的組
+                                currentGroupValues.push([]);
+                                for (let i = 0; i < dataPoints; i++) {
+                                    const input = document.getElementById(`y_${gIndex}_${i}`);
+                                    currentGroupValues[currentGroupValues.length - 1][i] = input ? input.value : '';
+                                }
+                            }
+                        });
+                        
+                        // 移除指定的實驗組
+                        experimentGroups.splice(groupIndex, 1);
+                        renderExperimentGroups();
+                        
+                        // 重建表格但保留數據
+                        rebuildTableWithSavedData(currentXValues, currentGroupValues);
+                        generateChart();
+                        
+                        console.log('=== 刪除完成 ===');
+                    }
+                });
+            });
+        }
+
+        // 使用保存的數據重建表格
+        function rebuildTableWithSavedData(savedXValues, savedGroupValues) {
+            const table = document.getElementById('dataTable');
+            table.innerHTML = '';
+
+            // 創建表頭
+            const headerRow = table.insertRow();
+            headerRow.insertCell().innerHTML = '<strong>實驗組列</strong>';
+            for (let i = 0; i < dataPoints; i++) {
+                headerRow.insertCell().innerHTML = `<strong>數據點 ${i + 1}</strong>`;
+            }
+
+            // X軸數值行
+            const xRow = table.insertRow();
+            const xHeaderCell = xRow.insertCell();
+            xHeaderCell.innerHTML = `<div class="editable-cell" onclick="startInlineEdit(this, 0, 'variable')">${manipulatedVariableName}</div>`;
+            xHeaderCell.style.cursor = 'pointer';
+            
+            for (let i = 0; i < dataPoints; i++) {
+                const cell = xRow.insertCell();
+                const value = i < savedXValues.length ? savedXValues[i] : '';
+                cell.innerHTML = `<input type="number" id="x_${i}" name="x_${i}" value="${value}" placeholder="輸入數值" onchange="updateChart()">`;
+            }
+
+            // 各實驗組行
+            experimentGroups.forEach((group, groupIndex) => {
+                const row = table.insertRow();
+                const nameCell = row.insertCell();
+                nameCell.innerHTML = `<div class="editable-cell" onclick="startInlineEdit(this, ${groupIndex}, 'group')">${group.name}</div>`;
+                nameCell.style.backgroundColor = group.color;
+                nameCell.style.color = 'white';
+                nameCell.style.fontWeight = 'bold';
+                nameCell.style.cursor = 'pointer';
+
+                for (let i = 0; i < dataPoints; i++) {
+                    const cell = row.insertCell();
+                    const value = (savedGroupValues[groupIndex] && i < savedGroupValues[groupIndex].length) ? savedGroupValues[groupIndex][i] : '';
+                    cell.innerHTML = `<input type="number" id="y_${groupIndex}_${i}" name="y_${groupIndex}_${i}" value="${value}" placeholder="輸入數值" onchange="updateGroupData(${groupIndex}, ${i}, this.value)">`;
+                }
             });
         }
 
@@ -1161,21 +1242,24 @@
                         regression = calculateLinearRegression(xData, yData);
                         formulaText = `y = ${regression.slope.toFixed(4)}x + ${regression.intercept.toFixed(4)}`;
                     } else if (chartType === 'semilogx') {
+                        // 半對數X軸：y = a*log(x) + b
                         const logXData = xData.map(x => Math.log10(x));
                         regression = calculateLinearRegression(logXData, yData);
                         formulaText = `y = ${regression.slope.toFixed(4)}log(x) + ${regression.intercept.toFixed(4)}`;
                     } else if (chartType === 'semilogy') {
+                        // 半對數Y軸：log(y) = a*x + b，即 y = 10^(a*x + b)
                         const logYData = yData.map(y => Math.log10(y));
                         regression = calculateLinearRegression(xData, logYData);
-                        const a = Math.pow(10, regression.intercept);
-                        const b = regression.slope;
-                        formulaText = `y = ${a.toFixed(4)} × 10^(${b.toFixed(4)}x)`;
+                        // 在對數空間的公式：log(y) = slope*x + intercept
+                        // 轉換為原始空間：y = 10^(slope*x + intercept)
+                        formulaText = `log(y) = ${regression.slope.toFixed(4)}x + ${regression.intercept.toFixed(4)}`;
                     } else if (chartType === 'loglog') {
+                        // 雙對數：log(y) = a*log(x) + b，即 y = 10^b * x^a
                         const logXData = xData.map(x => Math.log10(x));
                         const logYData = yData.map(y => Math.log10(y));
                         regression = calculateLinearRegression(logXData, logYData);
-                        const a = Math.pow(10, regression.intercept);
-                        formulaText = `y = ${a.toFixed(4)}x^${regression.slope.toFixed(4)}`;
+                        // 在對數空間的公式：log(y) = slope*log(x) + intercept
+                        formulaText = `log(y) = ${regression.slope.toFixed(4)}log(x) + ${regression.intercept.toFixed(4)}`;
                     }
                     
                     allRSquared.push({
@@ -1415,24 +1499,20 @@
             }
         }
 
-        // 頁面載入完成後初始化並自動修復按鈕 - 防止重複綁定
+        // 頁面載入完成後初始化並自動修復所有按鈕 - 防止重複綁定
         window.onload = function() {
             init();
             window.addEventListener('resize', handleResize);
             
-            // 自動執行修復，確保addDataPoint按鈕正確工作，但只執行一次
+            // 自動執行修復，確保所有按鈕正確工作
             setTimeout(function() {
-                console.log('自動執行addDataPoint修復...');
+                console.log('自動執行按鈕修復...');
                 
-                // 檢查是否已經修復過
+                // 修復新增數據點按鈕
                 const addButton = document.querySelector('button[onclick="addDataPoint()"]');
                 if (addButton && !addButton.dataset.fixed) {
-                    console.log('找到新增按鈕，重新綁定...');
-                    
-                    // 標記已修復，避免重複綁定
+                    console.log('修復新增數據點按鈕...');
                     addButton.dataset.fixed = 'true';
-                    
-                    // 完全替換按鈕事件
                     addButton.removeAttribute('onclick');
                     addButton.addEventListener('click', function() {
                         console.log('=== 觸發新增數據點 ===');
@@ -1514,13 +1594,40 @@
                         console.log('=== 新增完成 ===');
                         generateChart();
                     });
-                    
-                    console.log('按鈕重新綁定完成');
-                } else if (addButton && addButton.dataset.fixed) {
-                    console.log('按鈕已經修復過，跳過重複綁定');
-                } else {
-                    console.log('找不到新增按鈕');
+                    console.log('新增數據點按鈕修復完成');
                 }
+                
+                // 修復刪除實驗組按鈕
+                const removeButton = document.querySelector('button[onclick="removeDataColumn()"]');
+                if (removeButton && !removeButton.dataset.fixed) {
+                    console.log('修復刪除實驗組按鈕...');
+                    removeButton.dataset.fixed = 'true';
+                    removeButton.removeAttribute('onclick');
+                    removeButton.addEventListener('click', function() {
+                        console.log('=== 觸發刪除實驗組 ===');
+                        
+                        if (experimentGroups.length > 1) {
+                            experimentGroups.pop();
+                            renderExperimentGroups();
+                            
+                            // 手動移除表格中的最後一行，保留現有數據
+                            const table = document.getElementById('dataTable');
+                            const rows = table.rows;
+                            
+                            // 找到最後一個實驗組行並移除
+                            if (rows.length > 2) { // 確保至少有表頭和X軸行
+                                const lastRowIndex = rows.length - 1;
+                                table.deleteRow(lastRowIndex);
+                            }
+                            
+                            generateChart();
+                            console.log('=== 刪除完成 ===');
+                        }
+                    });
+                    console.log('刪除實驗組按鈕修復完成');
+                }
+                
+                console.log('所有按鈕修復完成');
             }, 100);
         };
     </script>
