@@ -3,8 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>實驗數據圖表工具 V27</title>
+    <title>實驗數據圖表工具 V28</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -80,6 +81,14 @@
         .form-group {
             display: flex;
             flex-direction: column;
+            min-width: 0; /* 防止flex item過度膨脹 */
+        }
+
+        .form-group input[type="text"], 
+        .form-group input[type="number"] {
+            width: 100%;
+            max-width: 100%;
+            box-sizing: border-box;
         }
 
         label {
@@ -421,6 +430,8 @@
                     <label for="xAxisMax">X軸最大值</label>
                     <input type="number" id="xAxisMax" name="xAxisMax" value="100" onchange="updateChart()">
                 </div>
+            </div>
+            <div class="form-grid-y-section">
                 <div class="form-group">
                     <label for="yAxisName">Y軸名稱</label>
                     <input type="text" id="yAxisName" name="yAxisName" value="Y軸" placeholder="輸入Y軸名稱" onchange="updateChart()">
@@ -482,6 +493,7 @@
                     </select>
                 </div>
                 <button class="btn btn-purple" onclick="downloadChart()">💾 下載圖表</button>
+                <button class="btn btn-success" onclick="exportFullReport()">📄 匯出完整報告</button>
             </div>
             
             <div class="chart-container">
@@ -498,7 +510,7 @@
     </div>
 
     <script>
-        // 全局變數宣告
+        // 全域變數宣告
         let chart = null;
         let experimentGroups = [];
         let dataPoints = 5;
@@ -543,7 +555,7 @@
 
             // 創建表頭
             const headerRow = table.insertRow();
-            headerRow.insertCell().innerHTML = '<strong>實驗組列</strong>';
+            headerRow.insertCell().innerHTML = '<strong>實驗組別</strong>';
             for (let i = 0; i < dataPoints; i++) {
                 headerRow.insertCell().innerHTML = `<strong>數據點 ${i + 1}</strong>`;
             }
@@ -693,7 +705,7 @@
 
             // 創建表頭
             const headerRow = table.insertRow();
-            headerRow.insertCell().innerHTML = '<strong>實驗組列</strong>';
+            headerRow.insertCell().innerHTML = '<strong>實驗組別</strong>';
             for (let i = 0; i < dataPoints; i++) {
                 headerRow.insertCell().innerHTML = `<strong>數據點 ${i + 1}</strong>`;
             }
@@ -779,7 +791,7 @@
             // 更新實驗組管理區域的名稱
             const groupElements = document.querySelectorAll('.group-name');
             if (groupElements[groupIndex]) {
-                groupElements[groupIndex].textContent = newName + ' (點擊編輯名稱)';
+                groupElements[groupIndex].textContent = newName;
             }
             
             // 更新數據表格中的名稱 (表格的行名稱)
@@ -811,6 +823,7 @@
             input.onchange = function() {
                 experimentGroups[index].color = this.value;
                 renderExperimentGroups();
+                updateDataTable();
                 generateChart();
             };
             input.click();
@@ -839,7 +852,7 @@
 
             // 創建表頭
             const headerRow = table.insertRow();
-            headerRow.insertCell().innerHTML = '<strong>實驗組列</strong>';
+            headerRow.insertCell().innerHTML = '<strong>實驗組別</strong>';
             for (let i = 0; i < dataPoints; i++) {
                 headerRow.insertCell().innerHTML = `<strong>數據點 ${i + 1}</strong>`;
             }
@@ -879,8 +892,7 @@
             if (existingInput && existingInput.value) {
                 return existingInput.value;
             }
-            // 只在真正沒有值時才使用預設值
-            return index === 0 ? '10' : (parseInt(getXValue(index - 1)) + 10).toString();
+            return '';
         }
 
         // 更新組別數據
@@ -1415,6 +1427,162 @@
             }
         }
 
+        // 匯出完整報告
+        async function exportFullReport() {
+            try {
+                // 顯示載入提示
+                const loadingMsg = document.createElement('div');
+                loadingMsg.style.cssText = `
+                    position: fixed;
+                    top: 50%;
+                    left: 50%;
+                    transform: translate(-50%, -50%);
+                    background: rgba(0,0,0,0.8);
+                    color: white;
+                    padding: 20px 40px;
+                    border-radius: 10px;
+                    z-index: 10000;
+                    font-size: 16px;
+                    font-weight: bold;
+                `;
+                loadingMsg.textContent = '正在產生報告，請稍候...';
+                document.body.appendChild(loadingMsg);
+
+                // 暫時調整頁面樣式以利截圖
+                const originalOverflow = document.body.style.overflow;
+                document.body.style.overflow = 'visible';
+                
+                // 確保公式顯示區域可見（如果有的話）
+                const formulaDisplay = document.getElementById('formulaDisplay');
+                const originalFormulaDisplay = formulaDisplay ? formulaDisplay.style.display : '';
+                if (formulaDisplay && showFormula) {
+                    formulaDisplay.style.display = 'block';
+                }
+
+                // 等待一小段時間確保所有內容都渲染完成
+                await new Promise(resolve => setTimeout(resolve, 500));
+
+                // 獲取當前日期時間作為檔案名稱
+                const now = new Date();
+                const timestamp = now.toISOString().replace(/[:.]/g, '-').split('T')[0] + '_' + 
+                                now.getHours().toString().padStart(2, '0') + 
+                                now.getMinutes().toString().padStart(2, '0');
+
+                // 生成實驗報告標題
+                let reportTitle = '實驗數據分析報告';
+                const xAxisName = document.getElementById('xAxisName').value;
+                const yAxisName = document.getElementById('yAxisName').value;
+                if (xAxisName && yAxisName && xAxisName !== 'X軸' && yAxisName !== 'Y軸') {
+                    reportTitle = `${xAxisName} vs ${yAxisName} 實驗分析報告`;
+                }
+
+                // 使用 html2canvas 截圖
+                const canvas = await html2canvas(document.body, {
+                    height: document.body.scrollHeight,
+                    width: document.body.scrollWidth,
+                    useCORS: true,
+                    allowTaint: true,
+                    scale: 1.5, // 提高解析度
+                    backgroundColor: '#ffffff',
+                    logging: false,
+                    onclone: function(clonedDoc) {
+                        // 在複製的文檔中確保所有樣式都正確應用
+                        const clonedContainer = clonedDoc.querySelector('.container');
+                        if (clonedContainer) {
+                            clonedContainer.style.maxWidth = 'none';
+                            clonedContainer.style.margin = '20px';
+                        }
+                        
+                        // 確保圖表在複製版本中正確顯示
+                        const clonedCanvas = clonedDoc.querySelector('#chart');
+                        if (clonedCanvas && chart) {
+                            // 將原始圖表的內容複製到複製版本
+                            const ctx = clonedCanvas.getContext('2d');
+                            ctx.drawImage(chart.canvas, 0, 0);
+                        }
+                    }
+                });
+
+                // 創建下載連結
+                const link = document.createElement('a');
+                link.download = `實驗報告_${timestamp}.png`;
+                link.href = canvas.toDataURL('image/png', 1.0);
+                link.click();
+
+                // 恢復原始樣式
+                document.body.style.overflow = originalOverflow;
+                if (formulaDisplay) {
+                    formulaDisplay.style.display = originalFormulaDisplay;
+                }
+
+                // 移除載入提示
+                document.body.removeChild(loadingMsg);
+
+                // 顯示成功訊息
+                const successMsg = document.createElement('div');
+                successMsg.style.cssText = `
+                    position: fixed;
+                    top: 20px;
+                    right: 20px;
+                    background: #4CAF50;
+                    color: white;
+                    padding: 15px 25px;
+                    border-radius: 8px;
+                    z-index: 10000;
+                    font-size: 14px;
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+                `;
+                successMsg.innerHTML = `
+                    <div style="font-weight: bold;">✅ 報告匯出成功！</div>
+                    <div style="font-size: 12px; margin-top: 5px;">已儲存為: 實驗報告_${timestamp}.png</div>
+                `;
+                document.body.appendChild(successMsg);
+
+                // 3秒後自動移除成功訊息
+                setTimeout(() => {
+                    if (document.body.contains(successMsg)) {
+                        document.body.removeChild(successMsg);
+                    }
+                }, 3000);
+
+            } catch (error) {
+                console.error('匯出報告時發生錯誤:', error);
+                
+                // 顯示錯誤訊息
+                const errorMsg = document.createElement('div');
+                errorMsg.style.cssText = `
+                    position: fixed;
+                    top: 20px;
+                    right: 20px;
+                    background: #f44336;
+                    color: white;
+                    padding: 15px 25px;
+                    border-radius: 8px;
+                    z-index: 10000;
+                    font-size: 14px;
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+                `;
+                errorMsg.innerHTML = `
+                    <div style="font-weight: bold;">❌ 匯出失敗</div>
+                    <div style="font-size: 12px; margin-top: 5px;">請重試或聯繫技術支援</div>
+                `;
+                document.body.appendChild(errorMsg);
+
+                // 5秒後自動移除錯誤訊息
+                setTimeout(() => {
+                    if (document.body.contains(errorMsg)) {
+                        document.body.removeChild(errorMsg);
+                    }
+                }, 5000);
+
+                // 移除載入提示（如果還在的話）
+                const loadingMsg = document.querySelector('div[style*="正在產生報告"]');
+                if (loadingMsg && document.body.contains(loadingMsg)) {
+                    document.body.removeChild(loadingMsg);
+                }
+            }
+        }
+
         // 處理窗口大小變化 - 修復版本
         function handleResize() {
             if (chart && chart.canvas) {
@@ -1504,9 +1672,18 @@
             init();
             window.addEventListener('resize', handleResize);
             
+            // 確保Y軸布局正確
+            setTimeout(function() {
+                const yAxisContainer = document.querySelector('.axis-section .form-grid-y-section');
+                if (yAxisContainer) {
+                    yAxisContainer.style.display = 'grid';
+                    yAxisContainer.style.gridTemplateColumns = '1fr 1fr 1fr';
+                    yAxisContainer.style.gap = '15px';
+                }
+            }, 100);
+            
             // 自動執行修復，確保所有按鈕正確工作
             setTimeout(function() {
-                console.log('自動執行按鈕修復...');
                 
                 // 修復新增數據點按鈕
                 const addButton = document.querySelector('button[onclick="addDataPoint()"]');
@@ -1556,7 +1733,7 @@
                         
                         // 創建表頭
                         const headerRow = table.insertRow();
-                        headerRow.insertCell().innerHTML = '<strong>實驗組列</strong>';
+                        headerRow.insertCell().innerHTML = '<strong>實驗組別</strong>';
                         for (let i = 0; i < dataPoints; i++) {
                             headerRow.insertCell().innerHTML = `<strong>數據點 ${i + 1}</strong>`;
                         }
