@@ -476,13 +476,14 @@
             <div class="section-title">📈 圖表控制</div>
             <div class="chart-controls">
                 <div class="toggle-group">
-                    <span id="trendLineLabel">顯示迴歸直線：</span>
+                    <span id="trendLineLabel">迴歸直線：</span>
                     <div class="toggle" id="trendLineToggle" onclick="toggleTrendLine()"></div>
                 </div>
                 <div class="toggle-group">
-                    <span>顯示公式：</span>
+                    <span>公式：</span>
                     <div class="toggle" id="formulaToggle" onclick="toggleFormula()"></div>
                 </div>
+				
                 <div class="toggle-group">
                     <span><strong>圖表類型：</strong></span>
                     <select id="chartType" name="chartType" onchange="changeChartType()">
@@ -493,7 +494,7 @@
                     </select>
                 </div>
                 <button class="btn btn-purple" onclick="downloadChart()">💾 下載圖表</button>
-                <button class="btn btn-success" onclick="exportFullReport()">📄 匯出完整報告</button>
+                <button class="btn btn-success" onclick="exportFullReport()">📄 匯出頁面</button>
             </div>
             
             <div class="chart-container">
@@ -503,7 +504,7 @@
             </div>
 
             <div id="formulaDisplay" class="formula-display" style="display: none;">
-                <h4>📝 回歸公式</h4>
+                <h4>📝 迴歸公式</h4>
                 <div id="formulaContent"></div>
             </div>
         </div>
@@ -516,8 +517,52 @@
         let dataPoints = 5;
         let showTrendLine = false;
         let showFormula = false;
+		let showCoordinates = false;
         let chartType = 'linear';
         let manipulatedVariableName = 'X軸數值(操縱變因)';
+		
+		// Chart.js 座標標籤插件
+		const coordinatePlugin = {
+			id: 'coordinateLabels',
+			afterDraw: function(chart) {
+				if (!showCoordinates) return;
+				
+				const ctx = chart.ctx;
+				const chartArea = chart.chartArea;
+				
+				ctx.save();
+				ctx.font = '12px Arial';
+				ctx.fillStyle = 'black';
+				ctx.textAlign = 'center';
+				ctx.textBaseline = 'bottom';
+				
+				chart.data.datasets.forEach((dataset) => {
+					if (dataset.label.includes('迴歸線') || dataset.showLine) return;
+					
+					dataset.data.forEach((point) => {
+						if (point && typeof point.x !== 'undefined' && typeof point.y !== 'undefined') {
+							const pixelX = chart.scales.x.getPixelForValue(point.x);
+							const pixelY = chart.scales.y.getPixelForValue(point.y);
+							
+							if (pixelX >= chartArea.left && pixelX <= chartArea.right &&
+								pixelY >= chartArea.top && pixelY <= chartArea.bottom) {
+								
+								let xLabel = point.x % 1 !== 0 ? point.x.toFixed(2) : point.x.toString();
+								let yLabel = point.y % 1 !== 0 ? point.y.toFixed(2) : point.y.toString();
+								
+								const label = `(${xLabel}, ${yLabel})`;
+								ctx.fillText(label, pixelX, pixelY - 10);
+							}
+						}
+					});
+				});
+				
+				ctx.restore();
+			}
+		};
+
+		// 註冊插件
+		Chart.register(coordinatePlugin);
 
         // 顏色選項
         const colors = [
@@ -971,6 +1016,15 @@
                 calculateAndDisplayFormulas();
             }
         }
+		
+		// 切換座標顯示
+		function toggleCoordinates() {
+			showCoordinates = !showCoordinates;
+			document.getElementById('coordinateToggle').classList.toggle('active', showCoordinates);
+			if (chart) {
+				chart.update('none');
+			}
+		}
 
         // 生成圖表
         function generateChart() {
@@ -1680,6 +1734,41 @@
                     yAxisContainer.style.gridTemplateColumns = '1fr 1fr 1fr';
                     yAxisContainer.style.gap = '15px';
                 }
+                
+                // 動態添加座標顯示按鈕
+                console.log('=== 動態添加座標顯示按鈕 ===');
+                const chartControls = document.querySelector('.chart-controls');
+                const formulaToggleGroup = document.querySelector('.chart-controls .toggle-group:nth-child(2)');
+                
+                if (chartControls && formulaToggleGroup) {
+                    // 創建座標顯示按鈕組
+                    const coordinateToggleGroup = document.createElement('div');
+                    coordinateToggleGroup.className = 'toggle-group';
+                    coordinateToggleGroup.innerHTML = `
+                        <span>座標值：</span>
+                        <div class="toggle" id="coordinateToggle"></div>
+                    `;
+                    
+                    // 在公式按鈕後面插入
+                    formulaToggleGroup.parentNode.insertBefore(coordinateToggleGroup, formulaToggleGroup.nextSibling);
+                    
+                    // 綁定事件
+                    const coordinateToggle = document.getElementById('coordinateToggle');
+                    if (coordinateToggle) {
+                        coordinateToggle.addEventListener('click', function() {
+                            console.log('座標顯示按鈕被點擊');
+                            showCoordinates = !showCoordinates;
+                            console.log('showCoordinates狀態:', showCoordinates);
+                            this.classList.toggle('active', showCoordinates);
+                            generateChart();
+                        });
+                        console.log('座標顯示按鈕添加成功並綁定事件');
+                    }
+                } else {
+                    console.log('無法找到圖表控制區域或公式按鈕組');
+                }
+                
+                console.log('=== 添加完成 ===');
             }, 100);
             
             // 自動執行修復，確保所有按鈕正確工作
