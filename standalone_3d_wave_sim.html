@@ -1,0 +1,751 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D波動多模態模擬器</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #f8fafc 0%, #e0f2fe 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+        
+        .content {
+            display: grid;
+            grid-template-columns: 300px 1fr;
+            gap: 20px;
+            padding: 20px;
+        }
+        
+        .controls {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        
+        .control-panel {
+            background: #f8fafc;
+            border-radius: 8px;
+            padding: 15px;
+            border: 1px solid #e2e8f0;
+        }
+        
+        .control-panel h3 {
+            margin-bottom: 15px;
+            color: #334155;
+            font-size: 1.1rem;
+            border-bottom: 2px solid #e2e8f0;
+            padding-bottom: 5px;
+        }
+        
+        .btn {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 10px;
+            border: none;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 14px;
+        }
+        
+        .btn-primary {
+            background: #10b981;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #059669;
+        }
+        
+        .btn-secondary {
+            background: #6b7280;
+            color: white;
+        }
+        
+        .btn-secondary:hover {
+            background: #4b5563;
+        }
+        
+        .btn-danger {
+            background: #ef4444;
+            color: white;
+        }
+        
+        .btn-danger:hover {
+            background: #dc2626;
+        }
+        
+        .btn-info {
+            background: #3b82f6;
+            color: white;
+        }
+        
+        .btn-info:hover {
+            background: #2563eb;
+        }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+            color: #374151;
+            font-size: 13px;
+        }
+        
+        .form-group select,
+        .form-group input[type="range"] {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #d1d5db;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        
+        .form-group select:focus {
+            outline: none;
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+        
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            margin-top: 10px;
+        }
+        
+        .checkbox-group input {
+            margin-right: 8px;
+        }
+        
+        .checkbox-group label {
+            margin: 0;
+            font-size: 13px;
+        }
+        
+        .viewport {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .canvas-container {
+            background: #f8fafc;
+            border-radius: 8px;
+            padding: 15px;
+            border: 1px solid #e2e8f0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 600px;
+        }
+        
+        .info-panel {
+            background: #f8fafc;
+            border-radius: 8px;
+            padding: 15px;
+            border: 1px solid #e2e8f0;
+            margin-top: 20px;
+        }
+        
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+            font-size: 13px;
+            color: #4b5563;
+        }
+        
+        .instructions {
+            background: #fef3c7;
+            border: 1px solid #f59e0b;
+            border-radius: 6px;
+            padding: 10px;
+            margin-top: 10px;
+            font-size: 12px;
+            color: #92400e;
+        }
+        
+        .instructions strong {
+            color: #78350f;
+        }
+        
+        @media (max-width: 1024px) {
+            .content {
+                grid-template-columns: 1fr;
+            }
+            
+            .controls {
+                order: 2;
+            }
+            
+            .viewport {
+                order: 1;
+            }
+        }
+        
+        #threeCanvas {
+            max-width: 100%;
+            border-radius: 6px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🌊 3D波動多模態模擬器</h1>
+            <p>探索波動在3D空間中的傳播特性</p>
+        </div>
+        
+        <div class="content">
+            <div class="controls">
+                <div class="control-panel">
+                    <h3>播放控制</h3>
+                    <button id="playBtn" class="btn btn-primary">▶️ 播放</button>
+                    <button id="audioBtn" class="btn btn-secondary">🔇 音頻關閉</button>
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="autoRotate" checked>
+                        <label for="autoRotate">自動旋轉視角</label>
+                    </div>
+                </div>
+                
+                <div class="control-panel">
+                    <h3>波動模式</h3>
+                    <div class="form-group">
+                        <label for="waveMode">波動類型</label>
+                        <select id="waveMode">
+                            <option value="1D">一維波（平行波）</option>
+                            <option value="2D">二維波（斜波）</option>
+                            <option value="circular">圓形波</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="waveType">波型</label>
+                        <select id="waveType">
+                            <option value="sine">正弦波</option>
+                            <option value="cosine">餘弦波</option>
+                            <option value="square">方波</option>
+                            <option value="triangle">三角波</option>
+                            <option value="sawtooth">鋸齒波</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="gridSize">網格大小: <span id="gridSizeValue">40</span>×<span id="gridSizeValue2">40</span></label>
+                        <input type="range" id="gridSize" min="20" max="60" step="5" value="40">
+                    </div>
+                </div>
+                
+                <div class="control-panel">
+                    <h3>波形參數</h3>
+                    <div class="form-group">
+                        <label for="frequency">頻率: <span id="frequencyValue">2</span> Hz</label>
+                        <input type="range" id="frequency" min="0.5" max="5" step="0.1" value="2">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="amplitude">振幅: <span id="amplitudeValue">2</span></label>
+                        <input type="range" id="amplitude" min="0.5" max="5" step="0.1" value="2">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="speed">速度: <span id="speedValue">1</span>x</label>
+                        <input type="range" id="speed" min="0.1" max="3" step="0.1" value="1">
+                    </div>
+                    
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="interference">
+                        <label for="interference">顯示干涉效應</label>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="viewport">
+                <div class="canvas-container">
+                    <div id="threeContainer"></div>
+                </div>
+                
+                <div class="instructions">
+                    <strong>操作說明:</strong> 🖱️ 拖拽旋轉視角 | 🖱️ 滾輪縮放 | 🔄 自動旋轉環繞觀察 | 🎨 彩色點代表介質粒子
+                </div>
+                
+                <div class="info-panel">
+                    <h3>3D介質點波動模型說明</h3>
+                    <div class="info-grid">
+                        <div><strong>一維波:</strong> 波沿單一方向傳播，如吉他弦振動</div>
+                        <div><strong>二維波:</strong> 波沿對角線方向傳播，展現複雜模式</div>
+                        <div><strong>圓形波:</strong> 從中心向外擴散，如水面投石</div>
+                        <div><strong>介質粒子:</strong> 3D球體代表真實介質中的粒子</div>
+                        <div><strong>連接網絡:</strong> 顯示粒子間的彈性連接關係</div>
+                        <div><strong>視角控制:</strong> 360度觀察波動傳播過程</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class Wave3DSimulator {
+            constructor() {
+                this.scene = null;
+                this.renderer = null;
+                this.camera = null;
+                this.particles = [];
+                this.connections = [];
+                this.synth = null;
+                
+                this.isPlaying = false;
+                this.audioEnabled = false;
+                this.autoRotate = true;
+                
+                this.waveType = 'sine';
+                this.frequency = 2;
+                this.amplitude = 2;
+                this.speed = 1;
+                this.showInterference = false;
+                this.gridSize = 40;
+                this.waveMode = '1D';
+                
+                this.isDragging = false;
+                this.previousMousePosition = { x: 0, y: 0 };
+                
+                this.init();
+                this.setupEventListeners();
+            }
+            
+            init() {
+                this.initScene();
+                this.createParticleGrid();
+                this.setupMouseControls();
+                this.animate();
+            }
+            
+            initScene() {
+                const container = document.getElementById('threeContainer');
+                
+                // 場景
+                this.scene = new THREE.Scene();
+                this.scene.background = new THREE.Color(0xf8fafc);
+                
+                // 相機
+                this.camera = new THREE.PerspectiveCamera(75, 800 / 600, 0.1, 1000);
+                this.camera.position.set(20, 15, 20);
+                this.camera.lookAt(0, 0, 0);
+                
+                // 渲染器
+                this.renderer = new THREE.WebGLRenderer({ antialias: true });
+                this.renderer.setSize(800, 600);
+                this.renderer.shadowMap.enabled = true;
+                this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+                
+                container.appendChild(this.renderer.domElement);
+                
+                // 光源
+                const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
+                this.scene.add(ambientLight);
+                
+                const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+                directionalLight.position.set(10, 10, 5);
+                directionalLight.castShadow = true;
+                this.scene.add(directionalLight);
+            }
+            
+            createParticleGrid() {
+                // 清除之前的粒子
+                this.particles.forEach(particle => this.scene.remove(particle));
+                this.connections.forEach(connection => this.scene.remove(connection.line));
+                this.particles = [];
+                this.connections = [];
+                
+                const colors = [
+                    0x3b82f6, 0xef4444, 0x10b981, 
+                    0xf59e0b, 0x8b5cf6, 0x06b6d4
+                ];
+                
+                const spacing = 1;
+                const halfSize = this.gridSize / 2;
+                
+                // 創建粒子
+                for (let i = 0; i < this.gridSize; i++) {
+                    for (let j = 0; j < this.gridSize; j++) {
+                        const x = (i - halfSize) * spacing;
+                        const z = (j - halfSize) * spacing;
+                        
+                        const geometry = new THREE.SphereGeometry(0.2, 16, 16);
+                        const colorIndex = (i + j) % colors.length;
+                        const material = new THREE.MeshPhongMaterial({ 
+                            color: colors[colorIndex],
+                            transparent: true,
+                            opacity: 0.8
+                        });
+                        
+                        const particle = new THREE.Mesh(geometry, material);
+                        particle.position.set(x, 0, z);
+                        particle.castShadow = true;
+                        particle.userData = { originalX: x, originalZ: z, colorIndex };
+                        
+                        this.scene.add(particle);
+                        this.particles.push(particle);
+                    }
+                }
+                
+                // 創建連接線
+                const lineMaterial = new THREE.LineBasicMaterial({ 
+                    color: 0x94a3b8, 
+                    transparent: true, 
+                    opacity: 0.3 
+                });
+                
+                // 水平連接
+                for (let i = 0; i < this.gridSize; i++) {
+                    for (let j = 0; j < this.gridSize - 1; j++) {
+                        const geometry = new THREE.BufferGeometry();
+                        const positions = new Float32Array(6);
+                        geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+                        
+                        const line = new THREE.Line(geometry, lineMaterial);
+                        this.scene.add(line);
+                        this.connections.push({
+                            line,
+                            p1: i * this.gridSize + j,
+                            p2: i * this.gridSize + j + 1
+                        });
+                    }
+                }
+                
+                // 垂直連接
+                for (let i = 0; i < this.gridSize - 1; i++) {
+                    for (let j = 0; j < this.gridSize; j++) {
+                        const geometry = new THREE.BufferGeometry();
+                        const positions = new Float32Array(6);
+                        geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+                        
+                        const line = new THREE.Line(geometry, lineMaterial);
+                        this.scene.add(line);
+                        this.connections.push({
+                            line,
+                            p1: i * this.gridSize + j,
+                            p2: (i + 1) * this.gridSize + j
+                        });
+                    }
+                }
+                
+                // 座標軸
+                const axesHelper = new THREE.AxesHelper(halfSize);
+                this.scene.add(axesHelper);
+                
+                // 地面網格
+                const gridHelper = new THREE.GridHelper(this.gridSize * 2, this.gridSize);
+                gridHelper.position.y = -this.amplitude * 2;
+                gridHelper.material.transparent = true;
+                gridHelper.material.opacity = 0.2;
+                this.scene.add(gridHelper);
+            }
+            
+            setupMouseControls() {
+                const canvas = this.renderer.domElement;
+                
+                canvas.addEventListener('mousedown', (e) => {
+                    this.isDragging = true;
+                    this.previousMousePosition = { x: e.clientX, y: e.clientY };
+                });
+                
+                canvas.addEventListener('mousemove', (e) => {
+                    if (!this.isDragging || this.autoRotate) return;
+                    
+                    const deltaMove = {
+                        x: e.clientX - this.previousMousePosition.x,
+                        y: e.clientY - this.previousMousePosition.y
+                    };
+                    
+                    const rotationSpeed = 0.005;
+                    const spherical = new THREE.Spherical();
+                    spherical.setFromVector3(this.camera.position);
+                    spherical.theta -= deltaMove.x * rotationSpeed;
+                    spherical.phi += deltaMove.y * rotationSpeed;
+                    spherical.phi = Math.max(0.1, Math.min(Math.PI - 0.1, spherical.phi));
+                    
+                    this.camera.position.setFromSpherical(spherical);
+                    this.camera.lookAt(0, 0, 0);
+                    
+                    this.previousMousePosition = { x: e.clientX, y: e.clientY };
+                });
+                
+                canvas.addEventListener('mouseup', () => {
+                    this.isDragging = false;
+                });
+                
+                canvas.addEventListener('wheel', (e) => {
+                    const zoomSpeed = 0.1;
+                    const direction = e.deltaY > 0 ? 1 : -1;
+                    this.camera.position.multiplyScalar(1 + direction * zoomSpeed);
+                    this.camera.position.clampLength(10, 100);
+                });
+            }
+            
+            getWaveValue(x, z, t, freq, amp, type, mode) {
+                let phase;
+                
+                switch (mode) {
+                    case '1D':
+                        phase = 2 * Math.PI * freq * (x / 10 - t);
+                        break;
+                    case '2D':
+                        phase = 2 * Math.PI * freq * ((x + z) / 10 - t);
+                        break;
+                    case 'circular':
+                        const distance = Math.sqrt(x * x + z * z);
+                        phase = 2 * Math.PI * freq * (distance / 10 - t);
+                        break;
+                    default:
+                        phase = 2 * Math.PI * freq * (x / 10 - t);
+                }
+                
+                switch (type) {
+                    case 'sine': return amp * Math.sin(phase);
+                    case 'cosine': return amp * Math.cos(phase);
+                    case 'square': return amp * Math.sign(Math.sin(phase));
+                    case 'triangle': return (2 * amp / Math.PI) * Math.asin(Math.sin(phase));
+                    case 'sawtooth': return (2 * amp / Math.PI) * (phase % (2 * Math.PI) - Math.PI);
+                    default: return amp * Math.sin(phase);
+                }
+            }
+            
+            updateWave(time) {
+                if (!this.particles.length) return;
+                
+                const halfSize = this.gridSize / 2;
+                
+                this.particles.forEach((particle, index) => {
+                    const i = Math.floor(index / this.gridSize);
+                    const j = index % this.gridSize;
+                    const x = i - halfSize;
+                    const z = j - halfSize;
+                    
+                    let displacement = 0;
+                    
+                    // 主波
+                    displacement += this.getWaveValue(x, z, time * this.speed, this.frequency, this.amplitude, this.waveType, this.waveMode);
+                    
+                    // 干涉波
+                    if (this.showInterference) {
+                        displacement += this.getWaveValue(x, z, time * this.speed, this.frequency * 1.3, this.amplitude * 0.6, this.waveType, this.waveMode) * 0.5;
+                    }
+                    
+                    // 更新粒子位置
+                    particle.position.y = displacement;
+                    
+                    // 更新粒子大小和透明度
+                    const intensity = Math.abs(displacement) / this.amplitude;
+                    const scale = 0.8 + intensity * 0.4;
+                    particle.scale.setScalar(scale);
+                    
+                    particle.material.opacity = Math.max(0.4, Math.min(1, 0.6 + intensity * 0.4));
+                    
+                    // 發光效果
+                    if (intensity > 0.7) {
+                        particle.material.emissive.setHex(particle.material.color.getHex());
+                        particle.material.emissiveIntensity = (intensity - 0.7) * 0.5;
+                    } else {
+                        particle.material.emissive.setHex(0x000000);
+                        particle.material.emissiveIntensity = 0;
+                    }
+                });
+                
+                // 更新連接線
+                this.connections.forEach(connection => {
+                    const p1 = this.particles[connection.p1];
+                    const p2 = this.particles[connection.p2];
+                    
+                    if (p1 && p2) {
+                        const positions = connection.line.geometry.attributes.position.array;
+                        positions[0] = p1.position.x;
+                        positions[1] = p1.position.y;
+                        positions[2] = p1.position.z;
+                        positions[3] = p2.position.x;
+                        positions[4] = p2.position.y;
+                        positions[5] = p2.position.z;
+                        connection.line.geometry.attributes.position.needsUpdate = true;
+                    }
+                });
+            }
+            
+            animate() {
+                requestAnimationFrame(() => this.animate());
+                
+                if (this.isPlaying) {
+                    const time = Date.now() * 0.001;
+                    this.updateWave(time);
+                    
+                    // 自動旋轉
+                    if (this.autoRotate) {
+                        const radius = this.camera.position.length();
+                        this.camera.position.x = Math.cos(time * 0.2) * radius;
+                        this.camera.position.z = Math.sin(time * 0.2) * radius;
+                        this.camera.lookAt(0, 0, 0);
+                    }
+                }
+                
+                this.renderer.render(this.scene, this.camera);
+            }
+            
+            setupEventListeners() {
+                // 播放按鈕
+                document.getElementById('playBtn').addEventListener('click', () => {
+                    this.togglePlayback();
+                });
+                
+                // 音頻按鈕
+                document.getElementById('audioBtn').addEventListener('click', () => {
+                    this.toggleAudio();
+                });
+                
+                // 自動旋轉
+                document.getElementById('autoRotate').addEventListener('change', (e) => {
+                    this.autoRotate = e.target.checked;
+                });
+                
+                // 波動模式
+                document.getElementById('waveMode').addEventListener('change', (e) => {
+                    this.waveMode = e.target.value;
+                });
+                
+                document.getElementById('waveType').addEventListener('change', (e) => {
+                    this.waveType = e.target.value;
+                    if (this.synth) {
+                        this.synth.type = this.waveType;
+                    }
+                });
+                
+                // 網格大小
+                document.getElementById('gridSize').addEventListener('input', (e) => {
+                    this.gridSize = parseInt(e.target.value);
+                    document.getElementById('gridSizeValue').textContent = this.gridSize;
+                    document.getElementById('gridSizeValue2').textContent = this.gridSize;
+                    this.createParticleGrid();
+                });
+                
+                // 頻率
+                document.getElementById('frequency').addEventListener('input', (e) => {
+                    this.frequency = parseFloat(e.target.value);
+                    document.getElementById('frequencyValue').textContent = this.frequency;
+                    if (this.synth) {
+                        this.synth.frequency.value = this.frequency * 100;
+                    }
+                });
+                
+                // 振幅
+                document.getElementById('amplitude').addEventListener('input', (e) => {
+                    this.amplitude = parseFloat(e.target.value);
+                    document.getElementById('amplitudeValue').textContent = this.amplitude;
+                });
+                
+                // 速度
+                document.getElementById('speed').addEventListener('input', (e) => {
+                    this.speed = parseFloat(e.target.value);
+                    document.getElementById('speedValue').textContent = this.speed;
+                });
+                
+                // 干涉
+                document.getElementById('interference').addEventListener('change', (e) => {
+                    this.showInterference = e.target.checked;
+                });
+            }
+            
+            async togglePlayback() {
+                const btn = document.getElementById('playBtn');
+                
+                if (!this.isPlaying) {
+                    if (this.audioEnabled && Tone) {
+                        await Tone.start();
+                        if (!this.synth) {
+                            this.synth = new Tone.Oscillator(this.frequency * 100, this.waveType).toDestination();
+                            this.synth.volume.value = -20;
+                        }
+                        this.synth.start();
+                    }
+                    this.isPlaying = true;
+                    btn.textContent = '⏸️ 暫停';
+                    btn.className = 'btn btn-danger';
+                } else {
+                    if (this.synth) {
+                        this.synth.stop();
+                    }
+                    this.isPlaying = false;
+                    btn.textContent = '▶️ 播放';
+                    btn.className = 'btn btn-primary';
+                }
+            }
+            
+            async toggleAudio() {
+                const btn = document.getElementById('audioBtn');
+                
+                if (!this.audioEnabled) {
+                    if (Tone) {
+                        await Tone.start();
+                        if (!this.synth) {
+                            this.synth = new Tone.Oscillator(this.frequency * 100, this.waveType).toDestination();
+                            this.synth.volume.value = -20;
+                        }
+                        if (this.isPlaying) {
+                            this.synth.start();
+                        }
+                    }
+                    this.audioEnabled = true;
+                    btn.textContent = '🔊 音頻開啟';
+                    btn.className = 'btn btn-info';
+                } else {
+                    if (this.synth) {
+                        this.synth.stop();
+                    }
+                    this.audioEnabled = false;
+                    btn.textContent = '🔇 音頻關閉';
+                    btn.className = 'btn btn-secondary';
+                }
+            }
+        }
+        
+        // 初始化模擬器
+        window.addEventListener('load', () => {
+            new Wave3DSimulator();
+        });
+    </script>
+</body>
+</html>
