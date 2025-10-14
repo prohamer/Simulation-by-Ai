@@ -1,0 +1,1562 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎵 頻率產生器 - 多樂器音色合成器</title>
+    <meta name="description" content="互動式頻率產生器,支持多種樂器音色、自訂波形繪製、即時鋼琴演奏和波形顯示">
+    <meta name="keywords" content="頻率產生器,音樂教學,波形,合成器,鋼琴">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(to bottom right, #581c87, #1e3a8a, #312e81);
+            min-height: 100vh;
+            padding: 1rem;
+            color: white;
+        }
+
+        .container {
+            max-width: 1024px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(16px);
+            border-radius: 24px;
+            padding: 1.5rem;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        h1 {
+            font-size: 2rem;
+            text-align: center;
+            margin-bottom: 0.25rem;
+            font-weight: bold;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #bfdbfe;
+            margin-bottom: 1.5rem;
+            font-size: 0.875rem;
+        }
+
+        .section {
+            margin-bottom: 1.5rem;
+        }
+
+        .section-title {
+            font-size: 1rem;
+            font-weight: 600;
+            margin-bottom: 0.75rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .play-button {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            padding: 0.75rem 1.5rem;
+            font-size: 1rem;
+            font-weight: bold;
+            border: none;
+            border-radius: 9999px;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin: 0 auto 1.5rem;
+        }
+
+        .play-button:hover {
+            transform: scale(1.05);
+        }
+
+        .play-button.playing {
+            background: #ef4444;
+            color: white;
+        }
+
+        .play-button.playing:hover {
+            background: #dc2626;
+        }
+
+        .play-button.stopped {
+            background: #10b981;
+            color: white;
+        }
+
+        .play-button.stopped:hover {
+            background: #059669;
+        }
+
+        .instruments-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 0.75rem;
+        }
+
+        .instrument-btn {
+            padding: 0.625rem;
+            background: rgba(255, 255, 255, 0.2);
+            border: none;
+            border-radius: 10px;
+            color: white;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+
+        .instrument-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .instrument-btn.active {
+            background: #3b82f6;
+            transform: scale(1.05);
+            box-shadow: 0 10px 30px rgba(59, 130, 246, 0.5);
+        }
+
+        .instrument-icon {
+            font-size: 1.5rem;
+            display: block;
+            margin-bottom: 0.25rem;
+        }
+
+        .canvas-container {
+            background: #1e293b;
+            border-radius: 10px;
+            padding: 0.375rem;
+            border: 2px solid;
+        }
+
+        .canvas-container.draw {
+            border-color: #3b82f6;
+        }
+
+        .canvas-container.display {
+            border-color: #10b981;
+        }
+
+        canvas {
+            width: 100%;
+            border-radius: 8px;
+            display: block;
+            cursor: crosshair;
+        }
+
+        canvas.display-canvas {
+            cursor: default;
+        }
+
+        .slider-container {
+            margin-top: 0.5rem;
+        }
+
+        .slider-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
+
+        .slider-value {
+            font-size: 1.25rem;
+            font-weight: bold;
+            color: #93c5fd;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            height: 12px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 6px;
+            outline: none;
+            -webkit-appearance: none;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: white;
+            cursor: pointer;
+            box-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+        }
+
+        input[type="range"]::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: white;
+            cursor: pointer;
+            border: none;
+            box-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+        }
+
+        .slider-labels {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.75rem;
+            color: #bfdbfe;
+            margin-top: 0.5rem;
+        }
+
+        .notes-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 0.375rem;
+        }
+
+        .note-btn {
+            padding: 0.5rem 0.375rem;
+            background: rgba(255, 255, 255, 0.2);
+            border: none;
+            border-radius: 6px;
+            color: white;
+            font-size: 0.7rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .note-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: scale(1.05);
+        }
+
+        .piano-container {
+            background: linear-gradient(to bottom, #1e293b, #0f172a);
+            border-radius: 10px;
+            padding: 0.75rem;
+            border: 2px solid #a78bfa;
+        }
+
+        .piano-keys {
+            position: relative;
+            height: 150px;
+            display: flex;
+            align-items: flex-end;
+            justify-content: center;
+            margin-bottom: 0.75rem;
+            overflow-x: auto;
+            overflow-y: hidden;
+            padding: 0 10px;
+        }
+
+        .white-key {
+            width: 38px;
+            height: 130px;
+            background: linear-gradient(to bottom, white, #e5e7eb);
+            border: 2px solid #6b7280;
+            border-radius: 0 0 6px 6px;
+            cursor: pointer;
+            transition: all 0.1s;
+            display: flex;
+            align-items: flex-end;
+            justify-content: center;
+            padding-bottom: 0.375rem;
+            font-weight: bold;
+            color: #1f2937;
+            font-size: 0.65rem;
+            user-select: none;
+            touch-action: none;
+            flex-shrink: 0;
+        }
+
+        .white-key:hover {
+            background: linear-gradient(to bottom, #e5e7eb, #d1d5db);
+        }
+
+        .white-key:active {
+            background: linear-gradient(to bottom, #bfdbfe, #93c5fd);
+        }
+
+        .black-key {
+            position: absolute;
+            width: 26px;
+            height: 82px;
+            background: linear-gradient(to bottom, #374151, black);
+            border: 2px solid #111827;
+            border-radius: 0 0 6px 6px;
+            cursor: pointer;
+            transition: all 0.1s;
+            z-index: 10;
+            color: white;
+            font-weight: bold;
+            font-size: 0.6rem;
+            display: flex;
+            align-items: flex-end;
+            padding-bottom: 0.5rem;
+            justify-content: center;
+            user-select: none;
+            touch-action: none;
+        }
+
+        .black-key:hover {
+            background: linear-gradient(to bottom, #4b5563, #1f2937);
+        }
+
+        .black-key:active {
+            background: linear-gradient(to bottom, #a78bfa, #7c3aed);
+        }
+
+        .hint {
+            text-align: center;
+            color: #bfdbfe;
+            font-size: 0.75rem;
+            margin-top: 0.5rem;
+        }
+
+        .hint.custom {
+            color: #fde047;
+        }
+
+        .hint.piano {
+            color: #d8b4fe;
+        }
+
+        .hint.display {
+            color: #6ee7b7;
+        }
+
+        .sync-indicator {
+            display: inline-block;
+            padding: 0.25rem 0.5rem;
+            border-radius: 6px;
+            font-size: 0.7rem;
+            font-weight: bold;
+            margin-left: 0.5rem;
+        }
+
+        .sync-indicator.synced {
+            background: #10b981;
+            color: white;
+        }
+
+        .sync-indicator.unsynced {
+            background: #f59e0b;
+            color: white;
+        }
+
+        .clear-btn {
+            display: flex;
+            align-items: center;
+            gap: 0.375rem;
+            padding: 0.375rem 0.75rem;
+            background: rgba(255, 255, 255, 0.2);
+            border: none;
+            border-radius: 6px;
+            color: white;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 0.75rem;
+        }
+
+        .clear-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 0.125rem 0.5rem;
+            background: #10b981;
+            color: white;
+            border-radius: 9999px;
+            font-size: 0.65rem;
+            margin-left: 0.375rem;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 1rem;
+            }
+
+            h1 {
+                font-size: 1.875rem;
+            }
+
+            .instruments-grid {
+                grid-template-columns: repeat(3, 1fr);
+            }
+
+            .piano-keys {
+                justify-content: flex-start;
+            }
+
+            .white-key {
+                width: 32px;
+                height: 110px;
+                font-size: 0.6rem;
+            }
+
+            .black-key {
+                width: 22px;
+                height: 70px;
+                font-size: 0.55rem;
+            }
+        }
+
+        .footer {
+            text-align: center;
+            margin-top: 1.5rem;
+            padding-top: 0.75rem;
+            border-top: 1px solid rgba(255, 255, 255, 0.2);
+            color: #bfdbfe;
+            font-size: 0.75rem;
+        }
+
+        .footer a {
+            color: #93c5fd;
+            text-decoration: none;
+        }
+
+        .footer a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎵 頻率產生器</h1>
+        <p class="subtitle">多樂器音色合成器 + 自訂波形 + 即時演奏</p>
+
+        <!-- 播放控制 -->
+        <button id="playButton" class="play-button stopped">
+            <span id="playIcon">▶</span>
+            <span id="playText">開始播放</span>
+        </button>
+
+        <!-- 樂器選擇 -->
+        <div class="section">
+            <h2 class="section-title">🎹 樂器音色</h2>
+            <div class="instruments-grid">
+                <button class="instrument-btn active" data-instrument="sine">
+                    <span class="instrument-icon">〰️</span>
+                    正弦波
+                </button>
+                <button class="instrument-btn" data-instrument="square">
+                    <span class="instrument-icon">⊡</span>
+                    方波
+                </button>
+                <button class="instrument-btn" data-instrument="sawtooth">
+                    <span class="instrument-icon">⚡</span>
+                    鋸齒波
+                </button>
+                <button class="instrument-btn" data-instrument="triangle">
+                    <span class="instrument-icon">△</span>
+                    三角波
+                </button>
+                <button class="instrument-btn" data-instrument="custom">
+                    <span class="instrument-icon">✏️</span>
+                    自訂波形
+                </button>
+            </div>
+        </div>
+
+        <!-- 自訂波形繪製 -->
+        <div id="customWaveSection" class="section" style="display: none;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                <h2 class="section-title" style="margin-bottom: 0;">
+                    ✏️ 繪製你的波形
+                    <span id="savedBadge" class="status-badge" style="display: none;">✓ 已儲存</span>
+                </h2>
+                <button id="clearButton" class="clear-btn">
+                    ↺ 清除
+                </button>
+            </div>
+            <div class="canvas-container draw">
+                <canvas id="drawCanvas" width="800" height="200"></canvas>
+            </div>
+            <p class="hint custom">💡 在畫布上按住滑鼠或手指,畫出一個完整週期的波形。<strong>可自由創作：</strong>對稱波形(首尾同高)或不對稱波形(如小提琴鋸齒)都可以！播放後可在示波器區調整觸發電位來穩定顯示。</p>
+        </div>
+
+        <!-- 頻率控制 -->
+        <div class="section">
+            <div class="slider-container">
+                <div class="slider-header">
+                    <h2 class="section-title" style="margin-bottom: 0;">🎚️ 頻率</h2>
+                    <span class="slider-value" id="frequencyValue">440.00 Hz</span>
+                </div>
+                <input type="range" id="frequencySlider" min="20" max="2000" step="0.01" value="440">
+                <div class="slider-labels">
+                    <span>20 Hz</span>
+                    <span>2000 Hz</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 快速音符 -->
+        <div class="section">
+            <h2 class="section-title">🎼 快速音符</h2>
+            <div class="notes-grid">
+                <button class="note-btn" data-freq="261.63">C4</button>
+                <button class="note-btn" data-freq="293.66">D4</button>
+                <button class="note-btn" data-freq="329.63">E4</button>
+                <button class="note-btn" data-freq="349.23">F4</button>
+                <button class="note-btn" data-freq="392.00">G4</button>
+                <button class="note-btn" data-freq="440.00">A4</button>
+                <button class="note-btn" data-freq="493.88">B4</button>
+            </div>
+        </div>
+
+        <!-- 音量控制 -->
+        <div class="section">
+            <div class="slider-container">
+                <div class="slider-header">
+                    <h2 class="section-title" style="margin-bottom: 0;">🔊 音量</h2>
+                    <span class="slider-value" id="volumeValue">30%</span>
+                </div>
+                <input type="range" id="volumeSlider" min="0" max="1" step="0.01" value="0.3">
+            </div>
+        </div>
+
+        <!-- 即時波形顯示 -->
+        <div class="section">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+                <h2 class="section-title" style="margin-bottom: 0;">📊 即時波形顯示</h2>
+                <button id="freezeButton" class="clear-btn" style="display: none;">
+                    ❄️ 凍結波形
+                </button>
+            </div>
+            <div class="canvas-container display">
+                <canvas id="displayCanvas" width="800" height="150" class="display-canvas"></canvas>
+            </div>
+            <p class="hint display" id="displayHint">按下播放按鈕即可看到波形</p>
+        </div>
+
+        <!-- 示波器時基調整 -->
+        <div class="section" id="oscilloscopeSection" style="display: none;">
+            <h2 class="section-title">🔬 示波器時基與觸發控制</h2>
+            
+            <!-- 觸發控制 -->
+            <div style="margin-bottom: 1rem; padding: 0.75rem; background: rgba(239, 68, 68, 0.1); border-radius: 8px; border-left: 3px solid #ef4444;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                    <span style="font-size: 0.875rem; color: #fca5a5; font-weight: 600;">⚡ 觸發設定</span>
+                    <div style="display: flex; gap: 0.5rem;">
+                        <button id="triggerRising" class="clear-btn" style="font-size: 0.7rem; padding: 0.25rem 0.5rem; background: rgba(16, 185, 129, 0.3);">
+                            ↗️ 上升沿
+                        </button>
+                        <button id="triggerFalling" class="clear-btn" style="font-size: 0.7rem; padding: 0.25rem 0.5rem;">
+                            ↘️ 下降沿
+                        </button>
+                    </div>
+                </div>
+                <div class="slider-header" style="margin-bottom: 0.25rem;">
+                    <span style="font-size: 0.8rem; color: #fca5a5;">觸發電位</span>
+                    <span class="slider-value" id="triggerValue" style="font-size: 1rem;">50%</span>
+                </div>
+                <input type="range" id="triggerSlider" min="0" max="100" step="1" value="50" style="height: 8px;">
+                <div class="slider-labels" style="font-size: 0.65rem;">
+                    <span>0% (底部)</span>
+                    <span>50% (中心)</span>
+                    <span>100% (頂部)</span>
+                </div>
+                <p style="font-size: 0.7rem; color: #fca5a5; margin-top: 0.5rem; margin-bottom: 0;">
+                    💡 對於不對稱波形(如小提琴鋸齒波),調整觸發電位可找到穩定的起始點
+                </p>
+            </div>
+
+            <!-- 時基控制 -->
+            <div class="slider-container">
+                <div class="slider-header">
+                    <div style="display: flex; align-items: center;">
+                        <span style="font-size: 0.875rem; color: #bfdbfe;">顯示週期數</span>
+                        <span id="syncIndicator" class="sync-indicator synced">✓ 已同步</span>
+                    </div>
+                    <span class="slider-value" id="cyclesValue">2.0 週期</span>
+                </div>
+                <input type="range" id="cyclesSlider" min="0.5" max="10" step="0.1" value="2.0">
+                <div class="slider-labels">
+                    <span>0.5 週期</span>
+                    <span>10 週期</span>
+                </div>
+                <div style="margin-top: 0.5rem; padding: 0.5rem; background: rgba(59, 130, 246, 0.1); border-radius: 6px; border-left: 3px solid #3b82f6;">
+                    <p style="font-size: 0.75rem; color: #93c5fd; margin: 0;">
+                        <strong>💡 提示：</strong><span id="timebaseInfo">時基 = 1.14 ms/格 (每格 1.14 毫秒)</span>
+                    </p>
+                    <p style="font-size: 0.7rem; color: #bfdbfe; margin: 0.25rem 0 0 0;" id="syncHint">
+                        調整到整數個週期(1.0, 2.0, 3.0...)波形會靜止不動,就像駐波一樣!
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 鋼琴鍵盤 -->
+        <div class="section">
+            <h2 class="section-title">🎹 即時演奏鋼琴(兩個八度)</h2>
+            <div class="piano-container">
+                <div class="piano-keys" id="pianoKeys"></div>
+                <p class="hint piano">💡 按住琴鍵演奏,放開停止 - 支持滑鼠和觸控</p>
+            </div>
+        </div>
+
+        <p class="hint">💡 用鋼琴鍵盤即時演奏,或選擇「自訂波形」創造獨特音色!</p>
+
+        <div class="footer">
+            <p>開源專案 - 歡迎分享給更多學生使用</p>
+            <p>適用於音樂教學、物理教學、聲波學習</p>
+        </div>
+    </div>
+
+    <script>
+        // 全域變數
+        let audioContext;
+        let oscillator = null;
+        let gainNode;
+        let analyser;
+        let animationId = null;
+        let isPlaying = false;
+        let currentInstrument = 'sine';
+        let frequency = 440;
+        let volume = 0.3;
+        let customWaveData = null;
+        let drawingPoints = [];
+        let isDrawing = false;
+        let isFrozen = false;
+        let frozenImageData = null;
+        let displayCycles = 2.0;
+        let triggerLevel = 50; // 觸發電位百分比 (0-100)
+        let triggerSlope = 'rising'; // 觸發斜率: 'rising' 或 'falling'
+
+        // 初始化
+        function init() {
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            gainNode = audioContext.createGain();
+            gainNode.connect(audioContext.destination);
+            
+            analyser = audioContext.createAnalyser();
+            analyser.fftSize = 2048;
+            gainNode.connect(analyser);
+
+            drawGrid(document.getElementById('drawCanvas'));
+            initPianoKeys();
+            setupEventListeners();
+        }
+
+        // 繪製網格
+        function drawGrid(canvas) {
+            const ctx = canvas.getContext('2d');
+            const width = canvas.width;
+            const height = canvas.height;
+
+            ctx.fillStyle = '#1e293b';
+            ctx.fillRect(0, 0, width, height);
+
+            ctx.strokeStyle = '#334155';
+            ctx.lineWidth = 1;
+
+            for (let i = 0; i <= 10; i++) {
+                ctx.beginPath();
+                ctx.moveTo((width / 10) * i, 0);
+                ctx.lineTo((width / 10) * i, height);
+                ctx.stroke();
+            }
+
+            for (let i = 0; i <= 4; i++) {
+                ctx.beginPath();
+                ctx.moveTo(0, (height / 4) * i);
+                ctx.lineTo(width, (height / 4) * i);
+                ctx.stroke();
+            }
+
+            ctx.strokeStyle = '#475569';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(0, height / 2);
+            ctx.lineTo(width, height / 2);
+            ctx.stroke();
+        }
+
+        // 繪製使用者的波形
+        function drawUserWave(points) {
+            const canvas = document.getElementById('drawCanvas');
+            const ctx = canvas.getContext('2d');
+
+            drawGrid(canvas);
+
+            if (points.length < 2) return;
+
+            // 繪製主波形
+            ctx.strokeStyle = '#3b82f6';
+            ctx.lineWidth = 3;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+
+            ctx.beginPath();
+            ctx.moveTo(points[0].x, points[0].y);
+
+            for (let i = 1; i < points.length; i++) {
+                ctx.lineTo(points[i].x, points[i].y);
+            }
+
+            ctx.stroke();
+
+            // 標記起點和終點
+            const height = canvas.height;
+            
+            // 起點標記(綠色)
+            ctx.fillStyle = '#10b981';
+            ctx.beginPath();
+            ctx.arc(points[0].x, points[0].y, 6, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // 終點標記(紅色)
+            if (points.length > 1) {
+                ctx.fillStyle = '#ef4444';
+                ctx.beginPath();
+                ctx.arc(points[points.length - 1].x, points[points.length - 1].y, 6, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // 如果起點和終點高度接近,顯示週期連續提示
+                const yDiff = Math.abs(points[0].y - points[points.length - 1].y);
+                if (yDiff < 10) {
+                    ctx.fillStyle = '#10b981';
+                    ctx.font = 'bold 12px monospace';
+                    ctx.fillText('✓ 週期連續', canvas.width - 80, 20);
+                } else {
+                    ctx.fillStyle = '#fbbf24';
+                    ctx.font = 'bold 12px monospace';
+                    ctx.fillText('⚠ 首尾高度不同', canvas.width - 110, 20);
+                }
+            }
+            
+            // 繪製中心線參考
+            ctx.strokeStyle = '#475569';
+            ctx.lineWidth = 1;
+            ctx.setLineDash([5, 5]);
+            ctx.beginPath();
+            ctx.moveTo(0, height / 2);
+            ctx.lineTo(canvas.width, height / 2);
+            ctx.stroke();
+            ctx.setLineDash([]);
+        }
+
+        // 轉換波形點為傅立葉係數
+        function convertPointsToWaveform(points) {
+            const canvas = document.getElementById('drawCanvas');
+            const height = canvas.height;
+            const width = canvas.width;
+
+            // 使用更高的採樣率以捕捉更多細節
+            const sampleCount = 8192;
+            const timeDomain = new Float32Array(sampleCount);
+
+            // 步驟 1: 對手繪點進行插值,確保首尾連續
+            // 先排序點(按 x 座標)
+            const sortedPoints = [...points].sort((a, b) => a.x - b.x);
+            
+            // 如果起點不在 x=0 附近,添加起點
+            if (sortedPoints[0].x > 5) {
+                sortedPoints.unshift({ x: 0, y: sortedPoints[0].y });
+            }
+            
+            // 如果終點不在 x=width 附近,添加終點(與起點 y 值相同,確保週期性)
+            if (sortedPoints[sortedPoints.length - 1].x < width - 5) {
+                sortedPoints.push({ x: width, y: sortedPoints[0].y });
+            } else {
+                // 強制終點 y 值等於起點 y 值,確保週期連續
+                sortedPoints[sortedPoints.length - 1].y = sortedPoints[0].y;
+            }
+
+            // 步驟 2: 對整個週期進行均勻採樣
+            for (let i = 0; i < sampleCount; i++) {
+                const x = (i / sampleCount) * width;
+                let y = height / 2;
+
+                // 線性插值找到對應的 y 值
+                for (let j = 0; j < sortedPoints.length - 1; j++) {
+                    const p1 = sortedPoints[j];
+                    const p2 = sortedPoints[j + 1];
+
+                    if (x >= p1.x && x <= p2.x) {
+                        const t = (x - p1.x) / (p2.x - p1.x);
+                        y = p1.y + t * (p2.y - p1.y);
+                        break;
+                    }
+                }
+
+                // 轉換為標準化振幅 [-1, 1]
+                timeDomain[i] = (height / 2 - y) / (height / 2);
+            }
+
+            // 步驟 3: 計算 DFT(離散傅立葉變換)
+            // 使用更多諧波以獲得更精確的波形重建
+            const harmonics = 256;
+            const real = new Float32Array(harmonics);
+            const imag = new Float32Array(harmonics);
+
+            // DC 分量(k=0)需要特別處理
+            let dcSum = 0;
+            for (let n = 0; n < sampleCount; n++) {
+                dcSum += timeDomain[n];
+            }
+            real[0] = dcSum / sampleCount;
+            imag[0] = 0;
+
+            // 計算各次諧波的係數
+            for (let k = 1; k < harmonics; k++) {
+                let sumReal = 0;
+                let sumImag = 0;
+
+                for (let n = 0; n < sampleCount; n++) {
+                    const angle = (2 * Math.PI * k * n) / sampleCount;
+                    sumReal += timeDomain[n] * Math.cos(angle);
+                    sumImag += timeDomain[n] * Math.sin(angle);
+                }
+
+                // DFT 標準公式:除以 N/2(對於實數信號)
+                real[k] = (2 / sampleCount) * sumReal;
+                // 注意:虛部符號為負,這是 Web Audio API 的約定
+                imag[k] = -(2 / sampleCount) * sumImag;
+            }
+
+            // 步驟 4: 移除 DC 偏移以確保波形對稱
+            real[0] = 0;
+
+            return { real, imag, timeDomain };
+        }
+
+        // 繪製即時波形
+        function drawWaveform() {
+            const canvas = document.getElementById('displayCanvas');
+            const ctx = canvas.getContext('2d');
+            const width = canvas.width;
+            const height = canvas.height;
+            const bufferLength = analyser.frequencyBinCount;
+            const dataArray = new Uint8Array(bufferLength);
+
+            function draw() {
+                // 如果凍結,就不繼續動畫
+                if (isFrozen) return;
+                
+                animationId = requestAnimationFrame(draw);
+
+                analyser.getByteTimeDomainData(dataArray);
+
+                // === 可調整觸發同步機制 ===
+                // 計算觸發閾值 (0-255)
+                const threshold = Math.round((triggerLevel / 100) * 255);
+                let triggerPoint = 0;
+                
+                if (triggerSlope === 'rising') {
+                    // 尋找上升沿：從低於閾值變成高於閾值
+                    for (let i = 1; i < bufferLength - 1; i++) {
+                        if (dataArray[i - 1] < threshold && dataArray[i] >= threshold) {
+                            triggerPoint = i;
+                            break;
+                        }
+                    }
+                } else {
+                    // 尋找下降沿：從高於閾值變成低於閾值
+                    for (let i = 1; i < bufferLength - 1; i++) {
+                        if (dataArray[i - 1] > threshold && dataArray[i] <= threshold) {
+                            triggerPoint = i;
+                            break;
+                        }
+                    }
+                }
+
+                // 計算要顯示的樣本數(根據顯示週期數)
+                const period = 1 / frequency; // 週期(秒)
+                const sampleRate = audioContext.sampleRate; // 取樣率
+                const samplesPerPeriod = sampleRate * period; // 一個週期的樣本數
+                const samplesToShow = Math.round(samplesPerPeriod * displayCycles); // 要顯示的總樣本數
+                
+                // 確保不超過 buffer 長度且從觸發點開始有足夠的資料
+                const actualSamples = Math.min(samplesToShow, bufferLength - triggerPoint);
+
+                // 清空畫布
+                ctx.fillStyle = '#1e293b';
+                ctx.fillRect(0, 0, width, height);
+
+                // 繪製網格
+                ctx.strokeStyle = '#334155';
+                ctx.lineWidth = 1;
+                for (let i = 0; i <= 10; i++) {
+                    ctx.beginPath();
+                    ctx.moveTo((width / 10) * i, 0);
+                    ctx.lineTo((width / 10) * i, height);
+                    ctx.stroke();
+                }
+                for (let i = 0; i <= 4; i++) {
+                    ctx.beginPath();
+                    ctx.moveTo(0, (height / 4) * i);
+                    ctx.lineTo(width, (height / 4) * i);
+                    ctx.stroke();
+                }
+
+                // 中心線
+                ctx.strokeStyle = '#475569';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(0, height / 2);
+                ctx.lineTo(width, height / 2);
+                ctx.stroke();
+
+                // 繪製觸發電位線（水平虛線）
+                const triggerY = height - (triggerLevel / 100) * height;
+                ctx.strokeStyle = '#ef4444';
+                ctx.lineWidth = 2;
+                ctx.setLineDash([5, 5]);
+                ctx.beginPath();
+                ctx.moveTo(0, triggerY);
+                ctx.lineTo(width, triggerY);
+                ctx.stroke();
+                ctx.setLineDash([]);
+
+                // 繪製觸發點標記（左側）
+                ctx.fillStyle = '#ef4444';
+                ctx.beginPath();
+                ctx.arc(5, triggerY, 5, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // 繪製觸發箭頭標示
+                ctx.fillStyle = '#fca5a5';
+                ctx.font = 'bold 11px monospace';
+                const triggerText = triggerSlope === 'rising' ? '↗️' : '↘️';
+                ctx.fillText(triggerText + triggerLevel + '%', 15, triggerY + 4);
+
+                // 繪製波形(從觸發點開始)
+                ctx.strokeStyle = '#10b981';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+
+                const sliceWidth = width / actualSamples;
+                let x = 0;
+
+                for (let i = 0; i < actualSamples; i++) {
+                    const dataIndex = triggerPoint + i;
+                    if (dataIndex >= bufferLength) break;
+                    
+                    const v = dataArray[dataIndex] / 128.0;
+                    const y = (v * height) / 2;
+
+                    if (i === 0) {
+                        ctx.moveTo(x, y);
+                    } else {
+                        ctx.lineTo(x, y);
+                    }
+
+                    x += sliceWidth;
+                }
+
+                ctx.stroke();
+
+                // 繪製時間刻度
+                ctx.fillStyle = '#93c5fd';
+                ctx.font = '10px monospace';
+                const timePerDiv = (period * displayCycles / 10) * 1000; // ms/格
+                for (let i = 0; i <= 10; i += 2) {
+                    const timeMs = (timePerDiv * i).toFixed(2);
+                    ctx.fillText(timeMs + 'ms', (width / 10) * i + 2, height - 2);
+                }
+            }
+
+            draw();
+        }
+
+        // 更新時基資訊
+        function updateTimebaseInfo() {
+            const period = 1 / frequency; // 秒
+            const totalTime = period * displayCycles; // 總顯示時間
+            const timePerDiv = totalTime / 10; // 每格的時間(10格)
+            const timePerDivMs = timePerDiv * 1000; // 轉換為毫秒
+
+            // 更新顯示
+            document.getElementById('cyclesValue').textContent = displayCycles.toFixed(1) + ' 週期';
+            document.getElementById('timebaseInfo').textContent = 
+                `時基 = ${timePerDivMs.toFixed(2)} ms/格 | 週期 = ${(period * 1000).toFixed(2)} ms | 顯示總時間 = ${(totalTime * 1000).toFixed(2)} ms`;
+
+            // 檢查是否同步(整數個週期)
+            const isInteger = Math.abs(displayCycles - Math.round(displayCycles)) < 0.01;
+            const indicator = document.getElementById('syncIndicator');
+            const hint = document.getElementById('syncHint');
+
+            if (isInteger) {
+                indicator.className = 'sync-indicator synced';
+                indicator.textContent = '✓ 已同步';
+                hint.textContent = `完美!顯示 ${Math.round(displayCycles)} 個完整週期。波形起點與終點完美對齊,形成閉合迴路。`;
+                hint.style.color = '#6ee7b7';
+            } else {
+                indicator.className = 'sync-indicator unsynced';
+                indicator.textContent = '⚠️ 未同步';
+                const wholePart = Math.floor(displayCycles);
+                const fractionalPart = (displayCycles - wholePart).toFixed(1);
+                hint.textContent = `顯示 ${wholePart} 個完整週期 + ${fractionalPart} 個週期(${(fractionalPart * 100).toFixed(0)}%)。雖然觸發機制讓波形穩定顯示,但注意右側波形未閉合。試著調整到整數讓起點與終點對齊!`;
+                hint.style.color = '#fbbf24';
+            }
+        }
+
+        function toggleFreeze() {
+            const canvas = document.getElementById('displayCanvas');
+            const ctx = canvas.getContext('2d');
+            const button = document.getElementById('freezeButton');
+
+            if (!isFrozen) {
+                // 凍結:保存當前畫面
+                frozenImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                isFrozen = true;
+                button.textContent = '▶️ 繼續播放';
+                button.style.background = 'rgba(16, 185, 129, 0.3)';
+                
+                // 停止動畫但不停止聲音
+                if (animationId) {
+                    cancelAnimationFrame(animationId);
+                    animationId = null;
+                }
+            } else {
+                // 解凍:恢復動畫
+                isFrozen = false;
+                frozenImageData = null;
+                button.textContent = '❄️ 凍結波形';
+                button.style.background = 'rgba(255, 255, 255, 0.2)';
+                
+                // 如果正在播放,重新開始動畫
+                if (isPlaying) {
+                    drawWaveform();
+                }
+            }
+        }
+
+        // 停止波形顯示
+        function stopWaveform() {
+            if (animationId) {
+                cancelAnimationFrame(animationId);
+                animationId = null;
+            }
+
+            // 重置凍結狀態
+            isFrozen = false;
+            frozenImageData = null;
+            const button = document.getElementById('freezeButton');
+            button.textContent = '❄️ 凍結波形';
+            button.style.background = 'rgba(255, 255, 255, 0.2)';
+            button.style.display = 'none';
+            document.getElementById('oscilloscopeSection').style.display = 'none';
+
+            const canvas = document.getElementById('displayCanvas');
+            drawGrid(canvas);
+        }
+
+        // 開始播放
+        async function startSound() {
+            if (audioContext.state === 'suspended') {
+                await audioContext.resume();
+            }
+
+            oscillator = audioContext.createOscillator();
+
+            if (currentInstrument === 'custom' && customWaveData) {
+                try {
+                    const correctedReal = new Float32Array(customWaveData.real);
+                    const correctedImag = new Float32Array(customWaveData.imag);
+                    correctedReal[0] = 0;
+                    correctedImag[0] = 0;
+
+                    const periodicWave = audioContext.createPeriodicWave(
+                        correctedReal,
+                        correctedImag,
+                        { disableNormalization: false }
+                    );
+                    oscillator.setPeriodicWave(periodicWave);
+                } catch (error) {
+                    oscillator.type = 'sine';
+                }
+            } else {
+                oscillator.type = currentInstrument === 'custom' ? 'sine' : currentInstrument;
+            }
+
+            oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime);
+            oscillator.connect(gainNode);
+            gainNode.gain.setValueAtTime(volume, audioContext.currentTime);
+
+            oscillator.start();
+            isPlaying = true;
+
+            updatePlayButton();
+            drawWaveform();
+            document.getElementById('displayHint').textContent = '🎵 正在播放中...';
+            document.getElementById('freezeButton').style.display = 'flex';
+            document.getElementById('oscilloscopeSection').style.display = 'block';
+            updateTimebaseInfo();
+        }
+
+        // 停止播放
+        function stopSound() {
+            if (oscillator) {
+                try {
+                    oscillator.stop();
+                    oscillator.disconnect();
+                } catch (e) {}
+                oscillator = null;
+            }
+            isPlaying = false;
+
+            updatePlayButton();
+            stopWaveform();
+            document.getElementById('displayHint').textContent = '按下播放按鈕即可看到波形';
+        }
+
+        // 更新播放按鈕
+        function updatePlayButton() {
+            const button = document.getElementById('playButton');
+            const icon = document.getElementById('playIcon');
+            const text = document.getElementById('playText');
+
+            if (isPlaying) {
+                button.className = 'play-button playing';
+                icon.textContent = '⏹';
+                text.textContent = '停止播放';
+            } else {
+                button.className = 'play-button stopped';
+                icon.textContent = '▶';
+                text.textContent = '開始播放';
+            }
+        }
+
+        // 演奏音符
+        async function playNote(freq) {
+            if (oscillator) {
+                try {
+                    oscillator.stop();
+                    oscillator.disconnect();
+                } catch (e) {}
+                oscillator = null;
+            }
+
+            if (audioContext.state === 'suspended') {
+                await audioContext.resume();
+            }
+
+            oscillator = audioContext.createOscillator();
+
+            if (currentInstrument === 'custom' && customWaveData) {
+                try {
+                    const correctedReal = new Float32Array(customWaveData.real);
+                    const correctedImag = new Float32Array(customWaveData.imag);
+                    correctedReal[0] = 0;
+                    correctedImag[0] = 0;
+
+                    const periodicWave = audioContext.createPeriodicWave(
+                        correctedReal,
+                        correctedImag,
+                        { disableNormalization: false }
+                    );
+                    oscillator.setPeriodicWave(periodicWave);
+                } catch (error) {
+                    oscillator.type = 'sine';
+                }
+            } else {
+                oscillator.type = currentInstrument === 'custom' ? 'sine' : currentInstrument;
+            }
+
+            oscillator.frequency.setValueAtTime(freq, audioContext.currentTime);
+            oscillator.connect(gainNode);
+            gainNode.gain.setValueAtTime(volume, audioContext.currentTime);
+
+            oscillator.start();
+            isPlaying = true;
+            frequency = freq;
+
+            document.getElementById('frequencySlider').value = freq;
+            document.getElementById('frequencyValue').textContent = freq.toFixed(2) + ' Hz';
+
+            updatePlayButton();
+            drawWaveform();
+            document.getElementById('displayHint').textContent = '🎵 正在播放中...';
+            document.getElementById('freezeButton').style.display = 'flex';
+            document.getElementById('oscilloscopeSection').style.display = 'block';
+            updateTimebaseInfo();
+        }
+
+        // 停止音符
+        function stopNote() {
+            stopSound();
+        }
+
+        // 初始化鋼琴鍵
+        function initPianoKeys() {
+            // 兩個八度的鋼琴鍵(C3 到 C5)
+            const pianoKeys = [
+                // 第一個八度 C3-B3
+                { name: 'C3', freq: 130.81, isBlack: false, label: 'C3' },
+                { name: 'C#3', freq: 138.59, isBlack: true, label: 'C#' },
+                { name: 'D3', freq: 146.83, isBlack: false, label: 'D3' },
+                { name: 'D#3', freq: 155.56, isBlack: true, label: 'D#' },
+                { name: 'E3', freq: 164.81, isBlack: false, label: 'E3' },
+                { name: 'F3', freq: 174.61, isBlack: false, label: 'F3' },
+                { name: 'F#3', freq: 185.00, isBlack: true, label: 'F#' },
+                { name: 'G3', freq: 196.00, isBlack: false, label: 'G3' },
+                { name: 'G#3', freq: 207.65, isBlack: true, label: 'G#' },
+                { name: 'A3', freq: 220.00, isBlack: false, label: 'A3' },
+                { name: 'A#3', freq: 233.08, isBlack: true, label: 'A#' },
+                { name: 'B3', freq: 246.94, isBlack: false, label: 'B3' },
+                // 第二個八度 C4-B4
+                { name: 'C4', freq: 261.63, isBlack: false, label: 'C4' },
+                { name: 'C#4', freq: 277.18, isBlack: true, label: 'C#' },
+                { name: 'D4', freq: 293.66, isBlack: false, label: 'D4' },
+                { name: 'D#4', freq: 311.13, isBlack: true, label: 'D#' },
+                { name: 'E4', freq: 329.63, isBlack: false, label: 'E4' },
+                { name: 'F4', freq: 349.23, isBlack: false, label: 'F4' },
+                { name: 'F#4', freq: 369.99, isBlack: true, label: 'F#' },
+                { name: 'G4', freq: 392.00, isBlack: false, label: 'G4' },
+                { name: 'G#4', freq: 415.30, isBlack: true, label: 'G#' },
+                { name: 'A4', freq: 440.00, isBlack: false, label: 'A4' },
+                { name: 'A#4', freq: 466.16, isBlack: true, label: 'A#' },
+                { name: 'B4', freq: 493.88, isBlack: false, label: 'B4' },
+                { name: 'C5', freq: 523.25, isBlack: false, label: 'C5' }
+            ];
+
+            const container = document.getElementById('pianoKeys');
+            const whiteKeys = pianoKeys.filter(k => !k.isBlack);
+            const blackKeys = pianoKeys.filter(k => k.isBlack);
+
+            // 創建白鍵
+            whiteKeys.forEach(key => {
+                const button = document.createElement('button');
+                button.className = 'white-key';
+                button.textContent = key.label;
+                button.dataset.freq = key.freq;
+
+                button.addEventListener('mousedown', () => playNote(key.freq));
+                button.addEventListener('mouseup', stopNote);
+                button.addEventListener('mouseleave', stopNote);
+                button.addEventListener('touchstart', (e) => {
+                    e.preventDefault();
+                    playNote(key.freq);
+                });
+                button.addEventListener('touchend', (e) => {
+                    e.preventDefault();
+                    stopNote();
+                });
+
+                container.appendChild(button);
+            });
+
+            // 創建黑鍵,並計算正確位置
+            blackKeys.forEach((key) => {
+                const button = document.createElement('button');
+                button.className = 'black-key';
+                button.textContent = key.label;
+                button.dataset.freq = key.freq;
+
+                // 計算黑鍵在所有鍵中的索引
+                const keyIndex = pianoKeys.indexOf(key);
+                // 計算在這個黑鍵之前有多少個白鍵
+                const whiteKeysBefore = pianoKeys.slice(0, keyIndex).filter(k => !k.isBlack).length;
+                
+                // 黑鍵位置:在兩個白鍵之間,偏移量根據白鍵寬度和黑鍵寬度計算
+                const whiteKeyWidth = 38;
+                const blackKeyWidth = 26;
+                const offset = whiteKeyWidth - (blackKeyWidth / 2);
+                
+                button.style.left = `${whiteKeysBefore * whiteKeyWidth + offset + 10}px`;
+
+                button.addEventListener('mousedown', () => playNote(key.freq));
+                button.addEventListener('mouseup', stopNote);
+                button.addEventListener('mouseleave', stopNote);
+                button.addEventListener('touchstart', (e) => {
+                    e.preventDefault();
+                    playNote(key.freq);
+                });
+                button.addEventListener('touchend', (e) => {
+                    e.preventDefault();
+                    stopNote();
+                });
+
+                container.appendChild(button);
+            });
+        }
+
+        // 設置事件監聽器
+        function setupEventListeners() {
+            // 播放按鈕
+            document.getElementById('playButton').addEventListener('click', () => {
+                if (isPlaying) {
+                    stopSound();
+                } else {
+                    startSound();
+                }
+            });
+
+            // 樂器按鈕
+            document.querySelectorAll('.instrument-btn').forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    const wasPlaying = isPlaying;
+                    const instrument = btn.dataset.instrument;
+
+                    // 更新選中狀態
+                    document.querySelectorAll('.instrument-btn').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+
+                    currentInstrument = instrument;
+
+                    // 顯示/隱藏自訂波形區域
+                    if (instrument === 'custom') {
+                        document.getElementById('customWaveSection').style.display = 'block';
+                    } else {
+                        document.getElementById('customWaveSection').style.display = 'none';
+                    }
+
+                    // 如果正在播放,重新啟動
+                    if (wasPlaying) {
+                        if (oscillator) {
+                            try {
+                                oscillator.stop();
+                                oscillator.disconnect();
+                            } catch (e) {}
+                            oscillator = null;
+                        }
+                        stopWaveform();
+
+                        await new Promise(resolve => setTimeout(resolve, 100));
+
+                        oscillator = audioContext.createOscillator();
+
+                        if (instrument === 'custom' && customWaveData) {
+                            try {
+                                const correctedReal = new Float32Array(customWaveData.real);
+                                const correctedImag = new Float32Array(customWaveData.imag);
+                                correctedReal[0] = 0;
+                                correctedImag[0] = 0;
+
+                                const periodicWave = audioContext.createPeriodicWave(
+                                    correctedReal,
+                                    correctedImag,
+                                    { disableNormalization: false }
+                                );
+                                oscillator.setPeriodicWave(periodicWave);
+                            } catch (error) {
+                                oscillator.type = 'sine';
+                            }
+                        } else {
+                            oscillator.type = instrument;
+                        }
+
+                        oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime);
+                        oscillator.connect(gainNode);
+                        gainNode.gain.setValueAtTime(volume, audioContext.currentTime);
+
+                        oscillator.start();
+                        isPlaying = true;
+                        drawWaveform();
+                    }
+                });
+            });
+
+            // 頻率滑桿
+            document.getElementById('frequencySlider').addEventListener('input', (e) => {
+                frequency = parseFloat(e.target.value);
+                document.getElementById('frequencyValue').textContent = frequency.toFixed(2) + ' Hz';
+
+                if (oscillator) {
+                    oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime);
+                }
+
+                // 更新時基資訊
+                if (isPlaying) {
+                    updateTimebaseInfo();
+                }
+            });
+
+            // 音量滑桿
+            document.getElementById('volumeSlider').addEventListener('input', (e) => {
+                volume = parseFloat(e.target.value);
+                document.getElementById('volumeValue').textContent = Math.round(volume * 100) + '%';
+
+                if (gainNode) {
+                    gainNode.gain.setValueAtTime(volume, audioContext.currentTime);
+                }
+            });
+
+            // 快速音符按鈕
+            document.querySelectorAll('.note-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    frequency = parseFloat(btn.dataset.freq);
+                    document.getElementById('frequencySlider').value = frequency;
+                    document.getElementById('frequencyValue').textContent = frequency.toFixed(2) + ' Hz';
+
+                    if (oscillator) {
+                        oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime);
+                    }
+
+                    // 更新時基資訊
+                    if (isPlaying) {
+                        updateTimebaseInfo();
+                    }
+                });
+            });
+
+            // 繪製畫布事件
+            const drawCanvas = document.getElementById('drawCanvas');
+
+            function getCanvasCoords(e, canvas) {
+                const rect = canvas.getBoundingClientRect();
+                const scaleX = canvas.width / rect.width;
+                const scaleY = canvas.height / rect.height;
+
+                if (e.touches) {
+                    return {
+                        x: (e.touches[0].clientX - rect.left) * scaleX,
+                        y: (e.touches[0].clientY - rect.top) * scaleY
+                    };
+                } else {
+                    return {
+                        x: (e.clientX - rect.left) * scaleX,
+                        y: (e.clientY - rect.top) * scaleY
+                    };
+                }
+            }
+
+            drawCanvas.addEventListener('mousedown', (e) => {
+                isDrawing = true;
+                const coords = getCanvasCoords(e, drawCanvas);
+                drawingPoints = [coords];
+            });
+
+            drawCanvas.addEventListener('mousemove', (e) => {
+                if (!isDrawing) return;
+                const coords = getCanvasCoords(e, drawCanvas);
+                drawingPoints.push(coords);
+                drawUserWave(drawingPoints);
+            });
+
+            drawCanvas.addEventListener('mouseup', () => {
+                if (isDrawing && drawingPoints.length > 10) {
+                    customWaveData = convertPointsToWaveform(drawingPoints);
+                    
+                    // 檢查週期連續性
+                    const yDiff = Math.abs(drawingPoints[0].y - drawingPoints[drawingPoints.length - 1].y);
+                    const badge = document.getElementById('savedBadge');
+                    
+                    if (yDiff < 10) {
+                        badge.textContent = '✓ 已儲存(週期完美)';
+                        badge.style.background = '#10b981';
+                    } else {
+                        badge.textContent = '✓ 已儲存(已自動修正)';
+                        badge.style.background = '#f59e0b';
+                    }
+                    badge.style.display = 'inline-block';
+                }
+                isDrawing = false;
+            });
+
+            drawCanvas.addEventListener('mouseleave', () => {
+                if (isDrawing && drawingPoints.length > 10) {
+                    customWaveData = convertPointsToWaveform(drawingPoints);
+                    
+                    const yDiff = Math.abs(drawingPoints[0].y - drawingPoints[drawingPoints.length - 1].y);
+                    const badge = document.getElementById('savedBadge');
+                    
+                    if (yDiff < 10) {
+                        badge.textContent = '✓ 已儲存(週期完美)';
+                        badge.style.background = '#10b981';
+                    } else {
+                        badge.textContent = '✓ 已儲存(已自動修正)';
+                        badge.style.background = '#f59e0b';
+                    }
+                    badge.style.display = 'inline-block';
+                }
+                isDrawing = false;
+            });
+
+            // 觸控事件
+            drawCanvas.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                isDrawing = true;
+                const coords = getCanvasCoords(e, drawCanvas);
+                drawingPoints = [coords];
+            });
+
+            drawCanvas.addEventListener('touchmove', (e) => {
+                e.preventDefault();
+                if (!isDrawing) return;
+                const coords = getCanvasCoords(e, drawCanvas);
+                drawingPoints.push(coords);
+                drawUserWave(drawingPoints);
+            });
+
+            drawCanvas.addEventListener('touchend', (e) => {
+                e.preventDefault();
+                if (isDrawing && drawingPoints.length > 10) {
+                    customWaveData = convertPointsToWaveform(drawingPoints);
+                    
+                    const yDiff = Math.abs(drawingPoints[0].y - drawingPoints[drawingPoints.length - 1].y);
+                    const badge = document.getElementById('savedBadge');
+                    
+                    if (yDiff < 10) {
+                        badge.textContent = '✓ 已儲存(週期完美)';
+                        badge.style.background = '#10b981';
+                    } else {
+                        badge.textContent = '✓ 已儲存(已自動修正)';
+                        badge.style.background = '#f59e0b';
+                    }
+                    badge.style.display = 'inline-block';
+                }
+                isDrawing = false;
+            });
+
+            // 清除按鈕
+            document.getElementById('clearButton').addEventListener('click', () => {
+                drawingPoints = [];
+                customWaveData = null;
+                drawGrid(drawCanvas);
+                document.getElementById('savedBadge').style.display = 'none';
+            });
+
+            // 凍結按鈕
+            document.getElementById('freezeButton').addEventListener('click', toggleFreeze);
+
+            // 週期數滑桿
+            document.getElementById('cyclesSlider').addEventListener('input', (e) => {
+                displayCycles = parseFloat(e.target.value);
+                updateTimebaseInfo();
+                
+                // 如果正在播放且未凍結,重新繪製波形
+                if (isPlaying && !isFrozen) {
+                    // 停止當前動畫
+                    if (animationId) {
+                        cancelAnimationFrame(animationId);
+                        animationId = null;
+                    }
+                    // 重新開始繪製
+                    drawWaveform();
+                }
+            });
+
+            // 觸發電位滑桿
+            document.getElementById('triggerSlider').addEventListener('input', (e) => {
+                triggerLevel = parseFloat(e.target.value);
+                document.getElementById('triggerValue').textContent = triggerLevel.toFixed(0) + '%';
+                
+                // 如果正在播放且未凍結,波形會自動更新
+            });
+
+            // 觸發斜率按鈕
+            document.getElementById('triggerRising').addEventListener('click', () => {
+                triggerSlope = 'rising';
+                document.getElementById('triggerRising').style.background = 'rgba(16, 185, 129, 0.3)';
+                document.getElementById('triggerFalling').style.background = 'rgba(255, 255, 255, 0.2)';
+            });
+
+            document.getElementById('triggerFalling').addEventListener('click', () => {
+                triggerSlope = 'falling';
+                document.getElementById('triggerFalling').style.background = 'rgba(239, 68, 68, 0.3)';
+                document.getElementById('triggerRising').style.background = 'rgba(255, 255, 255, 0.2)';
+            });
+        }
+
+        // 頁面載入時初始化
+        window.addEventListener('load', init);
+    </script>
+</body>
+</html>
