@@ -447,6 +447,64 @@
             box-shadow: 0 0 15px rgba(59, 130, 246, 0.3);
         }
 
+        .duration-control {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 0.75rem;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            margin-bottom: 1rem;
+        }
+
+        .duration-input-group {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .duration-input {
+            width: 80px;
+            padding: 0.5rem;
+            background: rgba(255, 255, 255, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 6px;
+            color: white;
+            font-size: 0.875rem;
+            text-align: center;
+        }
+
+        .duration-input:focus {
+            outline: none;
+            border-color: #3b82f6;
+            background: rgba(255, 255, 255, 0.25);
+        }
+
+        .duration-label {
+            color: #bfdbfe;
+            font-size: 0.875rem;
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            cursor: pointer;
+        }
+
+        .checkbox-group input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+            accent-color: #3b82f6;
+        }
+
+        .divider {
+            width: 1px;
+            height: 30px;
+            background: rgba(255, 255, 255, 0.2);
+        }
+
         .status-badge {
             display: inline-block;
             padding: 0.125rem 0.5rem;
@@ -516,6 +574,20 @@
             <span id="playIcon">▶</span>
             <span id="playText">開始播放</span>
         </button>
+
+        <!-- 播放時長控制 -->
+        <div class="duration-control">
+            <div class="duration-input-group">
+                <span class="duration-label">🕐 播放時長：</span>
+                <input type="number" id="durationInput" class="duration-input" min="0.1" max="60" step="0.1" value="2">
+                <span class="duration-label">秒</span>
+            </div>
+            <div class="divider"></div>
+            <label class="checkbox-group">
+                <input type="checkbox" id="continuousPlay" checked>
+                <span class="duration-label">♾️ 持續播放</span>
+            </label>
+        </div>
 
         <!-- 樂器選擇 -->
         <div class="section">
@@ -742,6 +814,9 @@
         let triggerLevel = 50; // 觸發電位百分比 (0-100)
         let triggerSlope = 'rising'; // 觸發斜率: 'rising' 或 'falling'
         let displayMode = 'normal'; // 顯示模式: 'normal' 或 'oscilloscope'
+        let playDuration = 2; // 播放時長（秒）
+        let isContinuousPlay = true; // 是否持續播放
+        let stopTimeout = null; // 自動停止的計時器
 
         // 初始化
         function init() {
@@ -777,19 +852,30 @@
 
             switch(instrument) {
                 case 'flute':
-                    // 長笛：基於 F5 (694Hz) 頻譜分析
-                    // 特徵：基頻和2次諧波都極強（幾乎相等），形成明顯雙峰
-                    real[1] = 1.00;   // 基頻（-12dB 參考）
-                    real[2] = 0.95;   // 第2諧波（-13dB，幾乎跟基頻一樣強！）
-                    real[3] = 0.55;   // 第3諧波（-18dB）
-                    real[4] = 0.30;   // 第4諧波（-27dB）
-                    real[5] = 0.15;   // 第5諧波（-33dB）
-                    real[6] = 0.08;   // 第6諧波（快速衰減）
-                    real[7] = 0.04;   // 第7諧波
+                    // 長笛：基於手繪波形的真實傅立葉係數
+                    // 來源：從實際長笛波形手繪並轉換
+                    // 特徵：基頻超強，諧波快速衰減，純淨音色
+                    const fluteReal = [
+                        0.000000, -0.665689, -0.241520, -0.084461, 0.023754, -0.018882,
+                        -0.014470, 0.001353, -0.004049, 0.001439, -0.004839, -0.000522,
+                        -0.001376, -0.002107, -0.000180, 0.000510, -0.002791, 0.001364,
+                        -0.001820, 0.001408, 0.000263, 0.000756, 0.001253, -0.000481,
+                        0.000832, 0.000406, 0.000675, 0.000419, -0.000018, 0.000670,
+                        0.000227, 0.000215
+                    ];
                     
-                    // 8次以上幾乎為0（純淨音色）
-                    for (let i = 8; i < harmonics; i++) {
-                        real[i] = 0.02 / i;
+                    const fluteImag = [
+                        0.000000, -0.602536, 0.010926, -0.043907, 0.023559, 0.011414,
+                        -0.013053, 0.007460, -0.000258, 0.000137, 0.001823, 0.002633,
+                        0.006774, 0.002056, 0.005535, 0.002520, 0.001072, 0.000977,
+                        0.001411, 0.001351, 0.003138, -0.000431, 0.002040, 0.001507,
+                        0.000302, 0.000482, -0.001627, -0.000076, -0.000512, 0.000492,
+                        0.000133, 0.000462
+                    ];
+                    
+                    for (let i = 0; i < harmonics && i < fluteReal.length; i++) {
+                        real[i] = fluteReal[i];
+                        imag[i] = fluteImag[i];
                     }
                     break;
 
@@ -821,23 +907,30 @@
                     break;
 
                 case 'piano':
-                    // 鋼琴：複雜的諧波結構
-                    const amplitudes = [
-                        0, 1.00, 0.65, 0.45, 0.55, 0.38, 0.42, 0.32, 0.28,
-                        0.25, 0.22, 0.20, 0.18, 0.17, 0.16, 0.15, 0.14
+                    // 鋼琴：基於手繪波形的真實傅立葉係數
+                    // 來源：從實際鋼琴波形手繪並轉換
+                    // 特徵：複雜的諧波結構，不規則衰減，豐富的泛音
+                    const pianoReal = [
+                        0.000000, -0.655542, -0.069323, -0.067852, 0.045698, -0.086718,
+                        -0.014329, 0.017055, 0.013534, -0.000099, 0.007251, -0.022797,
+                        -0.002402, -0.002295, 0.003001, 0.002360, -0.003251, -0.001729,
+                        0.001700, -0.000141, 0.004372, 0.003334, -0.002556, 0.000797,
+                        -0.001452, 0.001399, 0.001511, 0.001627, -0.000257, -0.000067,
+                        -0.000538, 0.000285
                     ];
                     
-                    for (let i = 1; i < harmonics; i++) {
-                        let amp;
-                        if (i < amplitudes.length) {
-                            amp = amplitudes[i];
-                        } else {
-                            amp = (0.4 / Math.sqrt(i)) * (0.8 + Math.sin(i * 0.7) * 0.3);
-                        }
-                        
-                        const phase = i * 0.3 * Math.PI;
-                        real[i] = amp * Math.cos(phase);
-                        imag[i] = amp * Math.sin(phase);
+                    const pianoImag = [
+                        0.000000, -0.034535, -0.314345, 0.230697, -0.051015, 0.000114,
+                        -0.013571, -0.027533, -0.009915, 0.026955, 0.001501, 0.012120,
+                        -0.002871, -0.007191, 0.002215, 0.001585, -0.000237, 0.002186,
+                        -0.001895, -0.002961, 0.001123, 0.000375, 0.004142, 0.000600,
+                        -0.002278, -0.001130, -0.000440, 0.001803, 0.002698, 0.000157,
+                        -0.001152, 0.001187
+                    ];
+                    
+                    for (let i = 0; i < harmonics && i < pianoReal.length; i++) {
+                        real[i] = pianoReal[i];
+                        imag[i] = pianoImag[i];
                     }
                     break;
 
@@ -1320,10 +1413,23 @@
                 document.getElementById('oscilloscopeSection').style.display = 'block';
                 updateTimebaseInfo();
             }
+
+            // 如果不是持續播放，設置自動停止
+            if (!isContinuousPlay && playDuration > 0) {
+                stopTimeout = setTimeout(() => {
+                    stopSound();
+                }, playDuration * 1000);
+            }
         }
 
         // 停止播放
         function stopSound() {
+            // 清除自動停止計時器
+            if (stopTimeout) {
+                clearTimeout(stopTimeout);
+                stopTimeout = null;
+            }
+
             if (oscillator) {
                 try {
                     oscillator.stop();
@@ -1921,6 +2027,34 @@
                     }
                 } else {
                     document.getElementById('displayHint').textContent = '📡 示波器模式 - 播放後可精確控制顯示週期與觸發設定';
+                }
+            });
+
+            // 播放時長輸入
+            document.getElementById('durationInput').addEventListener('input', (e) => {
+                let value = parseFloat(e.target.value);
+                if (value < 0.1) value = 0.1;
+                if (value > 60) value = 60;
+                playDuration = value;
+                e.target.value = value;
+            });
+
+            // 持續播放勾選
+            document.getElementById('continuousPlay').addEventListener('change', (e) => {
+                isContinuousPlay = e.target.checked;
+                
+                // 如果取消持續播放且正在播放，需要重新設置停止計時器
+                if (!isContinuousPlay && isPlaying) {
+                    if (stopTimeout) {
+                        clearTimeout(stopTimeout);
+                    }
+                    stopTimeout = setTimeout(() => {
+                        stopSound();
+                    }, playDuration * 1000);
+                } else if (isContinuousPlay && stopTimeout) {
+                    // 如果勾選持續播放，清除停止計時器
+                    clearTimeout(stopTimeout);
+                    stopTimeout = null;
                 }
             });
         }
