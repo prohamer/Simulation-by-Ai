@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>聲波橫波縱波模擬器</title>
+    <title>聲波教學互動模擬器 - 小星星旋律</title>
     <style>
         * {
             box-sizing: border-box;
@@ -614,7 +614,10 @@
                 velocity = Math.sign(Math.cos(phase));
                 break;
             case 'sawtooth':
-                displacement = (phase % (2 * Math.PI)) / Math.PI - 1;
+                // 鋸齒波：從 -1 線性上升到 +1，然後突然跳回 -1
+                const normalizedPhase = ((phase % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+                displacement = (normalizedPhase / Math.PI) - 1;
+                // 鋸齒波的導數是常數（除了不連續點）
                 velocity = 1 / Math.PI;
                 break;
             case 'violin':
@@ -677,45 +680,56 @@
         // 標記密部和疏部（如果啟用）
         if (showMarkers) {
             const wavelength_px = currentWavelength * PIXELS_PER_METER;
-            const phase_offset = (timeFactor / (2 * Math.PI)) * wavelength_px;
+            const waveNumber = (2 * Math.PI) / currentWavelength;
             
-            // 密部：橫波向下穿過平衡線的位置
-            for (let i = -1; i < transverseCanvas.width / wavelength_px + 1; i++) {
-                const x_compression = (i * wavelength_px + wavelength_px * 0.25 + phase_offset) % (transverseCanvas.width + wavelength_px);
-                if (x_compression >= 0 && x_compression < transverseCanvas.width) {
-                    // 繪製密部標記（紅色向下箭頭）
-                    transverseCtx.fillStyle = '#ff6b6b';
-                    transverseCtx.beginPath();
-                    transverseCtx.moveTo(x_compression, centerLineY_T - 15);
-                    transverseCtx.lineTo(x_compression - 5, centerLineY_T - 25);
-                    transverseCtx.lineTo(x_compression + 5, centerLineY_T - 25);
-                    transverseCtx.closePath();
-                    transverseCtx.fill();
-                    
-                    transverseCtx.fillStyle = '#ff6b6b';
-                    transverseCtx.font = 'bold 12px sans-serif';
-                    transverseCtx.textAlign = 'center';
-                    transverseCtx.fillText('密', x_compression, centerLineY_T - 28);
-                }
-            }
+            // 掃描整個畫布，找出向下穿過和向上穿過平衡線的位置
+            let lastCrossingX = -100; // 避免重複標記
             
-            // 疏部：橫波向上穿過平衡線的位置
-            for (let i = -1; i < transverseCanvas.width / wavelength_px + 1; i++) {
-                const x_rarefaction = (i * wavelength_px + wavelength_px * 0.75 + phase_offset) % (transverseCanvas.width + wavelength_px);
-                if (x_rarefaction >= 0 && x_rarefaction < transverseCanvas.width) {
-                    // 繪製疏部標記（藍色向上箭頭）
-                    transverseCtx.fillStyle = '#4ecdc4';
-                    transverseCtx.beginPath();
-                    transverseCtx.moveTo(x_rarefaction, centerLineY_T + 15);
-                    transverseCtx.lineTo(x_rarefaction - 5, centerLineY_T + 25);
-                    transverseCtx.lineTo(x_rarefaction + 5, centerLineY_T + 25);
-                    transverseCtx.closePath();
-                    transverseCtx.fill();
-                    
-                    transverseCtx.fillStyle = '#4ecdc4';
-                    transverseCtx.font = 'bold 12px sans-serif';
-                    transverseCtx.textAlign = 'center';
-                    transverseCtx.fillText('疏', x_rarefaction, centerLineY_T + 38);
+            for (let x_px = 0; x_px < transverseCanvas.width; x_px += 2) {
+                const x_m = x_px / PIXELS_PER_METER;
+                const x_next_m = (x_px + 2) / PIXELS_PER_METER;
+                
+                const { displacement: d1 } = getDisplacementAndVelocity(x_m, timeFactor);
+                const { displacement: d2 } = getDisplacementAndVelocity(x_next_m, timeFactor);
+                
+                // 檢測穿過平衡線（符號改變）
+                const crossedZero = (d1 * d2) <= 0;
+                
+                if (crossedZero && x_px - lastCrossingX > 20) {
+                    // 檢測向下穿過平衡線（從正到負）→ 密部
+                    if (d1 >= 0 && d2 < 0) {
+                        transverseCtx.fillStyle = '#ff6b6b';
+                        transverseCtx.beginPath();
+                        transverseCtx.moveTo(x_px, centerLineY_T - 15);
+                        transverseCtx.lineTo(x_px - 5, centerLineY_T - 25);
+                        transverseCtx.lineTo(x_px + 5, centerLineY_T - 25);
+                        transverseCtx.closePath();
+                        transverseCtx.fill();
+                        
+                        transverseCtx.fillStyle = '#ff6b6b';
+                        transverseCtx.font = 'bold 12px sans-serif';
+                        transverseCtx.textAlign = 'center';
+                        transverseCtx.fillText('密', x_px, centerLineY_T - 28);
+                        
+                        lastCrossingX = x_px;
+                    }
+                    // 檢測向上穿過平衡線（從負到正）→ 疏部
+                    else if (d1 < 0 && d2 >= 0) {
+                        transverseCtx.fillStyle = '#4ecdc4';
+                        transverseCtx.beginPath();
+                        transverseCtx.moveTo(x_px, centerLineY_T + 15);
+                        transverseCtx.lineTo(x_px - 5, centerLineY_T + 25);
+                        transverseCtx.lineTo(x_px + 5, centerLineY_T + 25);
+                        transverseCtx.closePath();
+                        transverseCtx.fill();
+                        
+                        transverseCtx.fillStyle = '#4ecdc4';
+                        transverseCtx.font = 'bold 12px sans-serif';
+                        transverseCtx.textAlign = 'center';
+                        transverseCtx.fillText('疏', x_px, centerLineY_T + 38);
+                        
+                        lastCrossingX = x_px;
+                    }
                 }
             }
         }
@@ -759,36 +773,46 @@
 
         // 在縱波圖上標記密部和疏部
         if (showMarkers) {
-            const wavelength_px = currentWavelength * PIXELS_PER_METER;
-            const phase_offset = (timeFactor / (2 * Math.PI)) * wavelength_px;
+            let lastCrossingX = -100; // 避免重複標記
             
-            // 密部標記
-            for (let i = -1; i < longitudinalCanvas.width / wavelength_px + 1; i++) {
-                const x_compression = (i * wavelength_px + wavelength_px * 0.25 + phase_offset) % (longitudinalCanvas.width + wavelength_px);
-                if (x_compression >= 0 && x_compression < longitudinalCanvas.width) {
-                    longitudinalCtx.strokeStyle = '#ff6b6b';
-                    longitudinalCtx.lineWidth = 2;
-                    longitudinalCtx.setLineDash([5, 5]);
-                    longitudinalCtx.beginPath();
-                    longitudinalCtx.moveTo(x_compression, 10);
-                    longitudinalCtx.lineTo(x_compression, longitudinalCanvas.height - 10);
-                    longitudinalCtx.stroke();
-                    longitudinalCtx.setLineDash([]);
-                }
-            }
-            
-            // 疏部標記
-            for (let i = -1; i < longitudinalCanvas.width / wavelength_px + 1; i++) {
-                const x_rarefaction = (i * wavelength_px + wavelength_px * 0.75 + phase_offset) % (longitudinalCanvas.width + wavelength_px);
-                if (x_rarefaction >= 0 && x_rarefaction < longitudinalCanvas.width) {
-                    longitudinalCtx.strokeStyle = '#4ecdc4';
-                    longitudinalCtx.lineWidth = 2;
-                    longitudinalCtx.setLineDash([5, 5]);
-                    longitudinalCtx.beginPath();
-                    longitudinalCtx.moveTo(x_rarefaction, 10);
-                    longitudinalCtx.lineTo(x_rarefaction, longitudinalCanvas.height - 10);
-                    longitudinalCtx.stroke();
-                    longitudinalCtx.setLineDash([]);
+            // 掃描整個畫布，找出穿過平衡線的位置
+            for (let x_px = 0; x_px < longitudinalCanvas.width; x_px += 2) {
+                const x_m = x_px / PIXELS_PER_METER;
+                const x_next_m = (x_px + 2) / PIXELS_PER_METER;
+                
+                const { displacement: d1 } = getDisplacementAndVelocity(x_m, timeFactor);
+                const { displacement: d2 } = getDisplacementAndVelocity(x_next_m, timeFactor);
+                
+                // 檢測穿過平衡線
+                const crossedZero = (d1 * d2) <= 0;
+                
+                if (crossedZero && x_px - lastCrossingX > 20) {
+                    // 密部標記：向下穿過（從正到負）
+                    if (d1 >= 0 && d2 < 0) {
+                        longitudinalCtx.strokeStyle = '#ff6b6b';
+                        longitudinalCtx.lineWidth = 3;
+                        longitudinalCtx.setLineDash([8, 4]);
+                        longitudinalCtx.beginPath();
+                        longitudinalCtx.moveTo(x_px, 10);
+                        longitudinalCtx.lineTo(x_px, longitudinalCanvas.height - 10);
+                        longitudinalCtx.stroke();
+                        longitudinalCtx.setLineDash([]);
+                        
+                        lastCrossingX = x_px;
+                    }
+                    // 疏部標記：向上穿過（從負到正）
+                    else if (d1 < 0 && d2 >= 0) {
+                        longitudinalCtx.strokeStyle = '#4ecdc4';
+                        longitudinalCtx.lineWidth = 3;
+                        longitudinalCtx.setLineDash([8, 4]);
+                        longitudinalCtx.beginPath();
+                        longitudinalCtx.moveTo(x_px, 10);
+                        longitudinalCtx.lineTo(x_px, longitudinalCanvas.height - 10);
+                        longitudinalCtx.stroke();
+                        longitudinalCtx.setLineDash([]);
+                        
+                        lastCrossingX = x_px;
+                    }
                 }
             }
         }
