@@ -765,9 +765,9 @@
             // 存儲在 customWaveData 變數中
         }
 
-        // 獲取樂器的傅立葉係數（基於真實頻譜分析）
+        // 獲取樂器的傅立葉係數（基於真實波形分析）
         function getInstrumentWaveform(instrument) {
-            const harmonics = 32; // 使用32個諧波確保兼容性
+            const harmonics = 32;
             const real = new Float32Array(harmonics);
             const imag = new Float32Array(harmonics);
             
@@ -777,74 +777,67 @@
 
             switch(instrument) {
                 case 'flute':
-                    // 長笛：基於 G1 (196Hz) 頻譜分析
-                    // 特徵：基頻超強，第3諧波也很強，形成雙峰結構
-                    real[1] = 1.00;   // 基頻（最強）
-                    real[2] = 0.24;   // 第2諧波
-                    real[3] = 0.67;   // 第3諧波（很強！造成雙峰）
-                    real[4] = 0.35;   // 第4諧波
-                    real[5] = 0.15;   // 第5諧波
-                    real[6] = 0.08;   // 第6諧波
-                    real[7] = 0.04;   // 第7諧波開始快速衰減
+                    // 長笛：基於 F5 (694Hz) 頻譜分析
+                    // 特徵：基頻和2次諧波都極強（幾乎相等），形成明顯雙峰
+                    real[1] = 1.00;   // 基頻（-12dB 參考）
+                    real[2] = 0.95;   // 第2諧波（-13dB，幾乎跟基頻一樣強！）
+                    real[3] = 0.55;   // 第3諧波（-18dB）
+                    real[4] = 0.30;   // 第4諧波（-27dB）
+                    real[5] = 0.15;   // 第5諧波（-33dB）
+                    real[6] = 0.08;   // 第6諧波（快速衰減）
+                    real[7] = 0.04;   // 第7諧波
+                    
                     // 8次以上幾乎為0（純淨音色）
                     for (let i = 8; i < harmonics; i++) {
-                        real[i] = 0.02 / i; // 極少的高頻
+                        real[i] = 0.02 / i;
                     }
                     break;
 
                 case 'violin':
-                    // 小提琴：基於真實頻譜 - 需要很多高頻諧波！
-                    // 類似鋸齒波但更豐富
-                    real[1] = 1.00;   // 基頻
-                    real[2] = 0.60;   // 第2諧波（強）
-                    real[3] = 0.45;   // 第3諧波
-                    real[4] = 0.38;   // 第4諧波
-                    real[5] = 0.32;   // 第5諧波
-                    real[6] = 0.28;   // 第6諧波
-                    real[7] = 0.24;   // 第7諧波
-                    real[8] = 0.21;   // 第8諧波
-                    real[9] = 0.19;   // 第9諧波
-                    real[10] = 0.17;  // 第10諧波
-                    real[11] = 0.15;  // 第11諧波
-                    real[12] = 0.14;  // 第12諧波
-                    real[13] = 0.13;  // 第13諧波
-                    real[14] = 0.12;  // 第14諧波
-                    real[15] = 0.11;  // 第15諧波
+                    // 小提琴：基於手繪波形的真實傅立葉係數
+                    // 來源：從實際小提琴波形手繪並轉換
+                    const violinReal = [
+                        0.000000, 0.083271, 0.120492, -0.029813, -0.131892, 0.023254,
+                        -0.025857, -0.008472, -0.006287, -0.011175, -0.011364, -0.001251,
+                        -0.011776, -0.002313, 0.001824, 0.002806, -0.002548, -0.003840,
+                        -0.003821, 0.002967, 0.001706, 0.002217, -0.003560, 0.001273,
+                        -0.001130, 0.002950, -0.004365, 0.002397, -0.001682, 0.003603,
+                        -0.004724, 0.001477
+                    ];
                     
-                    // 高次諧波仍然明顯（小提琴的明亮音色）
-                    for (let i = 16; i < harmonics; i++) {
-                        // 較慢的衰減，保留大量高頻
-                        real[i] = 0.25 / i;
-                        // 奇次諧波加強（小提琴特徵）
-                        if (i % 2 === 1) {
-                            real[i] *= 1.3;
-                        }
+                    const violinImag = [
+                        0.000000, 0.536728, -0.226939, 0.014252, -0.158813, 0.004576,
+                        -0.023696, 0.036146, -0.008211, -0.001324, -0.006049, 0.007575,
+                        0.004440, -0.003214, -0.003466, 0.003601, 0.004673, 0.003894,
+                        -0.006151, -0.000321, 0.001134, 0.005382, -0.000637, 0.001146,
+                        -0.002946, 0.000994, -0.001471, 0.000696, 0.000187, 0.002764,
+                        0.001290, -0.000092
+                    ];
+                    
+                    for (let i = 0; i < harmonics && i < violinReal.length; i++) {
+                        real[i] = violinReal[i];
+                        imag[i] = violinImag[i];
                     }
                     break;
 
                 case 'piano':
-                    // 鋼琴：基於 C2 ff 強奏頻譜
-                    // 極其複雜的諧波結構
-                    real[1] = 1.00;   // 基頻
-                    real[2] = 0.65;   // 第2諧波（強）
-                    real[3] = 0.45;   // 第3諧波
-                    real[4] = 0.55;   // 第4諧波（特別強）
-                    real[5] = 0.38;   // 第5諧波
-                    real[6] = 0.42;   // 第6諧波
-                    real[7] = 0.32;   // 第7諧波
-                    real[8] = 0.28;   // 第8諧波
-                    real[9] = 0.25;   // 第9諧波
-                    real[10] = 0.22;  // 第10諧波
-                    real[11] = 0.20;  // 第11諧波
-                    real[12] = 0.18;  // 第12諧波
-                    real[13] = 0.17;  // 第13諧波
-                    real[14] = 0.16;  // 第14諧波
-                    real[15] = 0.15;  // 第15諧波
+                    // 鋼琴：複雜的諧波結構
+                    const amplitudes = [
+                        0, 1.00, 0.65, 0.45, 0.55, 0.38, 0.42, 0.32, 0.28,
+                        0.25, 0.22, 0.20, 0.18, 0.17, 0.16, 0.15, 0.14
+                    ];
                     
-                    // 16次以上的高次諧波（鋼琴的金屬音色）
-                    for (let i = 16; i < harmonics; i++) {
-                        // 不規則的諧波強度（模擬鋼琴的複雜性）
-                        real[i] = (0.4 / Math.sqrt(i)) * (0.8 + Math.sin(i * 0.7) * 0.3);
+                    for (let i = 1; i < harmonics; i++) {
+                        let amp;
+                        if (i < amplitudes.length) {
+                            amp = amplitudes[i];
+                        } else {
+                            amp = (0.4 / Math.sqrt(i)) * (0.8 + Math.sin(i * 0.7) * 0.3);
+                        }
+                        
+                        const phase = i * 0.3 * Math.PI;
+                        real[i] = amp * Math.cos(phase);
+                        imag[i] = amp * Math.sin(phase);
                     }
                     break;
 
@@ -1694,6 +1687,21 @@
                 if (isDrawing && drawingPoints.length > 10) {
                     customWaveData = convertPointsToWaveform(drawingPoints);
                     
+                    // 輸出傅立葉係數到 Console（方便複製）
+                    console.log('=== 自訂波形的傅立葉係數 ===');
+                    console.log('// 實部 (real):');
+                    console.log('const real = [');
+                    for (let i = 0; i < Math.min(32, customWaveData.real.length); i++) {
+                        console.log(`  ${customWaveData.real[i].toFixed(6)},  // 第${i}諧波`);
+                    }
+                    console.log('];');
+                    console.log('\n// 虛部 (imag):');
+                    console.log('const imag = [');
+                    for (let i = 0; i < Math.min(32, customWaveData.imag.length); i++) {
+                        console.log(`  ${customWaveData.imag[i].toFixed(6)},  // 第${i}諧波`);
+                    }
+                    console.log('];');
+                    
                     // 檢查週期連續性
                     const yDiff = Math.abs(drawingPoints[0].y - drawingPoints[drawingPoints.length - 1].y);
                     const badge = document.getElementById('savedBadge');
@@ -1701,11 +1709,15 @@
                     if (yDiff < 10) {
                         badge.textContent = '✓ 已儲存(週期完美)';
                         badge.style.background = '#10b981';
+                        console.log('\n✓ 週期連續性：完美（首尾高度差 < 10px）');
                     } else {
                         badge.textContent = '✓ 已儲存(已自動修正)';
                         badge.style.background = '#f59e0b';
+                        console.log(`\n⚠ 週期連續性：已自動修正（首尾高度差 ${yDiff.toFixed(1)}px）`);
                     }
                     badge.style.display = 'inline-block';
+                    
+                    console.log('=====================================\n');
                 }
                 isDrawing = false;
             });
@@ -1714,17 +1726,36 @@
                 if (isDrawing && drawingPoints.length > 10) {
                     customWaveData = convertPointsToWaveform(drawingPoints);
                     
+                    // 輸出傅立葉係數到 Console
+                    console.log('=== 自訂波形的傅立葉係數 ===');
+                    console.log('// 實部 (real):');
+                    console.log('const real = [');
+                    for (let i = 0; i < Math.min(32, customWaveData.real.length); i++) {
+                        console.log(`  ${customWaveData.real[i].toFixed(6)},  // 第${i}諧波`);
+                    }
+                    console.log('];');
+                    console.log('\n// 虛部 (imag):');
+                    console.log('const imag = [');
+                    for (let i = 0; i < Math.min(32, customWaveData.imag.length); i++) {
+                        console.log(`  ${customWaveData.imag[i].toFixed(6)},  // 第${i}諧波`);
+                    }
+                    console.log('];');
+                    
                     const yDiff = Math.abs(drawingPoints[0].y - drawingPoints[drawingPoints.length - 1].y);
                     const badge = document.getElementById('savedBadge');
                     
                     if (yDiff < 10) {
                         badge.textContent = '✓ 已儲存(週期完美)';
                         badge.style.background = '#10b981';
+                        console.log('\n✓ 週期連續性：完美');
                     } else {
                         badge.textContent = '✓ 已儲存(已自動修正)';
                         badge.style.background = '#f59e0b';
+                        console.log(`\n⚠ 週期連續性：已自動修正（首尾高度差 ${yDiff.toFixed(1)}px）`);
                     }
                     badge.style.display = 'inline-block';
+                    
+                    console.log('=====================================\n');
                 }
                 isDrawing = false;
             });
@@ -1750,17 +1781,36 @@
                 if (isDrawing && drawingPoints.length > 10) {
                     customWaveData = convertPointsToWaveform(drawingPoints);
                     
+                    // 輸出傅立葉係數到 Console
+                    console.log('=== 自訂波形的傅立葉係數 ===');
+                    console.log('// 實部 (real):');
+                    console.log('const real = [');
+                    for (let i = 0; i < Math.min(32, customWaveData.real.length); i++) {
+                        console.log(`  ${customWaveData.real[i].toFixed(6)},  // 第${i}諧波`);
+                    }
+                    console.log('];');
+                    console.log('\n// 虛部 (imag):');
+                    console.log('const imag = [');
+                    for (let i = 0; i < Math.min(32, customWaveData.imag.length); i++) {
+                        console.log(`  ${customWaveData.imag[i].toFixed(6)},  // 第${i}諧波`);
+                    }
+                    console.log('];');
+                    
                     const yDiff = Math.abs(drawingPoints[0].y - drawingPoints[drawingPoints.length - 1].y);
                     const badge = document.getElementById('savedBadge');
                     
                     if (yDiff < 10) {
                         badge.textContent = '✓ 已儲存(週期完美)';
                         badge.style.background = '#10b981';
+                        console.log('\n✓ 週期連續性：完美');
                     } else {
                         badge.textContent = '✓ 已儲存(已自動修正)';
                         badge.style.background = '#f59e0b';
+                        console.log(`\n⚠ 週期連續性：已自動修正（首尾高度差 ${yDiff.toFixed(1)}px）`);
                     }
                     badge.style.display = 'inline-block';
+                    
+                    console.log('=====================================\n');
                 }
                 isDrawing = false;
             });
