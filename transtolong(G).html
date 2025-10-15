@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>聲波教學互動模擬器 - 大屏高密度優化版</title>
+    <title>聲波教學互動模擬器 - 小星星旋律</title>
     <style>
         body { 
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
@@ -53,6 +53,7 @@
         .btn { padding: 10px 15px; border: none; border-radius: 5px; cursor: pointer; transition: background-color 0.3s; }
         .btn-primary { background-color: #28a745; color: white; }
         .btn-secondary { background-color: #dc3545; color: white; }
+        .btn-melody { background-color: #ffc107; color: #333; } /* 旋律按鈕樣式 */
         
         /* === 折疊說明按鈕樣式 (右下角) === */
         .info-button {
@@ -103,6 +104,13 @@
             border-top: 1px solid #ddd;
             font-size: 12px;
             color: #6c757d;
+        }
+        
+        /* 鎖定輸入時的樣式 */
+        .locked-input {
+            background-color: #ffe4e6;
+            cursor: not-allowed;
+            pointer-events: none; /* 禁用點擊事件 */
         }
     </style>
 </head>
@@ -159,6 +167,7 @@
         <button class="btn" onclick="setPreset(261.63)">C4 (中央C)</button>
         <button class="btn" onclick="setPreset(100)">低頻 (100 Hz)</button>
         <button class="btn" onclick="setPreset(1000)">高頻 (1000 Hz)</button>
+        <button class="btn btn-melody" id="twinkle-btn" onclick="startTwinkleMelody()">🌟 播放小星星 (升八度)</button>
     </div>
     
     <div class="visualization-area">
@@ -224,6 +233,7 @@
     let currentWaveform = 'sine';
     let isPlaying = false;
     let isFrozen = false;
+    let isPlayingMelody = false; 
     let currentWavelength = V_SOUND / currentFrequency; 
     let animationTime = 0; // 全域動畫時間
     let speedMultiplier = 1.0; // 慢動作控制變數
@@ -244,8 +254,13 @@
     const splDisplay = document.getElementById('spl-display'); 
     const pressureDiffDisplay = document.getElementById('pressure-diff-display'); 
     const waveformSelect = document.getElementById('waveform-select');
+    const playBtn = document.getElementById('play-btn');
+    const twinkleBtn = document.getElementById('twinkle-btn'); 
+    
+    // 儲存 setTimeout ID 以便取消
+    let melodyTimeoutId = null;
 
-    // ** 樂器波形定義 **
+    // ** 樂器波形定義 (保持不變) **
     
     function createCustomWave(real, imag) {
         const n = Math.max(real.length, imag.length);
@@ -269,6 +284,92 @@
     // 鋼琴諧波係數 (1st, 3rd, 5th, 7th)
     const PIANO_HARMONIC_AMPS = [1.0, 0.0, 0.5, 0.0, 0.3, 0.0, 0.1]; 
     const PIANO_HARMONICS = createCustomWave(PIANO_HARMONIC_AMPS, [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]);
+    
+    // ** 小星星旋律定義 (將頻率升八度，即 C4 -> C5, G4 -> G5 等) **
+    
+    // 標準頻率 (基頻)
+    const C4 = 261.63;
+    const D4 = 293.66;
+    const E4 = 329.63;
+    const F4 = 349.23;
+    const G4 = 392.00;
+    const A4 = 440.00; 
+    
+    // ** 升八度頻率 (將所有基頻乘以 2) **
+    const C5 = C4 * 2;
+    const D5 = D4 * 2;
+    const E5 = E4 * 2;
+    const F5 = F4 * 2;
+    const G5 = G4 * 2;
+    const A5 = A4 * 2;
+    
+    const DURATION_Q = 0.4; // 四分音符時長
+    const DURATION_E = 0.2; // 八分音符時長
+
+    const TWINKLE_MELODY = [
+        // C C G G | A A G (2) | 
+        { freq: C5, duration: DURATION_E }, { freq: C5, duration: DURATION_E }, 
+        { freq: G5, duration: DURATION_E }, { freq: G5, duration: DURATION_E }, 
+        { freq: A5, duration: DURATION_E }, { freq: A5, duration: DURATION_E }, 
+        { freq: G5, duration: DURATION_Q * 2 }, // 二分音符
+
+        // F F E E | D D C (2) |
+        { freq: F5, duration: DURATION_E }, { freq: F5, duration: DURATION_E }, 
+        { freq: E5, duration: DURATION_E }, { freq: E5, duration: DURATION_E }, 
+        { freq: D5, duration: DURATION_E }, { freq: D5, duration: DURATION_E }, 
+        { freq: C5, duration: DURATION_Q * 2 }, // 二分音符
+        
+        // G G F F | E E D (2) | (重複高音部分 1)
+        { freq: G5, duration: DURATION_E }, { freq: G5, duration: DURATION_E }, 
+        { freq: F5, duration: DURATION_E }, { freq: F5, duration: DURATION_E },
+        { freq: E5, duration: DURATION_E }, { freq: E5, duration: DURATION_E },
+        { freq: D5, duration: DURATION_Q * 2 }, 
+        
+        // G G F F | E E D (2) | (重複高音部分 2)
+        { freq: G5, duration: DURATION_E }, { freq: G5, duration: DURATION_E }, 
+        { freq: F5, duration: DURATION_E }, { freq: F5, duration: DURATION_E },
+        { freq: E5, duration: DURATION_E }, { freq: E5, duration: DURATION_E },
+        { freq: D5, duration: DURATION_Q * 2 }, 
+        
+        // C C G G | A A G (2) | (回歸第一樂句)
+        { freq: C5, duration: DURATION_E }, { freq: C5, duration: DURATION_E }, 
+        { freq: G5, duration: DURATION_E }, { freq: G5, duration: DURATION_E }, 
+        { freq: A5, duration: DURATION_E }, { freq: A5, duration: DURATION_E }, 
+        { freq: G5, duration: DURATION_Q * 2 }, 
+        
+        // F F E E | D D C (2) | (結束)
+        { freq: F5, duration: DURATION_E }, { freq: F5, duration: DURATION_E }, 
+        { freq: E5, duration: DURATION_E }, { freq: E5, duration: DURATION_E }, 
+        { freq: D5, duration: DURATION_E }, { freq: D5, duration: DURATION_E }, 
+        { freq: C5, duration: DURATION_Q * 2 } 
+    ];
+
+    // ** 輔助函數：鎖定/解鎖頻率控制項 **
+    function setFrequencyControlsLocked(locked) {
+        const input = frequencyInput;
+        const range = frequencyRange;
+        
+        input.disabled = locked;
+        range.disabled = locked;
+
+        if (locked) {
+            input.classList.add('locked-input');
+            range.classList.add('locked-input');
+        } else {
+            input.classList.remove('locked-input');
+            range.classList.remove('locked-input');
+        }
+    }
+    
+    // ** 鎖定/解鎖波形控制項 **
+    function setWaveformControlsLocked(locked) {
+        waveformSelect.disabled = locked;
+        if (locked) {
+            waveformSelect.classList.add('locked-input');
+        } else {
+            waveformSelect.classList.remove('locked-input');
+        }
+    }
     
     // ** 輔助函數：計算和更新壓力/分貝 **
     function updatePressure(amplitude) {
@@ -309,6 +410,9 @@
 
     // ** 1. 聲音控制函數 **
     function setFrequency(freqValue, source) {
+        // 旋律播放中，手動調整無效
+        if (isPlayingMelody && source !== 'melody') return;
+        
         let freq = parseFloat(freqValue);
         
         if (freq < 20) freq = 20;
@@ -319,13 +423,15 @@
         if (source !== 'range') {
             frequencyRange.value = freq;
         }
+        // 無論來源，都更新輸入框的值
         frequencyInput.value = freq; 
         frequencyDisplay.textContent = freq.toFixed(0); 
 
         updateWavelength(currentFrequency); 
         
         if (isPlaying && oscillator) {
-            oscillator.frequency.setValueAtTime(currentFrequency, audioCtx.currentTime);
+            // 使用 AudioContext 的時間排程，讓聲音變化更平滑
+            oscillator.frequency.linearRampToValueAtTime(currentFrequency, audioCtx.currentTime + 0.01);
         }
     }
     
@@ -342,44 +448,72 @@
     }
     
     function setPreset(freq) {
+        // 如果正在播放旋律，先停止
+        if (isPlayingMelody) {
+            stopTwinkleMelody(); 
+        }
         setFrequency(freq, 'preset');
     }
 
+    // 設置波形類型
+    function updateOscillatorWaveform() {
+        if (!oscillator) return;
+        
+        if (currentWaveform === 'violin') {
+            oscillator.setPeriodicWave(VIOLIN_HARMONICS);
+        } else if (currentWaveform === 'piano') {
+            oscillator.setPeriodicWave(PIANO_HARMONICS);
+        } else {
+             // 設置標準波形
+             oscillator.type = currentWaveform;
+        }
+    }
+    
     function togglePlay() {
+        // 如果正在播放旋律，先停止
+        if (isPlayingMelody) {
+            stopTwinkleMelody(); 
+        }
+        
         if (!isPlaying) {
-            oscillator = audioCtx.createOscillator();
-            
-            if (currentWaveform === 'violin') {
-                oscillator.setPeriodicWave(VIOLIN_HARMONICS);
-            } else if (currentWaveform === 'piano') {
-                oscillator.setPeriodicWave(PIANO_HARMONICS);
-            } else {
-                oscillator.type = currentWaveform;
+            if (!oscillator) {
+                // 創建 oscillator 和 gain node
+                oscillator = audioCtx.createOscillator();
+                const gainNode = audioCtx.createGain();
+                gainNode.gain.setValueAtTime(currentAmplitude, audioCtx.currentTime);
+                oscillator.connect(gainNode).connect(audioCtx.destination);
+                oscillator.start();
             }
-            
+
+            // 更新播放器參數
+            updateOscillatorWaveform();
             oscillator.frequency.setValueAtTime(currentFrequency, audioCtx.currentTime);
-            const gainNode = audioCtx.createGain();
-            gainNode.gain.setValueAtTime(currentAmplitude, audioCtx.currentTime);
-            oscillator.connect(gainNode).connect(audioCtx.destination);
-            oscillator.start();
+
             isPlaying = true;
-            document.getElementById('play-btn').textContent = '⏹️ 停止聲音';
+            playBtn.textContent = '⏹️ 停止聲音';
             if (!isFrozen) {
                 requestAnimationFrame(drawWave);
             }
         } else {
-            oscillator.stop();
-            oscillator.disconnect();
+            // 停止播放
+            if (oscillator) {
+                oscillator.stop(audioCtx.currentTime + 0.05); 
+                oscillator = null; 
+            }
             isPlaying = false;
-            document.getElementById('play-btn').textContent = '▶️ 播放聲音';
+            playBtn.textContent = '▶️ 播放聲音';
         }
     }
-
+    
     function setWaveform(waveform) {
         currentWaveform = waveform;
         if (isPlaying) {
-            togglePlay(); 
-            togglePlay(); 
+            // 重新啟動播放來確保波形正確更新
+            if (oscillator) {
+                oscillator.stop();
+                oscillator = null;
+            }
+            togglePlay();
         }
     }
     
@@ -394,8 +528,79 @@
             }
         }
     }
+    
+    // ** 2. 小星星旋律播放功能 **
+    
+    function stopTwinkleMelody() { 
+        if (!isPlayingMelody) return;
+        
+        isPlayingMelody = false;
+        clearTimeout(melodyTimeoutId);
+        setFrequencyControlsLocked(false);
+        setWaveformControlsLocked(false); 
+        twinkleBtn.textContent = '🌟 播放小星星 (升八度)'; // 更改按鈕文字
+        twinkleBtn.classList.remove('btn-secondary');
+        twinkleBtn.classList.add('btn-melody');
+    }
+    
+    function playNextNote(index) {
+        if (!isPlayingMelody || index >= TWINKLE_MELODY.length) { 
+            stopTwinkleMelody(); 
+            return;
+        }
 
-    // ** 2. 繪圖與動畫函數 **
+        const note = TWINKLE_MELODY[index];
+        const nextIndex = index + 1;
+        
+        // 1. 更新模擬器（視覺和頻率顯示）
+        setFrequency(note.freq, 'melody');
+
+        // 2. 調整聲音頻率
+        if (oscillator) {
+             oscillator.frequency.linearRampToValueAtTime(note.freq, audioCtx.currentTime + 0.05);
+        } else {
+            // 如果聲音沒開，就先開啟 
+            togglePlay();
+             if (oscillator) {
+                updateOscillatorWaveform();
+                oscillator.frequency.linearRampToValueAtTime(note.freq, audioCtx.currentTime + 0.05);
+            }
+        }
+
+        // 3. 安排下一個音符
+        const delay = (note.duration / speedMultiplier) * 1000; 
+        
+        melodyTimeoutId = setTimeout(() => {
+            playNextNote(nextIndex);
+        }, delay);
+        
+        // 更新按鈕顯示當前音符進度
+        twinkleBtn.textContent = `▶️ 播放中... (${index + 1}/${TWINKLE_MELODY.length})`;
+    }
+
+    function startTwinkleMelody() { 
+        if (isPlayingMelody) {
+            stopTwinkleMelody();
+            return;
+        }
+
+        // 1. 準備工作
+        if (!isPlaying) {
+            togglePlay();
+        }
+        
+        isPlayingMelody = true;
+        setFrequencyControlsLocked(true);
+        setWaveformControlsLocked(true); 
+        twinkleBtn.classList.remove('btn-melody');
+        twinkleBtn.classList.add('btn-secondary');
+
+        // 2. 開始播放
+        playNextNote(0);
+    }
+
+    
+    // ** 3. 繪圖與動畫函數 (保持不變) **
 
     
     const MAX_TRANSVERSE_SHIFT = 100; 
@@ -406,7 +611,7 @@
     const numRows = 16;                 
     const particleSpacing_px = 4;       
 
-    // *** 計算自定義波形的瞬時值 for 繪圖 (已取負號實現標準相位) ***
+    // *** 計算自定義波形的瞬時值 for 繪圖 ***
     function getWaveValue(x_m, timeFactor) {
         const waveNumber = (2 * Math.PI) / currentWavelength;
         const phase = (waveNumber * x_m) - timeFactor; 
