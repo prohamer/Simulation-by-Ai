@@ -1,0 +1,799 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D 聲波模擬器 - 物理正確版</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft JhengHei', sans-serif;
+            background: linear-gradient(135deg, #EFF6FF 0%, #E0E7FF 100%);
+            padding: 20px;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+            padding: 30px;
+        }
+        h1 { text-align: center; color: #1e3a8a; margin-bottom: 10px; font-size: 2em; }
+        .subtitle { text-align: center; color: #64748b; margin-bottom: 30px; }
+        .canvas-container {
+            position: relative;
+            background: #f8fafc;
+            border: 2px solid #c7d2fe;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        canvas { width: 100%; height: auto; display: block; cursor: move; touch-action: none; }
+        .view-navigator {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: white;
+            border: 2px solid #c7d2fe;
+            border-radius: 12px;
+            padding: 15px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        .view-navigator h4 { margin: 0 0 10px 0; color: #1e3a8a; font-size: 14px; }
+        .view-buttons { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+        .view-btn {
+            padding: 8px 12px;
+            background: #f1f5f9;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            color: #334155;
+            transition: all 0.2s;
+        }
+        .view-btn:hover { background: #e0e7ff; border-color: #818cf8; color: #4f46e5; }
+        .zoom-controls {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .zoom-btn {
+            width: 50px;
+            height: 50px;
+            background: white;
+            border: 2px solid #c7d2fe;
+            border-radius: 8px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            color: #4f46e5;
+            transition: all 0.2s;
+        }
+        .zoom-btn:hover { background: #f1f5f9; }
+        .zoom-display {
+            background: white;
+            border: 2px solid #c7d2fe;
+            border-radius: 8px;
+            padding: 5px 10px;
+            font-size: 12px;
+            font-weight: bold;
+            color: #4f46e5;
+            text-align: center;
+        }
+
+        .angle-display {
+            display: none;
+        }
+        .hint { text-align: center; color: #64748b; font-size: 12px; margin-top: 8px; }
+        
+        .controls {
+            background: white;
+            border-radius: 12px;
+            padding: 15px;
+            margin-bottom: 15px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+        
+        .button-group { 
+            display: flex; 
+            gap: 10px; 
+            justify-content: center; 
+            margin-bottom: 15px; 
+            flex-wrap: wrap; 
+        }
+        button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.2s;
+        }
+        .btn-primary { background: #4f46e5; color: white; }
+        .btn-primary:hover { background: #4338ca; }
+        .btn-secondary { background: #64748b; color: white; }
+        .btn-secondary:hover { background: #475569; }
+        .btn-success { background: #10b981; color: white; }
+        .btn-success:hover { background: #059669; }
+        .btn-step { background: #f59e0b; color: white; padding: 8px 16px; font-size: 13px; }
+        .btn-step:hover { background: #d97706; }
+        .options-group { display: flex; gap: 15px; justify-content: center; margin-bottom: 15px; flex-wrap: wrap; }
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 15px;
+            background: #f8fafc;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+        }
+        .checkbox-group input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; }
+        .checkbox-group label { cursor: pointer; font-size: 14px; color: #334155; user-select: none; }
+        .sliders { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; }
+        .slider-group { display: flex; flex-direction: column; }
+        .slider-label { font-weight: 600; color: #374151; margin-bottom: 8px; font-size: 14px; }
+        input[type="range"] {
+            width: 100%;
+            height: 12px;
+            background: #c7d2fe;
+            border-radius: 6px;
+            outline: none;
+            -webkit-appearance: none;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 24px;
+            height: 24px;
+            background: #4f46e5;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+        input[type="range"]::-moz-range-thumb {
+            width: 24px;
+            height: 24px;
+            background: #4f46e5;
+            border-radius: 50%;
+            cursor: pointer;
+            border: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>3D 聲波模擬器（物理正確版）</h1>
+        <p class="subtitle">橫波圖=壓力波 | 縱波=質點位移（相位差90°）</p>
+
+        <div class="canvas-container">
+            <canvas id="waveCanvas" width="1400" height="600"></canvas>
+            
+            <div class="zoom-controls">
+                <button class="zoom-btn" onclick="zoomIn()">+</button>
+                <button class="zoom-btn" onclick="zoomOut()">−</button>
+                <div class="zoom-display" id="zoomDisplay">100%</div>
+            </div>
+
+            <div class="angle-display" id="angleDisplay">
+                <div>
+                    <span>X軸:</span>
+                    <input type="number" class="angle-input" id="inputAngleX" value="-20" step="1">
+                    <span>°</span>
+                </div>
+                <div>
+                    <span>Y軸:</span>
+                    <input type="number" class="angle-input" id="inputAngleY" value="0" step="1">
+                    <span>°</span>
+                </div>
+                <div>
+                    <button class="angle-btn" onclick="applyAngles()">套用角度</button>
+                    <button class="angle-btn" onclick="saveCurrentView()">儲存為俯視</button>
+                </div>
+            </div>
+
+            <p class="hint">💡 拖曳旋轉3D空間（360度）| 滾輪/按鈕縮放</p>
+        </div>
+
+        <div class="controls">
+            <div class="button-group">
+                <button class="btn-primary" onclick="togglePlay()">
+                    <span id="playIcon">▶</span>
+                    <span id="playText">播放</span>
+                </button>
+                <button class="btn-secondary" onclick="resetTime()">↻ 重置</button>
+                <button class="btn-success" onclick="resetView()">🔄 預設視角</button>
+                <button class="btn-success" onclick="setSideView()">📐 側視</button>
+                <button class="btn-success" onclick="setTopView()">👁 俯視</button>
+                <button class="btn-step" onclick="stepBackward()">⏮ 上一格</button>
+                <button class="btn-step" onclick="stepForward()">下一格 ⏭</button>
+            </div>
+
+            <div class="options-group">
+                <div class="checkbox-group">
+                    <input type="checkbox" id="showDensity" onchange="drawScene()" checked>
+                    <label for="showDensity">顯示疏密標示</label>
+                </div>
+                <div class="checkbox-group">
+                    <input type="checkbox" id="showWavelength" onchange="drawScene()">
+                    <label for="showWavelength">顯示波長</label>
+                </div>
+                <div class="checkbox-group">
+                    <input type="checkbox" id="showAmplitude" onchange="drawScene()">
+                    <label for="showAmplitude">顯示振幅</label>
+                </div>
+            </div>
+
+            <div class="sliders">
+                <div class="slider-group">
+                    <label class="slider-label">振幅: <span id="amplitudeValue">30</span></label>
+                    <input type="range" min="10" max="50" value="30" id="amplitude" oninput="updateAmplitude(this.value)">
+                </div>
+                <div class="slider-group">
+                    <label class="slider-label">頻率: <span id="frequencyValue">1.5</span></label>
+                    <input type="range" min="0.5" max="3" step="0.1" value="1.5" id="frequency" oninput="updateFrequency(this.value)">
+                </div>
+                <div class="slider-group">
+                    <label class="slider-label">波速: <span id="speedValue">2.0</span></label>
+                    <input type="range" min="0.5" max="4" step="0.1" value="2" id="speed" oninput="updateSpeed(this.value)">
+                </div>
+            </div>
+        </div>
+
+        <div class="info-section">
+            <button class="toggle-info" onclick="toggleInfo()">
+                <span id="infoIcon">📖</span>
+                <span id="infoText">操作說明與物理原理</span>
+            </button>
+            
+            <div class="info-content" id="infoContent">
+                <h3>📖 操作說明</h3>
+                <h4>🎮 基本操作</h4>
+                <ul>
+                    <li><strong>拖曳畫面</strong>：用滑鼠或手指拖曳，360度旋轉觀察角度</li>
+                    <li><strong>縮放</strong>：滑鼠滾輪或右上角的 +/- 按鈕</li>
+                    <li><strong>播放控制</strong>：播放/暫停波動，或使用格進功能逐格觀察</li>
+                </ul>
+
+                <h4>👁️ 視角切換</h4>
+                <ul>
+                    <li><strong>預設視角</strong>：斜向觀察，同時看清橫波和縱波</li>
+                    <li><strong>側視</strong>：從側面觀察，橫波接近平面，縱波左右振動明顯</li>
+                    <li><strong>俯視</strong>：從上往下看，橫波質點原地大小變化，縱波疏密清晰</li>
+                </ul>
+
+                <h4>⚙️ 參數調整</h4>
+                <ul>
+                    <li><strong>振幅</strong>：控制波的高度（質點振動的最大距離）</li>
+                    <li><strong>頻率</strong>：控制波的密集程度（單位時間振動次數）</li>
+                    <li><strong>波速</strong>：控制波傳播的快慢</li>
+                </ul>
+
+                <h4>🎯 輔助標示</h4>
+                <ul>
+                    <li><strong>疏密標示</strong>：顯示縱波的密部（高壓）和疏部（低壓）位置</li>
+                    <li><strong>波長標示</strong>：標示一個完整波長的距離</li>
+                    <li><strong>振幅標示</strong>：標示振幅的大小</li>
+                </ul>
+
+                <h3>🔬 物理原理說明</h3>
+                
+                <h4>聲波的本質</h4>
+                <p>聲波是一種<strong>壓力波</strong>（縱波），在介質中傳播時，質點僅在平衡位置附近微幅振動，<strong>質點本身不會隨波移動</strong>，而是透過振動將能量向前傳遞。</p>
+
+                <h4>橫波圖（壓力波表示）</h4>
+                <p>我們常見的聲波圖（如示波器顯示）其實是<strong>壓力隨時間的變化</strong>：</p>
+                <ul>
+                    <li><strong>波峰</strong>：代表高壓（密部）</li>
+                    <li><strong>波谷</strong>：代表低壓（疏部）</li>
+                    <li><strong>平衡線</strong>：代表正常大氣壓</li>
+                </ul>
+
+                <h4>縱波（質點位移）</h4>
+                <p>質點的實際運動方式：</p>
+                <ul>
+                    <li><strong>左右振動</strong>：質點沿著波傳播方向前後移動</li>
+                    <li><strong>疏密變化</strong>：質點聚集形成密部，分散形成疏部</li>
+                    <li><strong>紅色質點</strong>：正在向右移動的區域</li>
+                    <li><strong>藍色質點</strong>：正在向左移動的區域</li>
+                </ul>
+
+                <h4>⚠️ 關鍵：90度相位差</h4>
+                <p>壓力波與位移波之間存在<strong>90度相位差</strong>：</p>
+                <ul>
+                    <li><strong>橫波向下穿過平衡線</strong> ← 對應 → <strong>縱波密部</strong>（質點位移為零但正在聚集）</li>
+                    <li><strong>橫波向上穿過平衡線</strong> ← 對應 → <strong>縱波疏部</strong>（質點位移為零但正在分散）</li>
+                    <li><strong>橫波波峰/波谷</strong> ← 對應 → <strong>質點位移最大處</strong>（壓力平衡）</li>
+                </ul>
+
+                <h4>💡 教學建議</h4>
+                <ul>
+                    <li>先從<strong>預設視角</strong>觀察整體，理解兩種波的空間關係</li>
+                    <li>使用<strong>俯視</strong>角度觀察橫波如何表示壓力變化</li>
+                    <li>開啟<strong>疏密標示</strong>，觀察橫波和縱波的對應關係</li>
+                    <li>使用<strong>格進功能</strong>逐格觀察質點運動細節</li>
+                    <li>調整<strong>頻率和波速</strong>，觀察波長和週期的變化</li>
+                </ul>
+
+                <div class="credit">
+                    <p>🤖 本模擬器由 <a href="https://claude.ai" target="_blank">Claude AI</a> (Anthropic) 製作</p>
+                    <p>適用於國中理化教學・物理正確的聲波模擬・支援電腦與iPad橫向螢幕</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('waveCanvas');
+        const ctx = canvas.getContext('2d');
+
+        let isPlaying = false;
+        let time = 0;
+        let amplitude = 30;
+        let frequency = 1.5;
+        let waveSpeed = 2;
+        let rotationX = -20;
+        let rotationY = 0;
+        let zoom = 2;
+
+        let isDragging = false;
+        let lastMouseX = 0;
+        let lastMouseY = 0;
+        let animationFrame = null;
+
+        function project(x, y, z) {
+            const angleX = rotationX * Math.PI / 180;
+            const angleY = rotationY * Math.PI / 180;
+
+            let x1 = x * Math.cos(angleY) - z * Math.sin(angleY);
+            let z1 = x * Math.sin(angleY) + z * Math.cos(angleY);
+
+            let y1 = y * Math.cos(angleX) - z1 * Math.sin(angleX);
+            let z2 = y * Math.sin(angleX) + z1 * Math.cos(angleX);
+
+            const baseScale = 400 / (400 + z2);
+            const scale = baseScale * zoom;
+
+            return {
+                x: canvas.width / 2 + x1 * scale,
+                y: canvas.height / 2 + y1 * scale,
+                z: z2
+            };
+        }
+
+        function drawScene() {
+            ctx.fillStyle = '#f8fafc';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            updateAngleDisplay();
+
+            const numParticles = 30;
+            const waveLength = 300;
+            const depthZ = 80;
+            const depthY = 60;
+            const verticalOffset = 60;
+            const numDepthLayers = 5;
+            const renderQueue = [];
+
+            const transverseParticles = [];
+            for (let d = 0; d < numDepthLayers; d++) {
+                const yPos = -depthY/2 + (d / (numDepthLayers - 1)) * depthY - verticalOffset;
+                for (let i = 0; i < numParticles; i++) {
+                    const x = -waveLength/2 + (i / (numParticles - 1)) * waveLength;
+                    const phase = 2 * Math.PI * frequency * (i / (numParticles - 1)) - waveSpeed * time;
+                    const waveZ = amplitude * Math.sin(phase);
+                    
+                    const equilibrium = project(x, yPos, 0);
+                    const particle = project(x, yPos, waveZ);
+                    
+                    transverseParticles.push({
+                        equilibrium, particle,
+                        z: particle.z,
+                        depth: d,
+                        isCenter: d === Math.floor(numDepthLayers / 2),
+                        baseX: x,
+                        phase: phase
+                    });
+                }
+            }
+
+            const longitudinalParticles = [];
+            for (let d = 0; d < numDepthLayers; d++) {
+                const zPos = -depthZ/2 + (d / (numDepthLayers - 1)) * depthZ;
+                for (let i = 0; i < numParticles; i++) {
+                    const baseX = -waveLength/2 + (i / (numParticles - 1)) * waveLength;
+                    const phase = 2 * Math.PI * frequency * (i / (numParticles - 1)) - waveSpeed * time;
+                    const displacement = amplitude * 0.8 * Math.cos(phase);
+                    
+                    const equilibrium = project(baseX, verticalOffset, zPos);
+                    const particle = project(baseX + displacement, verticalOffset, zPos);
+                    
+                    longitudinalParticles.push({
+                        equilibrium, particle,
+                        z: particle.z,
+                        displacement,
+                        depth: d,
+                        isCenter: d === Math.floor(numDepthLayers / 2)
+                    });
+                }
+            }
+
+            for (let d = 0; d < numDepthLayers; d++) {
+                const yPos = -depthY/2 + (d / (numDepthLayers - 1)) * depthY - verticalOffset;
+                const start = project(-waveLength/2 - 20, yPos, 0);
+                const end = project(waveLength/2 + 20, yPos, 0);
+                renderQueue.push({
+                    z: start.z,
+                    draw: () => {
+                        ctx.strokeStyle = '#e2e8f0';
+                        ctx.lineWidth = 1;
+                        ctx.beginPath();
+                        ctx.moveTo(start.x, start.y);
+                        ctx.lineTo(end.x, end.y);
+                        ctx.stroke();
+                    }
+                });
+            }
+
+            for (let d = 0; d < numDepthLayers; d++) {
+                const zPos = -depthZ/2 + (d / (numDepthLayers - 1)) * depthZ;
+                const start = project(-waveLength/2 - 20, verticalOffset, zPos);
+                const end = project(waveLength/2 + 20, verticalOffset, zPos);
+                renderQueue.push({
+                    z: start.z,
+                    draw: () => {
+                        ctx.strokeStyle = d === Math.floor(numDepthLayers / 2) ? '#ef4444' : '#e2e8f0';
+                        ctx.lineWidth = d === Math.floor(numDepthLayers / 2) ? 3 : 1;
+                        ctx.setLineDash(d === Math.floor(numDepthLayers / 2) ? [] : []);
+                        ctx.beginPath();
+                        ctx.moveTo(start.x, start.y);
+                        ctx.lineTo(end.x, end.y);
+                        ctx.stroke();
+                        ctx.setLineDash([]);
+                    }
+                });
+            }
+
+            const centerLayerIndex = Math.floor(numDepthLayers / 2);
+            const centerTransverse = transverseParticles.filter(p => p.depth === centerLayerIndex);
+            const centerLongitudinal = longitudinalParticles.filter(p => p.depth === centerLayerIndex);
+
+            for (let i = 0; i < Math.min(centerTransverse.length, centerLongitudinal.length); i++) {
+                const t = centerTransverse[i];
+                const l = centerLongitudinal[i];
+                renderQueue.push({
+                    z: (t.particle.z + l.particle.z) / 2,
+                    draw: () => {
+                        ctx.strokeStyle = '#94a3b8';
+                        ctx.lineWidth = 1;
+                        ctx.setLineDash([5, 3]);
+                        ctx.globalAlpha = 0.3;
+                        ctx.beginPath();
+                        ctx.moveTo(t.particle.x, t.particle.y);
+                        ctx.lineTo(l.particle.x, l.particle.y);
+                        ctx.stroke();
+                        ctx.setLineDash([]);
+                        ctx.globalAlpha = 1;
+                    }
+                });
+            }
+
+            if (document.getElementById('showDensity').checked) {
+                for (let i = 0; i < centerTransverse.length - 1; i++) {
+                    const curr = centerTransverse[i];
+                    const next = centerTransverse[i + 1];
+                    
+                    const currSin = Math.sin(curr.phase);
+                    const nextSin = Math.sin(next.phase);
+                    
+                    if (currSin > 0 && nextSin < 0) {
+                        const midX = (curr.baseX + next.baseX) / 2;
+                        const midPoint = project(midX, -verticalOffset, 0);
+                        renderQueue.push({
+                            z: midPoint.z,
+                            draw: () => {
+                                ctx.fillStyle = 'rgba(239, 68, 68, 0.15)';
+                                const width = Math.abs(next.particle.x - curr.particle.x);
+                                ctx.fillRect(curr.particle.x, midPoint.y - 40, width, 80);
+                                ctx.fillStyle = '#dc2626';
+                                ctx.font = 'bold 14px sans-serif';
+                                ctx.textAlign = 'center';
+                                ctx.fillText('密部', midPoint.x, midPoint.y - 50);
+                                ctx.font = '11px sans-serif';
+                                ctx.fillText('(高壓)', midPoint.x, midPoint.y - 35);
+                            }
+                        });
+                    }
+                    else if (currSin < 0 && nextSin > 0) {
+                        const midX = (curr.baseX + next.baseX) / 2;
+                        const midPoint = project(midX, -verticalOffset, 0);
+                        renderQueue.push({
+                            z: midPoint.z,
+                            draw: () => {
+                                ctx.fillStyle = 'rgba(59, 130, 246, 0.15)';
+                                const width = Math.abs(next.particle.x - curr.particle.x);
+                                ctx.fillRect(curr.particle.x, midPoint.y - 40, width, 80);
+                                ctx.fillStyle = '#2563eb';
+                                ctx.font = 'bold 14px sans-serif';
+                                ctx.textAlign = 'center';
+                                ctx.fillText('疏部', midPoint.x, midPoint.y - 50);
+                                ctx.font = '11px sans-serif';
+                                ctx.fillText('(低壓)', midPoint.x, midPoint.y - 35);
+                            }
+                        });
+                    }
+                }
+            }
+
+            const centerTransverseWave = centerTransverse.sort((a, b) => a.baseX - b.baseX);
+            renderQueue.push({
+                z: centerTransverseWave[0]?.particle.z || 0,
+                draw: () => {
+                    ctx.strokeStyle = '#3b82f6';
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+                    centerTransverseWave.forEach((p, idx) => {
+                        if (idx === 0) ctx.moveTo(p.particle.x, p.particle.y);
+                        else ctx.lineTo(p.particle.x, p.particle.y);
+                    });
+                    ctx.stroke();
+                }
+            });
+
+            transverseParticles.forEach(p => {
+                renderQueue.push({
+                    z: p.particle.z,
+                    draw: () => {
+                        ctx.strokeStyle = p.isCenter ? '#93c5fd' : '#dbeafe';
+                        ctx.lineWidth = p.isCenter ? 1.5 : 1;
+                        ctx.globalAlpha = p.isCenter ? 0.8 : 0.3;
+                        ctx.beginPath();
+                        ctx.moveTo(p.equilibrium.x, p.equilibrium.y);
+                        ctx.lineTo(p.particle.x, p.particle.y);
+                        ctx.stroke();
+                        ctx.fillStyle = p.isCenter ? '#3b82f6' : '#93c5fd';
+                        ctx.globalAlpha = p.isCenter ? 1 : 0.35;
+                        ctx.beginPath();
+                        ctx.arc(p.particle.x, p.particle.y, 5, 0, Math.PI * 2);
+                        ctx.fill();
+                        ctx.globalAlpha = 1;
+                    }
+                });
+            });
+
+            longitudinalParticles.forEach(p => {
+                renderQueue.push({
+                    z: p.particle.z,
+                    draw: () => {
+                        ctx.strokeStyle = p.isCenter ? '#93c5fd' : '#dbeafe';
+                        ctx.lineWidth = p.isCenter ? 1.5 : 1;
+                        ctx.globalAlpha = p.isCenter ? 0.8 : 0.3;
+                        ctx.beginPath();
+                        ctx.moveTo(p.equilibrium.x, p.equilibrium.y);
+                        ctx.lineTo(p.particle.x, p.particle.y);
+                        ctx.stroke();
+                        const isDense = p.displacement > 0;
+                        ctx.fillStyle = p.isCenter ? 
+                            (isDense ? '#ef4444' : '#3b82f6') : 
+                            (isDense ? '#fca5a5' : '#93c5fd');
+                        ctx.globalAlpha = p.isCenter ? 1 : 0.35;
+                        ctx.beginPath();
+                        ctx.arc(p.particle.x, p.particle.y, 5, 0, Math.PI * 2);
+                        ctx.fill();
+                        ctx.globalAlpha = 1;
+                    }
+                });
+            });
+
+            renderQueue.sort((a, b) => a.z - b.z);
+            renderQueue.forEach(item => item.draw());
+
+            const transLabel = project(-waveLength/2 - 80, -verticalOffset, 0);
+            ctx.fillStyle = '#1e40af';
+            ctx.font = 'bold 18px sans-serif';
+            ctx.fillText('橫波', transLabel.x, transLabel.y);
+            ctx.font = '12px sans-serif';
+            ctx.fillStyle = '#64748b';
+            ctx.fillText('壓力波', transLabel.x - 5, transLabel.y + 18);
+
+            const longLabel = project(-waveLength/2 - 80, verticalOffset, 0);
+            ctx.fillStyle = '#991b1b';
+            ctx.font = 'bold 18px sans-serif';
+            ctx.fillText('縱波', longLabel.x, longLabel.y);
+            ctx.font = '12px sans-serif';
+            ctx.fillStyle = '#64748b';
+            ctx.fillText('質點位移', longLabel.x - 10, longLabel.y + 18);
+        }
+
+        function animate() {
+            drawScene();
+            if (isPlaying) {
+                time += 0.03;
+                animationFrame = requestAnimationFrame(animate);
+            }
+        }
+
+        function togglePlay() {
+            isPlaying = !isPlaying;
+            document.getElementById('playIcon').textContent = isPlaying ? '⏸' : '▶';
+            document.getElementById('playText').textContent = isPlaying ? '暫停' : '播放';
+            if (isPlaying) animate();
+            else if (animationFrame) cancelAnimationFrame(animationFrame);
+        }
+
+        function resetTime() {
+            isPlaying = false;
+            time = 0;
+            document.getElementById('playIcon').textContent = '▶';
+            document.getElementById('playText').textContent = '播放';
+            if (animationFrame) cancelAnimationFrame(animationFrame);
+            drawScene();
+        }
+
+        function resetView() {
+            rotationX = -20;
+            rotationY = 0;
+            zoom = 2;
+            updateZoomDisplay();
+            drawScene();
+        }
+
+        function setSideView() {
+            rotationX = -90;
+            rotationY = 0;
+            drawScene();
+        }
+
+        function setTopView() {
+            rotationX = 369;
+            rotationY = 0;
+            drawScene();
+        }
+
+        function setView(view) {
+            if (view === 'default') { rotationX = -20; rotationY = 0; }
+            else if (view === 'front') { rotationX = 0; rotationY = 0; }
+            else if (view === 'side') { rotationX = 0; rotationY = 90; }
+            else if (view === 'top') { rotationX = -90; rotationY = 0; }
+            drawScene();
+        }
+
+        function stepForward() {
+            time += 0.05;
+            drawScene();
+        }
+
+        function stepBackward() {
+            time -= 0.05;
+            drawScene();
+        }
+
+        function updateAmplitude(value) {
+            amplitude = parseFloat(value);
+            document.getElementById('amplitudeValue').textContent = Math.round(amplitude);
+            drawScene();
+        }
+
+        function updateFrequency(value) {
+            frequency = parseFloat(value);
+            document.getElementById('frequencyValue').textContent = frequency.toFixed(1);
+            drawScene();
+        }
+
+        function updateSpeed(value) {
+            waveSpeed = parseFloat(value);
+            document.getElementById('speedValue').textContent = waveSpeed.toFixed(1);
+            drawScene();
+        }
+
+        function zoomIn() {
+            zoom = Math.min(5, zoom + 0.4);
+            updateZoomDisplay();
+            drawScene();
+        }
+
+        function zoomOut() {
+            zoom = Math.max(1, zoom - 0.4);
+            updateZoomDisplay();
+        }
+
+        function updateZoomDisplay() {
+            document.getElementById('zoomDisplay').textContent = Math.round(zoom * 50) + '%';
+        }
+
+        function updateAngleDisplay() {
+            document.getElementById('inputAngleX').value = Math.round(rotationX);
+            document.getElementById('inputAngleY').value = Math.round(rotationY);
+        }
+
+        function applyAngles() {
+            rotationX = parseFloat(document.getElementById('inputAngleX').value);
+            rotationY = parseFloat(document.getElementById('inputAngleY').value);
+            drawScene();
+        }
+
+        function saveCurrentView() {
+            const x = Math.round(rotationX);
+            const y = Math.round(rotationY);
+            alert(`已儲存俯視角度：\nX軸 = ${x}°\nY軸 = ${y}°\n\n請告訴我這兩個數值，我會更新俯視按鈕！`);
+        }
+
+        function toggleInfo() {
+            const content = document.getElementById('infoContent');
+            const icon = document.getElementById('infoIcon');
+            const text = document.getElementById('infoText');
+            
+            if (content.classList.contains('show')) {
+                content.classList.remove('show');
+                icon.textContent = '📖';
+                text.textContent = '操作說明與物理原理';
+            } else {
+                content.classList.add('show');
+                icon.textContent = '📕';
+                text.textContent = '收起說明';
+            }
+        }
+
+        canvas.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            lastMouseX = e.clientX;
+            lastMouseY = e.clientY;
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            const deltaX = e.clientX - lastMouseX;
+            const deltaY = e.clientY - lastMouseY;
+            rotationY += deltaX * 0.5;
+            rotationX += deltaY * 0.5;
+            lastMouseX = e.clientX;
+            lastMouseY = e.clientY;
+            drawScene();
+        });
+
+        canvas.addEventListener('mouseup', () => { isDragging = false; });
+        canvas.addEventListener('mouseleave', () => { isDragging = false; });
+
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            const touch = e.touches[0];
+            isDragging = true;
+            lastMouseX = touch.clientX;
+            lastMouseY = touch.clientY;
+        });
+
+        canvas.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            if (!isDragging) return;
+            const touch = e.touches[0];
+            const deltaX = touch.clientX - lastMouseX;
+            const deltaY = touch.clientY - lastMouseY;
+            rotationY += deltaX * 0.5;
+            rotationX += deltaY * 0.5;
+            lastMouseX = touch.clientX;
+            lastMouseY = touch.clientY;
+            drawScene();
+        });
+
+        canvas.addEventListener('touchend', () => { isDragging = false; });
+
+        canvas.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const delta = e.deltaY > 0 ? -0.2 : 0.2;
+            zoom = Math.max(1, Math.min(5, zoom + delta));
+            updateZoomDisplay();
+            drawScene();
+        });
+
+        drawScene();
+    </script>
+</body>
+</html>
