@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>單字王練習GS25</title>
+    <title>單字王練習GS26</title>
     <style>
         
         body { 
@@ -9062,8 +9062,9 @@
                 button.disabled = true;
                 button.textContent = '貼上中...';
                 
+                // 檢查剪貼簿 API 是否可用
                 if (!navigator.clipboard || !navigator.clipboard.readText) {
-                    throw new Error('您的瀏覽器不支援剪貼簿功能，請手動輸入 API Key');
+                    throw new Error('CLIPBOARD_NOT_SUPPORTED');
                 }
                 
                 const clipboardText = await navigator.clipboard.readText();
@@ -9074,41 +9075,79 @@
                 
                 const trimmedText = clipboardText.trim();
                 if (!trimmedText.startsWith('AIza')) {
-                    const confirm = window.confirm('偵測到剪貼簿內容可能不是有效的 Gemini API Key\n（有效的 API Key 通常以 "AIza" 開頭）\n\n是否仍要貼上？');
-                    if (!confirm) {
-                        throw new Error('已取消貼上');
-                    }
+                    // 使用 console.log 代替 confirm（因為 sandboxed 環境可能阻擋 confirm）
+                    console.warn('偵測到的內容可能不是有效的 Gemini API Key（通常以 AIza 開頭）');
                 }
                 
                 input.value = trimmedText;
                 input.dispatchEvent(new Event('input', { bubbles: true }));
                 
-                button.textContent = '已貼上';
+                button.textContent = '✓ 已貼上';
+                button.style.backgroundColor = '#28a745';
                 setTimeout(() => {
                     button.textContent = '貼上';
+                    button.style.backgroundColor = '';
                     button.disabled = false;
-                }, 1500);
+                }, 2000);
                 
                 console.log('API Key 已成功貼上');
                 
             } catch (error) {
                 console.error('貼上 API Key 失敗:', error);
                 
-                let errorMessage;
-                if (error.name === 'NotAllowedError') {
-                    errorMessage = '無法存取剪貼簿，請檢查瀏覽器權限設定或手動輸入 API Key';
-                } else if (error.message.includes('不支援剪貼簿功能')) {
-                    errorMessage = error.message;
+                // 根據不同錯誤類型顯示不同訊息
+                if (error.name === 'NotAllowedError' || error.message === 'CLIPBOARD_NOT_SUPPORTED') {
+                    // 剪貼簿 API 被阻擋，顯示手動輸入提示
+                    button.textContent = '✗ 請手動輸入';
+                    button.style.backgroundColor = '#dc3545';
+                    
+                    // 在輸入框上方顯示提示
+                    showClipboardErrorMessage(input);
+                    
+                    setTimeout(() => {
+                        button.textContent = '貼上';
+                        button.style.backgroundColor = '';
+                        button.disabled = false;
+                    }, 3000);
+                    
+                    console.log('剪貼簿權限被拒絕，請手動輸入 API Key');
                 } else {
-                    errorMessage = error.message || '貼上失敗，請手動輸入 API Key';
+                    button.textContent = '貼上失敗';
+                    button.style.backgroundColor = '#ffc107';
+                    
+                    setTimeout(() => {
+                        button.textContent = '貼上';
+                        button.style.backgroundColor = '';
+                        button.disabled = false;
+                    }, 2000);
                 }
                 
-                alert(errorMessage);
-                
-                button.textContent = '貼上';
-                button.disabled = false;
                 input.focus();
             }
+        }
+        
+        function showClipboardErrorMessage(inputElement) {
+            // 檢查是否已經有錯誤訊息
+            let errorDiv = document.getElementById('clipboard-error-message');
+            if (errorDiv) {
+                errorDiv.remove();
+            }
+            
+            // 創建錯誤提示
+            errorDiv = document.createElement('div');
+            errorDiv.id = 'clipboard-error-message';
+            errorDiv.style.cssText = 'background-color: #fff3cd; color: #856404; padding: 8px; border-radius: 4px; margin-bottom: 8px; font-size: 12px; border: 1px solid #ffc107;';
+            errorDiv.innerHTML = '⚠️ 剪貼簿功能被阻擋，請手動複製貼上 API Key';
+            
+            // 插入到輸入框前面
+            inputElement.parentNode.insertBefore(errorDiv, inputElement);
+            
+            // 5秒後自動移除
+            setTimeout(() => {
+                if (errorDiv && errorDiv.parentNode) {
+                    errorDiv.remove();
+                }
+            }, 5000);
         }
 
         function disableTextSelection() {
