@@ -1,0 +1,837 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>光學法線練習</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap');
+        * { font-family: 'Noto Sans TC', sans-serif; box-sizing: border-box; }
+        body { margin: 0; padding: 0; background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); min-height: 100vh; color: #e2e8f0; overflow-x: hidden; }
+        canvas { border-radius: 8px; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4); cursor: crosshair; touch-action: none; background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); max-width: 100%; height: auto; }
+        .btn { transition: all 0.2s; font-weight: 500; }
+        .btn:hover { transform: translateY(-1px); }
+        .shape-btn { width: 44px; height: 44px; border-radius: 8px; background: rgba(30, 41, 59, 0.8); border: 2px solid rgba(148, 163, 184, 0.2); display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s; }
+        .shape-btn:hover { border-color: rgba(96, 165, 250, 0.5); background: rgba(59, 130, 246, 0.2); }
+        .shape-btn.active { background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); border-color: #60a5fa; box-shadow: 0 0 15px rgba(59, 130, 246, 0.5); }
+        .shape-icon { width: 28px; height: 28px; stroke: currentColor; fill: none; stroke-width: 2; }
+        .control-panel { backdrop-filter: blur(20px); background: rgba(15, 23, 42, 0.95); border-bottom: 1px solid rgba(148, 163, 184, 0.2); }
+        @media (max-width: 768px) { .shape-btn { width: 36px; height: 36px; } .shape-icon { width: 22px; height: 22px; } }
+    </style>
+</head>
+<body class="p-0">
+    <div class="control-panel fixed top-0 left-0 right-0 z-50 p-2 md:p-3">
+        <div class="max-w-7xl mx-auto">
+            <div class="flex items-center justify-between gap-2 flex-wrap">
+                <div class="flex-shrink-0">
+                    <h1 class="text-base md:text-lg font-bold text-blue-400 mb-1">光學法線練習</h1>
+                    <div class="text-xs md:text-sm"><span id="feedback" class="text-slate-400">點擊形狀開始練習</span></div>
+                </div>
+                <div class="flex flex-wrap gap-1 justify-center">
+                    <button class="shape-btn" data-curve="circle" title="圓形"><svg class="shape-icon" viewBox="0 0 40 40"><circle cx="20" cy="20" r="15"/></svg></button>
+                    <button class="shape-btn" data-curve="ellipse" title="橢圓"><svg class="shape-icon" viewBox="0 0 40 40"><ellipse cx="20" cy="20" rx="16" ry="10"/></svg></button>
+                    <button class="shape-btn" data-curve="parabola" title="拋物線"><svg class="shape-icon" viewBox="0 0 40 40"><path d="M 5 35 Q 20 5 35 35"/></svg></button>
+                    <button class="shape-btn" data-curve="parabola_right_convex" title="拋物鏡凸"><svg class="shape-icon" viewBox="0 0 40 40"><path d="M 10 5 Q 30 20 10 35"/></svg></button>
+                    <button class="shape-btn" data-curve="parabola_right_concave" title="拋物鏡凹"><svg class="shape-icon" viewBox="0 0 40 40"><path d="M 30 5 Q 10 20 30 35"/></svg></button>
+                    <button class="shape-btn" data-curve="sine" title="正弦"><svg class="shape-icon" viewBox="0 0 40 40"><path d="M 2 20 Q 8 10 13 20 T 24 20 T 38 20"/></svg></button>
+                    <button class="shape-btn" data-curve="line" title="直線"><svg class="shape-icon" viewBox="0 0 40 40"><line x1="8" y1="32" x2="32" y2="8"/></svg></button>
+                    <button class="shape-btn" data-curve="biconvex" title="雙凸"><svg class="shape-icon" viewBox="0 0 40 40"><path d="M 15 8 Q 12 20 15 32 M 25 8 Q 28 20 25 32"/></svg></button>
+                    <button class="shape-btn" data-curve="biconcave" title="雙凹"><svg class="shape-icon" viewBox="0 0 40 40"><path d="M 15 8 Q 20 20 15 32 M 25 8 Q 20 20 25 32"/></svg></button>
+                </div>
+                <div class="flex items-center gap-2 flex-shrink-0">
+                    <div class="flex items-center gap-1 bg-slate-800/50 rounded-lg px-2 py-1">
+                        <button id="toleranceDown" class="btn px-2 py-1 bg-slate-700 hover:bg-slate-600 rounded text-sm">−</button>
+                        <span id="toleranceValue" class="text-sm font-bold text-blue-400 min-w-[2.5rem] text-center">5°</span>
+                        <button id="toleranceUp" class="btn px-2 py-1 bg-slate-700 hover:bg-slate-600 rounded text-sm">+</button>
+                    </div>
+                    <button id="newPoint" class="btn px-2 md:px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs md:text-sm font-bold">新練習</button>
+                    <button id="showAnswer" class="btn px-2 md:px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs md:text-sm font-bold">答案</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="flex items-center justify-center p-2" style="margin-top: 80px; min-height: calc(100vh - 90px);"><canvas id="canvas"></canvas></div>
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        
+        function resizeCanvas() {
+            const margin = 90;
+            const maxWidth = Math.min(1400, window.innerWidth - 20);
+            const maxHeight = window.innerHeight - margin;
+            if (maxWidth / maxHeight > 4/3) {
+                canvas.height = maxHeight;
+                canvas.width = maxHeight * 4/3;
+            } else {
+                canvas.width = maxWidth;
+                canvas.height = maxWidth * 3/4;
+            }
+            if (targetPoint) draw();
+        }
+        
+        window.addEventListener('load', resizeCanvas);
+        window.addEventListener('resize', resizeCanvas);
+        
+        let currentCurve = null;
+        let targetPoint = null;
+        let normalAngle = 0;
+        let tangentAngle = 0;
+        let isDrawing = false;
+        let userLine = null;
+        let showingAnswer = false;
+        let tolerance = 5;
+        let answered = false;
+        
+        const shapeNames = {
+            circle: '圓形', ellipse: '橢圓', parabola: '拋物線',
+            parabola_right_convex: '拋物鏡(凸)', parabola_right_concave: '拋物鏡(凹)',
+            sine: '正弦', line: '直線',
+            biconvex: '雙凸透鏡', biconcave: '雙凹透鏡'
+        };
+        
+        const curves = {
+            circle: {
+                draw: (ctx) => {
+                    const cx = canvas.width / 2, cy = canvas.height / 2;
+                    const r = Math.min(canvas.width, canvas.height) * 0.25;
+                    ctx.beginPath();
+                    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+                    ctx.strokeStyle = '#60a5fa';
+                    ctx.lineWidth = 3;
+                    ctx.stroke();
+                },
+                getPoint: (t) => {
+                    const cx = canvas.width / 2, cy = canvas.height / 2;
+                    const r = Math.min(canvas.width, canvas.height) * 0.25;
+                    const angle = t * Math.PI * 2;
+                    return { x: cx + r * Math.cos(angle), y: cy + r * Math.sin(angle) };
+                },
+                getTangent: (t) => {
+                    // dx/dt = -r*sin(θ), dy/dt = r*cos(θ)
+                    const angle = t * Math.PI * 2;
+                    return Math.atan2(Math.cos(angle), -Math.sin(angle));
+                },
+                getNormal: (t) => {
+                    // 法線指向圓心外
+                    const angle = t * Math.PI * 2;
+                    return angle;
+                }
+            },
+            ellipse: {
+                draw: (ctx) => {
+                    const cx = canvas.width / 2, cy = canvas.height / 2;
+                    const rx = canvas.width * 0.33, ry = canvas.height * 0.25;
+                    ctx.beginPath();
+                    ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+                    ctx.strokeStyle = '#60a5fa';
+                    ctx.lineWidth = 3;
+                    ctx.stroke();
+                },
+                getPoint: (t) => {
+                    const cx = canvas.width / 2, cy = canvas.height / 2;
+                    const rx = canvas.width * 0.33, ry = canvas.height * 0.25;
+                    const angle = t * Math.PI * 2;
+                    return { x: cx + rx * Math.cos(angle), y: cy + ry * Math.sin(angle) };
+                },
+                getTangent: (t) => {
+                    // dx/dt = -rx*sin(θ), dy/dt = ry*cos(θ)
+                    const rx = canvas.width * 0.33, ry = canvas.height * 0.25;
+                    const angle = t * Math.PI * 2;
+                    return Math.atan2(ry * Math.cos(angle), -rx * Math.sin(angle));
+                },
+                getNormal: (t) => {
+                    const tangent = curves.ellipse.getTangent(t);
+                    return tangent + Math.PI / 2;
+                }
+            },
+            parabola: {
+                draw: (ctx) => {
+                    const w = canvas.width * 0.75, h = canvas.height * 0.6;
+                    const startX = canvas.width * 0.125;
+                    ctx.beginPath();
+                    for (let i = 0; i <= 100; i++) {
+                        const t = i / 100;
+                        const x = startX + t * w;
+                        const normalizedX = (x - canvas.width / 2) / (w / 2);
+                        const y = canvas.height * 0.85 - h * (1 - normalizedX * normalizedX);
+                        if (i === 0) ctx.moveTo(x, y);
+                        else ctx.lineTo(x, y);
+                    }
+                    ctx.strokeStyle = '#60a5fa';
+                    ctx.lineWidth = 3;
+                    ctx.stroke();
+                },
+                getPoint: (t) => {
+                    const w = canvas.width * 0.75, h = canvas.height * 0.6;
+                    const startX = canvas.width * 0.125;
+                    const x = startX + t * w;
+                    const normalizedX = (x - canvas.width / 2) / (w / 2);
+                    const y = canvas.height * 0.85 - h * (1 - normalizedX * normalizedX);
+                    return { x, y };
+                },
+                getTangent: (t) => {
+                    // y = h*(1 - ((x-cx)/(w/2))^2)
+                    // dy/dx = -2*h*(x-cx)/(w/2)^2
+                    const w = canvas.width * 0.75, h = canvas.height * 0.6;
+                    const startX = canvas.width * 0.125;
+                    const x = startX + t * w;
+                    const normalizedX = (x - canvas.width / 2) / (w / 2);
+                    const slope = 2 * h * normalizedX / (w / 2);
+                    return Math.atan2(-slope, 1);
+                },
+                getNormal: (t) => {
+                    const tangent = curves.parabola.getTangent(t);
+                    return tangent + Math.PI / 2;
+                }
+            },
+            parabola_right_convex: {
+                draw: (ctx) => {
+                    const w = canvas.width * 0.4, h = canvas.height * 0.7;
+                    const startX = canvas.width * 0.3, startY = canvas.height * 0.15;
+                    ctx.beginPath();
+                    for (let i = 0; i <= 100; i++) {
+                        const t = i / 100;
+                        const y = startY + t * h;
+                        const normalizedY = (y - canvas.height / 2) / (h / 2);
+                        const x = startX + w * (1 - normalizedY * normalizedY);
+                        if (i === 0) ctx.moveTo(x, y);
+                        else ctx.lineTo(x, y);
+                    }
+                    ctx.strokeStyle = '#60a5fa';
+                    ctx.lineWidth = 3;
+                    ctx.stroke();
+                },
+                getPoint: (t) => {
+                    const w = canvas.width * 0.4, h = canvas.height * 0.7;
+                    const startX = canvas.width * 0.3, startY = canvas.height * 0.15;
+                    const y = startY + t * h;
+                    const normalizedY = (y - canvas.height / 2) / (h / 2);
+                    const x = startX + w * (1 - normalizedY * normalizedY);
+                    return { x, y };
+                },
+                getTangent: (t) => {
+                    // x = w*(1 - ((y-cy)/(h/2))^2)
+                    // dx/dy = -2*w*(y-cy)/(h/2)^2
+                    const w = canvas.width * 0.4, h = canvas.height * 0.7;
+                    const startY = canvas.height * 0.15;
+                    const y = startY + t * h;
+                    const normalizedY = (y - canvas.height / 2) / (h / 2);
+                    const slope = -2 * w * normalizedY / (h / 2);
+                    return Math.atan2(1, slope);
+                },
+                getNormal: (t) => {
+                    const tangent = curves.parabola_right_convex.getTangent(t);
+                    return tangent + Math.PI / 2;
+                }
+            },
+            parabola_right_concave: {
+                draw: (ctx) => {
+                    const w = canvas.width * 0.4, h = canvas.height * 0.7;
+                    const startX = canvas.width * 0.7, startY = canvas.height * 0.15;
+                    ctx.beginPath();
+                    for (let i = 0; i <= 100; i++) {
+                        const t = i / 100;
+                        const y = startY + t * h;
+                        const normalizedY = (y - canvas.height / 2) / (h / 2);
+                        const x = startX - w * (1 - normalizedY * normalizedY);
+                        if (i === 0) ctx.moveTo(x, y);
+                        else ctx.lineTo(x, y);
+                    }
+                    ctx.strokeStyle = '#60a5fa';
+                    ctx.lineWidth = 3;
+                    ctx.stroke();
+                },
+                getPoint: (t) => {
+                    const w = canvas.width * 0.4, h = canvas.height * 0.7;
+                    const startX = canvas.width * 0.7, startY = canvas.height * 0.15;
+                    const y = startY + t * h;
+                    const normalizedY = (y - canvas.height / 2) / (h / 2);
+                    const x = startX - w * (1 - normalizedY * normalizedY);
+                    return { x, y };
+                },
+                getTangent: (t) => {
+                    const w = canvas.width * 0.4, h = canvas.height * 0.7;
+                    const startY = canvas.height * 0.15;
+                    const y = startY + t * h;
+                    const normalizedY = (y - canvas.height / 2) / (h / 2);
+                    const slope = 2 * w * normalizedY / (h / 2);
+                    return Math.atan2(1, slope);
+                },
+                getNormal: (t) => {
+                    const tangent = curves.parabola_right_concave.getTangent(t);
+                    return tangent + Math.PI / 2;
+                }
+            },
+            sine: {
+                draw: (ctx) => {
+                    const w = canvas.width * 0.75, h = canvas.height * 0.33;
+                    const startX = canvas.width * 0.125, cy = canvas.height / 2;
+                    ctx.beginPath();
+                    for (let i = 0; i <= 100; i++) {
+                        const t = i / 100;
+                        const x = startX + t * w;
+                        const y = cy + h * Math.sin(t * Math.PI * 4);
+                        if (i === 0) ctx.moveTo(x, y);
+                        else ctx.lineTo(x, y);
+                    }
+                    ctx.strokeStyle = '#60a5fa';
+                    ctx.lineWidth = 3;
+                    ctx.stroke();
+                },
+                getPoint: (t) => {
+                    const w = canvas.width * 0.75, h = canvas.height * 0.33;
+                    const startX = canvas.width * 0.125, cy = canvas.height / 2;
+                    const x = startX + t * w;
+                    const y = cy + h * Math.sin(t * Math.PI * 4);
+                    return { x, y };
+                },
+                getTangent: (t) => {
+                    // dy/dx = (dy/dt) / (dx/dt)
+                    // dx/dt = w, dy/dt = h * 4π * cos(4πt)
+                    const w = canvas.width * 0.75, h = canvas.height * 0.33;
+                    const slope = (h * Math.PI * 4 * Math.cos(t * Math.PI * 4)) / w;
+                    return Math.atan2(slope, 1);
+                },
+                getNormal: (t) => {
+                    const tangent = curves.sine.getTangent(t);
+                    return tangent + Math.PI / 2;
+                }
+            },
+            line: {
+                draw: (ctx) => {
+                    const startX = canvas.width * 0.2, endX = canvas.width * 0.8;
+                    const startY = canvas.height * 0.75, endY = canvas.height * 0.25;
+                    ctx.beginPath();
+                    ctx.moveTo(startX, startY);
+                    ctx.lineTo(endX, endY);
+                    ctx.strokeStyle = '#60a5fa';
+                    ctx.lineWidth = 3;
+                    ctx.stroke();
+                },
+                getPoint: (t) => {
+                    const startX = canvas.width * 0.2, endX = canvas.width * 0.8;
+                    const startY = canvas.height * 0.75, endY = canvas.height * 0.25;
+                    return { x: startX + t * (endX - startX), y: startY + t * (endY - startY) };
+                },
+                getTangent: (t) => {
+                    const dx = canvas.width * 0.6;
+                    const dy = -canvas.height * 0.5;
+                    return Math.atan2(dy, dx);
+                },
+                getNormal: (t) => {
+                    const tangent = curves.line.getTangent(t);
+                    return tangent + Math.PI / 2;
+                }
+            },
+            biconvex: {
+                draw: (ctx) => {
+                    const cx = canvas.width / 2, cy = canvas.height / 2;
+                    const h = canvas.height * 0.35;
+                    const r = h * 0.9;
+                    
+                    ctx.beginPath();
+                    // 左側凸面
+                    ctx.arc(cx - r * 0.5, cy, r, -Math.PI * 0.3, Math.PI * 0.3);
+                    // 右側凸面
+                    ctx.arc(cx + r * 0.5, cy, r, Math.PI * 0.7, Math.PI * 1.3);
+                    ctx.closePath(); // 封閉路徑
+                    
+                    ctx.strokeStyle = '#60a5fa';
+                    ctx.lineWidth = 3;
+                    ctx.stroke();
+                },
+                getPoint: (t) => {
+                    const cx = canvas.width / 2, cy = canvas.height / 2;
+                    const h = canvas.height * 0.35;
+                    const r = h * 0.9;
+                    
+                    if (t < 0.5) {
+                        // 左側凸面
+                        const angle = -Math.PI * 0.3 + t * 2 * (Math.PI * 0.6);
+                        return { 
+                            x: cx - r * 0.5 + r * Math.cos(angle), 
+                            y: cy + r * Math.sin(angle) 
+                        };
+                    } else {
+                        // 右側凸面
+                        const angle = Math.PI * 0.7 + (t - 0.5) * 2 * (Math.PI * 0.6);
+                        return { 
+                            x: cx + r * 0.5 + r * Math.cos(angle), 
+                            y: cy + r * Math.sin(angle) 
+                        };
+                    }
+                },
+                getTangent: (t) => {
+                    const h = canvas.height * 0.35;
+                    const r = h * 0.9;
+                    
+                    if (t < 0.5) {
+                        const angle = -Math.PI * 0.3 + t * 2 * (Math.PI * 0.6);
+                        return Math.atan2(r * Math.cos(angle), -r * Math.sin(angle));
+                    } else {
+                        const angle = Math.PI * 0.7 + (t - 0.5) * 2 * (Math.PI * 0.6);
+                        return Math.atan2(r * Math.cos(angle), -r * Math.sin(angle));
+                    }
+                },
+                getNormal: (t) => {
+                    const tangent = curves.biconvex.getTangent(t);
+                    return tangent + Math.PI / 2;
+                }
+            },
+            biconcave: {
+                draw: (ctx) => {
+                    const cx = canvas.width / 2, cy = canvas.height / 2;
+                    const scale = canvas.height * 0.7 / 535;
+                    const curvature = 2.5; // 弧度調整系數（增大此值可增加弧度）
+                    
+                    // 原始路徑點
+                    const originalPath = [
+                        {x: 603.69, y: 227.39}, // 左上
+                        {x: 749.63, y: 225.89}, // 右上
+                        {x: 700.04, y: 450.58}, // 右側圓弧控制點
+                        {x: 754.24, y: 674.20}, // 右下
+                        {x: 608.30, y: 675.70}, // 左下
+                        {x: 657.90, y: 451.01}  // 左側圓弧控制點
+                    ];
+                    
+                    const origCx = (603.69 + 754.24) / 2;
+                    const origCy = (225.89 + 675.70) / 2;
+                    
+                    // 轉換坐標並調整控制點以增加弧度
+                    const transform = (p, isControlPoint) => {
+                        let x = p.x, y = p.y;
+                        if (isControlPoint) {
+                            // 讓控制點更接近中心線來增加弧度
+                            x = origCx + (x - origCx) * (2 - curvature);
+                        }
+                        return {
+                            x: cx + (x - origCx) * scale,
+                            y: cy + (y - origCy) * scale
+                        };
+                    };
+                    
+                    const path = [
+                        transform(originalPath[0], false),
+                        transform(originalPath[1], false),
+                        transform(originalPath[2], true),  // 控制點
+                        transform(originalPath[3], false),
+                        transform(originalPath[4], false),
+                        transform(originalPath[5], true)   // 控制點
+                    ];
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(path[0].x, path[0].y);
+                    ctx.lineTo(path[1].x, path[1].y);
+                    ctx.quadraticCurveTo(path[2].x, path[2].y, path[3].x, path[3].y);
+                    ctx.lineTo(path[4].x, path[4].y);
+                    ctx.quadraticCurveTo(path[5].x, path[5].y, path[0].x, path[0].y);
+                    ctx.closePath();
+                    
+                    ctx.strokeStyle = '#60a5fa';
+                    ctx.lineWidth = 3;
+                    ctx.stroke();
+                },
+                getPoint: (t) => {
+                    const cx = canvas.width / 2, cy = canvas.height / 2;
+                    const scale = canvas.height * 0.7 / 535;
+                    const curvature = 2.5;
+                    
+                    const originalPath = [
+                        {x: 603.69, y: 227.39},
+                        {x: 749.63, y: 225.89},
+                        {x: 700.04, y: 450.58},
+                        {x: 754.24, y: 674.20},
+                        {x: 608.30, y: 675.70},
+                        {x: 657.90, y: 451.01}
+                    ];
+                    
+                    const origCx = (603.69 + 754.24) / 2;
+                    const origCy = (225.89 + 675.70) / 2;
+                    
+                    const transform = (p, isControlPoint) => {
+                        let x = p.x, y = p.y;
+                        if (isControlPoint) {
+                            x = origCx + (x - origCx) * (2 - curvature);
+                        }
+                        return {
+                            x: cx + (x - origCx) * scale,
+                            y: cy + (y - origCy) * scale
+                        };
+                    };
+                    
+                    const path = [
+                        transform(originalPath[0], false),
+                        transform(originalPath[1], false),
+                        transform(originalPath[2], true),
+                        transform(originalPath[3], false),
+                        transform(originalPath[4], false),
+                        transform(originalPath[5], true)
+                    ];
+                    
+                    if (t < 0.1) {
+                        const tt = t / 0.1;
+                        return {
+                            x: path[0].x + (path[1].x - path[0].x) * tt,
+                            y: path[0].y + (path[1].y - path[0].y) * tt
+                        };
+                    } else if (t < 0.5) {
+                        const tt = (t - 0.1) / 0.4;
+                        const s = 1 - tt;
+                        return {
+                            x: s * s * path[1].x + 2 * s * tt * path[2].x + tt * tt * path[3].x,
+                            y: s * s * path[1].y + 2 * s * tt * path[2].y + tt * tt * path[3].y
+                        };
+                    } else if (t < 0.6) {
+                        const tt = (t - 0.5) / 0.1;
+                        return {
+                            x: path[3].x + (path[4].x - path[3].x) * tt,
+                            y: path[3].y + (path[4].y - path[3].y) * tt
+                        };
+                    } else {
+                        const tt = (t - 0.6) / 0.4;
+                        const s = 1 - tt;
+                        return {
+                            x: s * s * path[4].x + 2 * s * tt * path[5].x + tt * tt * path[0].x,
+                            y: s * s * path[4].y + 2 * s * tt * path[5].y + tt * tt * path[0].y
+                        };
+                    }
+                },
+                getTangent: (t) => {
+                    const cx = canvas.width / 2, cy = canvas.height / 2;
+                    const scale = canvas.height * 0.7 / 535;
+                    const curvature = 2.5;
+                    
+                    const originalPath = [
+                        {x: 603.69, y: 227.39},
+                        {x: 749.63, y: 225.89},
+                        {x: 700.04, y: 450.58},
+                        {x: 754.24, y: 674.20},
+                        {x: 608.30, y: 675.70},
+                        {x: 657.90, y: 451.01}
+                    ];
+                    
+                    const origCx = (603.69 + 754.24) / 2;
+                    const origCy = (225.89 + 675.70) / 2;
+                    
+                    const transform = (p, isControlPoint) => {
+                        let x = p.x, y = p.y;
+                        if (isControlPoint) {
+                            x = origCx + (x - origCx) * (2 - curvature);
+                        }
+                        return {
+                            x: cx + (x - origCx) * scale,
+                            y: cy + (y - origCy) * scale
+                        };
+                    };
+                    
+                    const path = [
+                        transform(originalPath[0], false),
+                        transform(originalPath[1], false),
+                        transform(originalPath[2], true),
+                        transform(originalPath[3], false),
+                        transform(originalPath[4], false),
+                        transform(originalPath[5], true)
+                    ];
+                    
+                    let dx, dy;
+                    
+                    if (t < 0.1) {
+                        dx = path[1].x - path[0].x;
+                        dy = path[1].y - path[0].y;
+                    } else if (t < 0.5) {
+                        const tt = (t - 0.1) / 0.4;
+                        const s = 1 - tt;
+                        dx = 2 * s * (path[2].x - path[1].x) + 2 * tt * (path[3].x - path[2].x);
+                        dy = 2 * s * (path[2].y - path[1].y) + 2 * tt * (path[3].y - path[2].y);
+                    } else if (t < 0.6) {
+                        dx = path[4].x - path[3].x;
+                        dy = path[4].y - path[3].y;
+                    } else {
+                        const tt = (t - 0.6) / 0.4;
+                        const s = 1 - tt;
+                        dx = 2 * s * (path[5].x - path[4].x) + 2 * tt * (path[0].x - path[5].x);
+                        dy = 2 * s * (path[5].y - path[4].y) + 2 * tt * (path[0].y - path[5].y);
+                    }
+                    
+                    return Math.atan2(dy, dx);
+                },
+                getNormal: (t) => {
+                    const tangent = curves.biconcave.getTangent(t);
+                    return tangent + Math.PI / 2;
+                }
+            }
+        };
+        
+        function generateNewPoint() {
+            if (!currentCurve) return;
+            const t = Math.random() * 0.8 + 0.1;
+            targetPoint = curves[currentCurve].getPoint(t);
+            tangentAngle = curves[currentCurve].getTangent(t);
+            normalAngle = curves[currentCurve].getNormal(t);
+            userLine = null;
+            showingAnswer = false;
+            answered = false;
+            draw();
+            updateFeedback(`在${shapeNames[currentCurve]}的紅點處畫出法線`, '#60a5fa');
+        }
+        
+        function draw() {
+            if (!currentCurve) {
+                ctx.fillStyle = '#1e293b';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = '#60a5fa';
+                ctx.font = 'bold 24px "Noto Sans TC"';
+                ctx.textAlign = 'center';
+                ctx.fillText('請點擊上方的形狀圖示開始練習', canvas.width / 2, canvas.height / 2);
+                return;
+            }
+            
+            ctx.fillStyle = '#1e293b';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            ctx.strokeStyle = 'rgba(100, 116, 139, 0.1)';
+            ctx.lineWidth = 1;
+            const gridSize = Math.max(canvas.width, canvas.height) / 20;
+            for (let i = 0; i < canvas.width; i += gridSize) {
+                ctx.beginPath();
+                ctx.moveTo(i, 0);
+                ctx.lineTo(i, canvas.height);
+                ctx.stroke();
+            }
+            for (let i = 0; i < canvas.height; i += gridSize) {
+                ctx.beginPath();
+                ctx.moveTo(0, i);
+                ctx.lineTo(canvas.width, i);
+                ctx.stroke();
+            }
+            
+            curves[currentCurve].draw(ctx);
+            
+            if (targetPoint) {
+                ctx.beginPath();
+                ctx.arc(targetPoint.x, targetPoint.y, 10, 0, Math.PI * 2);
+                ctx.fillStyle = '#ef4444';
+                ctx.fill();
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 3;
+                ctx.stroke();
+                
+                if (userLine) {
+                    ctx.beginPath();
+                    ctx.moveTo(targetPoint.x, targetPoint.y);
+                    ctx.lineTo(userLine.x, userLine.y);
+                    ctx.strokeStyle = userLine.color || '#fbbf24';
+                    ctx.lineWidth = 4;
+                    ctx.stroke();
+                    
+                    const angle = Math.atan2(userLine.y - targetPoint.y, userLine.x - targetPoint.x);
+                    const arrowSize = 20;
+                    ctx.beginPath();
+                    ctx.moveTo(userLine.x, userLine.y);
+                    ctx.lineTo(userLine.x - arrowSize * Math.cos(angle - Math.PI / 6),
+                              userLine.y - arrowSize * Math.sin(angle - Math.PI / 6));
+                    ctx.moveTo(userLine.x, userLine.y);
+                    ctx.lineTo(userLine.x - arrowSize * Math.cos(angle + Math.PI / 6),
+                              userLine.y - arrowSize * Math.sin(angle + Math.PI / 6));
+                    ctx.stroke();
+                }
+                
+                if (showingAnswer) {
+                    const length = Math.min(canvas.width, canvas.height) * 0.25;
+                    
+                    // 切線 (綠色虛線)
+                    const tangentEndX1 = targetPoint.x + length * Math.cos(tangentAngle);
+                    const tangentEndY1 = targetPoint.y + length * Math.sin(tangentAngle);
+                    const tangentEndX2 = targetPoint.x - length * Math.cos(tangentAngle);
+                    const tangentEndY2 = targetPoint.y - length * Math.sin(tangentAngle);
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(tangentEndX2, tangentEndY2);
+                    ctx.lineTo(tangentEndX1, tangentEndY1);
+                    ctx.strokeStyle = '#10b981';
+                    ctx.lineWidth = 3;
+                    ctx.setLineDash([8, 5]);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                    
+                    // 法線 (青色實線)
+                    const normalEndX = targetPoint.x + length * Math.cos(normalAngle);
+                    const normalEndY = targetPoint.y + length * Math.sin(normalAngle);
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(targetPoint.x, targetPoint.y);
+                    ctx.lineTo(normalEndX, normalEndY);
+                    ctx.strokeStyle = '#06b6d4';
+                    ctx.lineWidth = 4;
+                    ctx.stroke();
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(normalEndX, normalEndY);
+                    ctx.lineTo(normalEndX - 20 * Math.cos(normalAngle - Math.PI / 6),
+                              normalEndY - 20 * Math.sin(normalAngle - Math.PI / 6));
+                    ctx.moveTo(normalEndX, normalEndY);
+                    ctx.lineTo(normalEndX - 20 * Math.cos(normalAngle + Math.PI / 6),
+                              normalEndY - 20 * Math.sin(normalAngle + Math.PI / 6));
+                    ctx.stroke();
+                    
+                    ctx.font = 'bold 18px "Noto Sans TC"';
+                    ctx.fillStyle = '#10b981';
+                    ctx.fillText('切線', tangentEndX1 + 15, tangentEndY1);
+                    ctx.fillStyle = '#06b6d4';
+                    ctx.fillText('法線', normalEndX + 15, normalEndY - 10);
+                }
+            }
+        }
+        
+        function updateFeedback(message, color) {
+            document.getElementById('feedback').textContent = message;
+            document.getElementById('feedback').style.color = color;
+        }
+        
+        function checkAnswer() {
+            if (!userLine || !targetPoint || answered) return;
+            
+            const userAngle = Math.atan2(userLine.y - targetPoint.y, userLine.x - targetPoint.x);
+            let angleDiff = Math.abs(userAngle - normalAngle) * 180 / Math.PI;
+            if (angleDiff > 180) angleDiff = 360 - angleDiff;
+            
+            const error = Math.min(angleDiff, Math.abs(angleDiff - 180));
+            const isCorrect = error <= tolerance;
+            
+            answered = true;
+            
+            if (isCorrect) {
+                userLine.color = '#10b981';
+                updateFeedback(`✓ 正確！誤差 ${error.toFixed(1)}°`, '#10b981');
+            } else {
+                userLine.color = '#fbbf24';
+                updateFeedback(`✗ 誤差 ${error.toFixed(1)}° (需 ≤${tolerance}°)`, '#fbbf24');
+            }
+            
+            draw();
+        }
+        
+        function getPosition(e) {
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            
+            if (e.touches && e.touches[0]) {
+                return {
+                    x: (e.touches[0].clientX - rect.left) * scaleX,
+                    y: (e.touches[0].clientY - rect.top) * scaleY
+                };
+            }
+            return {
+                x: (e.clientX - rect.left) * scaleX,
+                y: (e.clientY - rect.top) * scaleY
+            };
+        }
+        
+        canvas.addEventListener('mousedown', (e) => {
+            if (!targetPoint) return;
+            const pos = getPosition(e);
+            const dist = Math.sqrt((pos.x - targetPoint.x) ** 2 + (pos.y - targetPoint.y) ** 2);
+            if (dist < 40) {
+                isDrawing = true;
+                showingAnswer = false;
+            }
+        });
+        
+        canvas.addEventListener('mousemove', (e) => {
+            if (!isDrawing || !targetPoint) return;
+            userLine = getPosition(e);
+            draw();
+        });
+        
+        canvas.addEventListener('mouseup', () => {
+            if (isDrawing) {
+                isDrawing = false;
+                checkAnswer();
+            }
+        });
+        
+        canvas.addEventListener('mouseleave', () => {
+            if (isDrawing) {
+                isDrawing = false;
+                checkAnswer();
+            }
+        });
+        
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            if (!targetPoint) return;
+            const pos = getPosition(e);
+            const dist = Math.sqrt((pos.x - targetPoint.x) ** 2 + (pos.y - targetPoint.y) ** 2);
+            if (dist < 40) {
+                isDrawing = true;
+                showingAnswer = false;
+            }
+        });
+        
+        canvas.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            if (!isDrawing || !targetPoint) return;
+            userLine = getPosition(e);
+            draw();
+        });
+        
+        canvas.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            if (isDrawing) {
+                isDrawing = false;
+                checkAnswer();
+            }
+        });
+        
+        document.querySelectorAll('.shape-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.shape-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                currentCurve = btn.dataset.curve;
+                generateNewPoint();
+            });
+        });
+        
+        document.getElementById('toleranceDown').addEventListener('click', () => {
+            if (tolerance > 3) {
+                tolerance--;
+                document.getElementById('toleranceValue').textContent = tolerance + '°';
+            }
+        });
+        
+        document.getElementById('toleranceUp').addEventListener('click', () => {
+            if (tolerance < 15) {
+                tolerance++;
+                document.getElementById('toleranceValue').textContent = tolerance + '°';
+            }
+        });
+        
+        document.getElementById('newPoint').addEventListener('click', generateNewPoint);
+        
+        document.getElementById('showAnswer').addEventListener('click', () => {
+            if (targetPoint) {
+                showingAnswer = true;
+                draw();
+            }
+        });
+        
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'Space') {
+                e.preventDefault();
+                generateNewPoint();
+            } else if (e.code === 'Enter' && targetPoint) {
+                e.preventDefault();
+                showingAnswer = true;
+                draw();
+            }
+        });
+        
+        setTimeout(() => {
+            resizeCanvas();
+            draw();
+        }, 100);
+    </script>
+</body>
+</html>
