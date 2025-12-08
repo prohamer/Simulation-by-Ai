@@ -1,0 +1,1417 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>週期表拼圖遊戲</title>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Noto+Sans+TC:wght@400;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-primary: #0a0e27;
+            --bg-secondary: #1a1f3a;
+            --accent-cyan: #00ffff;
+            --accent-magenta: #ff00ff;
+            --accent-yellow: #ffff00;
+            --text-primary: #e0e6ff;
+            --text-secondary: #8891b3;
+            --success: #00ff88;
+            --error: #ff3366;
+            --glow-cyan: 0 0 20px rgba(0, 255, 255, 0.5);
+            --glow-magenta: 0 0 20px rgba(255, 0, 255, 0.5);
+        }
+
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+            background: linear-gradient(135deg, var(--bg-primary) 0%, #1a1035 100%);
+            color: var(--text-primary);
+            min-height: 100vh;
+            padding: 20px;
+            position: relative;
+            overflow-x: hidden;
+            -webkit-overflow-scrolling: touch;
+            touch-action: pan-y;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: 
+                radial-gradient(circle at 20% 30%, rgba(0, 255, 255, 0.1) 0%, transparent 50%),
+                radial-gradient(circle at 80% 70%, rgba(255, 0, 255, 0.1) 0%, transparent 50%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .container {
+            max-width: 1800px;
+            margin: 0 auto;
+            position: relative;
+            z-index: 1;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 40px;
+            animation: fadeInDown 0.8s ease;
+        }
+
+        h1 {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 3.5rem;
+            font-weight: 900;
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-magenta), var(--accent-yellow));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            text-shadow: 0 0 40px rgba(0, 255, 255, 0.3);
+            margin-bottom: 15px;
+            letter-spacing: 3px;
+        }
+
+        .subtitle {
+            font-size: 1.2rem;
+            color: var(--text-secondary);
+            font-family: 'Space Mono', monospace;
+            letter-spacing: 2px;
+        }
+
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+            animation: fadeIn 1s ease 0.3s backwards;
+        }
+
+        .toggle-btn {
+            background: var(--bg-secondary);
+            border: 2px solid var(--accent-cyan);
+            color: var(--text-primary);
+            padding: 15px 30px;
+            font-family: 'Space Mono', monospace;
+            font-size: 1rem;
+            font-weight: 700;
+            cursor: pointer;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .toggle-btn::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            border-radius: 50%;
+            background: rgba(0, 255, 255, 0.3);
+            transform: translate(-50%, -50%);
+            transition: width 0.6s, height 0.6s;
+        }
+
+        .toggle-btn:hover::before {
+            width: 300px;
+            height: 300px;
+        }
+
+        .toggle-btn:hover {
+            border-color: var(--accent-magenta);
+            box-shadow: var(--glow-cyan);
+            transform: translateY(-2px);
+        }
+
+        .reset-btn {
+            border-color: var(--accent-yellow);
+        }
+
+        .reset-btn:hover {
+            border-color: var(--accent-magenta);
+            box-shadow: var(--glow-magenta);
+        }
+
+        .game-area {
+            display: grid;
+            grid-template-columns: 280px 1fr;
+            gap: 25px;
+            margin-bottom: 40px;
+            animation: fadeIn 1s ease 0.5s backwards;
+        }
+
+        .draggable-elements {
+            background: var(--bg-secondary);
+            border: 2px solid var(--accent-cyan);
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 10px 40px rgba(0, 255, 255, 0.2);
+        }
+
+        .draggable-elements h2 {
+            font-family: 'Orbitron', sans-serif;
+            color: var(--accent-cyan);
+            margin-bottom: 15px;
+            font-size: 1.3rem;
+            text-align: center;
+            letter-spacing: 2px;
+        }
+
+        .mobile-hint {
+            display: none;
+            text-align: center;
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+            margin-bottom: 15px;
+            padding: 8px;
+            background: rgba(0, 255, 255, 0.1);
+            border-radius: 8px;
+            animation: fadeIn 1s ease;
+        }
+
+        @media (max-width: 768px) {
+            .mobile-hint {
+                display: block;
+            }
+        }
+
+        .elements-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            max-height: 700px;
+            overflow-y: auto;
+            padding: 10px;
+        }
+
+        .elements-grid::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .elements-grid::-webkit-scrollbar-track {
+            background: var(--bg-primary);
+            border-radius: 4px;
+        }
+
+        .elements-grid::-webkit-scrollbar-thumb {
+            background: var(--accent-cyan);
+            border-radius: 4px;
+        }
+
+        .draggable-element {
+            background: linear-gradient(135deg, rgba(0, 255, 255, 0.2), rgba(255, 0, 255, 0.2));
+            border: 2px solid var(--accent-cyan);
+            border-radius: 8px;
+            padding: 10px 6px;
+            cursor: move;
+            text-align: center;
+            transition: all 0.3s ease;
+            font-family: 'Space Mono', monospace;
+            position: relative;
+            overflow: hidden;
+            min-height: 75px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .draggable-element::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: linear-gradient(45deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+            transform: rotate(45deg);
+            transition: all 0.5s;
+        }
+
+        .draggable-element:hover::before {
+            left: 100%;
+        }
+
+        .draggable-element:hover {
+            transform: scale(1.05) rotate(2deg);
+            box-shadow: var(--glow-cyan);
+            border-color: var(--accent-magenta);
+        }
+
+        .draggable-element:active {
+            cursor: grabbing;
+            transform: scale(0.95);
+        }
+
+        .element-number {
+            position: absolute;
+            bottom: 4px;
+            left: 5px;
+            font-size: 0.6rem;
+            color: var(--accent-yellow);
+            font-weight: 700;
+        }
+
+        .element-mass {
+            position: absolute;
+            top: 4px;
+            left: 5px;
+            font-size: 0.55rem;
+            color: var(--text-secondary);
+            font-weight: 400;
+        }
+
+        .element-symbol {
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            font-family: 'Orbitron', sans-serif;
+            line-height: 1.2;
+        }
+
+        .element-symbol.large {
+            font-size: 1.6rem;
+        }
+
+        .element-symbol.small {
+            font-size: 0.8rem;
+            margin-top: 2px;
+        }
+
+        .element-name {
+            font-size: 0.7rem;
+            color: var(--text-secondary);
+            margin-top: 3px;
+            line-height: 1.2;
+        }
+
+        .element-name.large {
+            font-size: 1.2rem;
+            color: var(--text-primary);
+            font-weight: 700;
+        }
+
+        .element-name.small {
+            font-size: 0.6rem;
+        }
+
+        .periodic-table {
+            background: var(--bg-secondary);
+            border: 2px solid var(--accent-magenta);
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 10px 40px rgba(255, 0, 255, 0.2);
+        }
+
+        .periodic-table::-webkit-scrollbar {
+            height: 8px;
+        }
+
+        .periodic-table::-webkit-scrollbar-track {
+            background: var(--bg-primary);
+            border-radius: 4px;
+        }
+
+        .periodic-table::-webkit-scrollbar-thumb {
+            background: var(--accent-magenta);
+            border-radius: 4px;
+        }
+
+        .table-grid {
+            display: grid;
+            grid-template-columns: repeat(18, 1fr);
+            gap: 3px;
+        }
+
+        .drop-zone {
+            background: rgba(255, 255, 255, 0.03);
+            border: 2px dashed rgba(255, 255, 255, 0.2);
+            border-radius: 4px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            font-size: 0.65rem;
+            transition: all 0.3s ease;
+            position: relative;
+            font-family: 'Space Mono', monospace;
+            min-height: 70px;
+            height: 70px;
+        }
+
+        .drop-zone.drag-over {
+            background: rgba(0, 255, 255, 0.2);
+            border-color: var(--accent-cyan);
+            transform: scale(1.05);
+            box-shadow: var(--glow-cyan);
+        }
+
+        .drop-zone.filled {
+            background: linear-gradient(135deg, rgba(0, 255, 255, 0.15), rgba(255, 0, 255, 0.15));
+            border-style: solid;
+            border-color: rgba(255, 255, 255, 0.4);
+        }
+
+        .drop-zone.correct {
+            border-color: var(--success);
+            box-shadow: 0 0 20px rgba(0, 255, 136, 0.5);
+            animation: pulse 0.5s ease;
+        }
+
+        .drop-zone.incorrect {
+            border-color: var(--error);
+            box-shadow: 0 0 20px rgba(255, 51, 102, 0.5);
+            animation: shake 0.5s ease;
+        }
+
+        .drop-zone.auto-filled {
+            background: linear-gradient(135deg, rgba(100, 100, 255, 0.2), rgba(150, 100, 255, 0.2));
+            border-color: rgba(150, 100, 255, 0.6);
+        }
+
+        .lanthanide-placeholder {
+            background: rgba(0, 255, 255, 0.1);
+            border: 2px solid var(--accent-cyan);
+            border-style: solid;
+            cursor: default;
+        }
+
+        .lanthanide-cell {
+            background: linear-gradient(135deg, rgba(0, 255, 255, 0.15), rgba(100, 200, 255, 0.15));
+            border-color: rgba(0, 255, 255, 0.6);
+        }
+
+        .actinide-cell {
+            background: linear-gradient(135deg, rgba(255, 0, 255, 0.15), rgba(255, 100, 200, 0.15));
+            border-color: rgba(255, 0, 255, 0.6);
+        }
+
+        .series-label {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: 'Orbitron', sans-serif;
+            font-weight: 700;
+            border: none;
+            background: transparent;
+        }
+
+        .spacer-row {
+            min-height: 15px;
+            height: 15px;
+            border: none;
+            background: transparent;
+        }
+
+        .empty-cell {
+            background: transparent;
+            border: none;
+            min-height: 70px;
+            height: 70px;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            75% { transform: translateX(5px); }
+        }
+
+        @keyframes fadeInDown {
+            from {
+                opacity: 0;
+                transform: translateY(-30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .progress {
+            text-align: center;
+            margin-top: 30px;
+            padding: 20px;
+            background: var(--bg-secondary);
+            border-radius: 15px;
+            border: 2px solid var(--accent-yellow);
+            animation: fadeIn 1s ease 0.7s backwards;
+        }
+
+        .progress-text {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1.5rem;
+            color: var(--accent-yellow);
+            margin-bottom: 10px;
+            letter-spacing: 2px;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 30px;
+            background: var(--bg-primary);
+            border-radius: 15px;
+            overflow: hidden;
+            position: relative;
+            border: 2px solid var(--accent-cyan);
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--accent-cyan), var(--accent-magenta));
+            transition: width 0.5s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .progress-fill::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+            animation: shimmer 2s infinite;
+        }
+
+        @keyframes shimmer {
+            to { left: 200%; }
+        }
+
+        .congrats {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0);
+            background: var(--bg-secondary);
+            border: 3px solid var(--accent-cyan);
+            border-radius: 20px;
+            padding: 50px;
+            text-align: center;
+            z-index: 1000;
+            box-shadow: 0 0 100px rgba(0, 255, 255, 0.5);
+            transition: transform 0.5s ease;
+        }
+
+        .congrats.show {
+            transform: translate(-50%, -50%) scale(1);
+        }
+
+        .congrats h2 {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 3rem;
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-magenta), var(--accent-yellow));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 20px;
+        }
+
+        @media (max-width: 1500px) {
+            .game-area {
+                grid-template-columns: 260px 1fr;
+                gap: 20px;
+            }
+
+            .table-grid {
+                gap: 2px;
+            }
+        }
+
+        @media (max-width: 1200px) {
+            .game-area {
+                grid-template-columns: 1fr;
+            }
+            
+            h1 {
+                font-size: 2.5rem;
+            }
+            
+            .table-grid {
+                gap: 3px;
+            }
+
+            .elements-grid {
+                grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
+                max-height: 400px;
+            }
+        }
+
+        @media (max-width: 768px) {
+            body {
+                padding: 10px;
+            }
+
+            h1 {
+                font-size: 2rem;
+                letter-spacing: 1px;
+            }
+            
+            .subtitle {
+                font-size: 0.9rem;
+                letter-spacing: 1px;
+            }
+
+            .controls {
+                gap: 10px;
+            }
+
+            .toggle-btn {
+                padding: 12px 20px;
+                font-size: 0.85rem;
+            }
+
+            .game-area {
+                gap: 20px;
+                margin-bottom: 30px;
+            }
+
+            .draggable-elements {
+                padding: 15px;
+                order: 2;
+            }
+
+            .draggable-elements h2 {
+                font-size: 1.2rem;
+            }
+
+            .elements-grid {
+                grid-template-columns: repeat(auto-fill, minmax(65px, 1fr));
+                gap: 10px;
+                max-height: 400px;
+                padding: 5px;
+            }
+
+            .draggable-element {
+                padding: 10px 6px;
+                min-height: 70px;
+                touch-action: none;
+            }
+
+            .periodic-table {
+                padding: 15px;
+                order: 1;
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+            }
+
+            .table-grid {
+                gap: 2px;
+                min-width: 650px;
+            }
+
+            .drop-zone {
+                min-height: 60px;
+                height: 60px;
+                font-size: 0.6rem;
+            }
+
+            .empty-cell {
+                min-height: 60px;
+                height: 60px;
+            }
+
+            .spacer-row {
+                min-height: 10px;
+                height: 10px;
+            }
+
+            .series-label div {
+                font-size: 0.6rem !important;
+            }
+
+            .element-number {
+                font-size: 0.55rem;
+                bottom: 2px;
+                left: 3px;
+            }
+
+            .element-mass {
+                font-size: 0.5rem;
+                top: 2px;
+                left: 3px;
+            }
+
+            .element-symbol {
+                font-size: 1rem;
+            }
+
+            .element-symbol.large {
+                font-size: 1.3rem;
+            }
+
+            .element-symbol.small {
+                font-size: 0.7rem;
+            }
+
+            .element-name {
+                font-size: 0.6rem;
+            }
+
+            .element-name.large {
+                font-size: 1rem;
+            }
+
+            .element-name.small {
+                font-size: 0.55rem;
+            }
+
+            .progress {
+                padding: 15px;
+            }
+
+            .progress-text {
+                font-size: 1.2rem;
+            }
+
+            .progress-bar {
+                height: 25px;
+            }
+
+            .congrats {
+                padding: 30px 20px;
+                width: 90%;
+                max-width: 400px;
+            }
+
+            .congrats h2 {
+                font-size: 2rem;
+            }
+        }
+
+        @media (max-width: 480px) {
+            h1 {
+                font-size: 1.5rem;
+            }
+
+            .subtitle {
+                font-size: 0.75rem;
+            }
+
+            .toggle-btn {
+                padding: 10px 15px;
+                font-size: 0.75rem;
+                letter-spacing: 0.5px;
+            }
+
+            .elements-grid {
+                grid-template-columns: repeat(auto-fill, minmax(55px, 1fr));
+                gap: 8px;
+            }
+
+            .draggable-element {
+                padding: 8px 4px;
+                min-height: 60px;
+            }
+
+            .table-grid {
+                gap: 1px;
+                min-width: 550px;
+            }
+
+            .drop-zone {
+                min-height: 50px;
+                height: 50px;
+                border-width: 1px;
+            }
+
+            .empty-cell {
+                min-height: 50px;
+                height: 50px;
+            }
+
+            .spacer-row {
+                min-height: 8px;
+                height: 8px;
+            }
+
+            .lanthanide-placeholder {
+                font-size: 0.6rem;
+            }
+
+            .series-label {
+                font-size: 0.6rem;
+            }
+
+            .element-number {
+                font-size: 0.5rem;
+            }
+
+            .element-mass {
+                font-size: 0.45rem;
+            }
+
+            .element-symbol {
+                font-size: 0.85rem;
+            }
+
+            .element-symbol.large {
+                font-size: 1.1rem;
+            }
+
+            .element-symbol.small {
+                font-size: 0.6rem;
+            }
+
+            .element-name {
+                font-size: 0.55rem;
+            }
+
+            .element-name.large {
+                font-size: 0.85rem;
+            }
+
+            .element-name.small {
+                font-size: 0.5rem;
+            }
+        }
+
+        /* Touch device optimizations */
+        @media (hover: none) and (pointer: coarse) {
+            .draggable-element {
+                cursor: grab;
+            }
+
+            .draggable-element:active {
+                cursor: grabbing;
+            }
+
+            .drop-zone {
+                min-height: 65px;
+                height: 65px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>週期表拼圖遊戲</h1>
+            <p class="subtitle">▸ PERIODIC TABLE PUZZLE ◂</p>
+        </header>
+
+        <div class="controls">
+            <button class="toggle-btn" id="toggleLang">當前顯示：元素符號</button>
+            <button class="toggle-btn reset-btn" id="resetBtn">重新開始</button>
+        </div>
+
+        <div class="game-area">
+            <div class="draggable-elements">
+                <h2>待拖曳元素 (1-30)</h2>
+                <div class="mobile-hint">👆 點住元素並拖曳到正確位置</div>
+                <div class="elements-grid" id="draggableElements"></div>
+            </div>
+
+            <div class="periodic-table">
+                <div class="table-grid" id="periodicTable"></div>
+            </div>
+        </div>
+
+        <div class="progress">
+            <div class="progress-text">完成進度: <span id="progressText">0/30</span></div>
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill" style="width: 0%"></div>
+            </div>
+        </div>
+
+        <div class="congrats" id="congrats">
+            <h2>🎉 恭喜完成！🎉</h2>
+            <p style="font-size: 1.2rem; color: var(--text-secondary);">你已成功完成週期表拼圖！</p>
+        </div>
+    </div>
+
+    <script>
+        // 週期表完整資料 (1-118)
+        // row: 1-7 為主週期表, row: 8 為鑭系, row: 9 為錒系
+        const elements = [
+            {num: 1, symbol: "H", name: "氫", mass: "1.008", row: 1, col: 1},
+            {num: 2, symbol: "He", name: "氦", mass: "4.003", row: 1, col: 18},
+            {num: 3, symbol: "Li", name: "鋰", mass: "6.941", row: 2, col: 1},
+            {num: 4, symbol: "Be", name: "鈹", mass: "9.012", row: 2, col: 2},
+            {num: 5, symbol: "B", name: "硼", mass: "10.81", row: 2, col: 13},
+            {num: 6, symbol: "C", name: "碳", mass: "12.01", row: 2, col: 14},
+            {num: 7, symbol: "N", name: "氮", mass: "14.01", row: 2, col: 15},
+            {num: 8, symbol: "O", name: "氧", mass: "16.00", row: 2, col: 16},
+            {num: 9, symbol: "F", name: "氟", mass: "19.00", row: 2, col: 17},
+            {num: 10, symbol: "Ne", name: "氖", mass: "20.18", row: 2, col: 18},
+            {num: 11, symbol: "Na", name: "鈉", mass: "22.99", row: 3, col: 1},
+            {num: 12, symbol: "Mg", name: "鎂", mass: "24.31", row: 3, col: 2},
+            {num: 13, symbol: "Al", name: "鋁", mass: "26.98", row: 3, col: 13},
+            {num: 14, symbol: "Si", name: "矽", mass: "28.09", row: 3, col: 14},
+            {num: 15, symbol: "P", name: "磷", mass: "30.97", row: 3, col: 15},
+            {num: 16, symbol: "S", name: "硫", mass: "32.07", row: 3, col: 16},
+            {num: 17, symbol: "Cl", name: "氯", mass: "35.45", row: 3, col: 17},
+            {num: 18, symbol: "Ar", name: "氬", mass: "39.95", row: 3, col: 18},
+            {num: 19, symbol: "K", name: "鉀", mass: "39.10", row: 4, col: 1},
+            {num: 20, symbol: "Ca", name: "鈣", mass: "40.08", row: 4, col: 2},
+            {num: 21, symbol: "Sc", name: "鈧", mass: "44.96", row: 4, col: 3},
+            {num: 22, symbol: "Ti", name: "鈦", mass: "47.87", row: 4, col: 4},
+            {num: 23, symbol: "V", name: "釩", mass: "50.94", row: 4, col: 5},
+            {num: 24, symbol: "Cr", name: "鉻", mass: "52.00", row: 4, col: 6},
+            {num: 25, symbol: "Mn", name: "錳", mass: "54.94", row: 4, col: 7},
+            {num: 26, symbol: "Fe", name: "鐵", mass: "55.85", row: 4, col: 8},
+            {num: 27, symbol: "Co", name: "鈷", mass: "58.93", row: 4, col: 9},
+            {num: 28, symbol: "Ni", name: "鎳", mass: "58.69", row: 4, col: 10},
+            {num: 29, symbol: "Cu", name: "銅", mass: "63.55", row: 4, col: 11},
+            {num: 30, symbol: "Zn", name: "鋅", mass: "65.38", row: 4, col: 12},
+            {num: 31, symbol: "Ga", name: "鎵", mass: "69.72", row: 4, col: 13},
+            {num: 32, symbol: "Ge", name: "鍺", mass: "72.63", row: 4, col: 14},
+            {num: 33, symbol: "As", name: "砷", mass: "74.92", row: 4, col: 15},
+            {num: 34, symbol: "Se", name: "硒", mass: "78.97", row: 4, col: 16},
+            {num: 35, symbol: "Br", name: "溴", mass: "79.90", row: 4, col: 17},
+            {num: 36, symbol: "Kr", name: "氪", mass: "83.80", row: 4, col: 18},
+            {num: 37, symbol: "Rb", name: "銣", mass: "85.47", row: 5, col: 1},
+            {num: 38, symbol: "Sr", name: "鍶", mass: "87.62", row: 5, col: 2},
+            {num: 39, symbol: "Y", name: "釔", mass: "88.91", row: 5, col: 3},
+            {num: 40, symbol: "Zr", name: "鋯", mass: "91.22", row: 5, col: 4},
+            {num: 41, symbol: "Nb", name: "鈮", mass: "92.91", row: 5, col: 5},
+            {num: 42, symbol: "Mo", name: "鉬", mass: "95.95", row: 5, col: 6},
+            {num: 43, symbol: "Tc", name: "鎝", mass: "(98)", row: 5, col: 7},
+            {num: 44, symbol: "Ru", name: "釕", mass: "101.1", row: 5, col: 8},
+            {num: 45, symbol: "Rh", name: "銠", mass: "102.9", row: 5, col: 9},
+            {num: 46, symbol: "Pd", name: "鈀", mass: "106.4", row: 5, col: 10},
+            {num: 47, symbol: "Ag", name: "銀", mass: "107.9", row: 5, col: 11},
+            {num: 48, symbol: "Cd", name: "鎘", mass: "112.4", row: 5, col: 12},
+            {num: 49, symbol: "In", name: "銦", mass: "114.8", row: 5, col: 13},
+            {num: 50, symbol: "Sn", name: "錫", mass: "118.7", row: 5, col: 14},
+            {num: 51, symbol: "Sb", name: "銻", mass: "121.8", row: 5, col: 15},
+            {num: 52, symbol: "Te", name: "碲", mass: "127.6", row: 5, col: 16},
+            {num: 53, symbol: "I", name: "碘", mass: "126.9", row: 5, col: 17},
+            {num: 54, symbol: "Xe", name: "氙", mass: "131.3", row: 5, col: 18},
+            {num: 55, symbol: "Cs", name: "銫", mass: "132.9", row: 6, col: 1},
+            {num: 56, symbol: "Ba", name: "鋇", mass: "137.3", row: 6, col: 2},
+            {num: 57, symbol: "La", name: "鑭", mass: "138.9", row: 8, col: 3},
+            {num: 58, symbol: "Ce", name: "鈰", mass: "140.1", row: 8, col: 4},
+            {num: 59, symbol: "Pr", name: "鐠", mass: "140.9", row: 8, col: 5},
+            {num: 60, symbol: "Nd", name: "釹", mass: "144.2", row: 8, col: 6},
+            {num: 61, symbol: "Pm", name: "鉕", mass: "(145)", row: 8, col: 7},
+            {num: 62, symbol: "Sm", name: "釤", mass: "150.4", row: 8, col: 8},
+            {num: 63, symbol: "Eu", name: "銪", mass: "152.0", row: 8, col: 9},
+            {num: 64, symbol: "Gd", name: "釓", mass: "157.3", row: 8, col: 10},
+            {num: 65, symbol: "Tb", name: "鋱", mass: "158.9", row: 8, col: 11},
+            {num: 66, symbol: "Dy", name: "鏑", mass: "162.5", row: 8, col: 12},
+            {num: 67, symbol: "Ho", name: "鈥", mass: "164.9", row: 8, col: 13},
+            {num: 68, symbol: "Er", name: "鉺", mass: "167.3", row: 8, col: 14},
+            {num: 69, symbol: "Tm", name: "銩", mass: "168.9", row: 8, col: 15},
+            {num: 70, symbol: "Yb", name: "鐿", mass: "173.1", row: 8, col: 16},
+            {num: 71, symbol: "Lu", name: "鎦", mass: "175.0", row: 8, col: 17},
+            {num: 72, symbol: "Hf", name: "鉿", mass: "178.5", row: 6, col: 4},
+            {num: 73, symbol: "Ta", name: "鉭", mass: "180.9", row: 6, col: 5},
+            {num: 74, symbol: "W", name: "鎢", mass: "183.8", row: 6, col: 6},
+            {num: 75, symbol: "Re", name: "錸", mass: "186.2", row: 6, col: 7},
+            {num: 76, symbol: "Os", name: "鋨", mass: "190.2", row: 6, col: 8},
+            {num: 77, symbol: "Ir", name: "銥", mass: "192.2", row: 6, col: 9},
+            {num: 78, symbol: "Pt", name: "鉑", mass: "195.1", row: 6, col: 10},
+            {num: 79, symbol: "Au", name: "金", mass: "197.0", row: 6, col: 11},
+            {num: 80, symbol: "Hg", name: "汞", mass: "200.6", row: 6, col: 12},
+            {num: 81, symbol: "Tl", name: "鉈", mass: "204.4", row: 6, col: 13},
+            {num: 82, symbol: "Pb", name: "鉛", mass: "207.2", row: 6, col: 14},
+            {num: 83, symbol: "Bi", name: "鉍", mass: "209.0", row: 6, col: 15},
+            {num: 84, symbol: "Po", name: "釙", mass: "(209)", row: 6, col: 16},
+            {num: 85, symbol: "At", name: "砈", mass: "(210)", row: 6, col: 17},
+            {num: 86, symbol: "Rn", name: "氡", mass: "(222)", row: 6, col: 18},
+            {num: 87, symbol: "Fr", name: "鍅", mass: "(223)", row: 7, col: 1},
+            {num: 88, symbol: "Ra", name: "鐳", mass: "(226)", row: 7, col: 2},
+            {num: 89, symbol: "Ac", name: "錒", mass: "(227)", row: 9, col: 3},
+            {num: 90, symbol: "Th", name: "釷", mass: "232.0", row: 9, col: 4},
+            {num: 91, symbol: "Pa", name: "鏷", mass: "231.0", row: 9, col: 5},
+            {num: 92, symbol: "U", name: "鈾", mass: "238.0", row: 9, col: 6},
+            {num: 93, symbol: "Np", name: "錼", mass: "(237)", row: 9, col: 7},
+            {num: 94, symbol: "Pu", name: "鈽", mass: "(244)", row: 9, col: 8},
+            {num: 95, symbol: "Am", name: "鋂", mass: "(243)", row: 9, col: 9},
+            {num: 96, symbol: "Cm", name: "鋦", mass: "(247)", row: 9, col: 10},
+            {num: 97, symbol: "Bk", name: "錇", mass: "(247)", row: 9, col: 11},
+            {num: 98, symbol: "Cf", name: "鐦", mass: "(251)", row: 9, col: 12},
+            {num: 99, symbol: "Es", name: "鑀", mass: "(252)", row: 9, col: 13},
+            {num: 100, symbol: "Fm", name: "鐨", mass: "(257)", row: 9, col: 14},
+            {num: 101, symbol: "Md", name: "鍆", mass: "(258)", row: 9, col: 15},
+            {num: 102, symbol: "No", name: "鍩", mass: "(259)", row: 9, col: 16},
+            {num: 103, symbol: "Lr", name: "鐒", mass: "(266)", row: 9, col: 17},
+            {num: 104, symbol: "Rf", name: "鑪", mass: "(267)", row: 7, col: 4},
+            {num: 105, symbol: "Db", name: "𨧀", mass: "(268)", row: 7, col: 5},
+            {num: 106, symbol: "Sg", name: "𨭎", mass: "(269)", row: 7, col: 6},
+            {num: 107, symbol: "Bh", name: "𨨏", mass: "(270)", row: 7, col: 7},
+            {num: 108, symbol: "Hs", name: "𨭆", mass: "(277)", row: 7, col: 8},
+            {num: 109, symbol: "Mt", name: "䥑", mass: "(278)", row: 7, col: 9},
+            {num: 110, symbol: "Ds", name: "鐽", mass: "(281)", row: 7, col: 10},
+            {num: 111, symbol: "Rg", name: "錀", mass: "(282)", row: 7, col: 11},
+            {num: 112, symbol: "Cn", name: "鎶", mass: "(285)", row: 7, col: 12},
+            {num: 113, symbol: "Nh", name: "鉨", mass: "(286)", row: 7, col: 13},
+            {num: 114, symbol: "Fl", name: "鈇", mass: "(289)", row: 7, col: 14},
+            {num: 115, symbol: "Mc", name: "鏌", mass: "(290)", row: 7, col: 15},
+            {num: 116, symbol: "Lv", name: "鉝", mass: "(293)", row: 7, col: 16},
+            {num: 117, symbol: "Ts", name: "鿬", mass: "(294)", row: 7, col: 17},
+            {num: 118, symbol: "Og", name: "鿫", mass: "(294)", row: 7, col: 18}
+        ];
+
+        let showChinese = false;
+        let correctPlacements = 0;
+        let placedElements = new Set();
+        let draggedElement = null;
+        let touchDragElement = null;
+
+        // 初始化
+        function init() {
+            createDraggableElements();
+            createPeriodicTable();
+            updateProgress();
+        }
+
+        // 創建可拖曳元素 (1-30) - 只顯示符號和名稱
+        function createDraggableElements() {
+            const container = document.getElementById('draggableElements');
+            container.innerHTML = '';
+            
+            const draggableElements = elements.filter(el => el.num <= 30);
+            
+            // 隨機排序
+            draggableElements.sort(() => Math.random() - 0.5);
+            
+            draggableElements.forEach(element => {
+                const div = document.createElement('div');
+                div.className = 'draggable-element';
+                div.draggable = true;
+                div.dataset.number = element.num;
+                
+                if (showChinese) {
+                    // 顯示中文時：中文大在上，符號小在下
+                    div.innerHTML = `
+                        <div class="element-name large">${element.name}</div>
+                        <div class="element-symbol small">${element.symbol}</div>
+                    `;
+                } else {
+                    // 顯示符號時：符號大在上，中文小在下
+                    div.innerHTML = `
+                        <div class="element-symbol large">${element.symbol}</div>
+                        <div class="element-name small">${element.name}</div>
+                    `;
+                }
+                
+                div.addEventListener('dragstart', handleDragStart);
+                div.addEventListener('dragend', handleDragEnd);
+                
+                // Touch events for mobile
+                div.addEventListener('touchstart', handleTouchStart, {passive: false});
+                div.addEventListener('touchmove', handleTouchMove, {passive: false});
+                div.addEventListener('touchend', handleTouchEnd, {passive: false});
+                
+                container.appendChild(div);
+            });
+        }
+
+        // 創建週期表 - 完整顯示原子量和原子序
+        function createPeriodicTable() {
+            const table = document.getElementById('periodicTable');
+            table.innerHTML = '';
+            
+            // 主週期表：7行18列
+            for (let row = 1; row <= 7; row++) {
+                for (let col = 1; col <= 18; col++) {
+                    const element = elements.find(el => el.row === row && el.col === col);
+                    
+                    const cell = document.createElement('div');
+                    
+                    if (element) {
+                        if (element.num <= 30) {
+                            // 可拖曳的空格
+                            cell.className = 'drop-zone';
+                            cell.dataset.number = element.num;
+                            cell.innerHTML = `<div style="color: var(--text-secondary); font-size: 0.6rem;">${element.num}</div>`;
+                            
+                            cell.addEventListener('dragover', handleDragOver);
+                            cell.addEventListener('dragleave', handleDragLeave);
+                            cell.addEventListener('drop', handleDrop);
+                        } else {
+                            // 自動填充 (31-118)
+                            cell.className = 'drop-zone filled auto-filled';
+                            if (showChinese) {
+                                cell.innerHTML = `
+                                    <div class="element-mass">${element.mass}</div>
+                                    <div class="element-name large">${element.name}</div>
+                                    <div class="element-symbol small">${element.symbol}</div>
+                                    <div class="element-number">${element.num}</div>
+                                `;
+                            } else {
+                                cell.innerHTML = `
+                                    <div class="element-mass">${element.mass}</div>
+                                    <div class="element-symbol large">${element.symbol}</div>
+                                    <div class="element-name small">${element.name}</div>
+                                    <div class="element-number">${element.num}</div>
+                                `;
+                            }
+                        }
+                    } else {
+                        // 特殊處理：鑭系和錒系的佔位符
+                        if ((row === 6 && col === 3) || (row === 7 && col === 3)) {
+                            cell.className = 'drop-zone lanthanide-placeholder';
+                            cell.innerHTML = `<div style="color: var(--accent-cyan); font-size: 0.7rem;">57-71</div>`;
+                            if (row === 7) {
+                                cell.innerHTML = `<div style="color: var(--accent-cyan); font-size: 0.7rem;">89-103</div>`;
+                            }
+                        } else {
+                            // 空單元格
+                            cell.className = 'drop-zone empty-cell';
+                        }
+                    }
+                    
+                    table.appendChild(cell);
+                }
+            }
+            
+            // 添加分隔行（空白）
+            for (let i = 0; i < 18; i++) {
+                const spacer = document.createElement('div');
+                spacer.className = 'drop-zone empty-cell spacer-row';
+                table.appendChild(spacer);
+            }
+            
+            // 鑭系（第8行）- 從第3列開始的15個元素
+            for (let col = 1; col <= 18; col++) {
+                const cell = document.createElement('div');
+                
+                if (col >= 3 && col <= 17) {
+                    const element = elements.find(el => el.row === 8 && el.col === col);
+                    
+                    if (element && element.num <= 30) {
+                        // 可拖曳的空格
+                        cell.className = 'drop-zone';
+                        cell.dataset.number = element.num;
+                        cell.innerHTML = `<div style="color: var(--text-secondary); font-size: 0.6rem;">${element.num}</div>`;
+                        
+                        cell.addEventListener('dragover', handleDragOver);
+                        cell.addEventListener('dragleave', handleDragLeave);
+                        cell.addEventListener('drop', handleDrop);
+                    } else if (element) {
+                        // 自動填充
+                        cell.className = 'drop-zone filled auto-filled lanthanide-cell';
+                        if (showChinese) {
+                            cell.innerHTML = `
+                                <div class="element-mass">${element.mass}</div>
+                                <div class="element-name large">${element.name}</div>
+                                <div class="element-symbol small">${element.symbol}</div>
+                                <div class="element-number">${element.num}</div>
+                            `;
+                        } else {
+                            cell.innerHTML = `
+                                <div class="element-mass">${element.mass}</div>
+                                <div class="element-symbol large">${element.symbol}</div>
+                                <div class="element-name small">${element.name}</div>
+                                <div class="element-number">${element.num}</div>
+                            `;
+                        }
+                    } else {
+                        cell.className = 'drop-zone empty-cell';
+                    }
+                } else if (col === 1) {
+                    // 添加標籤
+                    cell.className = 'drop-zone empty-cell series-label';
+                    cell.innerHTML = `<div style="color: var(--accent-cyan); font-size: 0.7rem; writing-mode: horizontal-tb;">鑭系</div>`;
+                } else {
+                    cell.className = 'drop-zone empty-cell';
+                }
+                
+                table.appendChild(cell);
+            }
+            
+            // 錒系（第9行）- 從第3列開始的15個元素
+            for (let col = 1; col <= 18; col++) {
+                const cell = document.createElement('div');
+                
+                if (col >= 3 && col <= 17) {
+                    const element = elements.find(el => el.row === 9 && el.col === col);
+                    
+                    if (element && element.num <= 30) {
+                        // 可拖曳的空格
+                        cell.className = 'drop-zone';
+                        cell.dataset.number = element.num;
+                        cell.innerHTML = `<div style="color: var(--text-secondary); font-size: 0.6rem;">${element.num}</div>`;
+                        
+                        cell.addEventListener('dragover', handleDragOver);
+                        cell.addEventListener('dragleave', handleDragLeave);
+                        cell.addEventListener('drop', handleDrop);
+                    } else if (element) {
+                        // 自動填充
+                        cell.className = 'drop-zone filled auto-filled actinide-cell';
+                        if (showChinese) {
+                            cell.innerHTML = `
+                                <div class="element-mass">${element.mass}</div>
+                                <div class="element-name large">${element.name}</div>
+                                <div class="element-symbol small">${element.symbol}</div>
+                                <div class="element-number">${element.num}</div>
+                            `;
+                        } else {
+                            cell.innerHTML = `
+                                <div class="element-mass">${element.mass}</div>
+                                <div class="element-symbol large">${element.symbol}</div>
+                                <div class="element-name small">${element.name}</div>
+                                <div class="element-number">${element.num}</div>
+                            `;
+                        }
+                    } else {
+                        cell.className = 'drop-zone empty-cell';
+                    }
+                } else if (col === 1) {
+                    // 添加標籤
+                    cell.className = 'drop-zone empty-cell series-label';
+                    cell.innerHTML = `<div style="color: var(--accent-magenta); font-size: 0.7rem; writing-mode: horizontal-tb;">錒系</div>`;
+                } else {
+                    cell.className = 'drop-zone empty-cell';
+                }
+                
+                table.appendChild(cell);
+            }
+        }
+
+        // 拖曳事件處理
+        function handleDragStart(e) {
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', e.target.dataset.number);
+            e.target.style.opacity = '0.5';
+        }
+
+        function handleDragEnd(e) {
+            e.target.style.opacity = '1';
+        }
+
+        function handleDragOver(e) {
+            if (e.preventDefault) {
+                e.preventDefault();
+            }
+            e.dataTransfer.dropEffect = 'move';
+            e.currentTarget.classList.add('drag-over');
+            return false;
+        }
+
+        function handleDragLeave(e) {
+            e.currentTarget.classList.remove('drag-over');
+        }
+
+        function handleDrop(e) {
+            if (e.stopPropagation) {
+                e.stopPropagation();
+            }
+            e.preventDefault();
+            
+            const draggedNumber = e.dataTransfer.getData('text/plain');
+            const dropZoneNumber = e.currentTarget.dataset.number;
+            
+            e.currentTarget.classList.remove('drag-over');
+            
+            // 檢查是否已經放過
+            if (placedElements.has(dropZoneNumber)) {
+                return false;
+            }
+            
+            const element = elements.find(el => el.num == draggedNumber);
+            
+            // 檢查是否正確
+            if (draggedNumber === dropZoneNumber) {
+                // 正確
+                e.currentTarget.classList.add('filled', 'correct');
+                e.currentTarget.classList.remove('incorrect');
+                
+                if (showChinese) {
+                    e.currentTarget.innerHTML = `
+                        <div class="element-mass">${element.mass}</div>
+                        <div class="element-name large">${element.name}</div>
+                        <div class="element-symbol small">${element.symbol}</div>
+                        <div class="element-number">${element.num}</div>
+                    `;
+                } else {
+                    e.currentTarget.innerHTML = `
+                        <div class="element-mass">${element.mass}</div>
+                        <div class="element-symbol large">${element.symbol}</div>
+                        <div class="element-name small">${element.name}</div>
+                        <div class="element-number">${element.num}</div>
+                    `;
+                }
+                
+                // 移除拖曳元素
+                const draggedElement = document.querySelector(`[data-number="${draggedNumber}"]`);
+                if (draggedElement && draggedElement.classList.contains('draggable-element')) {
+                    draggedElement.remove();
+                }
+                
+                placedElements.add(dropZoneNumber);
+                correctPlacements++;
+                updateProgress();
+                
+                // 檢查是否完成
+                if (correctPlacements === 30) {
+                    setTimeout(showCongrats, 500);
+                }
+            } else {
+                // 錯誤
+                e.currentTarget.classList.add('incorrect');
+                e.currentTarget.classList.remove('correct');
+                setTimeout(() => {
+                    e.currentTarget.classList.remove('incorrect');
+                }, 500);
+            }
+            
+            return false;
+        }
+
+        // Touch event handlers for mobile devices
+        function handleTouchStart(e) {
+            e.preventDefault();
+            touchDragElement = e.currentTarget;
+            touchDragElement.style.opacity = '0.7';
+            touchDragElement.style.transform = 'scale(1.1)';
+            touchDragElement.style.zIndex = '1000';
+            touchDragElement.style.position = 'relative';
+        }
+
+        function handleTouchMove(e) {
+            e.preventDefault();
+            if (!touchDragElement) return;
+
+            const touch = e.touches[0];
+            const elementBelow = document.elementFromPoint(touch.clientX, touch.clientY);
+            
+            // Remove all drag-over classes
+            document.querySelectorAll('.drop-zone').forEach(zone => {
+                zone.classList.remove('drag-over');
+            });
+
+            // Add drag-over class to valid drop zone
+            if (elementBelow && elementBelow.classList.contains('drop-zone') && 
+                !elementBelow.classList.contains('filled') && elementBelow.dataset.number) {
+                elementBelow.classList.add('drag-over');
+            }
+        }
+
+        function handleTouchEnd(e) {
+            e.preventDefault();
+            if (!touchDragElement) return;
+
+            const touch = e.changedTouches[0];
+            const dropZone = document.elementFromPoint(touch.clientX, touch.clientY);
+
+            // Reset dragged element style
+            touchDragElement.style.opacity = '1';
+            touchDragElement.style.transform = 'scale(1)';
+            touchDragElement.style.zIndex = 'auto';
+
+            // Remove all drag-over classes
+            document.querySelectorAll('.drop-zone').forEach(zone => {
+                zone.classList.remove('drag-over');
+            });
+
+            if (dropZone && dropZone.classList.contains('drop-zone') && 
+                !dropZone.classList.contains('filled') && dropZone.dataset.number) {
+                
+                const draggedNumber = touchDragElement.dataset.number;
+                const dropZoneNumber = dropZone.dataset.number;
+
+                // Check if already placed
+                if (placedElements.has(dropZoneNumber)) {
+                    touchDragElement = null;
+                    return;
+                }
+
+                const element = elements.find(el => el.num == draggedNumber);
+
+                // Check if correct
+                if (draggedNumber === dropZoneNumber) {
+                    // Correct
+                    dropZone.classList.add('filled', 'correct');
+                    dropZone.classList.remove('incorrect');
+
+                    if (showChinese) {
+                        dropZone.innerHTML = `
+                            <div class="element-mass">${element.mass}</div>
+                            <div class="element-name large">${element.name}</div>
+                            <div class="element-symbol small">${element.symbol}</div>
+                            <div class="element-number">${element.num}</div>
+                        `;
+                    } else {
+                        dropZone.innerHTML = `
+                            <div class="element-mass">${element.mass}</div>
+                            <div class="element-symbol large">${element.symbol}</div>
+                            <div class="element-name small">${element.name}</div>
+                            <div class="element-number">${element.num}</div>
+                        `;
+                    }
+
+                    // Remove dragged element
+                    touchDragElement.remove();
+
+                    placedElements.add(dropZoneNumber);
+                    correctPlacements++;
+                    updateProgress();
+
+                    // Check if complete
+                    if (correctPlacements === 30) {
+                        setTimeout(showCongrats, 500);
+                    }
+                } else {
+                    // Incorrect
+                    dropZone.classList.add('incorrect');
+                    dropZone.classList.remove('correct');
+                    setTimeout(() => {
+                        dropZone.classList.remove('incorrect');
+                    }, 500);
+                }
+            }
+
+            touchDragElement = null;
+        }
+
+        // 更新進度
+        function updateProgress() {
+            const percentage = (correctPlacements / 30) * 100;
+            document.getElementById('progressText').textContent = `${correctPlacements}/30`;
+            document.getElementById('progressFill').style.width = `${percentage}%`;
+        }
+
+        // 顯示恭喜訊息
+        function showCongrats() {
+            document.getElementById('congrats').classList.add('show');
+            setTimeout(() => {
+                document.getElementById('congrats').classList.remove('show');
+            }, 3000);
+        }
+
+        // 切換語言
+        document.getElementById('toggleLang').addEventListener('click', function() {
+            showChinese = !showChinese;
+            this.textContent = showChinese ? '當前顯示：中文名稱' : '當前顯示：元素符號';
+            createDraggableElements();
+            createPeriodicTable();
+        });
+
+        // 重新開始
+        document.getElementById('resetBtn').addEventListener('click', function() {
+            correctPlacements = 0;
+            placedElements.clear();
+            init();
+        });
+
+        // 啟動遊戲
+        init();
+    </script>
+</body>
+</html>
