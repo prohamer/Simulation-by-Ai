@@ -284,6 +284,12 @@
             transform: scale(0.95);
         }
 
+        .dragging-touch {
+            box-shadow: 0 10px 40px rgba(0, 255, 255, 0.6), 
+                        0 0 0 3px rgba(0, 255, 255, 0.3);
+            border-color: var(--accent-cyan) !important;
+        }
+
         .element-number {
             position: absolute;
             bottom: 4px;
@@ -1330,10 +1336,40 @@
         function handleTouchStart(e) {
             e.preventDefault();
             touchDragElement = e.currentTarget;
-            touchDragElement.style.opacity = '0.7';
-            touchDragElement.style.transform = 'scale(1.1)';
-            touchDragElement.style.zIndex = '1000';
-            touchDragElement.style.position = 'relative';
+            
+            // 記錄原始位置以便復原
+            touchDragElement.dataset.originalParent = touchDragElement.parentElement.id;
+            
+            // 獲取元素的初始位置
+            const rect = touchDragElement.getBoundingClientRect();
+            const touch = e.touches[0];
+            
+            // 記錄觸摸點相對於元素的偏移
+            touchDragElement.dataset.offsetX = touch.clientX - rect.left;
+            touchDragElement.dataset.offsetY = touch.clientY - rect.top;
+            
+            // 創建跟隨的複製元素
+            const clone = touchDragElement.cloneNode(true);
+            clone.id = 'touch-drag-clone';
+            clone.classList.add('dragging-touch');
+            clone.style.position = 'fixed';
+            clone.style.left = rect.left + 'px';
+            clone.style.top = rect.top + 'px';
+            clone.style.width = rect.width + 'px';
+            clone.style.height = rect.height + 'px';
+            clone.style.opacity = '0.8';
+            clone.style.transform = 'scale(1.1)';
+            clone.style.zIndex = '10000';
+            clone.style.pointerEvents = 'none';
+            clone.style.transition = 'none';
+            clone.style.willChange = 'transform, left, top';
+            clone.style.cursor = 'grabbing';
+            document.body.appendChild(clone);
+            
+            // 隱藏原始元素
+            touchDragElement.style.opacity = '0.3';
+            touchDragElement.style.transform = 'scale(0.9)';
+            touchDragElement.style.filter = 'blur(1px)';
         }
 
         function handleTouchMove(e) {
@@ -1341,6 +1377,17 @@
             if (!touchDragElement) return;
 
             const touch = e.touches[0];
+            const clone = document.getElementById('touch-drag-clone');
+            
+            if (clone) {
+                // 更新複製元素的位置，跟隨手指
+                const offsetX = parseFloat(touchDragElement.dataset.offsetX);
+                const offsetY = parseFloat(touchDragElement.dataset.offsetY);
+                clone.style.left = (touch.clientX - offsetX) + 'px';
+                clone.style.top = (touch.clientY - offsetY) + 'px';
+            }
+            
+            // 檢測下方的元素
             const elementBelow = document.elementFromPoint(touch.clientX, touch.clientY);
             
             // Remove all drag-over classes
@@ -1362,10 +1409,16 @@
             const touch = e.changedTouches[0];
             const dropZone = document.elementFromPoint(touch.clientX, touch.clientY);
 
-            // Reset dragged element style
+            // 移除複製的元素
+            const clone = document.getElementById('touch-drag-clone');
+            if (clone) {
+                clone.remove();
+            }
+
+            // 恢復原始元素樣式
             touchDragElement.style.opacity = '1';
-            touchDragElement.style.transform = 'scale(1)';
-            touchDragElement.style.zIndex = 'auto';
+            touchDragElement.style.transform = '';
+            touchDragElement.style.filter = '';
 
             // Remove all drag-over classes
             document.querySelectorAll('.drop-zone').forEach(zone => {
@@ -1388,7 +1441,11 @@
 
                 // Check if correct
                 if (draggedNumber === dropZoneNumber) {
-                    // Correct
+                    // Correct - 提供觸覺反饋
+                    if (navigator.vibrate) {
+                        navigator.vibrate([50, 30, 50]); // 短-停-短的振動模式
+                    }
+                    
                     dropZone.classList.add('filled', 'correct');
                     dropZone.classList.remove('incorrect');
 
@@ -1420,7 +1477,11 @@
                         setTimeout(showCongrats, 500);
                     }
                 } else {
-                    // Incorrect
+                    // Incorrect - 提供錯誤振動反饋
+                    if (navigator.vibrate) {
+                        navigator.vibrate(200); // 較長的單次振動表示錯誤
+                    }
+                    
                     dropZone.classList.add('incorrect');
                     dropZone.classList.remove('correct');
                     setTimeout(() => {
