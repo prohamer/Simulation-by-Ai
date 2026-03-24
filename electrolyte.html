@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>微觀水溶液平衡模擬器 (弱酸動態視覺版)</title>
+  
+  <!-- 引入 Tailwind CSS (CDN) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- 引入 React 與 ReactDOM (CDN) -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  
+  <!-- 引入 Babel 用於在瀏覽器中編譯 JSX (CDN) -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body class="bg-slate-100">
+  <!-- React 應用程式的掛載點 -->
+  <div id="root"></div>
+
+  <!-- React 與應用程式邏輯 -->
+  <script type="text/babel">
+    const { useState, useMemo, useEffect, useRef } = React;
+
+    // --- 內建 SVG 圖示元件 (取代 lucide-react 以維持單一檔案獨立性) ---
+    const IconDroplet = ({ className }) => (
+      <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z"/></svg>
+    );
+    const IconZap = ({ className }) => (
+      <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+    );
+    const IconScale = ({ className }) => (
+      <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m16 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"/><path d="m2 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"/><path d="M7 21h10"/><path d="M12 3v18"/><path d="M3 7h2c2 0 5-1 7-2 2 1 5 2 7 2h2"/></svg>
+    );
+    const IconFlaskConical = ({ className }) => (
+      <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 2v7.31"/><path d="M14 9.3V2"/><path d="M8.5 2h7"/><path d="M14 9.3a6.5 6.5 0 1 1-4 0"/><line x1="5.52" x2="18.48" y1="16" y2="16"/></svg>
+    );
+    const IconMousePointer2 = ({ className }) => (
+      <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/><path d="M13 13l6 6"/></svg>
+    );
+    const IconRefreshCcw = ({ className }) => (
+      <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 21v-5h5"/></svg>
+    );
+
+    // --- 物理與化學常數 ---
+    const MAX_VOLUME = 5.0;
+    const INITIAL_VOLUME = 4.0;
+    const MOLES_PER_PARTICLE = 0.05;
+
+    const K_COULOMB = 40.0;
+    const K_REPULSION = 2.0;
+    const THERMAL_JITTER = 0.8;
+    const FRICTION = 0.92;
+    const MAX_VELOCITY = 4.0;
+    const BASE_PARTICLE_RADIUS = 14;
+
+    // 常見離子與分子定義
+    const SPECIES_DEFS = {
+      Na: { symbol: 'Na⁺', charge: 1, name: '鈉離子', color: '#1e40af', bg: '#dbeafe' },
+      K:  { symbol: 'K⁺', charge: 1, name: '鉀離子', color: '#6b21a8', bg: '#f3e8ff' },
+      Ag: { symbol: 'Ag⁺', charge: 1, name: '銀離子', color: '#374151', bg: '#e5e7eb' },
+      Ba: { symbol: 'Ba²⁺', charge: 2, name: '鋇離子', color: '#166534', bg: '#dcfce7' },
+      Ca: { symbol: 'Ca²⁺', charge: 2, name: '鈣離子', color: '#9a3412', bg: '#ffedd5' },
+      H:  { symbol: 'H⁺', charge: 1, name: '氫離子', color: '#dc2626', bg: '#fecaca' },
+      Cl: { symbol: 'Cl⁻', charge: -1, name: '氯離子', color: '#115e59', bg: '#ccfbf1' },
+      NO3:{ symbol: 'NO₃⁻', charge: -1, name: '硝酸根', color: '#0369a1', bg: '#e0f2fe' },
+      SO4:{ symbol: 'SO₄²⁻', charge: -2, name: '硫酸根', color: '#854d0e', bg: '#fef08a' },
+      CO3:{ symbol: 'CO₃²⁻', charge: -2, name: '碳酸根', color: '#991b1b', bg: '#fee2e2' },
+      CrO4:{ symbol: 'CrO₄²⁻', charge: -2, name: '鉻酸根', color: '#b45309', bg: '#fef3c7' },
+      CH3COO: { symbol: 'CH₃COO⁻', charge: -1, name: '醋酸根', color: '#4f46e5', bg: '#e0e7ff' },
+      CH3COOH: { symbol: 'CH₃COOH', charge: 0, name: '醋酸分子', color: '#4338ca', bg: '#c7d2fe' },
+      C2H5OH: { symbol: 'C₂H₅OH', charge: 0, name: '乙醇(酒精)', color: '#0f766e', bg: '#ccfbf1' },
+      C6H12O6: { symbol: '葡萄糖', charge: 0, name: '葡萄糖分子', color: '#9a3412', bg: '#ffedd5' },
+    };
+
+    // 可加入水中的電解質清單
+    const ELECTROLYTES = [
+      { id: 'NaCl', name: '氯化鈉 (強電解質)', formula: 'NaCl', inputs: { Na: 1, Cl: 1 }, uiColor: 'bg-white' },
+      { id: 'AgNO3', name: '硝酸銀 (強電解質)', formula: 'AgNO₃', inputs: { Ag: 1, NO3: 1 }, uiColor: 'bg-white' },
+      { id: 'BaCl2', name: '氯化鋇 (強電解質)', formula: 'BaCl₂', inputs: { Ba: 1, Cl: 2 }, uiColor: 'bg-white' },
+      { id: 'Na2CO3', name: '碳酸鈉 (強電解質)', formula: 'Na₂CO₃', inputs: { Na: 2, CO3: 1 }, uiColor: 'bg-white' },
+      { id: 'HCl', name: '鹽酸 (強酸)', formula: 'HCl', inputs: { H: 1, Cl: 1 }, uiColor: 'bg-red-50' },
+      { id: 'CH3COOH', name: '冰醋酸 (弱酸)', formula: 'CH₃COOH', inputs: { CH3COOH: 1 }, uiColor: 'bg-indigo-50' },
+      { id: 'NaCH3COO', name: '醋酸鈉 (強電解質)', formula: 'CH₃COONa', inputs: { Na: 1, CH3COO: 1 }, uiColor: 'bg-indigo-50' },
+      { id: 'C2H5OH', name: '酒精 (非電解質)', formula: 'C₂H₅OH', inputs: { C2H5OH: 1 }, uiColor: 'bg-teal-50' },
+      { id: 'C6H12O6', name: '葡萄糖 (非電解質)', formula: 'C₆H₁₂O₆', inputs: { C6H12O6: 1 }, uiColor: 'bg-orange-50' },
+    ];
+
+    const PRECIPITATES = [
+      { id: 'AgCl', formula: 'AgCl', cat: 'Ag', catN: 1, an: 'Cl', anN: 1, ksp: 1.8e-10, color: 'rgb(243, 244, 246)' },
+      { id: 'BaSO4', formula: 'BaSO₄', cat: 'Ba', catN: 1, an: 'SO4', anN: 1, ksp: 1.1e-10, color: 'rgb(248, 250, 252)' },
+      { id: 'CaCO3', formula: 'CaCO₃', cat: 'Ca', catN: 1, an: 'CO3', anN: 1, ksp: 3.3e-9, color: 'rgb(245, 245, 244)' },
+      { id: 'BaCO3', formula: 'BaCO₃', cat: 'Ba', catN: 1, an: 'CO3', anN: 1, ksp: 5.1e-9, color: 'rgb(244, 244, 245)' },
+      { id: 'Ag2CrO4', formula: 'Ag₂CrO₄', cat: 'Ag', catN: 2, an: 'CrO4', anN: 1, ksp: 1.1e-12, color: 'rgb(153, 27, 27)' },
+    ];
+
+    // --- 核心演算法：化學平衡計算 ---
+    function solvePrecipitation(ionA, countA, ionB, countB, ksp, vol, solidMoles) {
+      let cA = ionA / vol, cB = ionB / vol;
+      let Q = Math.pow(cA, countA) * Math.pow(cB, countB);
+      if (Math.abs(Q - ksp) / ksp < 1e-4) return 0; 
+      let minDelta, maxDelta;
+      if (Q > ksp) {
+        minDelta = 0; maxDelta = Math.min(ionA / countA, ionB / countB); 
+      } else {
+        if (solidMoles <= 0) return 0; 
+        minDelta = -solidMoles; maxDelta = 0;
+      }
+      let delta = 0;
+      for (let i = 0; i < 40; i++) {
+        delta = (minDelta + maxDelta) / 2;
+        let newCa = Math.max(0, (ionA - countA * delta) / vol);
+        let newCb = Math.max(0, (ionB - countB * delta) / vol);
+        let currentQ = Math.pow(newCa, countA) * Math.pow(newCb, countB);
+        if (currentQ > ksp) minDelta = delta; else maxDelta = delta;
+      }
+      return delta;
+    }
+
+    function solveWeakAcid(HA, H, A, Ka, vol) {
+      let cHA = HA / vol, cH = H / vol, cA = A / vol;
+      let Q = cHA > 0 ? (cH * cA) / cHA : (cH > 0 && cA > 0 ? Infinity : 0);
+      if (Math.abs(Q - Ka) / Ka < 1e-4) return 0;
+      
+      let minDelta, maxDelta;
+      if (Q < Ka) {
+        minDelta = 0; maxDelta = HA; 
+      } else {
+        minDelta = -Math.min(H, A); maxDelta = 0; 
+      }
+      
+      let delta = 0;
+      for (let i = 0; i < 40; i++) {
+        delta = (minDelta + maxDelta) / 2;
+        let nHA = Math.max(0, (HA - delta) / vol);
+        let nH = Math.max(0, (H + delta) / vol);
+        let nA = Math.max(0, (A + delta) / vol);
+        let currentQ = nHA > 0 ? (nH * nA) / nHA : Infinity;
+        if (currentQ < Ka) minDelta = delta; else maxDelta = delta;
+      }
+      return delta;
+    }
+
+    function calculateEquilibrium(totalAtoms, volume) {
+      let species = { ...totalAtoms };
+      let solids = {};
+      PRECIPITATES.forEach(p => solids[p.id] = 0);
+      let co2Generated = 0;
+
+      let changed = true;
+      let iterations = 0;
+      
+      while (changed && iterations < 100) {
+        changed = false;
+        
+        // A1. 氣體生成 (游離氫離子)
+        let hCount = species.H || 0;
+        let co3Count = species.CO3 || 0;
+        let reactLimit = Math.min(hCount / 2, co3Count);
+        if (reactLimit > 1e-8) {
+          species.H -= reactLimit * 2;
+          species.CO3 -= reactLimit;
+          co2Generated += reactLimit;
+          changed = true;
+        }
+
+        // A2. 氣體生成 (弱酸直接中和，避免迭代步長過小)
+        let ch3coohCount = species.CH3COOH || 0;
+        let remainingCo3 = species.CO3 || 0;
+        let directReactLimit = Math.min(ch3coohCount / 2, remainingCo3);
+        if (directReactLimit > 1e-8) {
+          species.CH3COOH -= directReactLimit * 2;
+          species.CO3 -= directReactLimit;
+          species.CH3COO = (species.CH3COO || 0) + directReactLimit * 2;
+          co2Generated += directReactLimit;
+          changed = true;
+        }
+
+        // B. 沉澱反應
+        for (let p of PRECIPITATES) {
+          let ionA = species[p.cat] || 0;
+          let ionB = species[p.an] || 0;
+          let solid = solids[p.id] || 0;
+          let delta = solvePrecipitation(ionA, p.catN, ionB, p.anN, p.ksp, volume, solid);
+          if (Math.abs(delta) > 1e-8) {
+            species[p.cat] = Math.max(0, ionA - p.catN * delta);
+            species[p.an] = Math.max(0, ionB - p.anN * delta);
+            solids[p.id] = Math.max(0, solid + delta);
+            changed = true;
+          }
+        }
+
+        // C. 弱電解質解離 (醋酸 Ka = 1.8e-5)
+        let ha = species.CH3COOH || 0;
+        let h = species.H || 0;
+        let a = species.CH3COO || 0;
+        let kaDelta = solveWeakAcid(ha, h, a, 1.8e-5, volume);
+        if (Math.abs(kaDelta) > 1e-8) {
+          species.CH3COOH = Math.max(0, ha - kaDelta);
+          species.H = Math.max(0, h + kaDelta);
+          species.CH3COO = Math.max(0, a + kaDelta);
+          changed = true;
+        }
+        
+        iterations++;
+      }
+
+      let totalPosCharge = 0;
+      let totalNegCharge = 0;
+      Object.keys(species).forEach(id => {
+        let def = SPECIES_DEFS[id];
+        let moles = species[id];
+        if (def.charge > 0) totalPosCharge += moles * def.charge;
+        if (def.charge < 0) totalNegCharge += moles * Math.abs(def.charge);
+      });
+
+      return { species, solids, co2Generated, totalPosCharge, totalNegCharge };
+    }
+
+    // --- 主應用元件 ---
+    function App() {
+      const [volume, setVolume] = useState(INITIAL_VOLUME); 
+      const [addAmount, setAddAmount] = useState(0.5); 
+      const [totalAtoms, setTotalAtoms] = useState({}); 
+      const [draggedItem, setDraggedItem] = useState(null);
+
+      const canvasRef = useRef(null);
+      const containerRef = useRef(null);
+      
+      const particlesRef = useRef([]); 
+      const snowflakesRef = useRef([]); 
+      const bubblesRef = useRef([]); 
+      const visualSolidsRef = useRef({}); 
+      const cumulativeCO2Ref = useRef(0); 
+      const animationRef = useRef(null);
+
+      const eqState = useMemo(() => calculateEquilibrium(totalAtoms, volume), [totalAtoms, volume]);
+
+      // 動畫觸發 (雪花與氣泡)
+      useEffect(() => {
+        const parent = containerRef.current;
+        if (!parent) return;
+        const canvasWidth = parent.clientWidth;
+        const canvasHeight = parent.clientHeight;
+        const waterTop = canvasHeight * (1 - volume / MAX_VOLUME);
+
+        Object.keys(eqState.solids).forEach(pId => {
+          const targetSolid = eqState.solids[pId];
+          const currentVisSolid = visualSolidsRef.current[pId] || 0;
+          
+          if (targetSolid > currentVisSolid + 1e-4) {
+            const diff = targetSolid - currentVisSolid;
+            const flakeCount = Math.floor(diff / MOLES_PER_PARTICLE);
+            const pDef = PRECIPITATES.find(p => p.id === pId);
+            for (let i = 0; i < flakeCount; i++) {
+              snowflakesRef.current.push({
+                id: pId, color: pDef.color,
+                x: 20 + Math.random() * (canvasWidth - 40),
+                y: waterTop + Math.random() * (canvasHeight - waterTop) * 0.5, 
+                vy: 1.5 + Math.random() * 1.5,
+                phase: Math.random() * Math.PI * 2,
+                moles: MOLES_PER_PARTICLE
+              });
+            }
+          } else if (targetSolid < currentVisSolid - 1e-4) {
+            visualSolidsRef.current[pId] = targetSolid;
+          }
+        });
+
+        if (eqState.co2Generated > cumulativeCO2Ref.current) {
+          const diff = eqState.co2Generated - cumulativeCO2Ref.current;
+          const bubbleCount = Math.floor(diff / MOLES_PER_PARTICLE) * 2; 
+          for (let i = 0; i < bubbleCount; i++) {
+            bubblesRef.current.push({
+              x: 20 + Math.random() * (canvasWidth - 40),
+              y: canvasHeight - 20, 
+              vy: -2 - Math.random() * 2,
+              radius: 3 + Math.random() * 4,
+              phase: Math.random() * Math.PI * 2
+            });
+          }
+          cumulativeCO2Ref.current = eqState.co2Generated;
+        }
+      }, [eqState.solids, eqState.co2Generated, volume]);
+
+      // 粒子數量同步
+      useEffect(() => {
+        const currentParticles = particlesRef.current;
+        const newParticles = [];
+        const particlesByType = {};
+        currentParticles.forEach(p => {
+          if(!particlesByType[p.type]) particlesByType[p.type] = [];
+          particlesByType[p.type].push(p);
+        });
+
+        Object.keys(SPECIES_DEFS).forEach(spId => {
+          const moles = eqState.species[spId] || 0;
+          let targetCount = Math.floor(moles / MOLES_PER_PARTICLE);
+
+          // 教學視覺保障：動態保持一組解離
+          if (spId === 'H' || spId === 'CH3COO') {
+            const hasVisibleAceticAcid = Math.floor((eqState.species['CH3COOH'] || 0) / MOLES_PER_PARTICLE) > 0;
+            if (hasVisibleAceticAcid && targetCount === 0) {
+              targetCount = 1;
+            }
+          }
+
+          const existing = particlesByType[spId] || [];
+
+          if (existing.length < targetCount) {
+            newParticles.push(...existing);
+            const toAdd = targetCount - existing.length;
+            for(let i=0; i < toAdd; i++) {
+                const w = containerRef.current?.clientWidth || 400;
+                const h = containerRef.current?.clientHeight || 400;
+                const waterTop = h * (1 - volume / MAX_VOLUME);
+                newParticles.push({
+                    id: Math.random().toString(36).substr(2, 9),
+                    type: spId,
+                    charge: SPECIES_DEFS[spId].charge,
+                    x: 30 + Math.random() * (w - 60),
+                    y: waterTop + 20 + Math.random() * (h - waterTop - 60),
+                    vx: (Math.random() - 0.5) * 2,
+                    vy: (Math.random() - 0.5) * 2
+                });
+            }
+          } else {
+            newParticles.push(...existing.slice(0, targetCount));
+          }
+        });
+        particlesRef.current = newParticles;
+      }, [eqState.species, volume]);
+
+      // Canvas 渲染與物理
+      useEffect(() => {
+        const canvas = canvasRef.current;
+        const ctx = canvas.getContext('2d');
+        let isRunning = true;
+        let time = 0;
+
+        const resizeCanvas = () => {
+          const parent = containerRef.current;
+          if (parent) {
+            canvas.width = parent.clientWidth;
+            canvas.height = parent.clientHeight;
+          }
+        };
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+
+        const renderLoop = () => {
+          if (!isRunning) return;
+          time += 0.05;
+          
+          const width = canvas.width;
+          const height = canvas.height;
+          const waterTop = height * (1 - volume / MAX_VOLUME);
+          
+          let solidTotalMoles = Object.values(visualSolidsRef.current).reduce((a, b) => a + b, 0);
+          let solidBaseY = height - Math.min((solidTotalMoles / 1.0) * 40, height * 0.4);
+
+          ctx.clearRect(0, 0, width, height);
+
+          const particles = particlesRef.current;
+          for (let i = 0; i < particles.length; i++) {
+            let p1 = particles[i];
+            p1.vx += (Math.random() - 0.5) * THERMAL_JITTER;
+            p1.vy += (Math.random() - 0.5) * THERMAL_JITTER;
+            if (p1.y < waterTop) p1.vy += 0.5;
+
+            for (let j = i + 1; j < particles.length; j++) {
+                let p2 = particles[j];
+                let dx = p2.x - p1.x; let dy = p2.y - p1.y;
+                let distSq = dx*dx + dy*dy;
+                let dist = Math.sqrt(distSq);
+                if (dist < 1) dist = 1;
+
+                let force = (K_COULOMB * p1.charge * p2.charge) / distSq;
+                let minDist = BASE_PARTICLE_RADIUS * 2.2;
+                if (dist < minDist) force += K_REPULSION * (minDist - dist);
+
+                let fx = (dx / dist) * force;
+                let fy = (dy / dist) * force;
+                p1.vx -= fx; p1.vy -= fy;
+                p2.vx += fx; p2.vy += fy;
+            }
+
+            p1.vx = Math.max(-MAX_VELOCITY, Math.min(MAX_VELOCITY, p1.vx)) * FRICTION;
+            p1.vy = Math.max(-MAX_VELOCITY, Math.min(MAX_VELOCITY, p1.vy)) * FRICTION;
+            p1.x += p1.vx; p1.y += p1.vy;
+
+            if (p1.x < BASE_PARTICLE_RADIUS) { p1.x = BASE_PARTICLE_RADIUS; p1.vx *= -0.8; }
+            if (p1.x > width - BASE_PARTICLE_RADIUS) { p1.x = width - BASE_PARTICLE_RADIUS; p1.vx *= -0.8; }
+            if (p1.y > solidBaseY - BASE_PARTICLE_RADIUS) { p1.y = solidBaseY - BASE_PARTICLE_RADIUS; p1.vy *= -0.8; }
+          }
+
+          for (let p of particles) {
+            const def = SPECIES_DEFS[p.type];
+            ctx.font = 'bold 11px sans-serif';
+            let textWidth = ctx.measureText(def.symbol).width;
+            let radius = Math.max(BASE_PARTICLE_RADIUS, (textWidth/2) + 4); 
+
+            ctx.beginPath();
+            if(radius > BASE_PARTICLE_RADIUS) {
+                ctx.roundRect(p.x - radius, p.y - BASE_PARTICLE_RADIUS, radius*2, BASE_PARTICLE_RADIUS*2, BASE_PARTICLE_RADIUS);
+            } else {
+                ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
+            }
+            ctx.fillStyle = def.bg;
+            ctx.fill();
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = def.color;
+            ctx.stroke();
+
+            ctx.fillStyle = def.color;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(def.symbol, p.x, p.y);
+          }
+
+          const activeSnowflakes = [];
+          for (let s of snowflakesRef.current) {
+            s.y += s.vy;
+            s.x += Math.sin(time * 2 + s.phase) * 0.5; 
+            if (s.y >= solidBaseY) {
+               visualSolidsRef.current[s.id] = (visualSolidsRef.current[s.id] || 0) + s.moles;
+            } else {
+               ctx.beginPath();
+               ctx.arc(s.x, s.y, 4, 0, Math.PI*2);
+               ctx.fillStyle = s.color;
+               ctx.fill();
+               ctx.strokeStyle = 'rgba(0,0,0,0.2)';
+               ctx.stroke();
+               activeSnowflakes.push(s);
+            }
+          }
+          snowflakesRef.current = activeSnowflakes;
+
+          const activeBubbles = [];
+          for (let b of bubblesRef.current) {
+            b.y += b.vy;
+            b.x += Math.sin(time * 3 + b.phase) * 1.0;
+            if (b.y > waterTop) {
+               ctx.beginPath();
+               ctx.arc(b.x, b.y, b.radius, 0, Math.PI*2);
+               ctx.fillStyle = 'rgba(255,255,255,0.6)';
+               ctx.fill();
+               ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+               ctx.stroke();
+               activeBubbles.push(b);
+            } 
+          }
+          bubblesRef.current = activeBubbles;
+
+          animationRef.current = requestAnimationFrame(renderLoop);
+        };
+
+        renderLoop();
+
+        return () => {
+          isRunning = false;
+          cancelAnimationFrame(animationRef.current);
+          window.removeEventListener('resize', resizeCanvas);
+        };
+      }, [volume]);
+
+      const handleReset = () => {
+        setTotalAtoms({});
+        setVolume(INITIAL_VOLUME);
+        visualSolidsRef.current = {};
+        cumulativeCO2Ref.current = 0;
+        particlesRef.current = [];
+        snowflakesRef.current = [];
+        bubblesRef.current = [];
+      };
+
+      const handleAddElectrolyte = (electrolyteId) => {
+        const el = ELECTROLYTES.find(e => e.id === electrolyteId);
+        if (!el) return;
+        setTotalAtoms(prev => {
+          const next = { ...prev };
+          Object.entries(el.inputs).forEach(([spId, count]) => {
+            next[spId] = (next[spId] || 0) + count * addAmount;
+          });
+          return next;
+        });
+      };
+
+      const onDragStart = (e, id) => { e.dataTransfer.setData('text/plain', id); setDraggedItem(id); };
+      const onDragOver = (e) => e.preventDefault();
+      const onDrop = (e) => { e.preventDefault(); handleAddElectrolyte(e.dataTransfer.getData('text/plain')); setDraggedItem(null); };
+
+      const formatNum = (num) => num > 0.001 ? num.toFixed(3) : num.toExponential(2);
+      const maxCharge = Math.max(eqState.totalPosCharge, eqState.totalNegCharge, 0.1);
+      const posHeight = (eqState.totalPosCharge / maxCharge) * 100;
+      const negHeight = (eqState.totalNegCharge / maxCharge) * 100;
+
+      return (
+        <div className="min-h-screen bg-slate-100 text-slate-800 font-sans p-4 md:p-6 flex flex-col">
+          <header className="mb-4 flex justify-between items-center bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+            <div className="flex items-center gap-3">
+              <IconFlaskConical className="w-8 h-8 text-indigo-600" />
+              <h1 className="text-2xl font-bold text-slate-800">微觀水溶液平衡 (弱酸動態視覺版)</h1>
+            </div>
+          </header>
+
+          <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-4">
+            
+            {/* 左側面板 */}
+            <div className="lg:col-span-3 flex flex-col gap-4">
+              <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                <h2 className="text-md font-bold mb-3 flex items-center gap-2"><IconDroplet className="w-5 h-5 text-blue-500"/> 設定與加入量</h2>
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-slate-700 mb-1">水量: {volume.toFixed(1)} L</label>
+                  <input type="range" min="1.0" max={MAX_VOLUME} step="0.5" value={volume} onChange={(e) => setVolume(parseFloat(e.target.value))} className="w-full accent-blue-500" />
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  {[0.1, 0.5, 1.0].map(amt => (
+                    <button key={amt} className={`py-1 text-sm rounded border ${addAmount === amt ? 'bg-indigo-100 border-indigo-400 font-bold' : 'bg-white hover:bg-slate-50'}`} onClick={() => setAddAmount(amt)}>{amt} mol</button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex-1 overflow-y-auto">
+                <h2 className="text-md font-bold mb-3 flex items-center gap-2"><IconMousePointer2 className="w-5 h-5 text-indigo-500"/> 化學藥品區</h2>
+                <div className="grid grid-cols-2 gap-2">
+                  {ELECTROLYTES.map(el => (
+                    <div 
+                      key={el.id} draggable onDragStart={(e) => onDragStart(e, el.id)} onClick={() => handleAddElectrolyte(el.id)}
+                      className={`p-2 border border-dashed border-slate-300 rounded cursor-grab hover:border-indigo-400 flex flex-col items-center justify-center gap-1 ${el.uiColor}`}
+                    >
+                      <span className="font-bold text-slate-800 text-sm text-center">{el.formula}</span>
+                      <span className="text-[10px] text-slate-600 text-center">{el.name}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* 中央 Canvas */}
+            <div className="lg:col-span-5 flex flex-col bg-white rounded-xl shadow-sm border border-slate-200 p-4 relative min-h-[500px]">
+              <div className="flex justify-between items-center mb-2">
+                <h2 className="text-lg font-bold text-slate-800">微觀互動燒杯</h2>
+                <button onClick={handleReset} className="flex items-center gap-1 text-sm text-red-600 hover:bg-red-50 px-2 py-1 rounded">
+                  <IconRefreshCcw className="w-4 h-4" /> 清空
+                </button>
+              </div>
+              
+              <div 
+                className={`flex-1 relative border-b-8 border-l-8 border-r-8 border-slate-300 rounded-b-[40px] overflow-hidden ${draggedItem ? 'bg-indigo-50/50' : 'bg-transparent'}`}
+                onDragOver={onDragOver} onDrop={onDrop} ref={containerRef} style={{ width: '90%', margin: '0 auto' }}
+              >
+                <div className="absolute bottom-0 w-full bg-blue-400/20 border-t border-blue-400/40" style={{ height: `${(volume / MAX_VOLUME) * 100}%` }} />
+                <div className="absolute bottom-0 left-0 w-full flex flex-col justify-end z-10 pointer-events-none">
+                  {Object.entries(eqState.solids).map(([pId, moles]) => {
+                    if (moles < 1e-4) return null;
+                    const pDef = PRECIPITATES.find(p => p.id === pId);
+                    const h = Math.min((moles / 1.0) * 40, 150); 
+                    return (
+                      <div key={pId} className="w-full flex items-center justify-center border-t border-black/10 overflow-hidden transition-all duration-300" style={{ height: `${h}px`, backgroundColor: pDef.color }}>
+                        <span className="text-xs font-bold text-black/50">{pDef.formula}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+                <canvas ref={canvasRef} className="absolute inset-0 w-full h-full pointer-events-none z-20" />
+              </div>
+            </div>
+
+            {/* 右側分析 */}
+            <div className="lg:col-span-4 flex flex-col gap-4">
+              <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                <h2 className="text-md font-bold mb-3 flex items-center gap-2"><IconScale className="w-5 h-5 text-emerald-600"/> 電中性與教學亮點</h2>
+                <div className="flex items-end justify-around h-24 mb-2 relative">
+                  <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-full h-1 bg-slate-200"></div>
+                  <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-3 h-3 rotate-45 bg-slate-300"></div>
+                  <div className="w-16 flex flex-col justify-end items-center gap-1">
+                    <span className="text-xs text-blue-600">{eqState.totalPosCharge.toFixed(2)}</span>
+                    <div className="w-full bg-blue-500 rounded-t transition-all" style={{ height: `${posHeight}%`, minHeight: '4px' }}></div>
+                    <span className="text-xs font-bold">陽電荷(+)</span>
+                  </div>
+                  <div className="w-16 flex flex-col justify-end items-center gap-1">
+                    <span className="text-xs text-red-600">{eqState.totalNegCharge.toFixed(2)}</span>
+                    <div className="w-full bg-red-500 rounded-t transition-all" style={{ height: `${negHeight}%`, minHeight: '4px' }}></div>
+                    <span className="text-xs font-bold">陰電荷(-)</span>
+                  </div>
+                </div>
+                <div className="bg-emerald-50 text-emerald-800 p-2 rounded text-xs leading-relaxed mt-3">
+                  <strong>💡 動態平衡觀察指南：</strong>
+                  <ol className="list-decimal pl-4 mt-1">
+                    <li>加入 <b>冰醋酸</b>，觀察畫面中是不是永遠保持「至少一組」 H⁺ 與 CH₃COO⁻ 解離在水中。</li>
+                    <li>加入 <b>碳酸鈉</b> 消耗 H⁺ 產生氣泡，醋酸分子會立刻「解離出下一個」來補充，維持那一組解離！</li>
+                    <li>清空後，改加 <b>醋酸鈉</b>，再加入 <b>鹽酸</b>，觀察它們如何快速結合回長條狀的醋酸分子！</li>
+                  </ol>
+                </div>
+              </div>
+
+              <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex-1 overflow-auto">
+                <h2 className="text-md font-bold mb-3 flex items-center gap-2"><IconZap className="w-5 h-5 text-amber-500"/> 物種分析 (mol)</h2>
+                <div className="grid grid-cols-2 gap-x-4 mb-3">
+                  {Object.entries(eqState.species).map(([id, moles]) => {
+                    if (moles < 1e-4) return null;
+                    return (
+                      <div key={id} className="flex justify-between text-sm py-1 border-b border-slate-50">
+                        <span>{SPECIES_DEFS[id].symbol}</span>
+                        <span className="font-mono text-slate-600">{formatNum(moles)}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // 將 React 元件掛載到 DOM
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
