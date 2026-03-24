@@ -42,6 +42,12 @@
     const IconRefreshCcw = ({ className }) => (
       <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 21v-5h5"/></svg>
     );
+    const IconPause = ({ className }) => (
+      <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
+    );
+    const IconPlay = ({ className }) => (
+      <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+    );
 
     // --- 物理與化學常數 ---
     const MAX_VOLUME = 5.0;
@@ -224,6 +230,10 @@
       const [addAmount, setAddAmount] = useState(0.5); 
       const [totalAtoms, setTotalAtoms] = useState({}); 
       const [draggedItem, setDraggedItem] = useState(null);
+      
+      // 新增：暫停狀態
+      const [isPaused, setIsPaused] = useState(false);
+      const isPausedRef = useRef(isPaused);
 
       const canvasRef = useRef(null);
       const containerRef = useRef(null);
@@ -236,6 +246,11 @@
       const animationRef = useRef(null);
 
       const eqState = useMemo(() => calculateEquilibrium(totalAtoms, volume), [totalAtoms, volume]);
+
+      // 同步暫停狀態到 Ref 供 renderLoop 存取
+      useEffect(() => {
+        isPausedRef.current = isPaused;
+      }, [isPaused]);
 
       // 動畫觸發 (雪花與氣泡)
       useEffect(() => {
@@ -351,7 +366,10 @@
 
         const renderLoop = () => {
           if (!isRunning) return;
-          time += 0.05;
+          
+          if (!isPausedRef.current) {
+             time += 0.05;
+          }
           
           const width = canvas.width;
           const height = canvas.height;
@@ -362,39 +380,44 @@
 
           ctx.clearRect(0, 0, width, height);
 
+          // 1. 物理游離粒子
           const particles = particlesRef.current;
-          for (let i = 0; i < particles.length; i++) {
-            let p1 = particles[i];
-            p1.vx += (Math.random() - 0.5) * THERMAL_JITTER;
-            p1.vy += (Math.random() - 0.5) * THERMAL_JITTER;
-            if (p1.y < waterTop) p1.vy += 0.5;
+          
+          if (!isPausedRef.current) {
+            for (let i = 0; i < particles.length; i++) {
+              let p1 = particles[i];
+              p1.vx += (Math.random() - 0.5) * THERMAL_JITTER;
+              p1.vy += (Math.random() - 0.5) * THERMAL_JITTER;
+              if (p1.y < waterTop) p1.vy += 0.5;
 
-            for (let j = i + 1; j < particles.length; j++) {
-                let p2 = particles[j];
-                let dx = p2.x - p1.x; let dy = p2.y - p1.y;
-                let distSq = dx*dx + dy*dy;
-                let dist = Math.sqrt(distSq);
-                if (dist < 1) dist = 1;
+              for (let j = i + 1; j < particles.length; j++) {
+                  let p2 = particles[j];
+                  let dx = p2.x - p1.x; let dy = p2.y - p1.y;
+                  let distSq = dx*dx + dy*dy;
+                  let dist = Math.sqrt(distSq);
+                  if (dist < 1) dist = 1;
 
-                let force = (K_COULOMB * p1.charge * p2.charge) / distSq;
-                let minDist = BASE_PARTICLE_RADIUS * 2.2;
-                if (dist < minDist) force += K_REPULSION * (minDist - dist);
+                  let force = (K_COULOMB * p1.charge * p2.charge) / distSq;
+                  let minDist = BASE_PARTICLE_RADIUS * 2.2;
+                  if (dist < minDist) force += K_REPULSION * (minDist - dist);
 
-                let fx = (dx / dist) * force;
-                let fy = (dy / dist) * force;
-                p1.vx -= fx; p1.vy -= fy;
-                p2.vx += fx; p2.vy += fy;
+                  let fx = (dx / dist) * force;
+                  let fy = (dy / dist) * force;
+                  p1.vx -= fx; p1.vy -= fy;
+                  p2.vx += fx; p2.vy += fy;
+              }
+
+              p1.vx = Math.max(-MAX_VELOCITY, Math.min(MAX_VELOCITY, p1.vx)) * FRICTION;
+              p1.vy = Math.max(-MAX_VELOCITY, Math.min(MAX_VELOCITY, p1.vy)) * FRICTION;
+              p1.x += p1.vx; p1.y += p1.vy;
+
+              if (p1.x < BASE_PARTICLE_RADIUS) { p1.x = BASE_PARTICLE_RADIUS; p1.vx *= -0.8; }
+              if (p1.x > width - BASE_PARTICLE_RADIUS) { p1.x = width - BASE_PARTICLE_RADIUS; p1.vx *= -0.8; }
+              if (p1.y > solidBaseY - BASE_PARTICLE_RADIUS) { p1.y = solidBaseY - BASE_PARTICLE_RADIUS; p1.vy *= -0.8; }
             }
-
-            p1.vx = Math.max(-MAX_VELOCITY, Math.min(MAX_VELOCITY, p1.vx)) * FRICTION;
-            p1.vy = Math.max(-MAX_VELOCITY, Math.min(MAX_VELOCITY, p1.vy)) * FRICTION;
-            p1.x += p1.vx; p1.y += p1.vy;
-
-            if (p1.x < BASE_PARTICLE_RADIUS) { p1.x = BASE_PARTICLE_RADIUS; p1.vx *= -0.8; }
-            if (p1.x > width - BASE_PARTICLE_RADIUS) { p1.x = width - BASE_PARTICLE_RADIUS; p1.vx *= -0.8; }
-            if (p1.y > solidBaseY - BASE_PARTICLE_RADIUS) { p1.y = solidBaseY - BASE_PARTICLE_RADIUS; p1.vy *= -0.8; }
           }
 
+          // 繪製粒子
           for (let p of particles) {
             const def = SPECIES_DEFS[p.type];
             ctx.font = 'bold 11px sans-serif';
@@ -419,11 +442,15 @@
             ctx.fillText(def.symbol, p.x, p.y);
           }
 
+          // 2. 沉澱雪花
           const activeSnowflakes = [];
           for (let s of snowflakesRef.current) {
-            s.y += s.vy;
-            s.x += Math.sin(time * 2 + s.phase) * 0.5; 
-            if (s.y >= solidBaseY) {
+            if (!isPausedRef.current) {
+              s.y += s.vy;
+              s.x += Math.sin(time * 2 + s.phase) * 0.5; 
+            }
+            
+            if (!isPausedRef.current && s.y >= solidBaseY) {
                visualSolidsRef.current[s.id] = (visualSolidsRef.current[s.id] || 0) + s.moles;
             } else {
                ctx.beginPath();
@@ -437,11 +464,17 @@
           }
           snowflakesRef.current = activeSnowflakes;
 
+          // 3. 氣體氣泡
           const activeBubbles = [];
           for (let b of bubblesRef.current) {
-            b.y += b.vy;
-            b.x += Math.sin(time * 3 + b.phase) * 1.0;
-            if (b.y > waterTop) {
+            if (!isPausedRef.current) {
+              b.y += b.vy;
+              b.x += Math.sin(time * 3 + b.phase) * 1.0;
+            }
+            
+            if (!isPausedRef.current && b.y <= waterTop) {
+               // 氣泡逸散，不再推入 active 陣列
+            } else {
                ctx.beginPath();
                ctx.arc(b.x, b.y, b.radius, 0, Math.PI*2);
                ctx.fillStyle = 'rgba(255,255,255,0.6)';
@@ -473,6 +506,7 @@
         particlesRef.current = [];
         snowflakesRef.current = [];
         bubblesRef.current = [];
+        setIsPaused(false); // 重置時自動解除暫停
       };
 
       const handleAddElectrolyte = (electrolyteId) => {
@@ -542,9 +576,18 @@
             <div className="lg:col-span-5 flex flex-col bg-white rounded-xl shadow-sm border border-slate-200 p-4 relative min-h-[500px]">
               <div className="flex justify-between items-center mb-2">
                 <h2 className="text-lg font-bold text-slate-800">微觀互動燒杯</h2>
-                <button onClick={handleReset} className="flex items-center gap-1 text-sm text-red-600 hover:bg-red-50 px-2 py-1 rounded">
-                  <IconRefreshCcw className="w-4 h-4" /> 清空
-                </button>
+                <div className="flex gap-2">
+                  <button 
+                    onClick={() => setIsPaused(!isPaused)} 
+                    className={`flex items-center gap-1 text-sm px-3 py-1.5 rounded-md transition-colors ${isPaused ? 'bg-amber-100 text-amber-700 hover:bg-amber-200' : 'bg-slate-100 text-slate-700 hover:bg-slate-200 font-medium'}`}
+                  >
+                    {isPaused ? <IconPlay className="w-4 h-4" /> : <IconPause className="w-4 h-4" />}
+                    {isPaused ? '繼續' : '暫停'}
+                  </button>
+                  <button onClick={handleReset} className="flex items-center gap-1 text-sm text-red-600 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-md transition-colors font-medium">
+                    <IconRefreshCcw className="w-4 h-4" /> 清空
+                  </button>
+                </div>
               </div>
               
               <div 
@@ -565,6 +608,15 @@
                   })}
                 </div>
                 <canvas ref={canvasRef} className="absolute inset-0 w-full h-full pointer-events-none z-20" />
+                
+                {/* 暫停時的視覺提示 */}
+                {isPaused && (
+                  <div className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none">
+                    <div className="bg-black/20 text-white backdrop-blur-sm px-6 py-2 rounded-full font-bold tracking-widest text-lg shadow-lg">
+                      已暫停
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
