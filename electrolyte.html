@@ -88,6 +88,7 @@
       { id: 'AgNO3', name: '硝酸銀 (強電解質)', formula: 'AgNO₃', inputs: { Ag: 1, NO3: 1 }, uiColor: 'bg-white' },
       { id: 'BaCl2', name: '氯化鋇 (強電解質)', formula: 'BaCl₂', inputs: { Ba: 1, Cl: 2 }, uiColor: 'bg-white' },
       { id: 'Na2CO3', name: '碳酸鈉 (強電解質)', formula: 'Na₂CO₃', inputs: { Na: 2, CO3: 1 }, uiColor: 'bg-white' },
+      { id: 'NaOH', name: '氫氧化鈉 (強鹼)', formula: 'NaOH', inputs: { Na: 1, OH: 1 }, uiColor: 'bg-green-50' },
       { id: 'HCl', name: '鹽酸 (強酸)', formula: 'HCl', inputs: { H: 1, Cl: 1 }, uiColor: 'bg-red-50' },
       { id: 'CH3COOH', name: '冰醋酸 (弱酸)', formula: 'CH₃COOH', inputs: { CH3COOH: 1 }, uiColor: 'bg-indigo-50' },
       { id: 'NaCH3COO', name: '醋酸鈉 (強電解質)', formula: 'CH₃COONa', inputs: { Na: 1, CH3COO: 1 }, uiColor: 'bg-indigo-50' },
@@ -442,9 +443,9 @@
 
           const existing = particlesByType[spId] || [];
 
-          // 會參與動態反應的物種，不強制刪除（讓視覺反應有空間發生）
-          // 只在數量嚴重偏多時才修剪（超過目標2倍），避免累積無限增長
-          const isReactive = ['H', 'CH3COO', 'CH3COOH', 'OH'].includes(spId);
+          // 軟同步：只有弱酸動態平衡的物種需要緩衝（CH₃COOH ⇌ H⁺ + CH₃COO⁻）
+          // H⁺ 和 OH⁻ 改回嚴格同步，確保強酸強鹼等量中和後正確歸零
+          const isReactive = ['CH3COO', 'CH3COOH'].includes(spId);
           const effectiveTarget = isReactive
             ? Math.max(targetCount, Math.min(existing.length, targetCount * 2 + 2))
             : targetCount;
@@ -489,14 +490,20 @@
           {
             // 醋酸結合：H⁺ + CH₃COO⁻ → CH₃COOH  (Ka小，結合機率高)
             r1: 'H', r2: 'CH3COO', product: 'CH3COOH',
-            prob: 0.35,           // 靠近時結合機率（每幀）
-            dissocProb: 0.004,    // 醋酸自發解離機率（Ka=1.8e-5，小→慢）
+            prob: 0.35,
+            dissocProb: 0.004,
             flashColor: '#6366f1'
           },
           {
-            // 醋酸根水解：OH⁻ + CH₃COOH → CH₃COO⁻ + H₂O（視覺上：OH⁻靠近CH₃COOH結合）
-            // 反向：CH₃COO⁻水解生成OH⁻，用解離模擬（極低機率）
-            r1: 'OH', r2: 'CH3COOH', product: null, // 直接互相消滅，產物由粒子系統保障
+            // 中和反應：H⁺ + OH⁻ → H₂O（強酸強鹼，結合機率極高，無產物粒子）
+            r1: 'H', r2: 'OH', product: null,
+            prob: 0.80,
+            dissocProb: 0,
+            flashColor: '#f59e0b'
+          },
+          {
+            // 醋酸根水解：OH⁻ + CH₃COOH → CH₃COO⁻ + H₂O
+            r1: 'OH', r2: 'CH3COOH', product: null,
             prob: 0.20,
             dissocProb: 0,
             flashColor: '#10b981'
@@ -909,8 +916,9 @@
                   <strong>💡 動態平衡觀察指南：</strong>
                   <ol className="list-decimal pl-4 mt-1">
                     <li>加入 <b>冰醋酸</b>，觀察畫面中永遠保持「至少一組」H⁺ 與 CH₃COO⁻ 在水中動態解離。</li>
-                    <li>加入 <b>醋酸鈉</b>，只會看到 Na⁺ 和 CH₃COO⁻，以及**極少量**（一組）的 CH₃COOH 與 OH⁻——這代表醋酸根水解（Kb≈5.6×10⁻¹⁰）雖然極微小，但不為零，溶液因此微鹼。</li>
+                    <li>加入 <b>醋酸鈉</b>，只會看到 Na⁺ 和 CH₃COO⁻，以及極少量（一組）的 CH₃COOH 與 OH⁻——醋酸根水解（Kb≈5.6×10⁻¹⁰）極微小但不為零，溶液微鹼。</li>
                     <li>加入 <b>碳酸鈉</b>，CO₃²⁻ 會顯著水解（Kb≈2.1×10⁻⁴），產生 HCO₃⁻ 和 OH⁻，溶液明顯偏鹼。</li>
+                    <li>加入 <b>氫氧化鈉</b>，觀察 OH⁻ 與 H⁺ 碰撞後立即中和消失（黃色閃光）。再加冰醋酸，看 NaOH 如何將弱酸平衡往解離方向推。</li>
                     <li>清空後，先加 <b>醋酸鈉</b> 再加 <b>鹽酸</b>，觀察 H⁺ 與 CH₃COO⁻ 快速結合回醋酸分子。</li>
                   </ol>
                 </div>
