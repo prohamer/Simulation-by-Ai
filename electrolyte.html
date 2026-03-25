@@ -267,6 +267,20 @@
           }
         }
 
+        // C2. OH⁻ 與 HCO₃⁻ 反應：OH⁻ + HCO₃⁻ → CO₃²⁻ + H₂O
+        //     強鹼直接中和弱酸根，正向進行
+        {
+          let oh   = species.OH   || 0;
+          let hco3 = species.HCO3 || 0;
+          let lim  = Math.min(oh, hco3);
+          if (lim > 1e-8) {
+            species.OH   -= lim;
+            species.HCO3 -= lim;
+            species.CO3   = (species.CO3 || 0) + lim;
+            changed = true;
+          }
+        }
+
         // D. 沉澱反應
         for (let p of PRECIPITATES) {
           let ionA = species[p.cat] || 0;
@@ -430,7 +444,6 @@
           }
 
           // 教學視覺保障 2：醋酸根水解——有醋酸根就保持至少一組 CH₃COOH + OH⁻
-          // Kb ≈ 5.6e-10，水解不為零，以一組粒子呈現讓教師說明平衡概念
           if (spId === 'OH') {
             const hasAcetate = (eqState.species['CH3COO'] || 0) >= MOLES_PER_PARTICLE;
             if (hasAcetate && targetCount === 0) targetCount = 1;
@@ -441,10 +454,17 @@
             if (hasAcetate && noExternalAcid && targetCount === 0) targetCount = 1;
           }
 
+          // 教學視覺保障 3：碳酸根水解——有 CO₃²⁻ 且無多餘 H⁺ 時，保持至少一組 HCO₃⁻ + OH⁻
+          if (spId === 'HCO3' || spId === 'OH') {
+            const hasCO3 = (eqState.species['CO3'] || 0) >= MOLES_PER_PARTICLE;
+            const noExcessH = (eqState.species['H'] || 0) < MOLES_PER_PARTICLE;
+            if (hasCO3 && noExcessH && targetCount === 0) targetCount = 1;
+          }
+
           const existing = particlesByType[spId] || [];
 
           // 軟同步：只有弱酸動態平衡的物種需要緩衝（CH₃COOH ⇌ H⁺ + CH₃COO⁻）
-          // H⁺ 和 OH⁻ 改回嚴格同步，確保強酸強鹼等量中和後正確歸零
+          // H⁺、OH⁻、CO₃²⁻、HCO₃⁻ 嚴格同步，確保酸鹼中和後正確歸零
           const isReactive = ['CH3COO', 'CH3COOH'].includes(spId);
           const effectiveTarget = isReactive
             ? Math.max(targetCount, Math.min(existing.length, targetCount * 2 + 2))
@@ -502,6 +522,14 @@
             flashColor: '#f59e0b'
           },
           {
+            // OH⁻ 中和碳酸氫根：OH⁻ + HCO₃⁻ → CO₃²⁻ + H₂O
+            // 結合後生成 CO₃²⁻，再水解回 HCO₃⁻ + OH⁻（動態循環）
+            r1: 'OH', r2: 'HCO3', product: 'CO3',
+            prob: 0.70,
+            dissocProb: 0.015, // CO₃²⁻ 水解 Kb1≈2.13e-4，較快解離
+            flashColor: '#f59e0b'
+          },
+          {
             // 醋酸根水解：OH⁻ + CH₃COOH → CH₃COO⁻ + H₂O
             r1: 'OH', r2: 'CH3COOH', product: null,
             prob: 0.20,
@@ -521,6 +549,10 @@
             const angle = Math.random() * Math.PI * 2;
             const speed = 4 + Math.random() * 2;
             const { cooldown, dissocMin, dissocMax } = window._SIM;
+            // CO₃²⁻ 水解比醋酸解離快（Kb1≈2.13e-4 vs Ka=1.8e-5），給較短計時
+            const timer = productType === 'CO3'
+              ? Math.floor(5 + Math.random() * 5)   // 約 0.08~0.17 秒
+              : Math.floor(dissocMin + Math.random() * (dissocMax - dissocMin));
             next.push({
               id: Math.random().toString(36).substr(2,9),
               type: productType,
@@ -529,7 +561,7 @@
               vx: Math.cos(angle) * speed,
               vy: Math.sin(angle) * speed,
               reactionCooldown: cooldown,
-              dissocTimer: Math.floor(dissocMin + Math.random() * (dissocMax - dissocMin)),
+              dissocTimer: timer,
             });
           }
           flashRef.current.push({ x, y, r: 18, alpha: 1.0, color });
