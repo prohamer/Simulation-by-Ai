@@ -1,0 +1,673 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>酸鹼鹽水解與 pH 動態模擬器</title>
+  
+  <!-- 引入 Tailwind CSS (CDN) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- 引入 React 與 ReactDOM (CDN) -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  
+  <!-- 引入 Babel -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body class="bg-slate-50">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useMemo, useEffect, useRef } = React;
+
+    // --- 內建 SVG 圖示元件 ---
+    const IconDroplet = ({ className }) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z"/></svg>;
+    const IconZap = ({ className }) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>;
+    const IconActivity = ({ className }) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>;
+    const IconFlaskConical = ({ className }) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 2v7.31"/><path d="M14 9.3V2"/><path d="M8.5 2h7"/><path d="M14 9.3a6.5 6.5 0 1 1-4 0"/><line x1="5.52" x2="18.48" y1="16" y2="16"/></svg>;
+    const IconMousePointer2 = ({ className }) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/><path d="M13 13l6 6"/></svg>;
+    const IconRefreshCcw = ({ className }) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 21v-5h5"/></svg>;
+    const IconPause = ({ className }) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>;
+    const IconPlay = ({ className }) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>;
+
+    // --- 物理與化學常數 ---
+    const MAX_VOLUME = 5.0;
+    const INITIAL_VOLUME = 4.0;
+    const MOLES_PER_PARTICLE = 0.05;
+
+    const K_COULOMB = 40.0;
+    const K_REPULSION = 2.0;
+    const THERMAL_JITTER = 1.0;
+    const FRICTION = 0.90;
+    const MAX_VELOCITY = 4.0;
+    const BASE_PARTICLE_RADIUS = 13;
+
+    // 定義所有參與反應的離子與分子
+    const SPECIES_DEFS = {
+      Na: { symbol: 'Na⁺', charge: 1, name: '鈉離子', color: '#1e40af', bg: '#dbeafe' },
+      Cl: { symbol: 'Cl⁻', charge: -1, name: '氯離子', color: '#115e59', bg: '#ccfbf1' },
+      H:  { symbol: 'H⁺', charge: 1, name: '氫離子', color: '#dc2626', bg: '#fecaca' },
+      OH: { symbol: 'OH⁻', charge: -1, name: '氫氧根', color: '#7c3aed', bg: '#ede9fe' },
+      CH3COO: { symbol: 'CH₃COO⁻', charge: -1, name: '醋酸根', color: '#4f46e5', bg: '#e0e7ff' },
+      CH3COOH: { symbol: 'CH₃COOH', charge: 0, name: '醋酸分子', color: '#4338ca', bg: '#c7d2fe' },
+      NH4: { symbol: 'NH₄⁺', charge: 1, name: '銨根', color: '#c2410c', bg: '#ffedd5' },
+      NH3: { symbol: 'NH₃', charge: 0, name: '氨分子', color: '#b45309', bg: '#fef3c7' },
+      CO3: { symbol: 'CO₃²⁻', charge: -2, name: '碳酸根', color: '#be123c', bg: '#ffe4e6' },
+      HCO3: { symbol: 'HCO₃⁻', charge: -1, name: '碳酸氫根', color: '#db2777', bg: '#fce7f3' },
+      H2CO3: { symbol: 'H₂CO₃', charge: 0, name: '碳酸分子', color: '#4b5563', bg: '#f3f4f6' },
+      H2O: { symbol: 'H₂O', charge: 0, name: '水分子', color: '#0284c7', bg: '#e0f2fe' } // 新增：中和動畫用水分子
+    };
+
+    // 新增：定義水解反應的前驅物，用於觸發「水膠囊」動畫
+    const REACTION_PRECURSORS = {
+      'HCO3': 'CO3',      // CO3 2- 變為 HCO3-
+      'CH3COOH': 'CH3COO', // CH3COO- 變為 CH3COOH
+      'NH3': 'NH4',       // NH4+ 變為 NH3
+      'OH': 'H2O',        // H2O 變為 OH-
+      'H': 'H2O',         // H2O 變為 H+
+      'H2CO3': 'HCO3'     // HCO3- 變為 H2CO3
+    };
+
+    // 常見酸鹼鹽清單
+    const ELECTROLYTES = [
+      { id: 'NaCl', name: '強酸強鹼鹽 (中性)', formula: 'NaCl', inputs: { Na: 1, Cl: 1 }, uiColor: 'bg-white border-slate-300 text-slate-700' },
+      { id: 'Na2CO3', name: '弱酸強鹼鹽 (強鹼性)', formula: 'Na₂CO₃', inputs: { Na: 2, CO3: 1 }, uiColor: 'bg-indigo-50 border-indigo-300 text-indigo-800' },
+      { id: 'NaHCO3', name: '酸式弱酸鹽 (弱鹼性)', formula: 'NaHCO₃', inputs: { Na: 1, HCO3: 1 }, uiColor: 'bg-blue-50 border-blue-300 text-blue-800' },
+      { id: 'CH3COONa', name: '弱酸強鹼鹽 (弱鹼性)', formula: 'CH₃COONa', inputs: { Na: 1, Acetic: 1 }, uiColor: 'bg-violet-50 border-violet-300 text-violet-800' },
+      { id: 'NH4Cl', name: '強酸弱鹼鹽 (弱酸性)', formula: 'NH₄Cl', inputs: { NH4: 1, Cl: 1 }, uiColor: 'bg-rose-50 border-rose-300 text-rose-800' },
+      { id: 'NH4CH3COO', name: '弱酸弱鹼鹽 (近中性)', formula: 'NH₄CH₃COO', inputs: { NH4: 1, Acetic: 1 }, uiColor: 'bg-emerald-50 border-emerald-300 text-emerald-800' },
+      { id: 'HCl', name: '強酸 (對照組)', formula: 'HCl', inputs: { NetH: 1, Cl: 1 }, uiColor: 'bg-red-100 border-red-400 text-red-900 font-bold' },
+      { id: 'NaOH', name: '強鹼 (對照組)', formula: 'NaOH', inputs: { Na: 1, NetH: -1 }, uiColor: 'bg-purple-100 border-purple-400 text-purple-900 font-bold' },
+    ];
+
+    // --- 核心演算法：精確分析化學耦合解算器 ---
+
+    function getStableKaShift(cHA, cA, cH, Ka) {
+      let p = cH + cA + Ka;
+      let q = cH * cA - Ka * cHA;
+      let disc = Math.max(0, p * p - 4 * q);
+      let shift = (-2 * q) / (p + Math.sqrt(disc));
+      if (shift < 0) shift = Math.max(shift, -cA, -cH);
+      if (shift > 0) shift = Math.min(shift, cHA);
+      return shift;
+    }
+
+    function getStableKwShift(cH, cOH, Kw) {
+      let p = cH + cOH;
+      let q = cH * cOH - Kw;
+      let disc = Math.max(0, p * p - 4 * q);
+      let shift = (-2 * q) / (p + Math.sqrt(disc));
+      if (shift < 0) shift = Math.max(shift, -cH, -cOH);
+      return shift;
+    }
+
+    function getStableKbShift(cA, cHA, cOH, Kb) {
+      let p = cHA + cOH + Kb;
+      let q = cHA * cOH - Kb * cA;
+      let disc = Math.max(0, p * p - 4 * q);
+      let shift = (-2 * q) / (p + Math.sqrt(disc));
+      if (shift < 0) shift = Math.max(shift, -cHA, -cOH);
+      if (shift > 0) shift = Math.min(shift, cA);
+      return shift;
+    }
+
+    // 計算巨觀動態平衡
+    function calculateEquilibrium(inputs, volume) {
+      let species = {
+          Na: inputs.Na || 0,
+          Cl: inputs.Cl || 0,
+          CH3COO: inputs.Acetic || 0,
+          CH3COOH: 0,
+          NH3: inputs.NH3 || 0,
+          NH4: inputs.NH4 || 0,
+          CO3: inputs.CO3 || 0,
+          HCO3: inputs.HCO3 || 0,
+          H2CO3: 0,
+          H: 1e-7 * volume + Math.max(0, inputs.NetH || 0),
+          OH: 1e-7 * volume + Math.max(0, -(inputs.NetH || 0))
+      };
+      let co2Generated = 0;
+
+      // A0. 碳酸鹽與強酸的劇烈分解反應 (優先處理，模擬不可逆冒泡)
+      // 1. CO3^2- + 2H+ -> CO2
+      let hAvail = species.H;
+      let directCO2_from_CO3 = Math.min(hAvail / 2, species.CO3);
+      if (directCO2_from_CO3 > 1e-8) {
+          species.H -= directCO2_from_CO3 * 2;
+          species.CO3 -= directCO2_from_CO3;
+          co2Generated += directCO2_from_CO3;
+          hAvail = species.H;
+      }
+      // 2. HCO3- + H+ -> CO2
+      let directCO2_from_HCO3 = Math.min(hAvail, species.HCO3);
+      if (directCO2_from_HCO3 > 1e-8) {
+          species.H -= directCO2_from_HCO3;
+          species.HCO3 -= directCO2_from_HCO3;
+          co2Generated += directCO2_from_HCO3;
+      }
+
+      // 迭代鬆弛逼近真實平衡
+      for (let i = 0; i < 200; i++) {
+          let shiftKw = getStableKwShift(species.H/volume, species.OH/volume, 1e-14);
+          species.H = Math.max(1e-16, species.H + shiftKw * volume);
+          species.OH = Math.max(1e-16, species.OH + shiftKw * volume);
+
+          let shiftAc = getStableKaShift(species.CH3COOH/volume, species.CH3COO/volume, species.H/volume, 1.8e-5);
+          species.CH3COOH -= shiftAc * volume; species.CH3COO += shiftAc * volume; 
+          species.H = Math.max(1e-16, species.H + shiftAc * volume);
+
+          let shiftAcKb = getStableKbShift(species.CH3COO/volume, species.CH3COOH/volume, species.OH/volume, 1e-14 / 1.8e-5);
+          species.CH3COO -= shiftAcKb * volume; species.CH3COOH += shiftAcKb * volume;
+          species.OH = Math.max(1e-16, species.OH + shiftAcKb * volume);
+
+          let shiftNH4 = getStableKaShift(species.NH4/volume, species.NH3/volume, species.H/volume, 5.6e-10);
+          species.NH4 -= shiftNH4 * volume; species.NH3 += shiftNH4 * volume; 
+          species.H = Math.max(1e-16, species.H + shiftNH4 * volume);
+
+          let shiftNH3Kb = getStableKbShift(species.NH3/volume, species.NH4/volume, species.OH/volume, 1e-14 / 5.6e-10);
+          species.NH3 -= shiftNH3Kb * volume; species.NH4 += shiftNH3Kb * volume;
+          species.OH = Math.max(1e-16, species.OH + shiftNH3Kb * volume);
+
+          let shiftCO3 = getStableKaShift(species.HCO3/volume, species.CO3/volume, species.H/volume, 4.7e-11);
+          species.HCO3 -= shiftCO3 * volume; species.CO3 += shiftCO3 * volume; 
+          species.H = Math.max(1e-16, species.H + shiftCO3 * volume);
+
+          let shiftCO3Kb = getStableKbShift(species.CO3/volume, species.HCO3/volume, species.OH/volume, 1e-14 / 4.7e-11);
+          species.CO3 -= shiftCO3Kb * volume; species.HCO3 += shiftCO3Kb * volume;
+          species.OH = Math.max(1e-16, species.OH + shiftCO3Kb * volume);
+
+          let shiftHCO3 = getStableKaShift(species.H2CO3/volume, species.HCO3/volume, species.H/volume, 4.3e-7);
+          species.H2CO3 -= shiftHCO3 * volume; species.HCO3 += shiftHCO3 * volume; 
+          species.H = Math.max(1e-16, species.H + shiftHCO3 * volume);
+
+          let shiftHCO3Kb = getStableKbShift(species.HCO3/volume, species.H2CO3/volume, species.OH/volume, 1e-14 / 4.3e-7);
+          species.HCO3 -= shiftHCO3Kb * volume; species.H2CO3 += shiftHCO3Kb * volume;
+          species.OH = Math.max(1e-16, species.OH + shiftHCO3Kb * volume);
+      }
+
+      // 處理二氧化碳逸散
+      if (species.H2CO3 / volume > 0.03) {
+          let excess = species.H2CO3 - 0.03 * volume;
+          species.H2CO3 = 0.03 * volume;
+          co2Generated += excess;
+      }
+
+      let pH = -Math.log10(Math.max(species.H / volume, 1e-15));
+      pH = Math.max(0, Math.min(14, pH));
+
+      return { species, co2Generated, pH };
+    }
+
+    const PhChart = ({ history }) => {
+      const width = 300;
+      const height = 100;
+      const xStep = width / Math.max(history.length - 1, 10);
+      const points = history.map((ph, i) => `${i * xStep},${height - (ph / 14) * height}`).join(' ');
+
+      return (
+        <div className="relative w-full h-32 rounded-xl overflow-hidden border-2 border-slate-300 shadow-inner flex flex-col">
+          <div className="absolute inset-0 bg-gradient-to-t from-blue-600 via-green-300 to-red-500 opacity-80"></div>
+          <div className="absolute inset-0 bg-white/20 backdrop-blur-[1px]"></div>
+          <svg viewBox={`0 0 ${width} ${height}`} className="absolute inset-0 w-full h-full drop-shadow-md overflow-visible" style={{ padding: '4px 0' }}>
+            <polyline points={points} fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+            {history.map((ph, i) => (
+              <circle key={i} cx={i * xStep} cy={height - (ph / 14) * height} r="4" fill="white" stroke="#333" strokeWidth="1" />
+            ))}
+          </svg>
+          <span className="absolute top-1 left-2 text-[10px] font-bold text-white drop-shadow-md">pH 14 (鹼)</span>
+          <span className="absolute top-1/2 -translate-y-1/2 left-2 text-[10px] font-bold text-white drop-shadow-md">pH 7 (中)</span>
+          <span className="absolute bottom-1 left-2 text-[10px] font-bold text-white drop-shadow-md">pH 0 (酸)</span>
+        </div>
+      );
+    }
+
+    // --- 主應用元件 ---
+    function App() {
+      const [volume, setVolume] = useState(INITIAL_VOLUME); 
+      const [addAmount, setAddAmount] = useState(0.5); 
+      const [inputs, setInputs] = useState({}); 
+      const [draggedItem, setDraggedItem] = useState(null);
+      const [isPaused, setIsPaused] = useState(false);
+      
+      const [phHistory, setPhHistory] = useState([7.0]);
+      const isPausedRef = useRef(isPaused);
+
+      const canvasRef = useRef(null);
+      const containerRef = useRef(null);
+      
+      const particlesRef = useRef([]); 
+      const bubblesRef = useRef([]); 
+      const fadingParticlesRef = useRef([]); // 記錄消失中的粒子(如H2O)
+      const cumulativeCO2Ref = useRef(0); 
+      const animationRef = useRef(null);
+
+      const eqState = useMemo(() => calculateEquilibrium(inputs, volume), [inputs, volume]);
+
+      useEffect(() => {
+        setPhHistory(prev => {
+          const next = [...prev, eqState.pH];
+          if (next.length > 40) return next.slice(next.length - 40);
+          return next;
+        });
+      }, [inputs, volume]);
+
+      useEffect(() => { isPausedRef.current = isPaused; }, [isPaused]);
+
+      useEffect(() => {
+        const parent = containerRef.current;
+        if (!parent) return;
+        const canvasWidth = parent.clientWidth;
+        const canvasHeight = parent.clientHeight;
+
+        if (eqState.co2Generated > cumulativeCO2Ref.current) {
+          const diff = eqState.co2Generated - cumulativeCO2Ref.current;
+          const bubbleCount = Math.floor(diff / MOLES_PER_PARTICLE) * 2; 
+          for (let i = 0; i < bubbleCount; i++) {
+            bubblesRef.current.push({
+              x: 20 + Math.random() * (canvasWidth - 40),
+              y: canvasHeight - 20, 
+              vy: -2 - Math.random() * 2,
+              radius: 3 + Math.random() * 4,
+              phase: Math.random() * Math.PI * 2
+            });
+          }
+          cumulativeCO2Ref.current = eqState.co2Generated;
+        }
+      }, [eqState.co2Generated]);
+
+      // 粒子物理同步與 H2O 轉場動畫
+      useEffect(() => {
+        const currentParticles = particlesRef.current;
+        const newParticles = [];
+        const particlesByType = {};
+        currentParticles.forEach(p => {
+          if(!particlesByType[p.type]) particlesByType[p.type] = [];
+          particlesByType[p.type].push(p);
+        });
+
+        Object.keys(SPECIES_DEFS).forEach(spId => {
+          if (spId === 'H2O') return; // 避免把它當成常規游離粒子處理
+          const moles = eqState.species[spId] || 0;
+          let targetCount = Math.floor(moles / MOLES_PER_PARTICLE);
+
+          // 💡 教學視覺保障：只要解離不是 0 (如 NH4+ 產生約 3e-5 mol 的 NH3)，就保留至少一組解離
+          // 閾值設為 1e-6 (0.000001 mol)，確保捕捉到弱酸鹼的微量解離，同時完美過濾掉中性純水 (4e-7 mol) 的干擾
+          if (targetCount === 0 && moles > 1e-6) {
+            targetCount = 1;
+          }
+
+          const existing = particlesByType[spId] || [];
+
+          if (existing.length < targetCount) {
+            newParticles.push(...existing);
+            const toAdd = targetCount - existing.length;
+            for(let i=0; i < toAdd; i++) {
+                const w = containerRef.current?.clientWidth || 400;
+                const h = containerRef.current?.clientHeight || 400;
+                const waterTop = h * (1 - volume / MAX_VOLUME);
+                
+                // 取得這個物種的反應前驅物 (如果有，就會觸發水膠囊動畫)
+                const precursor = REACTION_PRECURSORS[spId];
+
+                newParticles.push({
+                    id: Math.random().toString(36).substr(2, 9),
+                    type: spId,
+                    charge: SPECIES_DEFS[spId].charge,
+                    x: 30 + Math.random() * (w - 60),
+                    y: waterTop + 20 + Math.random() * (h - waterTop - 60),
+                    vx: (Math.random() - 0.5) * 2,
+                    vy: (Math.random() - 0.5) * 2,
+                    spawnAge: precursor ? 0 : 1, // 如果有前驅物，從 0 開始播放動畫
+                    sourceType: precursor
+                });
+            }
+          } else if (existing.length > targetCount) {
+            // 💡 粒子因反應減少時，若是 H 或 OH，使其在原地變為 H2O 並逐漸淡出
+            const removed = existing.slice(targetCount);
+            removed.forEach(p => {
+                let fadeType = p.type;
+                if (p.type === 'H' || p.type === 'OH') {
+                    fadeType = 'H2O';
+                }
+                fadingParticlesRef.current.push({
+                    x: p.x,
+                    y: p.y,
+                    vx: p.vx * 0.5,
+                    vy: p.vy * 0.5,
+                    type: fadeType,
+                    life: 1.0 // Alpha 控制值
+                });
+            });
+            newParticles.push(...existing.slice(0, targetCount));
+          } else {
+            newParticles.push(...existing);
+          }
+        });
+        particlesRef.current = newParticles;
+      }, [eqState.species, volume]);
+
+      // Canvas 物理引擎與渲染
+      useEffect(() => {
+        const canvas = canvasRef.current;
+        const ctx = canvas.getContext('2d');
+        let isRunning = true;
+        let time = 0;
+
+        const resizeCanvas = () => {
+          const parent = containerRef.current;
+          if (parent) {
+            canvas.width = parent.clientWidth;
+            canvas.height = parent.clientHeight;
+          }
+        };
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+
+        // 繪製單一粒子的共用函式，支援透明度與縮放
+        const drawParticle = (type, x, y, alpha = 1.0, scale = 1.0) => {
+            const def = SPECIES_DEFS[type] || SPECIES_DEFS['H2O'];
+            ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
+            ctx.font = `bold ${11 * scale}px sans-serif`;
+            let textWidth = ctx.measureText(def.symbol).width;
+            let radius = Math.max(BASE_PARTICLE_RADIUS, (textWidth/2) + 4) * scale; 
+
+            ctx.beginPath();
+            if(radius > BASE_PARTICLE_RADIUS * scale) {
+                ctx.roundRect(x - radius, y - BASE_PARTICLE_RADIUS * scale, radius*2, BASE_PARTICLE_RADIUS*2 * scale, BASE_PARTICLE_RADIUS * scale);
+            } else {
+                ctx.arc(x, y, radius, 0, Math.PI * 2);
+            }
+            ctx.fillStyle = def.bg;
+            ctx.fill();
+            ctx.lineWidth = 2 * scale;
+            ctx.strokeStyle = def.color;
+            ctx.stroke();
+
+            ctx.fillStyle = def.color;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(def.symbol, x, y);
+            ctx.globalAlpha = 1.0;
+        };
+
+        const renderLoop = () => {
+          if (!isRunning) return;
+          if (!isPausedRef.current) time += 0.05;
+          
+          const width = canvas.width;
+          const height = canvas.height;
+          const waterTop = height * (1 - volume / MAX_VOLUME);
+          ctx.clearRect(0, 0, width, height);
+
+          // 1. 處理物理運動
+          const particles = particlesRef.current;
+          if (!isPausedRef.current) {
+            for (let i = 0; i < particles.length; i++) {
+              let p1 = particles[i];
+              p1.vx += (Math.random() - 0.5) * THERMAL_JITTER;
+              p1.vy += (Math.random() - 0.5) * THERMAL_JITTER;
+              if (p1.y < waterTop) p1.vy += 0.5;
+
+              for (let j = i + 1; j < particles.length; j++) {
+                  let p2 = particles[j];
+                  let dx = p2.x - p1.x; let dy = p2.y - p1.y;
+                  let distSq = dx*dx + dy*dy;
+                  let dist = Math.sqrt(distSq);
+                  if (dist < 1) dist = 1;
+
+                  let force = (K_COULOMB * p1.charge * p2.charge) / distSq;
+                  let minDist = BASE_PARTICLE_RADIUS * 2.2;
+                  if (dist < minDist) force += K_REPULSION * (minDist - dist);
+
+                  let fx = (dx / dist) * force;
+                  let fy = (dy / dist) * force;
+                  p1.vx -= fx; p1.vy -= fy;
+                  p2.vx += fx; p2.vy += fy;
+              }
+
+              p1.vx = Math.max(-MAX_VELOCITY, Math.min(MAX_VELOCITY, p1.vx)) * FRICTION;
+              p1.vy = Math.max(-MAX_VELOCITY, Math.min(MAX_VELOCITY, p1.vy)) * FRICTION;
+              p1.x += p1.vx; p1.y += p1.vy;
+
+              if (p1.x < BASE_PARTICLE_RADIUS) { p1.x = BASE_PARTICLE_RADIUS; p1.vx *= -0.8; }
+              if (p1.x > width - BASE_PARTICLE_RADIUS) { p1.x = width - BASE_PARTICLE_RADIUS; p1.vx *= -0.8; }
+              if (p1.y > height - BASE_PARTICLE_RADIUS) { p1.y = height - BASE_PARTICLE_RADIUS; p1.vy *= -0.8; }
+            }
+          }
+
+          // 2. 繪製常規粒子與「水膠囊水解動畫」
+          for (let p of particles) {
+            if (p.spawnAge !== undefined && p.spawnAge < 1) {
+                if (!isPausedRef.current) p.spawnAge += 0.012; 
+                
+                if (p.spawnAge < 0.5) {
+                    drawParticle(p.sourceType, p.x, p.y);
+                    const capsuleScale = 1.3 + Math.sin(p.spawnAge * Math.PI * 4) * 0.1;
+                    const capsuleAlpha = p.spawnAge * 1.5; 
+                    drawParticle('H2O', p.x, p.y, capsuleAlpha, capsuleScale);
+                } else {
+                    drawParticle(p.type, p.x, p.y);
+                    const dissipateProgress = (p.spawnAge - 0.5) * 2; 
+                    const capsuleScale = 1.3 + dissipateProgress * 0.6; 
+                    const capsuleAlpha = 0.75 * (1 - dissipateProgress); 
+                    drawParticle('H2O', p.x, p.y, capsuleAlpha, capsuleScale);
+                }
+            } else {
+                drawParticle(p.type, p.x, p.y);
+            }
+          }
+
+          // 3. 繪製消失中的 H2O (結合動畫)
+          const activeFading = [];
+          for (let fp of fadingParticlesRef.current) {
+            if (!isPausedRef.current) {
+              fp.x += fp.vx;
+              fp.y += fp.vy;
+              fp.life -= 0.02;
+            }
+            if (fp.life > 0) {
+              drawParticle(fp.type, fp.x, fp.y, fp.life);
+              activeFading.push(fp);
+            }
+          }
+          fadingParticlesRef.current = activeFading;
+
+          // 4. 繪製氣泡
+          const activeBubbles = [];
+          for (let b of bubblesRef.current) {
+            if (!isPausedRef.current) {
+              b.y += b.vy;
+              b.x += Math.sin(time * 3 + b.phase) * 1.0;
+            }
+            if (isPausedRef.current || b.y > waterTop) {
+               ctx.beginPath();
+               ctx.arc(b.x, b.y, b.radius, 0, Math.PI*2);
+               ctx.fillStyle = 'rgba(255,255,255,0.6)';
+               ctx.fill();
+               ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+               ctx.stroke();
+               activeBubbles.push(b);
+            } 
+          }
+          bubblesRef.current = activeBubbles;
+
+          animationRef.current = requestAnimationFrame(renderLoop);
+        };
+
+        renderLoop();
+        return () => { isRunning = false; cancelAnimationFrame(animationRef.current); window.removeEventListener('resize', resizeCanvas); };
+      }, [volume]);
+
+      const handleReset = () => {
+        setInputs({});
+        setVolume(INITIAL_VOLUME);
+        cumulativeCO2Ref.current = 0;
+        particlesRef.current = [];
+        fadingParticlesRef.current = [];
+        bubblesRef.current = [];
+        setPhHistory([7.0]);
+        setIsPaused(false);
+      };
+
+      const handleAddElectrolyte = (electrolyteId) => {
+        const el = ELECTROLYTES.find(e => e.id === electrolyteId);
+        if (!el) return;
+        setInputs(prev => {
+          const next = { ...prev };
+          Object.entries(el.inputs).forEach(([spId, count]) => {
+            next[spId] = (next[spId] || 0) + count * addAmount;
+          });
+          return next;
+        });
+      };
+
+      const onDragStart = (e, id) => { e.dataTransfer.setData('text/plain', id); setDraggedItem(id); };
+      const onDragOver = (e) => e.preventDefault();
+      const onDrop = (e) => { e.preventDefault(); handleAddElectrolyte(e.dataTransfer.getData('text/plain')); setDraggedItem(null); };
+
+      const formatNum = (num) => num > 0.001 ? num.toFixed(3) : num.toExponential(2);
+      
+      const getPhColor = (ph) => {
+        if (ph < 3) return 'text-red-600';
+        if (ph < 6) return 'text-orange-500';
+        if (ph < 8) return 'text-green-600';
+        if (ph < 11) return 'text-blue-600';
+        return 'text-purple-600';
+      };
+
+      return (
+        <div className="min-h-screen text-slate-800 font-sans p-4 md:p-6 flex flex-col">
+          <header className="mb-4 flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+            <div className="flex items-center gap-3">
+              <IconFlaskConical className="w-8 h-8 text-indigo-600" />
+              <h1 className="text-2xl font-bold text-slate-800">酸鹼鹽水解與 pH 動態模擬器</h1>
+            </div>
+            
+            <div className="flex items-center gap-3 bg-slate-100 px-6 py-2 rounded-full border border-slate-200 shadow-inner">
+              <span className="font-bold text-slate-600 tracking-wider">目前 pH 值</span>
+              <span className={`text-3xl font-black ${getPhColor(eqState.pH)}`}>{eqState.pH.toFixed(2)}</span>
+            </div>
+          </header>
+
+          <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-4">
+            
+            <div className="lg:col-span-3 flex flex-col gap-4">
+              <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                <h2 className="text-md font-bold mb-3 flex items-center gap-2"><IconDroplet className="w-5 h-5 text-blue-500"/> 控制面板</h2>
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-slate-700 mb-1">水量: {volume.toFixed(1)} L</label>
+                  <input type="range" min="1.0" max={MAX_VOLUME} step="0.5" value={volume} onChange={(e) => setVolume(parseFloat(e.target.value))} className="w-full accent-blue-500" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">每次加入量</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[0.1, 0.5, 1.0].map(amt => (
+                      <button key={amt} className={`py-1 text-sm rounded border ${addAmount === amt ? 'bg-indigo-100 border-indigo-400 font-bold' : 'bg-white hover:bg-slate-50'}`} onClick={() => setAddAmount(amt)}>{amt} mol</button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex-1 overflow-y-auto">
+                <h2 className="text-md font-bold mb-3 flex items-center gap-2"><IconMousePointer2 className="w-5 h-5 text-indigo-500"/> 電解質藥品櫃</h2>
+                <div className="grid grid-cols-2 gap-2">
+                  {ELECTROLYTES.map(el => (
+                    <div 
+                      key={el.id} draggable onDragStart={(e) => onDragStart(e, el.id)} onClick={() => handleAddElectrolyte(el.id)}
+                      className={`p-2 border-2 border-dashed rounded-lg cursor-grab hover:shadow-md transition-all flex flex-col items-center justify-center gap-1 ${el.uiColor}`}
+                    >
+                      <span className="font-bold text-sm tracking-wider">{el.formula}</span>
+                      <span className="text-[10px] font-medium">{el.name}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="lg:col-span-5 flex flex-col bg-white rounded-xl shadow-sm border border-slate-200 p-4 relative min-h-[500px]">
+              <div className="flex justify-between items-center mb-2">
+                <h2 className="text-lg font-bold text-slate-800">微觀水解觀察區</h2>
+                <div className="flex gap-2">
+                  <button onClick={() => setIsPaused(!isPaused)} className={`flex items-center gap-1 text-sm px-3 py-1.5 rounded-md transition-colors ${isPaused ? 'bg-amber-100 text-amber-700 hover:bg-amber-200' : 'bg-slate-100 text-slate-700 hover:bg-slate-200 font-medium'}`}>
+                    {isPaused ? <IconPlay className="w-4 h-4" /> : <IconPause className="w-4 h-4" />} {isPaused ? '繼續' : '暫停'}
+                  </button>
+                  <button onClick={handleReset} className="flex items-center gap-1 text-sm text-red-600 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-md transition-colors font-medium">
+                    <IconRefreshCcw className="w-4 h-4" /> 清空
+                  </button>
+                </div>
+              </div>
+              
+              <div 
+                className={`flex-1 relative border-b-8 border-l-8 border-r-8 border-slate-300 rounded-b-[40px] overflow-hidden ${draggedItem ? 'bg-indigo-50/50' : 'bg-transparent'}`}
+                onDragOver={onDragOver} onDrop={onDrop} ref={containerRef} style={{ width: '90%', margin: '0 auto' }}
+              >
+                <div className="absolute bottom-0 w-full bg-blue-400/20 border-t border-blue-400/40" style={{ height: `${(volume / MAX_VOLUME) * 100}%` }} />
+                <canvas ref={canvasRef} className="absolute inset-0 w-full h-full pointer-events-none z-20" />
+                
+                {isPaused && (
+                  <div className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none">
+                    <div className="bg-black/20 text-white backdrop-blur-sm px-6 py-2 rounded-full font-bold tracking-widest text-lg shadow-lg">畫面已凍結</div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="lg:col-span-4 flex flex-col gap-4">
+              <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                <h2 className="text-md font-bold mb-3 flex items-center gap-2"><IconActivity className="w-5 h-5 text-rose-500"/> 滴定 / 加入歷程 pH 曲線</h2>
+                <PhChart history={phHistory} />
+                <div className="bg-sky-50 text-sky-800 p-2 rounded text-xs leading-relaxed mt-3 shadow-sm border border-sky-100">
+                  <strong>👨‍🔬 水解與中和觀察重點：</strong>
+                  <ul className="list-disc pl-4 mt-1 space-y-1">
+                    <li>加入 <b>氯化銨 (NH₄Cl)</b>：觀察水解，即使微量也會<b>保留一組 NH₃ 與 H⁺ 顯示在畫面上</b>，方便老師講解勒沙特列原理！</li>
+                    <li>加入 <b>強酸或鹼</b>：如果發生中和被抵消，會看到代表它們的粒子瞬間變成藍色的 <span className="text-blue-600 font-bold">H₂O</span> 膠囊並緩慢淡出！</li>
+                    <li>加入 <b>碳酸鈉 (Na₂CO₃)</b>：觀察被水膠囊包覆水解後產生的粉色 <span className="text-pink-600 font-bold">HCO₃⁻</span>，pH 飆升！</li>
+                  </ul>
+                </div>
+              </div>
+
+              <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex-1 overflow-auto">
+                <h2 className="text-md font-bold mb-3 flex items-center gap-2"><IconZap className="w-5 h-5 text-amber-500"/> 平衡後物種莫耳數 (mol)</h2>
+                <div className="grid grid-cols-2 gap-x-6 gap-y-1 mb-3">
+                  {Object.entries(eqState.species).map(([id, moles]) => {
+                    // 💡 確保畫面上被保留的微量離子 (如 1e-6 mol 左右的 NH3) 也能顯示在表格內
+                    if (moles < 1e-6 && id !== 'H' && id !== 'OH') return null;
+                    const def = SPECIES_DEFS[id];
+                    if (!def || id === 'H2O') return null;
+                    
+                    return (
+                      <div key={id} className="flex justify-between items-center text-sm py-1 border-b border-slate-50">
+                        <div className="flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full" style={{ backgroundColor: def.color }}></span>
+                          <span className="font-medium text-slate-700">{def.symbol}</span>
+                        </div>
+                        {/* 根據數量大小決定使用常規格式或是科學記號 */}
+                        <span className="font-mono text-slate-600">
+                          {moles >= 1e-4 ? formatNum(moles) : moles.toExponential(2)}
+                        </span>
+                      </div>
+                    );
+                  })}
+                  {eqState.co2Generated > 0 && (
+                    <div className="flex justify-between items-center text-sm py-1 border-b border-slate-50">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-slate-400"></span>
+                        <span className="font-medium text-slate-700">CO₂ (氣)</span>
+                      </div>
+                      <span className="font-mono text-sky-600 font-bold">{formatNum(eqState.co2Generated)}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
