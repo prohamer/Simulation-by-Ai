@@ -56,14 +56,24 @@
       CO3: { symbol: 'CO₃²⁻', charge: -2, name: '碳酸根', color: '#be123c', bg: '#ffe4e6' },
       HCO3: { symbol: 'HCO₃⁻', charge: -1, name: '碳酸氫根', color: '#db2777', bg: '#fce7f3' },
       H2CO3: { symbol: 'H₂CO₃', charge: 0, name: '碳酸分子', color: '#4b5563', bg: '#f3f4f6' },
-      H2O: { symbol: 'H₂O', charge: 0, name: '水分子', color: '#0284c7', bg: '#e0f2fe' } // 新增：中和動畫用水分子
+      H2O: { symbol: 'H₂O', charge: 0, name: '水分子', color: '#0284c7', bg: '#e0f2fe' },
+      // 新增物質
+      K: { symbol: 'K⁺', charge: 1, name: '鉀離子', color: '#6b21a8', bg: '#f3e8ff' },
+      NO3: { symbol: 'NO₃⁻', charge: -1, name: '硝酸根', color: '#0369a1', bg: '#e0f2fe' },
+      SO4: { symbol: 'SO₄²⁻', charge: -2, name: '硫酸根', color: '#854d0e', bg: '#fef08a' },
+      Cu: { symbol: 'Cu²⁺', charge: 2, name: '銅離子', color: '#0369a1', bg: '#bae6fd' },
+      CuOH: { symbol: 'Cu(OH)⁺', charge: 1, name: '氫氧銅離子', color: '#0284c7', bg: '#e0f2fe' },
+      Zn: { symbol: 'Zn²⁺', charge: 2, name: '鋅離子', color: '#334155', bg: '#cbd5e1' },
+      ZnOH: { symbol: 'Zn(OH)⁺', charge: 1, name: '氫氧鋅離子', color: '#475569', bg: '#e2e8f0' }
     };
 
-    // 新增：定義水解反應的前驅物，用於觸發「水膠囊」動畫
+    // 定義水解反應的前驅物，用於觸發「水膠囊」動畫
     const REACTION_PRECURSORS = {
       'HCO3': 'CO3',      // CO3 2- 變為 HCO3-
       'CH3COOH': 'CH3COO', // CH3COO- 變為 CH3COOH
       'NH3': 'NH4',       // NH4+ 變為 NH3
+      'CuOH': 'Cu',       // Cu2+ 變為 Cu(OH)+
+      'ZnOH': 'Zn',       // Zn2+ 變為 Zn(OH)+
       'OH': 'H2O',        // H2O 變為 OH-
       'H': 'H2O',         // H2O 變為 H+
       'H2CO3': 'HCO3'     // HCO3- 變為 H2CO3
@@ -77,6 +87,9 @@
       { id: 'CH3COONa', name: '弱酸強鹼鹽 (弱鹼性)', formula: 'CH₃COONa', inputs: { Na: 1, Acetic: 1 }, uiColor: 'bg-violet-50 border-violet-300 text-violet-800' },
       { id: 'NH4Cl', name: '強酸弱鹼鹽 (弱酸性)', formula: 'NH₄Cl', inputs: { NH4: 1, Cl: 1 }, uiColor: 'bg-rose-50 border-rose-300 text-rose-800' },
       { id: 'NH4CH3COO', name: '弱酸弱鹼鹽 (近中性)', formula: 'NH₄CH₃COO', inputs: { NH4: 1, Acetic: 1 }, uiColor: 'bg-emerald-50 border-emerald-300 text-emerald-800' },
+      { id: 'CuSO4', name: '強酸弱鹼鹽 (弱酸性)', formula: 'CuSO₄', inputs: { Cu: 1, SO4: 1 }, uiColor: 'bg-sky-50 border-sky-300 text-sky-800' },
+      { id: 'ZnSO4', name: '強酸弱鹼鹽 (弱酸性)', formula: 'ZnSO₄', inputs: { Zn: 1, SO4: 1 }, uiColor: 'bg-slate-100 border-slate-300 text-slate-800' },
+      { id: 'KNO3', name: '強酸強鹼鹽 (中性)', formula: 'KNO₃', inputs: { K: 1, NO3: 1 }, uiColor: 'bg-gray-50 border-gray-300 text-gray-700' },
       { id: 'HCl', name: '強酸 (對照組)', formula: 'HCl', inputs: { NetH: 1, Cl: 1 }, uiColor: 'bg-red-100 border-red-400 text-red-900 font-bold' },
       { id: 'NaOH', name: '強鹼 (對照組)', formula: 'NaOH', inputs: { Na: 1, NetH: -1 }, uiColor: 'bg-purple-100 border-purple-400 text-purple-900 font-bold' },
     ];
@@ -117,6 +130,13 @@
       let species = {
           Na: inputs.Na || 0,
           Cl: inputs.Cl || 0,
+          K: inputs.K || 0,
+          NO3: inputs.NO3 || 0,
+          SO4: inputs.SO4 || 0,
+          Cu: inputs.Cu || 0,
+          CuOH: 0,
+          Zn: inputs.Zn || 0,
+          ZnOH: 0,
           CH3COO: inputs.Acetic || 0,
           CH3COOH: 0,
           NH3: inputs.NH3 || 0,
@@ -130,7 +150,6 @@
       let co2Generated = 0;
 
       // A0. 碳酸鹽與強酸的劇烈分解反應 (優先處理，模擬不可逆冒泡)
-      // 1. CO3^2- + 2H+ -> CO2
       let hAvail = species.H;
       let directCO2_from_CO3 = Math.min(hAvail / 2, species.CO3);
       if (directCO2_from_CO3 > 1e-8) {
@@ -139,7 +158,6 @@
           co2Generated += directCO2_from_CO3;
           hAvail = species.H;
       }
-      // 2. HCO3- + H+ -> CO2
       let directCO2_from_HCO3 = Math.min(hAvail, species.HCO3);
       if (directCO2_from_HCO3 > 1e-8) {
           species.H -= directCO2_from_HCO3;
@@ -184,6 +202,24 @@
           let shiftHCO3Kb = getStableKbShift(species.HCO3/volume, species.H2CO3/volume, species.OH/volume, 1e-14 / 4.3e-7);
           species.HCO3 -= shiftHCO3Kb * volume; species.H2CO3 += shiftHCO3Kb * volume;
           species.OH = Math.max(1e-16, species.OH + shiftHCO3Kb * volume);
+
+          // 新增：銅離子水解 (Ka ≈ 3e-8)
+          let shiftCu = getStableKaShift(species.Cu/volume, species.CuOH/volume, species.H/volume, 3e-8);
+          species.Cu -= shiftCu * volume; species.CuOH += shiftCu * volume;
+          species.H = Math.max(1e-16, species.H + shiftCu * volume);
+
+          let shiftCuKb = getStableKbShift(species.CuOH/volume, species.Cu/volume, species.OH/volume, 1e-14 / 3e-8);
+          species.CuOH -= shiftCuKb * volume; species.Cu += shiftCuKb * volume;
+          species.OH = Math.max(1e-16, species.OH + shiftCuKb * volume);
+
+          // 新增：鋅離子水解 (Ka ≈ 1e-9)
+          let shiftZn = getStableKaShift(species.Zn/volume, species.ZnOH/volume, species.H/volume, 1e-9);
+          species.Zn -= shiftZn * volume; species.ZnOH += shiftZn * volume;
+          species.H = Math.max(1e-16, species.H + shiftZn * volume);
+
+          let shiftZnKb = getStableKbShift(species.ZnOH/volume, species.Zn/volume, species.OH/volume, 1e-14 / 1e-9);
+          species.ZnOH -= shiftZnKb * volume; species.Zn += shiftZnKb * volume;
+          species.OH = Math.max(1e-16, species.OH + shiftZnKb * volume);
       }
 
       // 處理二氧化碳逸散
@@ -238,7 +274,7 @@
       
       const particlesRef = useRef([]); 
       const bubblesRef = useRef([]); 
-      const fadingParticlesRef = useRef([]); // 記錄消失中的粒子(如H2O)
+      const fadingParticlesRef = useRef([]); 
       const cumulativeCO2Ref = useRef(0); 
       const animationRef = useRef(null);
 
@@ -287,12 +323,10 @@
         });
 
         Object.keys(SPECIES_DEFS).forEach(spId => {
-          if (spId === 'H2O') return; // 避免把它當成常規游離粒子處理
+          if (spId === 'H2O') return; 
           const moles = eqState.species[spId] || 0;
           let targetCount = Math.floor(moles / MOLES_PER_PARTICLE);
 
-          // 💡 教學視覺保障：只要解離不是 0 (如 NH4+ 產生約 3e-5 mol 的 NH3)，就保留至少一組解離
-          // 閾值設為 1e-6 (0.000001 mol)，確保捕捉到弱酸鹼的微量解離，同時完美過濾掉中性純水 (4e-7 mol) 的干擾
           if (targetCount === 0 && moles > 1e-6) {
             targetCount = 1;
           }
@@ -307,7 +341,6 @@
                 const h = containerRef.current?.clientHeight || 400;
                 const waterTop = h * (1 - volume / MAX_VOLUME);
                 
-                // 取得這個物種的反應前驅物 (如果有，就會觸發水膠囊動畫)
                 const precursor = REACTION_PRECURSORS[spId];
 
                 newParticles.push({
@@ -318,12 +351,11 @@
                     y: waterTop + 20 + Math.random() * (h - waterTop - 60),
                     vx: (Math.random() - 0.5) * 2,
                     vy: (Math.random() - 0.5) * 2,
-                    spawnAge: precursor ? 0 : 1, // 如果有前驅物，從 0 開始播放動畫
+                    spawnAge: precursor ? 0 : 1,
                     sourceType: precursor
                 });
             }
           } else if (existing.length > targetCount) {
-            // 💡 粒子因反應減少時，若是 H 或 OH，使其在原地變為 H2O 並逐漸淡出
             const removed = existing.slice(targetCount);
             removed.forEach(p => {
                 let fadeType = p.type;
@@ -336,7 +368,7 @@
                     vx: p.vx * 0.5,
                     vy: p.vy * 0.5,
                     type: fadeType,
-                    life: 1.0 // Alpha 控制值
+                    life: 1.0 
                 });
             });
             newParticles.push(...existing.slice(0, targetCount));
@@ -364,7 +396,6 @@
         resizeCanvas();
         window.addEventListener('resize', resizeCanvas);
 
-        // 繪製單一粒子的共用函式，支援透明度與縮放
         const drawParticle = (type, x, y, alpha = 1.0, scale = 1.0) => {
             const def = SPECIES_DEFS[type] || SPECIES_DEFS['H2O'];
             ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
@@ -620,8 +651,8 @@
                 <div className="bg-sky-50 text-sky-800 p-2 rounded text-xs leading-relaxed mt-3 shadow-sm border border-sky-100">
                   <strong>👨‍🔬 水解與中和觀察重點：</strong>
                   <ul className="list-disc pl-4 mt-1 space-y-1">
-                    <li>加入 <b>氯化銨 (NH₄Cl)</b>：觀察水解，即使微量也會<b>保留一組 NH₃ 與 H⁺ 顯示在畫面上</b>，方便老師講解勒沙特列原理！</li>
-                    <li>加入 <b>強酸或鹼</b>：如果發生中和被抵消，會看到代表它們的粒子瞬間變成藍色的 <span className="text-blue-600 font-bold">H₂O</span> 膠囊並緩慢淡出！</li>
+                    <li>加入 <b>硫酸銅 (CuSO₄)</b> 或 <b>硫酸鋅</b>：觀察微量的 Cu²⁺ 或 Zn²⁺ 會透過水膠囊動畫發生水解，釋出 <span className="text-red-600 font-bold">H⁺</span> 使 pH 降低！</li>
+                    <li>加入 <b>硝酸鉀 (KNO₃)</b>：強酸強鹼鹽，完全不發生水解反應，pH 值維持中性 7.00 不變。</li>
                     <li>加入 <b>碳酸鈉 (Na₂CO₃)</b>：觀察被水膠囊包覆水解後產生的粉色 <span className="text-pink-600 font-bold">HCO₃⁻</span>，pH 飆升！</li>
                   </ul>
                 </div>
@@ -631,7 +662,7 @@
                 <h2 className="text-md font-bold mb-3 flex items-center gap-2"><IconZap className="w-5 h-5 text-amber-500"/> 平衡後物種莫耳數 (mol)</h2>
                 <div className="grid grid-cols-2 gap-x-6 gap-y-1 mb-3">
                   {Object.entries(eqState.species).map(([id, moles]) => {
-                    // 💡 確保畫面上被保留的微量離子 (如 1e-6 mol 左右的 NH3) 也能顯示在表格內
+                    // 💡 確保畫面上被保留的微量離子也能顯示在表格內
                     if (moles < 1e-6 && id !== 'H' && id !== 'OH') return null;
                     const def = SPECIES_DEFS[id];
                     if (!def || id === 'H2O') return null;
@@ -642,7 +673,6 @@
                           <span className="w-2 h-2 rounded-full" style={{ backgroundColor: def.color }}></span>
                           <span className="font-medium text-slate-700">{def.symbol}</span>
                         </div>
-                        {/* 根據數量大小決定使用常規格式或是科學記號 */}
                         <span className="font-mono text-slate-600">
                           {moles >= 1e-4 ? formatNum(moles) : moles.toExponential(2)}
                         </span>
