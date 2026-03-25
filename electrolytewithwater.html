@@ -68,14 +68,13 @@
     };
 
     // 定義水解反應的前驅物，用於觸發「水膠囊」動畫
+    // 註：H+ 與 OH- 將在生成邏輯中動態判定，以區分初級解離與水解
     const REACTION_PRECURSORS = {
       'HCO3': 'CO3',      // CO3 2- 變為 HCO3-
       'CH3COOH': 'CH3COO', // CH3COO- 變為 CH3COOH
       'NH3': 'NH4',       // NH4+ 變為 NH3
       'CuOH': 'Cu',       // Cu2+ 變為 Cu(OH)+
       'ZnOH': 'Zn',       // Zn2+ 變為 Zn(OH)+
-      'OH': 'H2O',        // H2O 變為 OH-
-      'H': 'H2O',         // H2O 變為 H+
       'H2CO3': 'HCO3'     // HCO3- 變為 H2CO3
     };
 
@@ -323,6 +322,10 @@
           particlesByType[p.type].push(p);
         });
 
+        // 計算直接加入的強酸/強鹼離子數量，用於區分初級解離與次級水解
+        const directHCount = Math.floor(Math.max(0, inputs.NetH || 0) / MOLES_PER_PARTICLE);
+        const directOHCount = Math.floor(Math.max(0, -(inputs.NetH || 0)) / MOLES_PER_PARTICLE);
+
         Object.keys(SPECIES_DEFS).forEach(spId => {
           if (spId === 'H2O') return; 
           const moles = eqState.species[spId] || 0;
@@ -341,8 +344,16 @@
                 const w = containerRef.current?.clientWidth || 400;
                 const h = containerRef.current?.clientHeight || 400;
                 const waterTop = h * (1 - volume / MAX_VOLUME);
+                const currentIndex = existing.length + i;
                 
-                const precursor = REACTION_PRECURSORS[spId];
+                let precursor = REACTION_PRECURSORS[spId];
+                
+                // 動態判定：如果 H+ 或 OH- 是由強酸/強鹼直接解離而來，則不播放水膠囊動畫；若是水解產生則播放
+                if (spId === 'H') {
+                    precursor = (currentIndex >= directHCount) ? 'H2O' : null;
+                } else if (spId === 'OH') {
+                    precursor = (currentIndex >= directOHCount) ? 'H2O' : null;
+                }
 
                 newParticles.push({
                     id: Math.random().toString(36).substr(2, 9),
@@ -652,8 +663,8 @@
                 <div className="bg-sky-50 text-sky-800 p-2 rounded text-xs leading-relaxed mt-3 shadow-sm border border-sky-100">
                   <strong>👨‍🔬 水解與中和觀察重點：</strong>
                   <ul className="list-disc pl-4 mt-1 space-y-1">
-                    <li>加入 <b>硫酸銅 (CuSO₄)</b> 或 <b>硫酸鋅</b>：觀察微量的 Cu²⁺ 或 Zn²⁺ 會透過水膠囊動畫發生水解，釋出 <span className="text-red-600 font-bold">H⁺</span> 使 pH 降低！</li>
-                    <li>加入 <b>硝酸鉀 (KNO₃)</b>：強酸強鹼鹽，完全不發生水解反應，pH 值維持中性 7.00 不變。</li>
+                    <li>加入 <b>NaOH 或 HCl</b>：直接散布出 <span className="text-purple-600 font-bold">OH⁻</span> 或 <span className="text-red-600 font-bold">H⁺</span> (初級解離，無水膠囊動畫)。</li>
+                    <li>加入 <b>硫酸銅 (CuSO₄)</b>：觀察微量的 Cu²⁺ 會透過水膠囊動畫發生水解，釋出 <span className="text-red-600 font-bold">H⁺</span> 使 pH 降低！</li>
                     <li>加入 <b>碳酸鈉 (Na₂CO₃)</b>：觀察被水膠囊包覆水解後產生的粉色 <span className="text-pink-600 font-bold">HCO₃⁻</span>，pH 飆升！</li>
                   </ul>
                 </div>
