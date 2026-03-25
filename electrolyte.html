@@ -76,6 +76,8 @@
       CrO4:{ symbol: 'CrO₄²⁻', charge: -2, name: '鉻酸根', color: '#b45309', bg: '#fef3c7' },
       CH3COO: { symbol: 'CH₃COO⁻', charge: -1, name: '醋酸根', color: '#4f46e5', bg: '#e0e7ff' },
       CH3COOH: { symbol: 'CH₃COOH', charge: 0, name: '醋酸分子', color: '#4338ca', bg: '#c7d2fe' },
+      HCO3: { symbol: 'HCO₃⁻', charge: -1, name: '碳酸氫根', color: '#7c2d12', bg: '#fed7aa' },
+      OH:   { symbol: 'OH⁻', charge: -1, name: '氫氧根', color: '#065f46', bg: '#a7f3d0' },
       C2H5OH: { symbol: 'C₂H₅OH', charge: 0, name: '乙醇(酒精)', color: '#0f766e', bg: '#ccfbf1' },
       C6H12O6: { symbol: '葡萄糖', charge: 0, name: '葡萄糖分子', color: '#9a3412', bg: '#ffedd5' },
     };
@@ -154,59 +156,143 @@
       PRECIPITATES.forEach(p => solids[p.id] = 0);
       let co2Generated = 0;
 
+      // 確保所有物種都有初始值
+      ['H', 'OH', 'CO3', 'HCO3', 'CH3COOH', 'CH3COO'].forEach(k => {
+        if (!species[k]) species[k] = 0;
+      });
+
       let changed = true;
       let iterations = 0;
       
       while (changed && iterations < 100) {
         changed = false;
-        
-        // A1. 氣體生成 (游離氫離子)
-        let hCount = species.H || 0;
-        let co3Count = species.CO3 || 0;
-        let reactLimit = Math.min(hCount / 2, co3Count);
-        if (reactLimit > 1e-8) {
-          species.H -= reactLimit * 2;
-          species.CO3 -= reactLimit;
-          co2Generated += reactLimit;
-          changed = true;
-        }
 
-        // A2. 氣體生成 (弱酸直接中和，避免迭代步長過小)
-        let ch3coohCount = species.CH3COOH || 0;
-        let remainingCo3 = species.CO3 || 0;
-        let directReactLimit = Math.min(ch3coohCount / 2, remainingCo3);
-        if (directReactLimit > 1e-8) {
-          species.CH3COOH -= directReactLimit * 2;
-          species.CO3 -= directReactLimit;
-          species.CH3COO = (species.CH3COO || 0) + directReactLimit * 2;
-          co2Generated += directReactLimit;
-          changed = true;
-        }
-
-        // B. 沉澱反應
-        for (let p of PRECIPITATES) {
-          let ionA = species[p.cat] || 0;
-          let ionB = species[p.an] || 0;
-          let solid = solids[p.id] || 0;
-          let delta = solvePrecipitation(ionA, p.catN, ionB, p.anN, p.ksp, volume, solid);
-          if (Math.abs(delta) > 1e-8) {
-            species[p.cat] = Math.max(0, ionA - p.catN * delta);
-            species[p.an] = Math.max(0, ionB - p.anN * delta);
-            solids[p.id] = Math.max(0, solid + delta);
+        // A1. 強酸直接中和碳酸根：H⁺ + CO₃²⁻ → HCO₃⁻
+        //     再進一步：H⁺ + HCO₃⁻ → H₂CO₃ → CO₂↑ + H₂O
+        {
+          // 第一步：H⁺ + CO₃²⁻ → HCO₃⁻
+          let step1 = Math.min(species.H, species.CO3);
+          if (step1 > 1e-8) {
+            species.H   -= step1;
+            species.CO3 -= step1;
+            species.HCO3 = (species.HCO3 || 0) + step1;
+            changed = true;
+          }
+          // 第二步：H⁺ + HCO₃⁻ → CO₂↑ + H₂O
+          let step2 = Math.min(species.H, species.HCO3 || 0);
+          if (step2 > 1e-8) {
+            species.H    -= step2;
+            species.HCO3 -= step2;
+            co2Generated += step2;
             changed = true;
           }
         }
 
-        // C. 弱電解質解離 (醋酸 Ka = 1.8e-5)
-        let ha = species.CH3COOH || 0;
-        let h = species.H || 0;
-        let a = species.CH3COO || 0;
-        let kaDelta = solveWeakAcid(ha, h, a, 1.8e-5, volume);
-        if (Math.abs(kaDelta) > 1e-8) {
-          species.CH3COOH = Math.max(0, ha - kaDelta);
-          species.H = Math.max(0, h + kaDelta);
-          species.CH3COO = Math.max(0, a + kaDelta);
-          changed = true;
+        // A2. 醋酸直接中和碳酸根：2 CH₃COOH + CO₃²⁻ → 2 CH₃COO⁻ + CO₂↑ + H₂O
+        {
+          let ch3coohCount = species.CH3COOH || 0;
+          let co3Count = species.CO3 || 0;
+          let lim = Math.min(ch3coohCount / 2, co3Count);
+          if (lim > 1e-8) {
+            species.CH3COOH -= lim * 2;
+            species.CO3     -= lim;
+            species.CH3COO   = (species.CH3COO || 0) + lim * 2;
+            co2Generated    += lim;
+            changed = true;
+          }
+        }
+
+        // A3. 醋酸中和碳酸氫根：CH₃COOH + HCO₃⁻ → CH₃COO⁻ + CO₂↑ + H₂O
+        //     (Ka_CH3COOH=1.8e-5 > Ka2_H2CO3=4.7e-11，反應可正向進行)
+        {
+          let ch3coohCount = species.CH3COOH || 0;
+          let hco3Count = species.HCO3 || 0;
+          let lim = Math.min(ch3coohCount, hco3Count);
+          if (lim > 1e-8) {
+            species.CH3COOH -= lim;
+            species.HCO3    -= lim;
+            species.CH3COO   = (species.CH3COO || 0) + lim;
+            co2Generated    += lim;
+            changed = true;
+          }
+        }
+
+        // B. 碳酸根水解（顯著水解，不可忽略）
+        //    B1: CO₃²⁻ + H₂O ⇌ HCO₃⁻ + OH⁻  Kb1 = Kw/Ka2(H2CO3) = 1e-14/4.7e-11 ≈ 2.13e-4
+        //    醋酸根水解 Kb = 1e-14/1.8e-5 ≈ 5.6e-10，極小，忽略不計（不模擬醋酸根水解）
+        {
+          const Kb1_CO3 = 2.13e-4;
+          let co3  = species.CO3  || 0;
+          let hco3 = species.HCO3 || 0;
+          let oh   = species.OH   || 0;
+          let delta = solveWeakAcid(co3, oh, hco3, Kb1_CO3, volume);
+          if (Math.abs(delta) > 1e-8) {
+            species.CO3  = Math.max(0, co3  - delta);
+            species.OH   = Math.max(0, oh   + delta);
+            species.HCO3 = Math.max(0, hco3 + delta);
+            changed = true;
+          }
+        }
+
+        // B2: HCO₃⁻ + H₂O ⇌ H₂CO₃ + OH⁻  Kb2 = Kw/Ka1(H2CO3) = 1e-14/4.3e-7 ≈ 2.33e-8
+        //     H₂CO₃ 視為 CO₂(aq)，不穩定，立即逸出
+        {
+          const Kb2_HCO3 = 2.33e-8;
+          let hco3 = species.HCO3 || 0;
+          let oh   = species.OH   || 0;
+          // 此步生成 H₂CO₃，直接視為 CO₂ 逸出，delta 量從 HCO₃⁻ 扣除，OH⁻ 增加
+          // 用 solveWeakAcid 模擬：HA=HCO3, H=OH, A=CO2(用 co2Generated 追蹤)
+          // 簡化：直接計算平衡位移
+          let Q_hco3 = hco3 > 0 ? (oh / volume) * 1 / (hco3 / volume) : 0; // 簡化 Q
+          // 只在有顯著 HCO3 時才計算第二步水解（數量較小）
+          let lim2 = Math.min(hco3, oh) * Kb2_HCO3 * volume / (1 + Kb2_HCO3);
+          if (lim2 > 1e-8) {
+            species.HCO3 = Math.max(0, hco3 - lim2);
+            species.OH   = Math.max(0, oh   + lim2);
+            co2Generated += lim2;
+            changed = true;
+          }
+        }
+
+        // C. H⁺ 與 OH⁻ 中和：H⁺ + OH⁻ → H₂O
+        {
+          let h  = species.H  || 0;
+          let oh = species.OH || 0;
+          let lim = Math.min(h, oh);
+          if (lim > 1e-8) {
+            species.H  -= lim;
+            species.OH -= lim;
+            changed = true;
+          }
+        }
+
+        // D. 沉澱反應
+        for (let p of PRECIPITATES) {
+          let ionA = species[p.cat] || 0;
+          let ionB = species[p.an]  || 0;
+          let solid = solids[p.id]  || 0;
+          let delta = solvePrecipitation(ionA, p.catN, ionB, p.anN, p.ksp, volume, solid);
+          if (Math.abs(delta) > 1e-8) {
+            species[p.cat] = Math.max(0, ionA - p.catN * delta);
+            species[p.an]  = Math.max(0, ionB - p.anN * delta);
+            solids[p.id]   = Math.max(0, solid + delta);
+            changed = true;
+          }
+        }
+
+        // E. 弱酸解離：CH₃COOH ⇌ H⁺ + CH₃COO⁻  (Ka = 1.8e-5)
+        //    注意：醋酸根(CH3COO⁻)的水解 Kb = 5.6e-10，極小，此處不模擬
+        {
+          let ha = species.CH3COOH || 0;
+          let h  = species.H       || 0;
+          let a  = species.CH3COO  || 0;
+          let kaDelta = solveWeakAcid(ha, h, a, 1.8e-5, volume);
+          if (Math.abs(kaDelta) > 1e-8) {
+            species.CH3COOH = Math.max(0, ha - kaDelta);
+            species.H       = Math.max(0, h  + kaDelta);
+            species.CH3COO  = Math.max(0, a  + kaDelta);
+            changed = true;
+          }
         }
         
         iterations++;
@@ -239,6 +325,27 @@
       const containerRef = useRef(null);
       
       const particlesRef = useRef([]); 
+      // 掛到 window 方便 console 即時調整參數
+      useEffect(() => {
+        window._particlesRef = particlesRef;
+        window._setDissocRange = (min, max) => {
+          window._SIM.dissocMin = min;
+          window._SIM.dissocMax = max;
+          particlesRef.current.forEach(p => {
+            if (p.type === 'CH3COOH' && p.dissocTimer !== undefined)
+              p.dissocTimer = Math.floor(min + Math.random() * (max - min));
+          });
+          console.log(`dissocTimer 已設為 ${min}～${max} 幀（新生成粒子同步套用）`);
+        };
+        window._setCooldown = (frames) => {
+          window._SIM.cooldown = frames;
+          particlesRef.current.forEach(p => {
+            if ((p.reactionCooldown||0) > frames) p.reactionCooldown = frames;
+          });
+          console.log(`reactionCooldown 已設為 ${frames} 幀（新生成粒子同步套用）`);
+        };
+        window._status = () => console.log('目前參數：', JSON.stringify(window._SIM));
+      }, []); 
       const snowflakesRef = useRef([]); 
       const bubblesRef = useRef([]); 
       const visualSolidsRef = useRef({}); 
@@ -313,12 +420,24 @@
           const moles = eqState.species[spId] || 0;
           let targetCount = Math.floor(moles / MOLES_PER_PARTICLE);
 
-          // 教學視覺保障：動態保持一組解離
+          // 教學視覺保障 1：醋酸動態解離——有醋酸分子就保持至少一組 H⁺ + CH₃COO⁻
           if (spId === 'H' || spId === 'CH3COO') {
             const hasVisibleAceticAcid = Math.floor((eqState.species['CH3COOH'] || 0) / MOLES_PER_PARTICLE) > 0;
             if (hasVisibleAceticAcid && targetCount === 0) {
               targetCount = 1;
             }
+          }
+
+          // 教學視覺保障 2：醋酸根水解——有醋酸根就保持至少一組 CH₃COOH + OH⁻
+          // Kb ≈ 5.6e-10，水解不為零，以一組粒子呈現讓教師說明平衡概念
+          if (spId === 'OH') {
+            const hasAcetate = (eqState.species['CH3COO'] || 0) >= MOLES_PER_PARTICLE;
+            if (hasAcetate && targetCount === 0) targetCount = 1;
+          }
+          if (spId === 'CH3COOH') {
+            const hasAcetate = (eqState.species['CH3COO'] || 0) >= MOLES_PER_PARTICLE;
+            const noExternalAcid = Math.floor((eqState.species['CH3COOH'] || 0) / MOLES_PER_PARTICLE) === 0;
+            if (hasAcetate && noExternalAcid && targetCount === 0) targetCount = 1;
           }
 
           const existing = particlesByType[spId] || [];
@@ -348,11 +467,83 @@
       }, [eqState.species, volume]);
 
       // Canvas 渲染與物理
+      const flashRef = useRef([]); // 反應閃光特效 [{x,y,r,alpha,color}]
+
       useEffect(() => {
         const canvas = canvasRef.current;
         const ctx = canvas.getContext('2d');
         let isRunning = true;
         let time = 0;
+
+        // --- 動態反應規則 ---
+        // 每條規則：碰撞時按 prob 機率觸發結合，生成 product 粒子
+        // dissociate：product 粒子每幀以 dissocProb 機率自發解離回 reactants
+        const REACTION_RULES = [
+          {
+            // 醋酸結合：H⁺ + CH₃COO⁻ → CH₃COOH  (Ka小，結合機率高)
+            r1: 'H', r2: 'CH3COO', product: 'CH3COOH',
+            prob: 0.35,           // 靠近時結合機率（每幀）
+            dissocProb: 0.004,    // 醋酸自發解離機率（Ka=1.8e-5，小→慢）
+            flashColor: '#6366f1'
+          },
+          {
+            // 醋酸根水解：OH⁻ + CH₃COOH → CH₃COO⁻ + H₂O（視覺上：OH⁻靠近CH₃COOH結合）
+            // 反向：CH₃COO⁻水解生成OH⁻，用解離模擬（極低機率）
+            r1: 'OH', r2: 'CH3COOH', product: null, // 直接互相消滅，產物由粒子系統保障
+            prob: 0.20,
+            dissocProb: 0,
+            flashColor: '#10b981'
+          },
+        ];
+
+        // 可由 console 即時調整的參數
+        window._SIM = window._SIM || { cooldown: 20, dissocMin: 20, dissocMax: 25 };
+
+        // 結合反應：移除兩粒子，在原位生成 product，給予隨機大速度飛離
+        const combine = (particles, i, j, productType, x, y, color) => {
+          const removed = new Set([i, j]);
+          const next = particles.filter((_, idx) => !removed.has(idx));
+          if (productType) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = 4 + Math.random() * 2;
+            const { cooldown, dissocMin, dissocMax } = window._SIM;
+            next.push({
+              id: Math.random().toString(36).substr(2,9),
+              type: productType,
+              charge: SPECIES_DEFS[productType].charge,
+              x, y,
+              vx: Math.cos(angle) * speed,
+              vy: Math.sin(angle) * speed,
+              reactionCooldown: cooldown,
+              dissocTimer: Math.floor(dissocMin + Math.random() * (dissocMax - dissocMin)),
+            });
+          }
+          flashRef.current.push({ x, y, r: 18, alpha: 1.0, color });
+          return next;
+        };
+
+        // 解離反應：移除 parent，兩個子粒子以相反方向飛出
+        const dissociate = (particles, i, rule, x, y) => {
+          const next = particles.filter((_, idx) => idx !== i);
+          const angle = Math.random() * Math.PI * 2;
+          const speed = 4 + Math.random() * 2;
+          [rule.r1, rule.r2].forEach((t, idx) => {
+            const dir = idx === 0 ? 1 : -1;
+            next.push({
+              id: Math.random().toString(36).substr(2,9),
+              type: t,
+              charge: SPECIES_DEFS[t].charge,
+              x: x + Math.cos(angle) * dir * 16,
+              y: y + Math.sin(angle) * dir * 16,
+              vx: Math.cos(angle) * dir * speed,
+              vy: Math.sin(angle) * dir * speed,
+              reactionCooldown: 120,
+              noAttractTimer: 180, // 3秒內不受異性吸引，先飛散到各處
+            });
+          });
+          flashRef.current.push({ x, y, r: 22, alpha: 1.0, color: rule.flashColor });
+          return next;
+        };
 
         const resizeCanvas = () => {
           const parent = containerRef.current;
@@ -380,12 +571,15 @@
 
           ctx.clearRect(0, 0, width, height);
 
-          // 1. 物理游離粒子
-          const particles = particlesRef.current;
+          // 1. 物理與動態反應
+          let particles = particlesRef.current;
           
           if (!isPausedRef.current) {
+            // 1a. 移動與庫侖力
             for (let i = 0; i < particles.length; i++) {
               let p1 = particles[i];
+              if (p1.reactionCooldown > 0) p1.reactionCooldown--;
+              if (p1.noAttractTimer > 0) p1.noAttractTimer--;
               p1.vx += (Math.random() - 0.5) * THERMAL_JITTER;
               p1.vy += (Math.random() - 0.5) * THERMAL_JITTER;
               if (p1.y < waterTop) p1.vy += 0.5;
@@ -397,7 +591,14 @@
                   let dist = Math.sqrt(distSq);
                   if (dist < 1) dist = 1;
 
-                  let force = (K_COULOMB * p1.charge * p2.charge) / distSq;
+                  // 庫侖力：若任一方處於 noAttractTimer，暫停異性吸引（只保留排斥）
+                  const suppressAttract = (p1.noAttractTimer > 0) || (p2.noAttractTimer > 0);
+                  let force;
+                  if (suppressAttract && p1.charge * p2.charge < 0) {
+                    force = 0; // 暫時關閉異性吸引，讓粒子靠熱運動散開
+                  } else {
+                    force = (K_COULOMB * p1.charge * p2.charge) / distSq;
+                  }
                   let minDist = BASE_PARTICLE_RADIUS * 2.2;
                   if (dist < minDist) force += K_REPULSION * (minDist - dist);
 
@@ -415,7 +616,72 @@
               if (p1.x > width - BASE_PARTICLE_RADIUS) { p1.x = width - BASE_PARTICLE_RADIUS; p1.vx *= -0.8; }
               if (p1.y > solidBaseY - BASE_PARTICLE_RADIUS) { p1.y = solidBaseY - BASE_PARTICLE_RADIUS; p1.vy *= -0.8; }
             }
+
+            // 1b. 碰撞結合反應（每幀先 shuffle，每幀最多一次，確保公平隨機選粒子）
+            const shuffled = [...particles];
+            for (let k = shuffled.length - 1; k > 0; k--) {
+              const m = Math.floor(Math.random() * (k + 1));
+              [shuffled[k], shuffled[m]] = [shuffled[m], shuffled[k]];
+            }
+            outer: for (let rule of REACTION_RULES) {
+              for (let si = 0; si < shuffled.length; si++) {
+                let p1 = shuffled[si];
+                if (p1.type !== rule.r1 || (p1.reactionCooldown||0) > 0) continue;
+                for (let sj = 0; sj < shuffled.length; sj++) {
+                  if (si === sj) continue;
+                  let p2 = shuffled[sj];
+                  if (p2.type !== rule.r2 || (p2.reactionCooldown||0) > 0) continue;
+                  let dx = p2.x - p1.x, dy = p2.y - p1.y;
+                  let dist = Math.sqrt(dx*dx + dy*dy);
+                  if (dist < BASE_PARTICLE_RADIUS * 2.8 && Math.random() < rule.prob) {
+                    let mx = (p1.x+p2.x)/2, my = (p1.y+p2.y)/2;
+                    const oi = particles.findIndex(p => p.id === p1.id);
+                    const oj = particles.findIndex(p => p.id === p2.id);
+                    if (oi !== -1 && oj !== -1) {
+                      particles = combine(particles, oi, oj, rule.product, mx, my, rule.flashColor);
+                      particlesRef.current = particles;
+                    }
+                    break outer;
+                  }
+                }
+              }
+            }
+
+            // 1c. 自發解離（每幀最多一次，隨機順序避免偏向同一顆）
+            const dissocCandidates = [];
+            for (let i = 0; i < particles.length; i++) {
+              let p = particles[i];
+              if ((p.reactionCooldown||0) > 0) continue;
+              const rule = REACTION_RULES.find(r => r.product === p.type && r.dissocProb > 0);
+              if (!rule) continue;
+              if (p.dissocTimer !== undefined) {
+                p.dissocTimer--;
+                if (p.dissocTimer <= 0) dissocCandidates.push({ i, rule });
+              }
+            }
+            if (dissocCandidates.length > 0) {
+              // 隨機挑一顆解離
+              const pick = dissocCandidates[Math.floor(Math.random() * dissocCandidates.length)];
+              const p = particles[pick.i];
+              particles = dissociate(particles, pick.i, pick.rule, p.x, p.y);
+              particlesRef.current = particles;
+            }
           }
+
+          // 繪製閃光特效
+          const activeFlash = [];
+          for (let f of flashRef.current) {
+            f.alpha -= 0.07;
+            if (f.alpha > 0) {
+              ctx.beginPath();
+              ctx.arc(f.x, f.y, f.r * (1.5 - f.alpha), 0, Math.PI*2);
+              ctx.strokeStyle = f.color + Math.floor(f.alpha*255).toString(16).padStart(2,'0');
+              ctx.lineWidth = 2.5;
+              ctx.stroke();
+              activeFlash.push(f);
+            }
+          }
+          flashRef.current = activeFlash;
 
           // 繪製粒子
           for (let p of particles) {
@@ -506,7 +772,8 @@
         particlesRef.current = [];
         snowflakesRef.current = [];
         bubblesRef.current = [];
-        setIsPaused(false); // 重置時自動解除暫停
+        flashRef.current = [];
+        setIsPaused(false);
       };
 
       const handleAddElectrolyte = (electrolyteId) => {
@@ -609,14 +876,7 @@
                 </div>
                 <canvas ref={canvasRef} className="absolute inset-0 w-full h-full pointer-events-none z-20" />
                 
-                {/* 暫停時的視覺提示 */}
-                {isPaused && (
-                  <div className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none">
-                    <div className="bg-black/20 text-white backdrop-blur-sm px-6 py-2 rounded-full font-bold tracking-widest text-lg shadow-lg">
-                      已暫停
-                    </div>
-                  </div>
-                )}
+
               </div>
             </div>
 
@@ -641,9 +901,10 @@
                 <div className="bg-emerald-50 text-emerald-800 p-2 rounded text-xs leading-relaxed mt-3">
                   <strong>💡 動態平衡觀察指南：</strong>
                   <ol className="list-decimal pl-4 mt-1">
-                    <li>加入 <b>冰醋酸</b>，觀察畫面中是不是永遠保持「至少一組」 H⁺ 與 CH₃COO⁻ 解離在水中。</li>
-                    <li>加入 <b>碳酸鈉</b> 消耗 H⁺ 產生氣泡，醋酸分子會立刻「解離出下一個」來補充，維持那一組解離！</li>
-                    <li>清空後，改加 <b>醋酸鈉</b>，再加入 <b>鹽酸</b>，觀察它們如何快速結合回長條狀的醋酸分子！</li>
+                    <li>加入 <b>冰醋酸</b>，觀察畫面中永遠保持「至少一組」H⁺ 與 CH₃COO⁻ 在水中動態解離。</li>
+                    <li>加入 <b>醋酸鈉</b>，只會看到 Na⁺ 和 CH₃COO⁻，以及**極少量**（一組）的 CH₃COOH 與 OH⁻——這代表醋酸根水解（Kb≈5.6×10⁻¹⁰）雖然極微小，但不為零，溶液因此微鹼。</li>
+                    <li>加入 <b>碳酸鈉</b>，CO₃²⁻ 會顯著水解（Kb≈2.1×10⁻⁴），產生 HCO₃⁻ 和 OH⁻，溶液明顯偏鹼。</li>
+                    <li>清空後，先加 <b>醋酸鈉</b> 再加 <b>鹽酸</b>，觀察 H⁺ 與 CH₃COO⁻ 快速結合回醋酸分子。</li>
                   </ol>
                 </div>
               </div>
