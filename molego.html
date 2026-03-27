@@ -3,13 +3,23 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>3D 分子建構器</title>
+    <title>3D 分子建構器V6</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 
     <style>
-        body { margin: 0; overflow: hidden; background-color: #1a1a2e; touch-action: none; font-family: sans-serif; }
+        /* 【最佳化】加入 -webkit-touch-callout 與 user-select: none，防止手機長按選單與文字反白 */
+        body { 
+            margin: 0; overflow: hidden; background-color: #1a1a2e; 
+            touch-action: none; font-family: sans-serif; 
+            -webkit-touch-callout: none; 
+            -webkit-user-select: none; 
+            -khtml-user-select: none; 
+            -moz-user-select: none; 
+            -ms-user-select: none; 
+            user-select: none; 
+        }
         #canvas-container { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; z-index: 1; background-color: #1a1a2e; }
         #ui-layer { position: absolute; z-index: 10; width: 100%; height: 100%; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; }
         .pointer-events-auto { pointer-events: auto; }
@@ -29,7 +39,7 @@
 
     <div id="canvas-container"></div>
 
-    <!-- 【新增】說明視窗 Modal -->
+    <!-- 說明視窗 Modal -->
     <div id="info-modal" class="hidden absolute inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center pointer-events-auto backdrop-blur-sm transition-opacity">
         <div class="bg-gray-800 text-white p-6 rounded-2xl max-w-md w-11/12 shadow-2xl border border-gray-600 modal-animate relative">
             <button onclick="toggleInfo()" class="absolute top-4 right-4 text-gray-400 hover:text-white text-2xl leading-none">&times;</button>
@@ -55,7 +65,6 @@
         <div class="p-4 flex justify-between items-center bg-gray-900 bg-opacity-80 pointer-events-auto text-white backdrop-blur-sm shadow-md">
             <div class="flex items-center gap-2">
                 <h1 class="text-lg font-bold">🧪 3D 分子建構器</h1>
-                <!-- 【新增】說明按鈕 -->
                 <button onclick="toggleInfo()" class="bg-gray-700 hover:bg-gray-600 text-gray-200 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold border border-gray-500 transition-colors" title="使用說明">?</button>
             </div>
             <div class="flex gap-2">
@@ -78,7 +87,6 @@
                 <button onclick="setTool('camera')" id="tool-camera" class="tool-btn active flex-none bg-gray-800 text-gray-200 border border-gray-600 px-4 py-2 rounded-xl flex flex-col items-center snap-center">
                     <span class="text-xl">✋</span><span class="text-xs mt-1">旋轉/縮放</span>
                 </button>
-                <!-- 【新增】移動原子工具 -->
                 <button onclick="setTool('drag')" id="tool-drag" class="tool-btn flex-none bg-gray-800 text-gray-200 border border-gray-600 px-4 py-2 rounded-xl flex flex-col items-center snap-center">
                     <span class="text-xl">🤏</span><span class="text-xs mt-1">移動原子</span>
                 </button>
@@ -433,6 +441,9 @@
 
         // --- 3. 初始化 Three.js ---
         function init() {
+            // 【最佳化】阻止右鍵選單以避免行動裝置長按時干擾
+            document.addEventListener('contextmenu', event => event.preventDefault());
+
             const container = document.getElementById('canvas-container');
             scene = new THREE.Scene();
 
@@ -449,6 +460,8 @@
             camera.position.set(0, 0, 15);
 
             renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+            // 【最佳化】支援 Retina 高解析度螢幕，讓行動裝置上的 3D 渲染不再模糊！
+            renderer.setPixelRatio(window.devicePixelRatio);
             renderer.setSize(window.innerWidth, window.innerHeight);
             renderer.setClearColor(0x000000, 0); 
             container.appendChild(renderer.domElement);
@@ -458,7 +471,7 @@
             controls.dampingFactor = 0.05;
 
             renderer.domElement.addEventListener('pointerdown', onPointerDown);
-            renderer.domElement.addEventListener('pointermove', onPointerMove); // 【新增】拖曳原子監聽
+            renderer.domElement.addEventListener('pointermove', onPointerMove); 
             renderer.domElement.addEventListener('pointerup', onPointerUp);
             window.addEventListener('resize', onWindowResize);
 
@@ -475,9 +488,8 @@
             let intersects = raycaster.intersectObjects(interactables, true);
             dragStartAtomId = intersects.length > 0 ? intersects[0].object.userData.id : null;
 
-            // 【新增】移動原子邏輯：抓取原子並建立與相機平行的拖曳平面
             if (currentTool === 'drag' && dragStartAtomId) {
-                controls.enabled = false; // 拖曳時暫停畫面旋轉
+                controls.enabled = false; 
                 draggedAtom = atoms.find(a => a.id === dragStartAtomId);
                 
                 let cameraDir = new THREE.Vector3();
@@ -491,7 +503,6 @@
             }
         }
 
-        // 【新增】滑鼠移動處理：更新拖曳原子位置
         function onPointerMove(event) {
             if (!draggedAtom) return;
 
@@ -503,7 +514,6 @@
             if (raycaster.ray.intersectPlane(dragPlane, intersection)) {
                 draggedAtom.mesh.position.copy(intersection.sub(dragOffset));
                 
-                // 即時更新所有連接到這顆原子的化學鍵
                 bonds.forEach(b => {
                     if (b.atom1_id === draggedAtom.id || b.atom2_id === draggedAtom.id) {
                         updateBondMesh(b);
@@ -513,10 +523,8 @@
         }
 
         function onPointerUp(event) {
-            // 【新增】釋放拖曳原子
             if (draggedAtom) {
                 draggedAtom = null;
-                // 注意：在移動模式下保持 OrbitControls 關閉，避免誤觸旋轉
                 return;
             }
 
@@ -532,7 +540,6 @@
 
             const intersects = raycaster.intersectObjects(interactables, true);
 
-            // 若為視角工具或拖曳工具，點擊空白處或原子的處理交給相機/拖曳控制
             if (currentTool === 'camera' || currentTool === 'drag') return; 
 
             if (isDrag) {
@@ -862,7 +869,6 @@
                 if (bondSelection) { highlightAtom(bondSelection, false); bondSelection = null; }
                 if (deleteBondSelection) { highlightAtom(deleteBondSelection, false); deleteBondSelection = null; }
                 
-                // 【修改】拖曳原子時也先關閉視角控制，以防誤觸旋轉
                 controls.enabled = (tool === 'camera'); 
             }
         }
@@ -892,7 +898,6 @@
         function toggleLabels() {
             showLabels = !showLabels;
             atoms.forEach(a => {
-                // 符號模式下標籤必定顯示，不受開關影響
                 if (currentStyle !== 'symbol_mode') {
                     a.sprite.visible = showLabels;
                 }
