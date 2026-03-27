@@ -9,6 +9,11 @@
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 
     <style>
+        /* 定義動態高度變數，預設為 100vh */
+        :root {
+            --app-height: 100vh;
+        }
+
         body { 
             margin: 0; overflow: hidden; background-color: #1a1a2e; 
             touch-action: none; font-family: sans-serif; 
@@ -19,12 +24,15 @@
             -ms-user-select: none; 
             user-select: none; 
             width: 100vw;
-            height: 100vh;
-            height: 100dvh; 
+            /* 【修正】使用 JS 計算出的絕對準確高度，徹底解決 iPad 橫向載入被裁切的問題 */
+            height: 100vh; 
+            height: var(--app-height); 
         }
         
         #canvas-container { width: 100%; height: 100%; position: absolute; top: 0; left: 0; z-index: 1; background-color: #1a1a2e; }
-        #ui-layer { position: absolute; top: 0; bottom: 0; left: 0; right: 0; z-index: 10; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; }
+        
+        /* 【修正】將 UI 層改為 fixed 定位，能更好地抗禦 iOS Safari 的滾動與高度異常 */
+        #ui-layer { position: fixed; top: 0; bottom: 0; left: 0; right: 0; z-index: 10; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; }
         
         .pointer-events-auto { pointer-events: auto; }
         .no-scrollbar::-webkit-scrollbar { display: none; }
@@ -66,7 +74,7 @@
     <div id="ui-layer">
         <div class="p-4 flex justify-between items-center bg-gray-900 bg-opacity-80 pointer-events-auto text-white backdrop-blur-sm shadow-md">
             <div class="flex items-center gap-2">
-                <h1 class="text-lg font-bold">🧪 3D 分子建構器V9</h1>
+                <h1 class="text-lg font-bold">🧪 3D 分子建構器V11</h1>
                 <button onclick="toggleInfo()" class="bg-gray-700 hover:bg-gray-600 text-gray-200 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold border border-gray-500 transition-colors" title="使用說明">?</button>
             </div>
             <div class="flex gap-2">
@@ -150,6 +158,7 @@
         let deleteBondSelection = null; 
         let dragStartAtomId = null; 
 
+        // 移動原子的狀態變數
         let draggedAtom = null;
         let dragPlane = new THREE.Plane();
         let dragOffset = new THREE.Vector3();
@@ -442,6 +451,12 @@
             return v_sum.multiplyScalar(-1).normalize();
         }
 
+        // --- 【新增】全域高度更新函數，專治 iOS Safari ---
+        function updateAppHeight() {
+            // 抓取真實的螢幕可視高度，並更新至 CSS 變數
+            document.documentElement.style.setProperty('--app-height', `${window.innerHeight}px`);
+        }
+
         // --- 3. 初始化 Three.js ---
         function init() {
             document.addEventListener('contextmenu', event => event.preventDefault());
@@ -474,8 +489,20 @@
             renderer.domElement.addEventListener('pointerdown', onPointerDown);
             renderer.domElement.addEventListener('pointermove', onPointerMove); 
             renderer.domElement.addEventListener('pointerup', onPointerUp);
+            
             window.addEventListener('resize', onWindowResize);
+            
+            // 【新增】針對行動裝置翻轉螢幕的特殊處理
+            window.addEventListener('orientationchange', () => {
+                // 延遲 100ms 等 Safari 重新計算好版面後再刷新
+                setTimeout(() => {
+                    updateAppHeight();
+                    onWindowResize();
+                }, 100);
+            });
 
+            // 初始化時先強制抓取一次正確高度
+            updateAppHeight();
             buildUI();
             animate();
         }
@@ -699,11 +726,10 @@
             return sprite;
         }
 
-        // 【更新】負責統一切換網格與標籤可見度的函數，實現完美替換
         function updateVisibility() {
             atoms.forEach(a => {
                 a.sprite.visible = showLabels;
-                a.mesh.material.visible = !showLabels; // 顯示標籤時，隱藏 3D 圓球
+                a.mesh.material.visible = !showLabels; 
             });
             bonds.forEach(b => updateBondMesh(b));
         }
@@ -728,7 +754,7 @@
             let atomObj = { id: atomId, element: element, mesh: mesh, sprite: sprite, x: position.x, y: position.y, z: position.z };
             atoms.push(atomObj);
             
-            updateVisibility(); // 建立後同步目前顯示狀態
+            updateVisibility();
             return atomObj;
         }
 
@@ -769,7 +795,6 @@
             if (Math.abs(direction.y) > 0.9) up.set(1, 0, 0); 
             let perpendicular = new THREE.Vector3().crossVectors(direction, up).normalize();
 
-            // 【更新】如果顯示標籤，所有連線強制變細，呈現 2D 骨架風格
             let bondRadius = showLabels ? 0.04 : (isIonic ? 0.06 : 0.12);
 
             if (isIonic) {
@@ -803,7 +828,6 @@
                 }
             } 
             else {
-                // 【更新】如果顯示標籤，多重鍵的距離也縮小，避免看起來笨重
                 let offsetDist = showLabels ? 0.15 : 0.3; 
                 let offsets = [];
                 if (bondObj.order === 1) offsets = [0];
@@ -902,7 +926,6 @@
             updateVisibility();
         }
 
-        // 【修改】控制標籤顯示開關，並連動隱藏實體球模型
         function toggleLabels() {
             showLabels = !showLabels;
             let btn = document.getElementById('btn-labels');
@@ -1003,8 +1026,14 @@
         }
 
         // --- 8. 系統循環 ---
+        function updateAppHeight() {
+            document.documentElement.style.setProperty('--app-height', `${window.innerHeight}px`);
+        }
+
         function onWindowResize() {
-            camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix();
+            updateAppHeight();
+            camera.aspect = window.innerWidth / window.innerHeight; 
+            camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
         }
 
