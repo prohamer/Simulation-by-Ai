@@ -9,10 +9,6 @@
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 
     <style>
-        :root {
-            --app-height: 100vh;
-        }
-
         body { 
             margin: 0; overflow: hidden; background-color: #1a1a2e; 
             touch-action: none; font-family: sans-serif; 
@@ -23,13 +19,12 @@
             -ms-user-select: none; 
             user-select: none; 
             width: 100vw;
-            height: 100vh; 
-            height: var(--app-height); 
+            height: 100vh;
+            height: 100dvh; 
         }
         
         #canvas-container { width: 100%; height: 100%; position: absolute; top: 0; left: 0; z-index: 1; background-color: #1a1a2e; }
-        
-        #ui-layer { position: fixed; top: 0; bottom: 0; left: 0; right: 0; z-index: 10; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; }
+        #ui-layer { position: absolute; top: 0; bottom: 0; left: 0; right: 0; z-index: 10; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; }
         
         .pointer-events-auto { pointer-events: auto; }
         .no-scrollbar::-webkit-scrollbar { display: none; }
@@ -71,7 +66,7 @@
     <div id="ui-layer">
         <div class="p-4 flex justify-between items-center bg-gray-900 bg-opacity-80 pointer-events-auto text-white backdrop-blur-sm shadow-md">
             <div class="flex items-center gap-2">
-                <h1 class="text-lg font-bold">🧪 3D 分子建構器V12</h1>
+                <h1 class="text-lg font-bold">🧪 3D 分子建構器V10(需直向使用)</h1>
                 <button onclick="toggleInfo()" class="bg-gray-700 hover:bg-gray-600 text-gray-200 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold border border-gray-500 transition-colors" title="使用說明">?</button>
             </div>
             <div class="flex gap-2">
@@ -447,12 +442,6 @@
             return v_sum.multiplyScalar(-1).normalize();
         }
 
-        // --- 【修正核心】更新 App 高度，取偵測高度的 90% 以確保工具列完整顯示 ---
-        function updateAppHeight() {
-            const h = (window.visualViewport ? window.visualViewport.height : window.innerHeight);
-            document.documentElement.style.setProperty('--app-height', `${h * 0.9}px`);
-        }
-
         // --- 3. 初始化 Three.js ---
         function init() {
             document.addEventListener('contextmenu', event => event.preventDefault());
@@ -485,29 +474,7 @@
             renderer.domElement.addEventListener('pointerdown', onPointerDown);
             renderer.domElement.addEventListener('pointermove', onPointerMove); 
             renderer.domElement.addEventListener('pointerup', onPointerUp);
-            
             window.addEventListener('resize', onWindowResize);
-            
-            // 【修正①】多時間點延遲處理 orientationchange，應對 Safari 分批重算版面的特性
-            window.addEventListener('orientationchange', () => {
-                setTimeout(() => { updateAppHeight(); onWindowResize(); }, 100);
-                setTimeout(() => { updateAppHeight(); onWindowResize(); }, 300);
-                setTimeout(() => { updateAppHeight(); onWindowResize(); }, 600);
-            });
-
-            // 【修正②】使用 visualViewport API 監聽，這是 iOS Safari 上最準確的視窗大小事件
-            if (window.visualViewport) {
-                window.visualViewport.addEventListener('resize', () => {
-                    updateAppHeight();
-                    onWindowResize();
-                });
-            }
-
-            // 【修正③】初始化時多次延遲呼叫，確保橫向直接載入時也能抓到正確高度
-            updateAppHeight();
-            setTimeout(updateAppHeight, 50);
-            setTimeout(updateAppHeight, 300);
-            setTimeout(updateAppHeight, 600);
 
             buildUI();
             animate();
@@ -559,7 +526,6 @@
         function onPointerUp(event) {
             if (draggedAtom) {
                 draggedAtom = null;
-                controls.enabled = (currentTool === 'camera');
                 return;
             }
 
@@ -733,10 +699,11 @@
             return sprite;
         }
 
+        // 【更新】負責統一切換網格與標籤可見度的函數，實現完美替換
         function updateVisibility() {
             atoms.forEach(a => {
                 a.sprite.visible = showLabels;
-                a.mesh.material.visible = !showLabels; 
+                a.mesh.material.visible = !showLabels; // 顯示標籤時，隱藏 3D 圓球
             });
             bonds.forEach(b => updateBondMesh(b));
         }
@@ -761,7 +728,7 @@
             let atomObj = { id: atomId, element: element, mesh: mesh, sprite: sprite, x: position.x, y: position.y, z: position.z };
             atoms.push(atomObj);
             
-            updateVisibility();
+            updateVisibility(); // 建立後同步目前顯示狀態
             return atomObj;
         }
 
@@ -802,6 +769,7 @@
             if (Math.abs(direction.y) > 0.9) up.set(1, 0, 0); 
             let perpendicular = new THREE.Vector3().crossVectors(direction, up).normalize();
 
+            // 【更新】如果顯示標籤，所有連線強制變細，呈現 2D 骨架風格
             let bondRadius = showLabels ? 0.04 : (isIonic ? 0.06 : 0.12);
 
             if (isIonic) {
@@ -835,6 +803,7 @@
                 }
             } 
             else {
+                // 【更新】如果顯示標籤，多重鍵的距離也縮小，避免看起來笨重
                 let offsetDist = showLabels ? 0.15 : 0.3; 
                 let offsets = [];
                 if (bondObj.order === 1) offsets = [0];
@@ -933,6 +902,7 @@
             updateVisibility();
         }
 
+        // 【修改】控制標籤顯示開關，並連動隱藏實體球模型
         function toggleLabels() {
             showLabels = !showLabels;
             let btn = document.getElementById('btn-labels');
@@ -1034,13 +1004,8 @@
 
         // --- 8. 系統循環 ---
         function onWindowResize() {
-            const w = window.innerWidth;
-            const rawH = window.visualViewport ? window.visualViewport.height : window.innerHeight;
-            const h = rawH * 0.9;
-            updateAppHeight();
-            camera.aspect = w / h;
-            camera.updateProjectionMatrix();
-            renderer.setSize(w, h);
+            camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
         }
 
         function animate() {
