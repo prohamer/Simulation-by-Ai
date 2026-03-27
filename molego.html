@@ -19,15 +19,45 @@
         .tool-btn.active { background-color: #3b82f6; color: white; border-color: #2563eb; transform: scale(1.05); }
         .element-btn { transition: all 0.2s; border-width: 2px; }
         .element-btn.active { border-color: #3b82f6; transform: scale(1.1); box-shadow: 0 0 10px rgba(59,130,246,0.5); }
+        
+        /* 說明視窗動畫 */
+        @keyframes fadeIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+        .modal-animate { animation: fadeIn 0.2s ease-out forwards; }
     </style>
 </head>
 <body>
 
     <div id="canvas-container"></div>
 
+    <!-- 【新增】說明視窗 Modal -->
+    <div id="info-modal" class="hidden absolute inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center pointer-events-auto backdrop-blur-sm transition-opacity">
+        <div class="bg-gray-800 text-white p-6 rounded-2xl max-w-md w-11/12 shadow-2xl border border-gray-600 modal-animate relative">
+            <button onclick="toggleInfo()" class="absolute top-4 right-4 text-gray-400 hover:text-white text-2xl leading-none">&times;</button>
+            <h2 class="text-xl font-bold mb-4 flex items-center gap-2">📖 使用說明與限制</h2>
+            <div class="space-y-3 text-sm text-gray-300 leading-relaxed">
+                <p>歡迎使用 3D 分子建構器！您可以透過下方工具列來建立、連線與修改分子結構。</p>
+                <ul class="list-disc pl-5 space-y-1">
+                    <li><strong>連線/換鍵：</strong>點擊或拖曳兩原子可建立連線；再次點擊連線可切換雙鍵/三鍵。</li>
+                    <li><strong>最佳化：</strong>點擊「✨ 最佳化」將利用力場引擎，依據 VSEPR 理論自動推算分子的立體構型。</li>
+                </ul>
+                <div class="mt-4 p-3 bg-yellow-900 bg-opacity-30 border border-yellow-700 rounded-lg">
+                    <p class="text-yellow-400 font-bold mb-1 flex items-center gap-1">⚠️ 系統力場限制聲明</p>
+                    <p class="text-xs text-yellow-200">本系統採用簡化之共價與靜電力場模型，旨在展示基礎分子之空間構型。<strong>不適用於建構「有機金屬 (Organometallics)」、「純金屬晶格」或「巨型離子晶體 (Ionic Crystals)」</strong>。由於此類結構涉及複雜之多中心鍵結或整體晶格能，若強制執行「最佳化」，將導致結構變形或解體。</p>
+                </div>
+            </div>
+            <div class="mt-6 flex justify-end">
+                <button onclick="toggleInfo()" class="bg-blue-600 hover:bg-blue-500 px-5 py-2 rounded-lg text-sm font-semibold transition-colors">了解</button>
+            </div>
+        </div>
+    </div>
+
     <div id="ui-layer">
         <div class="p-4 flex justify-between items-center bg-gray-900 bg-opacity-80 pointer-events-auto text-white backdrop-blur-sm shadow-md">
-            <h1 class="text-lg font-bold">🧪 3D 分子建構器</h1>
+            <div class="flex items-center gap-2">
+                <h1 class="text-lg font-bold">🧪 3D 分子建構器</h1>
+                <!-- 【新增】說明按鈕 -->
+                <button onclick="toggleInfo()" class="bg-gray-700 hover:bg-gray-600 text-gray-200 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold border border-gray-500 transition-colors" title="使用說明">?</button>
+            </div>
             <div class="flex gap-2">
                 <button onclick="exportPNG()" class="bg-purple-600 hover:bg-purple-500 px-3 py-1.5 rounded text-sm font-semibold shadow transition-colors">📸 PNG</button>
                 <button onclick="exportMC()" class="bg-green-600 hover:bg-green-500 px-3 py-1.5 rounded text-sm font-semibold shadow transition-colors">⬇️ .mc</button>
@@ -41,14 +71,16 @@
                 <button onclick="setStyle('ball_and_stick')" id="style-ball" class="bg-gray-700 text-white px-3 py-1 rounded-full text-xs active bg-blue-600 transition-colors">球棍模型</button>
                 <button onclick="setStyle('atom_mode')" id="style-atom" class="bg-gray-700 text-white px-3 py-1 rounded-full text-xs transition-colors">原子模式</button>
                 <button onclick="setStyle('spacefill')" id="style-space" class="bg-gray-700 text-white px-3 py-1 rounded-full text-xs transition-colors">空間填充</button>
-                <div class="w-px h-6 bg-gray-600 mx-1"></div> <!-- 分隔線 -->
-                <!-- 【全新】將符號模式改為獨立的「顯示標籤」開關 -->
                 <button onclick="toggleLabels()" id="btn-labels" class="bg-gray-700 text-white px-3 py-1 rounded-full text-xs transition-colors">🏷️ 顯示標籤</button>
             </div>
 
             <div class="flex gap-3 overflow-x-auto no-scrollbar px-2 mb-4 snap-x">
                 <button onclick="setTool('camera')" id="tool-camera" class="tool-btn active flex-none bg-gray-800 text-gray-200 border border-gray-600 px-4 py-2 rounded-xl flex flex-col items-center snap-center">
                     <span class="text-xl">✋</span><span class="text-xs mt-1">旋轉/縮放</span>
+                </button>
+                <!-- 【新增】移動原子工具 -->
+                <button onclick="setTool('drag')" id="tool-drag" class="tool-btn flex-none bg-gray-800 text-gray-200 border border-gray-600 px-4 py-2 rounded-xl flex flex-col items-center snap-center">
+                    <span class="text-xl">🤏</span><span class="text-xs mt-1">移動原子</span>
                 </button>
                 <button onclick="setTool('add')" id="tool-add" class="tool-btn flex-none bg-gray-800 text-gray-200 border border-gray-600 px-4 py-2 rounded-xl flex flex-col items-center snap-center">
                     <span class="text-xl">➕</span><span class="text-xs mt-1">加原子</span>
@@ -99,16 +131,28 @@
         let currentTool = 'camera'; 
         let currentElement = 'C';
         let currentStyle = 'ball_and_stick'; 
-        let showLabels = false; // 標籤開關狀態
+        let showLabels = false; 
         let bondSelection = null; 
         let deleteBondSelection = null; 
         let dragStartAtomId = null; 
+
+        // 移動原子的狀態變數
+        let draggedAtom = null;
+        let dragPlane = new THREE.Plane();
+        let dragOffset = new THREE.Vector3();
 
         const raycaster = new THREE.Raycaster();
         const mouse = new THREE.Vector2();
         let pointerDownPos = new THREE.Vector2();
         let optimizationFrames = 0;
 
+        // --- 視窗控制 ---
+        function toggleInfo() {
+            const modal = document.getElementById('info-modal');
+            modal.classList.toggle('hidden');
+        }
+
+        // --- 價數與配位數檢查 ---
         function getAtomValencyInfo(atomId) {
             let covalent = 0;
             let total = 0;
@@ -414,6 +458,7 @@
             controls.dampingFactor = 0.05;
 
             renderer.domElement.addEventListener('pointerdown', onPointerDown);
+            renderer.domElement.addEventListener('pointermove', onPointerMove); // 【新增】拖曳原子監聽
             renderer.domElement.addEventListener('pointerup', onPointerUp);
             window.addEventListener('resize', onWindowResize);
 
@@ -429,9 +474,52 @@
             let interactables = atoms.map(a => a.mesh);
             let intersects = raycaster.intersectObjects(interactables, true);
             dragStartAtomId = intersects.length > 0 ? intersects[0].object.userData.id : null;
+
+            // 【新增】移動原子邏輯：抓取原子並建立與相機平行的拖曳平面
+            if (currentTool === 'drag' && dragStartAtomId) {
+                controls.enabled = false; // 拖曳時暫停畫面旋轉
+                draggedAtom = atoms.find(a => a.id === dragStartAtomId);
+                
+                let cameraDir = new THREE.Vector3();
+                camera.getWorldDirection(cameraDir);
+                dragPlane.setFromNormalAndCoplanarPoint(cameraDir.negate(), draggedAtom.mesh.position);
+                
+                let intersection = new THREE.Vector3();
+                if (raycaster.ray.intersectPlane(dragPlane, intersection)) {
+                    dragOffset.copy(intersection).sub(draggedAtom.mesh.position);
+                }
+            }
+        }
+
+        // 【新增】滑鼠移動處理：更新拖曳原子位置
+        function onPointerMove(event) {
+            if (!draggedAtom) return;
+
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+            raycaster.setFromCamera(mouse, camera);
+
+            let intersection = new THREE.Vector3();
+            if (raycaster.ray.intersectPlane(dragPlane, intersection)) {
+                draggedAtom.mesh.position.copy(intersection.sub(dragOffset));
+                
+                // 即時更新所有連接到這顆原子的化學鍵
+                bonds.forEach(b => {
+                    if (b.atom1_id === draggedAtom.id || b.atom2_id === draggedAtom.id) {
+                        updateBondMesh(b);
+                    }
+                });
+            }
         }
 
         function onPointerUp(event) {
+            // 【新增】釋放拖曳原子
+            if (draggedAtom) {
+                draggedAtom = null;
+                // 注意：在移動模式下保持 OrbitControls 關閉，避免誤觸旋轉
+                return;
+            }
+
             let isDrag = pointerDownPos.distanceTo(new THREE.Vector2(event.clientX, event.clientY)) > 10;
             mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
             mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
@@ -444,7 +532,8 @@
 
             const intersects = raycaster.intersectObjects(interactables, true);
 
-            if (currentTool === 'camera') return; 
+            // 若為視角工具或拖曳工具，點擊空白處或原子的處理交給相機/拖曳控制
+            if (currentTool === 'camera' || currentTool === 'drag') return; 
 
             if (isDrag) {
                 if (intersects.length > 0 && intersects[0].object.userData.type === 'atom') {
@@ -574,7 +663,6 @@
             return baseRadius * 0.4;                         
         }
 
-        // 【更新】重新設計高對比度的立體標籤文字
         function createTextSprite(element) {
             const canvas = document.createElement('canvas');
             canvas.width = 128;
@@ -585,7 +673,6 @@
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             
-            // 使用純白文字加粗黑外框，確保在任何顏色的圓球上都高度可見
             ctx.strokeStyle = '#222222';
             ctx.lineWidth = 10;
             ctx.lineJoin = 'round';
@@ -595,11 +682,10 @@
             ctx.fillText(element, 64, 64);
 
             const texture = new THREE.CanvasTexture(canvas);
-            // depthTest = false 讓文字確保浮在球體最外層，不會被切到
             const spriteMaterial = new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false }); 
             const sprite = new THREE.Sprite(spriteMaterial);
             
-            sprite.raycast = function() {}; // 防護罩破解魔法，讓滑鼠無視文字貼圖直接點擊球體
+            sprite.raycast = function() {}; 
             
             sprite.scale.set(1.5, 1.5, 1);
             return sprite;
@@ -615,7 +701,7 @@
             mesh.position.copy(position);
             
             const sprite = createTextSprite(element);
-            sprite.visible = showLabels; // 【更新】由標籤開關決定是否顯示
+            sprite.visible = showLabels || currentStyle === 'symbol_mode'; 
             mesh.add(sprite); 
             
             let atomId = id || Math.random().toString(36).substr(2, 9);
@@ -650,6 +736,8 @@
                 child.geometry.dispose();
                 child.material.dispose();
             }
+
+            if (currentStyle !== 'ball_and_stick' && currentStyle !== 'symbol_mode') return; 
 
             let a1 = atoms.find(a => a.id === bondObj.atom1_id).mesh.position;
             let a2 = atoms.find(a => a.id === bondObj.atom2_id).mesh.position;
@@ -755,7 +843,7 @@
         // --- 6. UI 與樣式控制 ---
         function setTool(tool) {
             currentTool = tool;
-            ['camera', 'add', 'bond', 'delete-bond', 'delete'].forEach(t => {
+            ['camera', 'drag', 'add', 'bond', 'delete-bond', 'delete'].forEach(t => {
                 let btn = document.getElementById(`tool-${t}`);
                 if (btn) btn.classList.remove('active', 'bg-blue-600', 'bg-red-600', 'border-blue-500', 'border-red-500');
             });
@@ -766,11 +854,15 @@
                 activeBtn.classList.add('active', 'bg-blue-600', 'border-blue-500');
             }
             let elementBar = document.getElementById('element-bar');
-            if (tool === 'add') { elementBar.classList.remove('hidden'); controls.enabled = false; } 
-            else {
+            if (tool === 'add') { 
+                elementBar.classList.remove('hidden'); 
+                controls.enabled = false; 
+            } else {
                 elementBar.classList.add('hidden');
                 if (bondSelection) { highlightAtom(bondSelection, false); bondSelection = null; }
                 if (deleteBondSelection) { highlightAtom(deleteBondSelection, false); deleteBondSelection = null; }
+                
+                // 【修改】拖曳原子時也先關閉視角控制，以防誤觸旋轉
                 controls.enabled = (tool === 'camera'); 
             }
         }
@@ -780,19 +872,31 @@
             document.getElementById('style-ball').classList.toggle('bg-blue-600', style === 'ball_and_stick');
             document.getElementById('style-atom').classList.toggle('bg-blue-600', style === 'atom_mode');
             document.getElementById('style-space').classList.toggle('bg-blue-600', style === 'spacefill');
+            document.getElementById('style-symbol').classList.toggle('bg-blue-600', style === 'symbol_mode');
             
             atoms.forEach(a => {
-                let radius = getAtomRadius(a.element, style);
-                a.mesh.geometry.dispose();
-                a.mesh.geometry = new THREE.SphereGeometry(radius, 32, 32);
+                if (style === 'symbol_mode') {
+                    a.mesh.material.visible = false; 
+                    a.sprite.visible = true;
+                } else {
+                    a.mesh.material.visible = true; 
+                    a.sprite.visible = showLabels; 
+                    let radius = getAtomRadius(a.element, style);
+                    a.mesh.geometry.dispose();
+                    a.mesh.geometry = new THREE.SphereGeometry(radius, 32, 32);
+                }
             });
             bonds.forEach(b => updateBondMesh(b));
         }
 
-        // 【全新】控制標籤顯示開關
         function toggleLabels() {
             showLabels = !showLabels;
-            atoms.forEach(a => a.sprite.visible = showLabels);
+            atoms.forEach(a => {
+                // 符號模式下標籤必定顯示，不受開關影響
+                if (currentStyle !== 'symbol_mode') {
+                    a.sprite.visible = showLabels;
+                }
+            });
             let btn = document.getElementById('btn-labels');
             btn.classList.toggle('bg-blue-600', showLabels);
             btn.classList.toggle('bg-gray-700', !showLabels);
