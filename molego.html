@@ -3,13 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>3D 分子建構器</title>
+    <title>3D 分子建構器V9</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 
     <style>
-        /* 【修正】加入 100dvh 動態高度，徹底解決 iPad 橫向視窗高度計算錯誤問題 */
         body { 
             margin: 0; overflow: hidden; background-color: #1a1a2e; 
             touch-action: none; font-family: sans-serif; 
@@ -20,13 +19,11 @@
             -ms-user-select: none; 
             user-select: none; 
             width: 100vw;
-            height: 100vh; /* Fallback for old browsers */
-            height: 100dvh; /* 現代行動裝置動態視窗高度 */
+            height: 100vh;
+            height: 100dvh; 
         }
         
         #canvas-container { width: 100%; height: 100%; position: absolute; top: 0; left: 0; z-index: 1; background-color: #1a1a2e; }
-        
-        /* 使用絕對定位填滿四邊，配合 100dvh 保證不超出可視範圍 */
         #ui-layer { position: absolute; top: 0; bottom: 0; left: 0; right: 0; z-index: 10; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; }
         
         .pointer-events-auto { pointer-events: auto; }
@@ -69,7 +66,7 @@
     <div id="ui-layer">
         <div class="p-4 flex justify-between items-center bg-gray-900 bg-opacity-80 pointer-events-auto text-white backdrop-blur-sm shadow-md">
             <div class="flex items-center gap-2">
-                <h1 class="text-lg font-bold">🧪 3D 分子建構器V8</h1>
+                <h1 class="text-lg font-bold">🧪 3D 分子建構器</h1>
                 <button onclick="toggleInfo()" class="bg-gray-700 hover:bg-gray-600 text-gray-200 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold border border-gray-500 transition-colors" title="使用說明">?</button>
             </div>
             <div class="flex gap-2">
@@ -80,7 +77,6 @@
             </div>
         </div>
 
-        <!-- 【修正】加入 style 計算 env(safe-area-inset-bottom)，避開 iPad/iPhone 下方的 Home 控制條 -->
         <div class="bg-gray-900 bg-opacity-90 pointer-events-auto rounded-t-2xl pt-4 px-2 backdrop-blur-md shadow-lg border-t border-gray-700" 
              style="padding-bottom: max(1.5rem, env(safe-area-inset-bottom));">
             
@@ -88,6 +84,7 @@
                 <button onclick="setStyle('ball_and_stick')" id="style-ball" class="bg-gray-700 text-white px-3 py-1 rounded-full text-xs active bg-blue-600 transition-colors">球棍模型</button>
                 <button onclick="setStyle('atom_mode')" id="style-atom" class="bg-gray-700 text-white px-3 py-1 rounded-full text-xs transition-colors">原子模式</button>
                 <button onclick="setStyle('spacefill')" id="style-space" class="bg-gray-700 text-white px-3 py-1 rounded-full text-xs transition-colors">空間填充</button>
+                <div class="w-px h-6 bg-gray-600 mx-1"></div>
                 <button onclick="toggleLabels()" id="btn-labels" class="bg-gray-700 text-white px-3 py-1 rounded-full text-xs transition-colors">🏷️ 顯示標籤</button>
             </div>
 
@@ -118,7 +115,7 @@
                 </button>
             </div>
 
-            <div id="element-bar" class="flex gap-3 overflow-x-auto no-scrollbar px-2 hidden">
+            <div id="element-bar" class="flex gap-3 overflow-x-auto no-scrollbar px-2 hidden pb-2">
                 <!-- Javascript 動態產生元素按鈕 -->
             </div>
         </div>
@@ -702,6 +699,15 @@
             return sprite;
         }
 
+        // 【更新】負責統一切換網格與標籤可見度的函數，實現完美替換
+        function updateVisibility() {
+            atoms.forEach(a => {
+                a.sprite.visible = showLabels;
+                a.mesh.material.visible = !showLabels; // 顯示標籤時，隱藏 3D 圓球
+            });
+            bonds.forEach(b => updateBondMesh(b));
+        }
+
         function createAtom(element, position, id = null) {
             let elData = ELEMENTS[element];
             let radius = getAtomRadius(element, currentStyle);
@@ -712,7 +718,7 @@
             mesh.position.copy(position);
             
             const sprite = createTextSprite(element);
-            sprite.visible = showLabels || currentStyle === 'symbol_mode'; 
+            
             mesh.add(sprite); 
             
             let atomId = id || Math.random().toString(36).substr(2, 9);
@@ -721,6 +727,8 @@
 
             let atomObj = { id: atomId, element: element, mesh: mesh, sprite: sprite, x: position.x, y: position.y, z: position.z };
             atoms.push(atomObj);
+            
+            updateVisibility(); // 建立後同步目前顯示狀態
             return atomObj;
         }
 
@@ -748,7 +756,7 @@
                 child.material.dispose();
             }
 
-            if (currentStyle !== 'ball_and_stick' && currentStyle !== 'symbol_mode') return; 
+            if (currentStyle !== 'ball_and_stick') return; 
 
             let a1 = atoms.find(a => a.id === bondObj.atom1_id).mesh.position;
             let a2 = atoms.find(a => a.id === bondObj.atom2_id).mesh.position;
@@ -761,13 +769,15 @@
             if (Math.abs(direction.y) > 0.9) up.set(1, 0, 0); 
             let perpendicular = new THREE.Vector3().crossVectors(direction, up).normalize();
 
-            let bondRadius = isIonic ? 0.06 : 0.12;
+            // 【更新】如果顯示標籤，所有連線強制變細，呈現 2D 骨架風格
+            let bondRadius = showLabels ? 0.04 : (isIonic ? 0.06 : 0.12);
 
             if (isIonic) {
                 let dashLength = 0.15; 
                 let gapLength = 0.15;  
                 let step = dashLength + gapLength;
                 let numDashes = Math.floor(distance / step); 
+                if (numDashes < 1) numDashes = 1;
                 
                 let remainingSpace = distance - (numDashes * step - gapLength);
                 let startOffset = remainingSpace / 2 + dashLength / 2;
@@ -793,7 +803,8 @@
                 }
             } 
             else {
-                let offsetDist = 0.3; 
+                // 【更新】如果顯示標籤，多重鍵的距離也縮小，避免看起來笨重
+                let offsetDist = showLabels ? 0.15 : 0.3; 
                 let offsets = [];
                 if (bondObj.order === 1) offsets = [0];
                 else if (bondObj.order === 2) offsets = [-offsetDist/2, offsetDist/2];
@@ -882,33 +893,22 @@
             document.getElementById('style-ball').classList.toggle('bg-blue-600', style === 'ball_and_stick');
             document.getElementById('style-atom').classList.toggle('bg-blue-600', style === 'atom_mode');
             document.getElementById('style-space').classList.toggle('bg-blue-600', style === 'spacefill');
-            document.getElementById('style-symbol').classList.toggle('bg-blue-600', style === 'symbol_mode');
             
             atoms.forEach(a => {
-                if (style === 'symbol_mode') {
-                    a.mesh.material.visible = false; 
-                    a.sprite.visible = true;
-                } else {
-                    a.mesh.material.visible = true; 
-                    a.sprite.visible = showLabels; 
-                    let radius = getAtomRadius(a.element, style);
-                    a.mesh.geometry.dispose();
-                    a.mesh.geometry = new THREE.SphereGeometry(radius, 32, 32);
-                }
+                let radius = getAtomRadius(a.element, style);
+                a.mesh.geometry.dispose();
+                a.mesh.geometry = new THREE.SphereGeometry(radius, 32, 32);
             });
-            bonds.forEach(b => updateBondMesh(b));
+            updateVisibility();
         }
 
+        // 【修改】控制標籤顯示開關，並連動隱藏實體球模型
         function toggleLabels() {
             showLabels = !showLabels;
-            atoms.forEach(a => {
-                if (currentStyle !== 'symbol_mode') {
-                    a.sprite.visible = showLabels;
-                }
-            });
             let btn = document.getElementById('btn-labels');
             btn.classList.toggle('bg-blue-600', showLabels);
             btn.classList.toggle('bg-gray-700', !showLabels);
+            updateVisibility();
         }
 
         function centerCamera() {
