@@ -2,28 +2,19 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <!-- 針對行動裝置優化，禁止原生網頁縮放，確保觸控手勢給 3D 畫布使用 -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>3D 分子建構器</title>
-    <!-- 引入 Tailwind CSS 快速建立 UI -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- 引入 Three.js 核心與軌道控制器 -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 
     <style>
         body { margin: 0; overflow: hidden; background-color: #1a1a2e; touch-action: none; font-family: sans-serif; }
-        /* 【更新】將背景色移到容器上，讓 WebGL 畫布本身維持透明，以利匯出透明 PNG */
         #canvas-container { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; z-index: 1; background-color: #1a1a2e; }
-        
-        /* UI 覆蓋層 */
         #ui-layer { position: absolute; z-index: 10; width: 100%; height: 100%; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; }
         .pointer-events-auto { pointer-events: auto; }
-        
-        /* 隱藏捲軸但允許滾動 */
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-
         .tool-btn { transition: all 0.2s; }
         .tool-btn.active { background-color: #3b82f6; color: white; border-color: #2563eb; transform: scale(1.05); }
         .element-btn { transition: all 0.2s; border-width: 2px; }
@@ -32,16 +23,12 @@
 </head>
 <body>
 
-    <!-- 3D 畫布容器 -->
     <div id="canvas-container"></div>
 
-    <!-- UI 層 -->
     <div id="ui-layer">
-        <!-- 頂部列：標題與存檔 -->
         <div class="p-4 flex justify-between items-center bg-gray-900 bg-opacity-80 pointer-events-auto text-white backdrop-blur-sm shadow-md">
             <h1 class="text-lg font-bold">🧪 3D 分子建構器</h1>
             <div class="flex gap-2">
-                <!-- 【新增】匯出 PNG 按鈕 -->
                 <button onclick="exportPNG()" class="bg-purple-600 hover:bg-purple-500 px-3 py-1.5 rounded text-sm font-semibold shadow transition-colors">📸 PNG</button>
                 <button onclick="exportMC()" class="bg-green-600 hover:bg-green-500 px-3 py-1.5 rounded text-sm font-semibold shadow transition-colors">⬇️ .mc</button>
                 <button onclick="document.getElementById('import-file').click()" class="bg-blue-600 hover:bg-blue-500 px-3 py-1.5 rounded text-sm font-semibold shadow transition-colors">⬆️ 匯入</button>
@@ -49,19 +36,16 @@
             </div>
         </div>
 
-        <!-- 底部列：工具與元素 -->
         <div class="bg-gray-900 bg-opacity-90 pointer-events-auto rounded-t-2xl pb-6 pt-4 px-2 backdrop-blur-md shadow-lg border-t border-gray-700">
-            
-            <!-- 視圖樣式切換 (四種模式) -->
             <div class="flex justify-center gap-2 mb-4 px-2">
                 <button onclick="setStyle('ball_and_stick')" id="style-ball" class="bg-gray-700 text-white px-3 py-1 rounded-full text-xs active bg-blue-600 transition-colors">球棍模型</button>
                 <button onclick="setStyle('atom_mode')" id="style-atom" class="bg-gray-700 text-white px-3 py-1 rounded-full text-xs transition-colors">原子模式</button>
                 <button onclick="setStyle('spacefill')" id="style-space" class="bg-gray-700 text-white px-3 py-1 rounded-full text-xs transition-colors">空間填充</button>
-                <!-- 【新增】元素符號模式按鈕 -->
-                <button onclick="setStyle('symbol_mode')" id="style-symbol" class="bg-gray-700 text-white px-3 py-1 rounded-full text-xs transition-colors">符號模式</button>
+                <div class="w-px h-6 bg-gray-600 mx-1"></div> <!-- 分隔線 -->
+                <!-- 【全新】將符號模式改為獨立的「顯示標籤」開關 -->
+                <button onclick="toggleLabels()" id="btn-labels" class="bg-gray-700 text-white px-3 py-1 rounded-full text-xs transition-colors">🏷️ 顯示標籤</button>
             </div>
 
-            <!-- 工具列 (可橫向滑動) -->
             <div class="flex gap-3 overflow-x-auto no-scrollbar px-2 mb-4 snap-x">
                 <button onclick="setTool('camera')" id="tool-camera" class="tool-btn active flex-none bg-gray-800 text-gray-200 border border-gray-600 px-4 py-2 rounded-xl flex flex-col items-center snap-center">
                     <span class="text-xl">✋</span><span class="text-xs mt-1">旋轉/縮放</span>
@@ -73,7 +57,7 @@
                     <span class="text-xl">🔗</span><span class="text-xs mt-1">連線/換鍵</span>
                 </button>
                 <button onclick="setTool('delete-bond')" id="tool-delete-bond" class="tool-btn flex-none bg-gray-800 text-gray-200 border border-gray-600 px-4 py-2 rounded-xl flex flex-col items-center snap-center">
-                    <span class="text-xl">✂️</span><span class="text-xs mt-1">刪除連線</span>
+                    <span class="text-xl">✂️</span><span class="text-xs mt-1">斷開連線</span>
                 </button>
                 <button onclick="setTool('delete')" id="tool-delete" class="tool-btn flex-none bg-gray-800 text-gray-200 border border-gray-600 px-4 py-2 rounded-xl flex flex-col items-center snap-center">
                     <span class="text-xl">🗑️</span><span class="text-xs mt-1">刪除物件</span>
@@ -86,9 +70,7 @@
                 </button>
             </div>
 
-            <!-- 元素列 (只有在新增模式時顯示) -->
             <div id="element-bar" class="flex gap-3 overflow-x-auto no-scrollbar px-2 pb-2 hidden">
-                <!-- Javascript 動態產生元素按鈕 -->
             </div>
         </div>
     </div>
@@ -96,23 +78,28 @@
     <script>
         // --- 1. 化學資料定義 ---
         const ELEMENTS = {
-            'C':  { color: 0x555555, covalent: 0.77, vdw: 1.70, maxBonds: 4 }, // 碳
-            'H':  { color: 0xffffff, covalent: 0.37, vdw: 1.20, maxBonds: 1 }, // 氫
-            'O':  { color: 0xff0000, covalent: 0.73, vdw: 1.52, maxBonds: 2 }, // 氧
-            'N':  { color: 0x0000ff, covalent: 0.75, vdw: 1.55, maxBonds: 3 }, // 氮
-            'Cl': { color: 0x00ff00, covalent: 0.99, vdw: 1.75, maxBonds: 1 }, // 氯
-            'S':  { color: 0xffff00, covalent: 1.02, vdw: 1.80, maxBonds: 6 }, // 硫
-            'P':  { color: 0xffa500, covalent: 1.06, vdw: 1.80, maxBonds: 5 }, // 磷
+            'C':  { color: 0x555555, covalent: 0.77, ionic: 0.15, vdw: 1.70, maxBonds: 4, isMetal: false },
+            'H':  { color: 0xffffff, covalent: 0.37, ionic: 1.20, vdw: 1.20, maxBonds: 1, isMetal: false },
+            'O':  { color: 0xff0000, covalent: 0.73, ionic: 1.40, vdw: 1.52, maxBonds: 2, isMetal: false },
+            'N':  { color: 0x0000ff, covalent: 0.75, ionic: 1.46, vdw: 1.55, maxBonds: 4, isMetal: false },
+            'Cl': { color: 0x00ff00, covalent: 0.99, ionic: 1.81, vdw: 1.75, maxBonds: 1, isMetal: false },
+            'S':  { color: 0xffff00, covalent: 1.02, ionic: 1.84, vdw: 1.80, maxBonds: 6, isMetal: false },
+            'P':  { color: 0xffa500, covalent: 1.06, ionic: 2.12, vdw: 1.80, maxBonds: 5, isMetal: false },
+            'Na': { color: 0x8b5cf6, covalent: 1.54, ionic: 1.02, vdw: 1.02, maxBonds: 6, isMetal: true },
+            'K':  { color: 0xc026d3, covalent: 1.96, ionic: 1.38, vdw: 1.38, maxBonds: 8, isMetal: true },
+            'Mg': { color: 0x84cc16, covalent: 1.36, ionic: 0.72, vdw: 0.72, maxBonds: 6, isMetal: true },
+            'Ca': { color: 0x10b981, covalent: 1.74, ionic: 1.00, vdw: 1.00, maxBonds: 8, isMetal: true },
         };
 
         // --- 2. 系統狀態 ---
         let scene, camera, renderer, controls;
-        let atoms = []; // { id, element, mesh, sprite, x, y, z }
-        let bonds = []; // { id, atom1_id, atom2_id, order, group }
+        let atoms = []; 
+        let bonds = []; 
         
         let currentTool = 'camera'; 
         let currentElement = 'C';
-        let currentStyle = 'ball_and_stick'; // 'ball_and_stick', 'atom_mode', 'spacefill', 'symbol_mode'
+        let currentStyle = 'ball_and_stick'; 
+        let showLabels = false; // 標籤開關狀態
         let bondSelection = null; 
         let deleteBondSelection = null; 
         let dragStartAtomId = null; 
@@ -120,15 +107,51 @@
         const raycaster = new THREE.Raycaster();
         const mouse = new THREE.Vector2();
         let pointerDownPos = new THREE.Vector2();
-
         let optimizationFrames = 0;
 
-        function getAtomValency(atomId) {
-            let valency = 0;
+        function getAtomValencyInfo(atomId) {
+            let covalent = 0;
+            let total = 0;
             bonds.forEach(b => {
-                if (b.atom1_id === atomId || b.atom2_id === atomId) valency += b.order;
+                if (b.atom1_id === atomId || b.atom2_id === atomId) {
+                    total++;
+                    if (b.bondType === 'covalent') covalent += b.order;
+                }
             });
-            return valency;
+            return { covalent, total };
+        }
+
+        function getIdealBondLength(el1Name, el2Name, isIonic) {
+            let e1 = ELEMENTS[el1Name];
+            let e2 = ELEMENTS[el2Name];
+            if (isIonic) return e1.ionic + e2.ionic;
+            return e1.covalent + e2.covalent;
+        }
+
+        function getTargetAngle(centerAtomId) {
+            let neighbors = [];
+            let totalOrder = 0;
+            bonds.forEach(b => {
+                if (b.atom1_id === centerAtomId) { neighbors.push(b.atom2_id); totalOrder += b.order; }
+                if (b.atom2_id === centerAtomId) { neighbors.push(b.atom1_id); totalOrder += b.order; }
+            });
+            let N = neighbors.length;
+            let el = atoms.find(a => a.id === centerAtomId).element;
+
+            if (N === 2) {
+                if (totalOrder >= 3 || el === 'C' || ELEMENTS[el].isMetal) return 180; 
+                if (el === 'O' || el === 'S') return 104.5; 
+                return 180; 
+            }
+            if (N === 3) {
+                if (totalOrder >= 4) return 120; 
+                if (el === 'N' || el === 'P') return 107; 
+                return 120; 
+            }
+            if (N === 4) return 109.5; 
+            if (N === 5) return 90; 
+            if (N === 6) return 90; 
+            return 109.5;
         }
 
         function showToast(message) {
@@ -151,24 +174,36 @@
             if (!existingBond) {
                 let a1Data = atoms.find(a => a.id === atom1Id);
                 let a2Data = atoms.find(a => a.id === atom2Id);
-                if (getAtomValency(atom1Id) >= ELEMENTS[a1Data.element].maxBonds) {
-                    showToast(`${a1Data.element} 元素已達鍵結上限！`); return;
-                }
-                if (getAtomValency(atom2Id) >= ELEMENTS[a2Data.element].maxBonds) {
-                    showToast(`${a2Data.element} 元素已達鍵結上限！`); return;
-                }
+                let el1Data = ELEMENTS[a1Data.element];
+                let el2Data = ELEMENTS[a2Data.element];
+                let willBeIonic = el1Data.isMetal || el2Data.isMetal;
+
+                let v1 = getAtomValencyInfo(atom1Id);
+                let v2 = getAtomValencyInfo(atom2Id);
+
+                if (el1Data.isMetal && v1.total >= el1Data.maxBonds) { showToast(`${a1Data.element} 離子已達配位數上限！`); return; }
+                if (!el1Data.isMetal && !willBeIonic && v1.covalent >= el1Data.maxBonds) { showToast(`${a1Data.element} 元素已達共價鍵上限！`); return; }
+                if (!el1Data.isMetal && v1.total >= 8) { showToast(`${a1Data.element} 空間過度壅擠！`); return; }
+
+                if (el2Data.isMetal && v2.total >= el2Data.maxBonds) { showToast(`${a2Data.element} 離子已達配位數上限！`); return; }
+                if (!el2Data.isMetal && !willBeIonic && v2.covalent >= el2Data.maxBonds) { showToast(`${a2Data.element} 元素已達共價鍵上限！`); return; }
+                if (!el2Data.isMetal && v2.total >= 8) { showToast(`${a2Data.element} 空間過度壅擠！`); return; }
+
                 createBond(atom1Id, atom2Id);
             } else {
+                if (existingBond.bondType === 'ionic') {
+                    showToast("離子鍵無法建立多重鍵！"); return;
+                }
                 let nextOrder = (existingBond.order % 3) + 1; 
                 if (nextOrder > existingBond.order) {
                     let additionalValency = nextOrder - existingBond.order;
                     let a1 = atoms.find(a => a.id === existingBond.atom1_id);
                     let a2 = atoms.find(a => a.id === existingBond.atom2_id);
-                    
-                    if (getAtomValency(a1.id) + additionalValency > ELEMENTS[a1.element].maxBonds || 
-                        getAtomValency(a2.id) + additionalValency > ELEMENTS[a2.element].maxBonds) {
-                        nextOrder = 1; 
-                        showToast("原子價數不足，自動退回單鍵！");
+                    let v1 = getAtomValencyInfo(a1.id);
+                    let v2 = getAtomValencyInfo(a2.id);
+                    if (v1.covalent + additionalValency > ELEMENTS[a1.element].maxBonds || 
+                        v2.covalent + additionalValency > ELEMENTS[a2.element].maxBonds) {
+                        nextOrder = 1; showToast("原子價數不足，退回單鍵！");
                     }
                 }
                 existingBond.order = nextOrder;
@@ -179,12 +214,8 @@
         function decreaseBondOrder(bondId) {
             let bondData = bonds.find(b => b.id === bondId);
             if (bondData) {
-                if (bondData.order > 1) {
-                    bondData.order -= 1; 
-                    updateBondMesh(bondData);
-                } else {
-                    deleteBond(bondId); 
-                }
+                if (bondData.order > 1) { bondData.order -= 1; updateBondMesh(bondData); } 
+                else { deleteBond(bondId); }
             }
         }
 
@@ -208,6 +239,7 @@
             optimizationFrames--;
 
             const k_bond = 2.0;       
+            const k_angle = 0.5;      
             const damping = 0.8;      
             const max_step = 0.2;     
 
@@ -219,7 +251,7 @@
                 let a2 = atoms.find(a => a.id === b.atom2_id);
                 if (!a1 || !a2) return;
                 
-                let idealL = ELEMENTS[a1.element].covalent + ELEMENTS[a2.element].covalent;
+                let idealL = getIdealBondLength(a1.element, a2.element, b.bondType === 'ionic');
                 let diff = new THREE.Vector3().subVectors(a1.mesh.position, a2.mesh.position);
                 let dist = diff.length();
                 
@@ -235,20 +267,51 @@
                 for (let j = i + 1; j < atoms.length; j++) {
                     let a1 = atoms[i];
                     let a2 = atoms[j];
-                    let isBonded = bonds.some(b => (b.atom1_id === a1.id && b.atom2_id === a2.id) || (b.atom2_id === a1.id && b.atom1_id === a2.id));
                     
+                    let isBonded = bonds.some(b => (b.atom1_id === a1.id && b.atom2_id === a2.id) || (b.atom2_id === a1.id && b.atom1_id === a2.id));
                     if (isBonded) continue; 
+
+                    let commonNeighbors = [];
+                    atoms.forEach(c => {
+                        if (c.id === a1.id || c.id === a2.id) return;
+                        let b1 = bonds.find(b => (b.atom1_id===a1.id && b.atom2_id===c.id)||(b.atom2_id===a1.id && b.atom1_id===c.id));
+                        let b2 = bonds.find(b => (b.atom1_id===a2.id && b.atom2_id===c.id)||(b.atom2_id===a2.id && b.atom1_id===c.id));
+                        if (b1 && b2) commonNeighbors.push({ center: c, bond1: b1, bond2: b2 });
+                    });
 
                     let diff = new THREE.Vector3().subVectors(a1.mesh.position, a2.mesh.position);
                     let dist = diff.length();
                     
-                    if (dist > 0.001) {
+                    if (dist < 0.001) {
+                        diff.set(Math.random()-0.5, Math.random()-0.5, Math.random()-0.5).normalize().multiplyScalar(0.01);
+                        dist = 0.01;
+                    }
+
+                    if (commonNeighbors.length > 0) {
+                        let relation = commonNeighbors[0]; 
+                        let targetAngle = getTargetAngle(relation.center.id);
+                        
+                        let L1 = getIdealBondLength(a1.element, relation.center.element, relation.bond1.bondType === 'ionic');
+                        let L2 = getIdealBondLength(a2.element, relation.center.element, relation.bond2.bondType === 'ionic');
+                        
+                        let idealDist = Math.sqrt(L1*L1 + L2*L2 - 2*L1*L2*Math.cos(targetAngle * Math.PI / 180));
+                        let forceMag = (idealDist - dist) * k_angle; 
+                        let f = diff.clone().normalize().multiplyScalar(forceMag);
+                        
+                        if (optimizationFrames > 150) {
+                            let jitter = new THREE.Vector3(Math.random()-0.5, Math.random()-0.5, Math.random()-0.5).multiplyScalar(0.05);
+                            f.add(jitter);
+                        }
+                        
+                        forces[a1.id].add(f);
+                        forces[a2.id].sub(f);
+                    } else {
                         let idealDist = ELEMENTS[a1.element].vdw + ELEMENTS[a2.element].vdw;
                         let forceMag = 0.5 / (dist * dist); 
-                        if (dist < idealDist) forceMag += (idealDist - dist) * 0.1; 
+                        if (dist < idealDist) forceMag += (idealDist - dist) * 0.2; 
                         if (forceMag > 1.0) forceMag = 1.0; 
                         
-                        let f = diff.normalize().multiplyScalar(forceMag);
+                        let f = diff.clone().normalize().multiplyScalar(forceMag);
                         forces[a1.id].add(f);
                         forces[a2.id].sub(f);
                     }
@@ -328,8 +391,6 @@
         function init() {
             const container = document.getElementById('canvas-container');
             scene = new THREE.Scene();
-            // 【更新】移除場景預設背景色，使其完全透明，才能匯出透明 PNG
-            // scene.background = new THREE.Color(0x1a1a2e); 
 
             const ambientLight = new THREE.AmbientLight(0x404040, 1.5); 
             scene.add(ambientLight);
@@ -343,10 +404,8 @@
             camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
             camera.position.set(0, 0, 15);
 
-            // 【更新】開啟 alpha 透明通道與 preserveDrawingBuffer (用於擷取畫面匯出 PNG)
             renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
-            // 確保清除時是透明的
             renderer.setClearColor(0x000000, 0); 
             container.appendChild(renderer.domElement);
 
@@ -410,20 +469,29 @@
                     if (hitObject.userData.type === 'atom') {
                         let parentAtomId = hitObject.userData.id;
                         let parentAtomData = atoms.find(a => a.id === parentAtomId);
+                        let parentElData = ELEMENTS[parentAtomData.element];
+                        let currentElData = ELEMENTS[currentElement];
+                        let willBeIonic = parentElData.isMetal || currentElData.isMetal;
                         
-                        let currentValency = getAtomValency(parentAtomId);
-                        let maxValency = ELEMENTS[parentAtomData.element].maxBonds;
+                        let valInfo = getAtomValencyInfo(parentAtomId);
                         
-                        if (currentValency >= maxValency) {
-                            showToast(`${parentAtomData.element} 元素已達到最大鍵結數 (${maxValency})！`);
-                            return; 
+                        if (parentElData.isMetal && valInfo.total >= parentElData.maxBonds) {
+                            showToast(`${parentAtomData.element} 離子已達配位數上限！`); return; 
+                        } else if (!parentElData.isMetal) {
+                            if (!willBeIonic && valInfo.covalent >= parentElData.maxBonds) {
+                                showToast(`${parentAtomData.element} 元素已達到最大共價鍵結數！`); return; 
+                            }
+                            if (valInfo.total >= 8) {
+                                showToast(`${parentAtomData.element} 空間過度壅擠！`); return; 
+                            }
                         }
 
                         let normal = intersects[0].face.normal.clone();
                         normal.transformDirection(hitObject.matrixWorld).normalize(); 
                         
                         let idealDir = getIdealBondDirection(parentAtomId, normal);
-                        let bondLength = ELEMENTS[parentAtomData.element].covalent + ELEMENTS[currentElement].covalent; 
+                        
+                        let bondLength = getIdealBondLength(parentAtomData.element, currentElement, willBeIonic);
                         let pos = hitObject.position.clone().add(idealDir.multiplyScalar(bondLength));
                         
                         let newAtom = createAtom(currentElement, pos);
@@ -442,8 +510,11 @@
                         let clickedAtomId = hitObject.userData.id;
                         if (!bondSelection) {
                             let aData = atoms.find(a => a.id === clickedAtomId);
-                            if (getAtomValency(clickedAtomId) >= ELEMENTS[aData.element].maxBonds) {
-                                showToast(`${aData.element} 元素無法再建立更多連線！`);
+                            let elData = ELEMENTS[aData.element];
+                            let vInfo = getAtomValencyInfo(clickedAtomId);
+                            
+                            if ((elData.isMetal && vInfo.total >= elData.maxBonds) || (!elData.isMetal && vInfo.total >= 8)) {
+                                showToast(`${aData.element} 周圍已沒有空間建立新連線！`);
                                 return;
                             }
                             bondSelection = clickedAtomId;
@@ -493,21 +564,18 @@
             }
         }
 
-        // --- 5. 核心化學繪圖邏輯 ---
-        function generateId() {
-            return Math.random().toString(36).substr(2, 9);
-        }
-
+        // --- 5. 核心繪圖邏輯 ---
         function getAtomRadius(element, style) {
             let elData = ELEMENTS[element];
-            if (style === 'spacefill') return elData.vdw;         
-            if (style === 'atom_mode') return elData.covalent * 1.25; 
-            return elData.covalent * 0.4;                         
+            let baseRadius = elData.isMetal ? elData.ionic : elData.covalent;
+            
+            if (style === 'spacefill') return elData.isMetal ? elData.ionic : elData.vdw;         
+            if (style === 'atom_mode') return baseRadius * 1.25; 
+            return baseRadius * 0.4;                         
         }
 
-        // 【新增】產生元素符號 2D 文字 Sprite 的函數
+        // 【更新】重新設計高對比度的立體標籤文字
         function createTextSprite(element) {
-            let elData = ELEMENTS[element];
             const canvas = document.createElement('canvas');
             canvas.width = 128;
             canvas.height = 128;
@@ -517,20 +585,21 @@
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             
-            // 繪製深色粗外框，確保在任何背景或重疊化學鍵上都清晰可見
+            // 使用純白文字加粗黑外框，確保在任何顏色的圓球上都高度可見
             ctx.strokeStyle = '#222222';
-            ctx.lineWidth = 12;
+            ctx.lineWidth = 10;
             ctx.lineJoin = 'round';
             ctx.strokeText(element, 64, 64);
             
-            // 繪製元素專屬色彩的文字
-            let colorHex = '#' + elData.color.toString(16).padStart(6, '0');
-            ctx.fillStyle = colorHex;
+            ctx.fillStyle = '#ffffff';
             ctx.fillText(element, 64, 64);
 
             const texture = new THREE.CanvasTexture(canvas);
-            const spriteMaterial = new THREE.SpriteMaterial({ map: texture, transparent: true }); 
+            // depthTest = false 讓文字確保浮在球體最外層，不會被切到
+            const spriteMaterial = new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false }); 
             const sprite = new THREE.Sprite(spriteMaterial);
+            
+            sprite.raycast = function() {}; // 防護罩破解魔法，讓滑鼠無視文字貼圖直接點擊球體
             
             sprite.scale.set(1.5, 1.5, 1);
             return sprite;
@@ -541,20 +610,15 @@
             let radius = getAtomRadius(element, currentStyle);
             
             const geometry = new THREE.SphereGeometry(radius, 32, 32);
-            const material = new THREE.MeshPhongMaterial({ 
-                color: elData.color,
-                shininess: 60
-            });
+            const material = new THREE.MeshPhongMaterial({ color: elData.color, shininess: 60 });
             const mesh = new THREE.Mesh(geometry, material);
             mesh.position.copy(position);
             
-            // 【新增】為每個原子附加專屬的文字 Sprite
             const sprite = createTextSprite(element);
-            sprite.visible = (currentStyle === 'symbol_mode'); // 只有符號模式才顯示文字
-            mesh.material.visible = (currentStyle !== 'symbol_mode'); // 符號模式隱藏圓球
-            mesh.add(sprite); // 將 Sprite 綁定在圓球上跟隨移動
+            sprite.visible = showLabels; // 【更新】由標籤開關決定是否顯示
+            mesh.add(sprite); 
             
-            let atomId = id || generateId();
+            let atomId = id || Math.random().toString(36).substr(2, 9);
             mesh.userData = { type: 'atom', id: atomId, element: element };
             scene.add(mesh);
 
@@ -564,8 +628,15 @@
         }
 
         function createBond(atom1_id, atom2_id, order = 1, id = null) {
-            let bondId = id || generateId();
-            let bondObj = { id: bondId, atom1_id: atom1_id, atom2_id: atom2_id, order: order, group: new THREE.Group() };
+            let el1 = atoms.find(a => a.id === atom1_id).element;
+            let el2 = atoms.find(a => a.id === atom2_id).element;
+            let isIonic = ELEMENTS[el1].isMetal || ELEMENTS[el2].isMetal;
+
+            let bondId = id || Math.random().toString(36).substr(2, 9);
+            let bondObj = { 
+                id: bondId, atom1_id: atom1_id, atom2_id: atom2_id, 
+                order: isIonic ? 1 : order, bondType: isIonic ? 'ionic' : 'covalent', group: new THREE.Group() 
+            };
             scene.add(bondObj.group);
             bonds.push(bondObj);
             updateBondMesh(bondObj);
@@ -580,11 +651,9 @@
                 child.material.dispose();
             }
 
-            // 【更新】符號模式也要顯示化學鍵，讓字母之間有連線
-            if (currentStyle !== 'ball_and_stick' && currentStyle !== 'symbol_mode') return; 
-
             let a1 = atoms.find(a => a.id === bondObj.atom1_id).mesh.position;
             let a2 = atoms.find(a => a.id === bondObj.atom2_id).mesh.position;
+            let isIonic = bondObj.bondType === 'ionic';
             
             let distance = a1.distanceTo(a2);
             let direction = new THREE.Vector3().subVectors(a2, a1).normalize();
@@ -593,30 +662,61 @@
             if (Math.abs(direction.y) > 0.9) up.set(1, 0, 0); 
             let perpendicular = new THREE.Vector3().crossVectors(direction, up).normalize();
 
-            // 【修改】依據模式設定不同的鍵結粗細與間距
-            let bondRadius = (currentStyle === 'symbol_mode') ? 0.04 : 0.12;
-            let offsetDist = (currentStyle === 'symbol_mode') ? 0.15 : 0.3; 
-            
-            let offsets = [];
-            if (bondObj.order === 1) offsets = [0];
-            else if (bondObj.order === 2) offsets = [-offsetDist/2, offsetDist/2];
-            else if (bondObj.order === 3) offsets = [-offsetDist, 0, offsetDist];
+            let bondRadius = isIonic ? 0.06 : 0.12;
 
-            offsets.forEach(offset => {
-                const geometry = new THREE.CylinderGeometry(bondRadius, bondRadius, distance, 16);
-                geometry.translate(0, distance / 2, 0);
-                geometry.rotateX(Math.PI / 2);
+            if (isIonic) {
+                let dashLength = 0.15; 
+                let gapLength = 0.15;  
+                let step = dashLength + gapLength;
+                let numDashes = Math.floor(distance / step); 
+                
+                let remainingSpace = distance - (numDashes * step - gapLength);
+                let startOffset = remainingSpace / 2 + dashLength / 2;
+
+                const material = new THREE.MeshPhongMaterial({ 
+                    color: 0x99ccff, transparent: true, opacity: 0.8, depthWrite: false
+                });
+
+                for (let i = 0; i < numDashes; i++) {
+                    const geometry = new THREE.CylinderGeometry(bondRadius, bondRadius, dashLength, 16);
+                    geometry.translate(0, dashLength / 2, 0);
+                    geometry.rotateX(Math.PI / 2);
+
+                    const mesh = new THREE.Mesh(geometry, material);
+                    let currentDist = startOffset + i * step;
+                    let pos = a1.clone().add(direction.clone().multiplyScalar(currentDist));
+
+                    mesh.position.copy(pos);
+                    mesh.lookAt(pos.clone().add(direction));
+
+                    mesh.userData = { type: 'bond', id: bondObj.id };
+                    bondObj.group.add(mesh);
+                }
+            } 
+            else {
+                let offsetDist = 0.3; 
+                let offsets = [];
+                if (bondObj.order === 1) offsets = [0];
+                else if (bondObj.order === 2) offsets = [-offsetDist/2, offsetDist/2];
+                else if (bondObj.order === 3) offsets = [-offsetDist, 0, offsetDist];
 
                 const material = new THREE.MeshPhongMaterial({ color: 0xaaaaaa });
-                const mesh = new THREE.Mesh(geometry, material);
-                
-                let pos = a1.clone().add(perpendicular.clone().multiplyScalar(offset));
-                mesh.position.copy(pos);
-                mesh.lookAt(pos.clone().add(direction));
 
-                mesh.userData = { type: 'bond', id: bondObj.id };
-                bondObj.group.add(mesh);
-            });
+                offsets.forEach(offset => {
+                    const geometry = new THREE.CylinderGeometry(bondRadius, bondRadius, distance, 16);
+                    geometry.translate(0, distance / 2, 0);
+                    geometry.rotateX(Math.PI / 2);
+
+                    const mesh = new THREE.Mesh(geometry, material);
+                    
+                    let pos = a1.clone().add(perpendicular.clone().multiplyScalar(offset));
+                    mesh.position.copy(pos);
+                    mesh.lookAt(pos.clone().add(direction));
+
+                    mesh.userData = { type: 'bond', id: bondObj.id };
+                    bondObj.group.add(mesh);
+                });
+            }
         }
 
         function deleteAtom(id) {
@@ -644,12 +744,9 @@
             if (atom) {
                 if (isHighlighted) {
                     atom.mesh.material.emissive.setHex(colorHex);
-                    // 【新增】連同文字 Sprite 也一起做選取提示效果
-                    atom.sprite.material.color.setHex(0xaaaaaa); 
-                    atom.sprite.scale.set(1.8, 1.8, 1);
+                    atom.sprite.scale.set(2.0, 2.0, 1);
                 } else {
                     atom.mesh.material.emissive.setHex(0x000000);
-                    atom.sprite.material.color.setHex(0xffffff); 
                     atom.sprite.scale.set(1.5, 1.5, 1);
                 }
             }
@@ -658,24 +755,19 @@
         // --- 6. UI 與樣式控制 ---
         function setTool(tool) {
             currentTool = tool;
-            
             ['camera', 'add', 'bond', 'delete-bond', 'delete'].forEach(t => {
                 let btn = document.getElementById(`tool-${t}`);
                 if (btn) btn.classList.remove('active', 'bg-blue-600', 'bg-red-600', 'border-blue-500', 'border-red-500');
             });
-            
             let activeBtn = document.getElementById(`tool-${tool}`);
             if (tool === 'delete' || tool === 'delete-bond') {
                 activeBtn.classList.add('active', 'bg-red-600', 'border-red-500'); 
             } else {
                 activeBtn.classList.add('active', 'bg-blue-600', 'border-blue-500');
             }
-
             let elementBar = document.getElementById('element-bar');
-            if (tool === 'add') {
-                elementBar.classList.remove('hidden');
-                controls.enabled = false; 
-            } else {
+            if (tool === 'add') { elementBar.classList.remove('hidden'); controls.enabled = false; } 
+            else {
                 elementBar.classList.add('hidden');
                 if (bondSelection) { highlightAtom(bondSelection, false); bondSelection = null; }
                 if (deleteBondSelection) { highlightAtom(deleteBondSelection, false); deleteBondSelection = null; }
@@ -683,57 +775,42 @@
             }
         }
 
-        // 【更新】加入第四種切換模式：符號模式
         function setStyle(style) {
             currentStyle = style;
-            
             document.getElementById('style-ball').classList.toggle('bg-blue-600', style === 'ball_and_stick');
             document.getElementById('style-atom').classList.toggle('bg-blue-600', style === 'atom_mode');
             document.getElementById('style-space').classList.toggle('bg-blue-600', style === 'spacefill');
-            document.getElementById('style-symbol').classList.toggle('bg-blue-600', style === 'symbol_mode');
             
             atoms.forEach(a => {
-                // 如果是符號模式，隱藏圓球、顯示文字
-                if (style === 'symbol_mode') {
-                    a.mesh.material.visible = false;
-                    a.sprite.visible = true;
-                } else {
-                    a.mesh.material.visible = true;
-                    a.sprite.visible = false;
-                    let radius = getAtomRadius(a.element, style);
-                    a.mesh.geometry.dispose();
-                    a.mesh.geometry = new THREE.SphereGeometry(radius, 32, 32);
-                }
+                let radius = getAtomRadius(a.element, style);
+                a.mesh.geometry.dispose();
+                a.mesh.geometry = new THREE.SphereGeometry(radius, 32, 32);
             });
-
             bonds.forEach(b => updateBondMesh(b));
         }
 
-        function centerCamera() {
-            if (atoms.length === 0) {
-                controls.target.set(0, 0, 0);
-                camera.position.set(0, 0, 15);
-                controls.update();
-                return;
-            }
+        // 【全新】控制標籤顯示開關
+        function toggleLabels() {
+            showLabels = !showLabels;
+            atoms.forEach(a => a.sprite.visible = showLabels);
+            let btn = document.getElementById('btn-labels');
+            btn.classList.toggle('bg-blue-600', showLabels);
+            btn.classList.toggle('bg-gray-700', !showLabels);
+        }
 
+        function centerCamera() {
+            if (atoms.length === 0) { controls.target.set(0, 0, 0); camera.position.set(0, 0, 15); controls.update(); return; }
             let box = new THREE.Box3();
             atoms.forEach(a => {
                 let r = getAtomRadius(a.element, currentStyle);
                 let minNode = new THREE.Vector3(a.mesh.position.x - r, a.mesh.position.y - r, a.mesh.position.z - r);
                 let maxNode = new THREE.Vector3(a.mesh.position.x + r, a.mesh.position.y + r, a.mesh.position.z + r);
-                box.expandByPoint(minNode);
-                box.expandByPoint(maxNode);
+                box.expandByPoint(minNode); box.expandByPoint(maxNode);
             });
-
-            let center = new THREE.Vector3();
-            box.getCenter(center);
-            let size = new THREE.Vector3();
-            box.getSize(size);
+            let center = new THREE.Vector3(); box.getCenter(center);
+            let size = new THREE.Vector3(); box.getSize(size);
             
-            let maxDim = Math.max(size.x, size.y, size.z);
-            if (maxDim < 2) maxDim = 2; 
-
+            let maxDim = Math.max(size.x, size.y, size.z); if (maxDim < 2) maxDim = 2; 
             let fov = camera.fov * (Math.PI / 180);
             let cameraDistance = (maxDim / 2) / Math.tan(fov / 2) * 1.5; 
             
@@ -742,8 +819,7 @@
             
             controls.target.copy(center);
             camera.position.copy(center).add(dir.multiplyScalar(cameraDistance));
-            camera.lookAt(center);
-            controls.update();
+            camera.lookAt(center); controls.update();
         }
 
         function selectElement(el) {
@@ -769,16 +845,11 @@
         }
 
         // --- 7. 匯出功能 ---
-        // 【新增】匯出透明背景的 PNG
         function exportPNG() {
-            renderer.render(scene, camera); // 確保擷取到最新一幀
+            renderer.render(scene, camera); 
             const dataURL = renderer.domElement.toDataURL("image/png");
-            const link = document.createElement('a');
-            link.href = dataURL;
-            link.download = 'molecule.png';
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
+            const link = document.createElement('a'); link.href = dataURL; link.download = 'molecule.png';
+            document.body.appendChild(link); link.click(); document.body.removeChild(link);
             showToast("📸 成功匯出透明背景 PNG！");
         }
 
@@ -786,49 +857,41 @@
             let saveData = {
                 version: "1.0",
                 atoms: atoms.map(a => ({ id: a.id, element: a.element, x: a.mesh.position.x, y: a.mesh.position.y, z: a.mesh.position.z })),
-                bonds: bonds.map(b => ({ id: b.id, atom1_id: b.atom1_id, atom2_id: b.atom2_id, order: b.order }))
+                bonds: bonds.map(b => ({ id: b.id, atom1_id: b.atom1_id, atom2_id: b.atom2_id, order: b.order, bondType: b.bondType }))
             };
-
             const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(saveData));
             const downloadAnchorNode = document.createElement('a');
-            downloadAnchorNode.setAttribute("href", dataStr);
-            downloadAnchorNode.setAttribute("download", "molecule.mc");
-            document.body.appendChild(downloadAnchorNode);
-            downloadAnchorNode.click();
-            downloadAnchorNode.remove();
+            downloadAnchorNode.setAttribute("href", dataStr); downloadAnchorNode.setAttribute("download", "molecule.mc");
+            document.body.appendChild(downloadAnchorNode); downloadAnchorNode.click(); downloadAnchorNode.remove();
         }
 
         function importMC(event) {
-            const file = event.target.files[0];
-            if (!file) return;
-
+            const file = event.target.files[0]; if (!file) return;
             const reader = new FileReader();
             reader.onload = function(e) {
                 try {
                     const data = JSON.parse(e.target.result);
-                    atoms.slice().forEach(a => deleteAtom(a.id));
-                    atoms = [];
-                    bonds = [];
-
-                    if (data.atoms) {
-                        data.atoms.forEach(a => createAtom(a.element, new THREE.Vector3(a.x, a.y, a.z), a.id));
-                    }
+                    atoms.slice().forEach(a => deleteAtom(a.id)); atoms = []; bonds = [];
+                    if (data.atoms) data.atoms.forEach(a => createAtom(a.element, new THREE.Vector3(a.x, a.y, a.z), a.id));
                     if (data.bonds) {
-                        data.bonds.forEach(b => createBond(b.atom1_id, b.atom2_id, b.order, b.id));
+                        data.bonds.forEach(b => {
+                            let el1 = atoms.find(a => a.id === b.atom1_id).element;
+                            let el2 = atoms.find(a => a.id === b.atom2_id).element;
+                            let isIonic = ELEMENTS[el1].isMetal || ELEMENTS[el2].isMetal;
+                            let bType = b.bondType ? b.bondType : (isIonic ? 'ionic' : 'covalent');
+                            let bondObj = { id: b.id, atom1_id: b.atom1_id, atom2_id: b.atom2_id, order: b.order, bondType: bType, group: new THREE.Group() };
+                            scene.add(bondObj.group); bonds.push(bondObj); updateBondMesh(bondObj);
+                        });
                     }
                     showToast("載入成功！");
-                } catch (err) {
-                    showToast("檔案格式錯誤或不相容！");
-                }
+                } catch (err) { showToast("檔案格式錯誤或不相容！"); }
             };
-            reader.readAsText(file);
-            event.target.value = ''; 
+            reader.readAsText(file); event.target.value = ''; 
         }
 
         // --- 8. 系統循環 ---
         function onWindowResize() {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
+            camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
         }
 
