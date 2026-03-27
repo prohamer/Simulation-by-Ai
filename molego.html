@@ -2,21 +2,33 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>3D 分子建構器</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 
     <style>
-        /* 【針對內嵌環境最佳化】改用 100% 取代 100vw/vh，適應 Google Sites 的 iframe 沙盒 */
-        html, body { 
-            width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; 
-            background-color: #1a1a2e; touch-action: none; font-family: sans-serif; 
-            -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; 
+        /* 【修正】加入 100dvh 動態高度，徹底解決 iPad 橫向視窗高度計算錯誤問題 */
+        body { 
+            margin: 0; overflow: hidden; background-color: #1a1a2e; 
+            touch-action: none; font-family: sans-serif; 
+            -webkit-touch-callout: none; 
+            -webkit-user-select: none; 
+            -khtml-user-select: none; 
+            -moz-user-select: none; 
+            -ms-user-select: none; 
+            user-select: none; 
+            width: 100vw;
+            height: 100vh; /* Fallback for old browsers */
+            height: 100dvh; /* 現代行動裝置動態視窗高度 */
         }
+        
         #canvas-container { width: 100%; height: 100%; position: absolute; top: 0; left: 0; z-index: 1; background-color: #1a1a2e; }
-        #ui-layer { position: absolute; top: 0; left: 0; z-index: 10; width: 100%; height: 100%; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; }
+        
+        /* 使用絕對定位填滿四邊，配合 100dvh 保證不超出可視範圍 */
+        #ui-layer { position: absolute; top: 0; bottom: 0; left: 0; right: 0; z-index: 10; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; }
+        
         .pointer-events-auto { pointer-events: auto; }
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
@@ -33,16 +45,14 @@
 
     <div id="canvas-container"></div>
 
-    <!-- 說明視窗 Modal -->
     <div id="info-modal" class="hidden absolute inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center pointer-events-auto backdrop-blur-sm transition-opacity">
         <div class="bg-gray-800 text-white p-6 rounded-2xl max-w-md w-11/12 shadow-2xl border border-gray-600 modal-animate relative">
             <button onclick="toggleInfo()" class="absolute top-4 right-4 text-gray-400 hover:text-white text-2xl leading-none">&times;</button>
             <h2 class="text-xl font-bold mb-4 flex items-center gap-2">📖 使用說明與限制</h2>
-            <div class="space-y-3 text-sm text-gray-300 leading-relaxed max-h-60 overflow-y-auto no-scrollbar">
+            <div class="space-y-3 text-sm text-gray-300 leading-relaxed">
                 <p>歡迎使用 3D 分子建構器！您可以透過下方工具列來建立、連線與修改分子結構。</p>
                 <ul class="list-disc pl-5 space-y-1">
                     <li><strong>連線/換鍵：</strong>點擊或拖曳兩原子可建立連線；再次點擊連線可切換雙鍵/三鍵。</li>
-                    <li><strong>移動原子：</strong>選取移動工具後，可按住原子拖曳，連線會自動跟隨。</li>
                     <li><strong>最佳化：</strong>點擊「✨ 最佳化」將利用力場引擎，依據 VSEPR 理論自動推算分子的立體構型。</li>
                 </ul>
                 <div class="mt-4 p-3 bg-yellow-900 bg-opacity-30 border border-yellow-700 rounded-lg">
@@ -59,7 +69,7 @@
     <div id="ui-layer">
         <div class="p-4 flex justify-between items-center bg-gray-900 bg-opacity-80 pointer-events-auto text-white backdrop-blur-sm shadow-md">
             <div class="flex items-center gap-2">
-                <h1 class="text-lg font-bold">🧪 3D 分子建構器V7</h1>
+                <h1 class="text-lg font-bold">🧪 3D 分子建構器V8</h1>
                 <button onclick="toggleInfo()" class="bg-gray-700 hover:bg-gray-600 text-gray-200 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold border border-gray-500 transition-colors" title="使用說明">?</button>
             </div>
             <div class="flex gap-2">
@@ -70,17 +80,17 @@
             </div>
         </div>
 
-        <div class="bg-gray-900 bg-opacity-90 pointer-events-auto rounded-t-2xl pb-6 pt-4 px-2 backdrop-blur-md shadow-lg border-t border-gray-700">
-            <!-- 視圖樣式切換 -->
+        <!-- 【修正】加入 style 計算 env(safe-area-inset-bottom)，避開 iPad/iPhone 下方的 Home 控制條 -->
+        <div class="bg-gray-900 bg-opacity-90 pointer-events-auto rounded-t-2xl pt-4 px-2 backdrop-blur-md shadow-lg border-t border-gray-700" 
+             style="padding-bottom: max(1.5rem, env(safe-area-inset-bottom));">
+            
             <div class="flex justify-center gap-2 mb-4 px-2">
-                <button onclick="setStyle('ball_and_stick')" id="style-ball" class="bg-blue-600 text-white px-3 py-1 rounded-full text-xs transition-colors">球棍模型</button>
+                <button onclick="setStyle('ball_and_stick')" id="style-ball" class="bg-gray-700 text-white px-3 py-1 rounded-full text-xs active bg-blue-600 transition-colors">球棍模型</button>
                 <button onclick="setStyle('atom_mode')" id="style-atom" class="bg-gray-700 text-white px-3 py-1 rounded-full text-xs transition-colors">原子模式</button>
                 <button onclick="setStyle('spacefill')" id="style-space" class="bg-gray-700 text-white px-3 py-1 rounded-full text-xs transition-colors">空間填充</button>
-                <div class="w-px h-6 bg-gray-600 mx-1"></div>
                 <button onclick="toggleLabels()" id="btn-labels" class="bg-gray-700 text-white px-3 py-1 rounded-full text-xs transition-colors">🏷️ 顯示標籤</button>
             </div>
 
-            <!-- 工具列 -->
             <div class="flex gap-3 overflow-x-auto no-scrollbar px-2 mb-4 snap-x">
                 <button onclick="setTool('camera')" id="tool-camera" class="tool-btn active flex-none bg-gray-800 text-gray-200 border border-gray-600 px-4 py-2 rounded-xl flex flex-col items-center snap-center">
                     <span class="text-xl">✋</span><span class="text-xs mt-1">旋轉/縮放</span>
@@ -108,8 +118,8 @@
                 </button>
             </div>
 
-            <!-- 元素列 -->
-            <div id="element-bar" class="flex gap-3 overflow-x-auto no-scrollbar px-2 pb-2 hidden">
+            <div id="element-bar" class="flex gap-3 overflow-x-auto no-scrollbar px-2 hidden">
+                <!-- Javascript 動態產生元素按鈕 -->
             </div>
         </div>
     </div>
@@ -143,7 +153,6 @@
         let deleteBondSelection = null; 
         let dragStartAtomId = null; 
 
-        // 移動原子的狀態變數
         let draggedAtom = null;
         let dragPlane = new THREE.Plane();
         let dragOffset = new THREE.Vector3();
@@ -153,13 +162,11 @@
         let pointerDownPos = new THREE.Vector2();
         let optimizationFrames = 0;
 
-        // --- 視窗控制 ---
         function toggleInfo() {
             const modal = document.getElementById('info-modal');
             modal.classList.toggle('hidden');
         }
 
-        // --- 價數與配位數檢查 ---
         function getAtomValencyInfo(atomId) {
             let covalent = 0;
             let total = 0;
@@ -297,7 +304,6 @@
             let forces = {};
             atoms.forEach(a => forces[a.id] = new THREE.Vector3(0, 0, 0));
 
-            // 1. 1-2 交互作用
             bonds.forEach(b => {
                 let a1 = atoms.find(a => a.id === b.atom1_id);
                 let a2 = atoms.find(a => a.id === b.atom2_id);
@@ -315,7 +321,6 @@
                 }
             });
 
-            // 2. 1-3 交互作用 & 1-4+ 立體障礙斥力
             for (let i = 0; i < atoms.length; i++) {
                 for (let j = i + 1; j < atoms.length; j++) {
                     let a1 = atoms[i];
@@ -456,12 +461,12 @@
             backLight.position.set(-5, -10, -7);
             scene.add(backLight);
 
-            camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 1000);
+            camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
             camera.position.set(0, 0, 15);
 
             renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
             renderer.setPixelRatio(window.devicePixelRatio);
-            renderer.setSize(container.clientWidth, container.clientHeight);
+            renderer.setSize(window.innerWidth, window.innerHeight);
             renderer.setClearColor(0x000000, 0); 
             container.appendChild(renderer.domElement);
 
@@ -707,7 +712,7 @@
             mesh.position.copy(position);
             
             const sprite = createTextSprite(element);
-            sprite.visible = showLabels; 
+            sprite.visible = showLabels || currentStyle === 'symbol_mode'; 
             mesh.add(sprite); 
             
             let atomId = id || Math.random().toString(36).substr(2, 9);
@@ -743,7 +748,7 @@
                 child.material.dispose();
             }
 
-            if (currentStyle !== 'ball_and_stick') return; 
+            if (currentStyle !== 'ball_and_stick' && currentStyle !== 'symbol_mode') return; 
 
             let a1 = atoms.find(a => a.id === bondObj.atom1_id).mesh.position;
             let a2 = atoms.find(a => a.id === bondObj.atom2_id).mesh.position;
@@ -847,19 +852,6 @@
         }
 
         // --- 6. UI 與樣式控制 ---
-        function updateBtnClass(id, isActive) {
-            const btn = document.getElementById(id);
-            if (btn) {
-                if (isActive) {
-                    btn.classList.add('bg-blue-600');
-                    btn.classList.remove('bg-gray-700');
-                } else {
-                    btn.classList.add('bg-gray-700');
-                    btn.classList.remove('bg-blue-600');
-                }
-            }
-        }
-
         function setTool(tool) {
             currentTool = tool;
             ['camera', 'drag', 'add', 'bond', 'delete-bond', 'delete'].forEach(t => {
@@ -887,18 +879,22 @@
 
         function setStyle(style) {
             currentStyle = style;
-            
-            // 修正：動態切換按鈕底色
-            updateBtnClass('style-ball', style === 'ball_and_stick');
-            updateBtnClass('style-atom', style === 'atom_mode');
-            updateBtnClass('style-space', style === 'spacefill');
+            document.getElementById('style-ball').classList.toggle('bg-blue-600', style === 'ball_and_stick');
+            document.getElementById('style-atom').classList.toggle('bg-blue-600', style === 'atom_mode');
+            document.getElementById('style-space').classList.toggle('bg-blue-600', style === 'spacefill');
+            document.getElementById('style-symbol').classList.toggle('bg-blue-600', style === 'symbol_mode');
             
             atoms.forEach(a => {
-                a.mesh.material.visible = true; 
-                a.sprite.visible = showLabels; 
-                let radius = getAtomRadius(a.element, style);
-                a.mesh.geometry.dispose();
-                a.mesh.geometry = new THREE.SphereGeometry(radius, 32, 32);
+                if (style === 'symbol_mode') {
+                    a.mesh.material.visible = false; 
+                    a.sprite.visible = true;
+                } else {
+                    a.mesh.material.visible = true; 
+                    a.sprite.visible = showLabels; 
+                    let radius = getAtomRadius(a.element, style);
+                    a.mesh.geometry.dispose();
+                    a.mesh.geometry = new THREE.SphereGeometry(radius, 32, 32);
+                }
             });
             bonds.forEach(b => updateBondMesh(b));
         }
@@ -906,7 +902,9 @@
         function toggleLabels() {
             showLabels = !showLabels;
             atoms.forEach(a => {
-                a.sprite.visible = showLabels;
+                if (currentStyle !== 'symbol_mode') {
+                    a.sprite.visible = showLabels;
+                }
             });
             let btn = document.getElementById('btn-labels');
             btn.classList.toggle('bg-blue-600', showLabels);
@@ -1006,10 +1004,8 @@
 
         // --- 8. 系統循環 ---
         function onWindowResize() {
-            const container = document.getElementById('canvas-container');
-            camera.aspect = container.clientWidth / container.clientHeight; 
-            camera.updateProjectionMatrix();
-            renderer.setSize(container.clientWidth, container.clientHeight);
+            camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
         }
 
         function animate() {
