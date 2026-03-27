@@ -9,7 +9,6 @@
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 
     <style>
-        /* 定義動態高度變數，預設為 100vh */
         :root {
             --app-height: 100vh;
         }
@@ -24,14 +23,12 @@
             -ms-user-select: none; 
             user-select: none; 
             width: 100vw;
-            /* 【修正】使用 JS 計算出的絕對準確高度，徹底解決 iPad 橫向載入被裁切的問題 */
             height: 100vh; 
             height: var(--app-height); 
         }
         
         #canvas-container { width: 100%; height: 100%; position: absolute; top: 0; left: 0; z-index: 1; background-color: #1a1a2e; }
         
-        /* 【修正】將 UI 層改為 fixed 定位，能更好地抗禦 iOS Safari 的滾動與高度異常 */
         #ui-layer { position: fixed; top: 0; bottom: 0; left: 0; right: 0; z-index: 10; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; }
         
         .pointer-events-auto { pointer-events: auto; }
@@ -74,7 +71,7 @@
     <div id="ui-layer">
         <div class="p-4 flex justify-between items-center bg-gray-900 bg-opacity-80 pointer-events-auto text-white backdrop-blur-sm shadow-md">
             <div class="flex items-center gap-2">
-                <h1 class="text-lg font-bold">🧪 3D 分子建構器V12</h1>
+                <h1 class="text-lg font-bold">🧪 3D 分子建構器V13</h1>
                 <button onclick="toggleInfo()" class="bg-gray-700 hover:bg-gray-600 text-gray-200 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold border border-gray-500 transition-colors" title="使用說明">?</button>
             </div>
             <div class="flex gap-2">
@@ -158,7 +155,6 @@
         let deleteBondSelection = null; 
         let dragStartAtomId = null; 
 
-        // 移動原子的狀態變數
         let draggedAtom = null;
         let dragPlane = new THREE.Plane();
         let dragOffset = new THREE.Vector3();
@@ -451,10 +447,10 @@
             return v_sum.multiplyScalar(-1).normalize();
         }
 
-        // --- 【新增】全域高度更新函數，專治 iOS Safari ---
+        // --- 【修正核心】更新 App 高度，優先使用 visualViewport ---
         function updateAppHeight() {
-            // 抓取真實的螢幕可視高度，並更新至 CSS 變數
-            document.documentElement.style.setProperty('--app-height', `${window.innerHeight}px`);
+            const h = (window.visualViewport ? window.visualViewport.height : window.innerHeight);
+            document.documentElement.style.setProperty('--app-height', `${h}px`);
         }
 
         // --- 3. 初始化 Three.js ---
@@ -492,14 +488,14 @@
             
             window.addEventListener('resize', onWindowResize);
             
-            // 【新增】針對行動裝置翻轉螢幕的特殊處理 (使用多個時間點重試)
+            // 【修正①】多時間點延遲處理 orientationchange，應對 Safari 分批重算版面的特性
             window.addEventListener('orientationchange', () => {
                 setTimeout(() => { updateAppHeight(); onWindowResize(); }, 100);
                 setTimeout(() => { updateAppHeight(); onWindowResize(); }, 300);
                 setTimeout(() => { updateAppHeight(); onWindowResize(); }, 600);
             });
 
-            // 使用 visualViewport API（iOS Safari 最準確的高度來源）
+            // 【修正②】使用 visualViewport API 監聽，這是 iOS Safari 上最準確的視窗大小事件
             if (window.visualViewport) {
                 window.visualViewport.addEventListener('resize', () => {
                     updateAppHeight();
@@ -507,11 +503,12 @@
                 });
             }
 
-            // 多次延遲確保初始橫向載入時也能抓到正確高度
+            // 【修正③】初始化時多次延遲呼叫，確保橫向直接載入時也能抓到正確高度
             updateAppHeight();
             setTimeout(updateAppHeight, 50);
             setTimeout(updateAppHeight, 300);
             setTimeout(updateAppHeight, 600);
+
             buildUI();
             animate();
         }
@@ -562,6 +559,7 @@
         function onPointerUp(event) {
             if (draggedAtom) {
                 draggedAtom = null;
+                controls.enabled = (currentTool === 'camera');
                 return;
             }
 
@@ -1035,17 +1033,14 @@
         }
 
         // --- 8. 系統循環 ---
-        function updateAppHeight() {
-            // visualViewport 在 iOS Safari 上比 window.innerHeight 更準確
-            const h = (window.visualViewport ? window.visualViewport.height : window.innerHeight);
-            document.documentElement.style.setProperty('--app-height', `${h}px`);
-        }
-
         function onWindowResize() {
+            // 使用 visualViewport 確保尺寸來源與 CSS 變數一致
+            const w = window.innerWidth;
+            const h = window.visualViewport ? window.visualViewport.height : window.innerHeight;
             updateAppHeight();
-            camera.aspect = window.innerWidth / window.innerHeight; 
+            camera.aspect = w / h;
             camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setSize(w, h);
         }
 
         function animate() {
