@@ -74,7 +74,7 @@
     <div id="ui-layer">
         <div class="p-4 flex justify-between items-center bg-gray-900 bg-opacity-80 pointer-events-auto text-white backdrop-blur-sm shadow-md">
             <div class="flex items-center gap-2">
-                <h1 class="text-lg font-bold">🧪 3D 分子建構器V11</h1>
+                <h1 class="text-lg font-bold">🧪 3D 分子建構器V12</h1>
                 <button onclick="toggleInfo()" class="bg-gray-700 hover:bg-gray-600 text-gray-200 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold border border-gray-500 transition-colors" title="使用說明">?</button>
             </div>
             <div class="flex gap-2">
@@ -492,17 +492,26 @@
             
             window.addEventListener('resize', onWindowResize);
             
-            // 【新增】針對行動裝置翻轉螢幕的特殊處理
+            // 【新增】針對行動裝置翻轉螢幕的特殊處理 (使用多個時間點重試)
             window.addEventListener('orientationchange', () => {
-                // 延遲 100ms 等 Safari 重新計算好版面後再刷新
-                setTimeout(() => {
-                    updateAppHeight();
-                    onWindowResize();
-                }, 100);
+                setTimeout(() => { updateAppHeight(); onWindowResize(); }, 100);
+                setTimeout(() => { updateAppHeight(); onWindowResize(); }, 300);
+                setTimeout(() => { updateAppHeight(); onWindowResize(); }, 600);
             });
 
-            // 初始化時先強制抓取一次正確高度
+            // 使用 visualViewport API（iOS Safari 最準確的高度來源）
+            if (window.visualViewport) {
+                window.visualViewport.addEventListener('resize', () => {
+                    updateAppHeight();
+                    onWindowResize();
+                });
+            }
+
+            // 多次延遲確保初始橫向載入時也能抓到正確高度
             updateAppHeight();
+            setTimeout(updateAppHeight, 50);
+            setTimeout(updateAppHeight, 300);
+            setTimeout(updateAppHeight, 600);
             buildUI();
             animate();
         }
@@ -1027,7 +1036,9 @@
 
         // --- 8. 系統循環 ---
         function updateAppHeight() {
-            document.documentElement.style.setProperty('--app-height', `${window.innerHeight}px`);
+            // visualViewport 在 iOS Safari 上比 window.innerHeight 更準確
+            const h = (window.visualViewport ? window.visualViewport.height : window.innerHeight);
+            document.documentElement.style.setProperty('--app-height', `${h}px`);
         }
 
         function onWindowResize() {
