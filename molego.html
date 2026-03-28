@@ -9,28 +9,26 @@
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 
     <style>
+        :root { --app-height: 100vh; }
+
         body { 
             margin: 0; overflow: hidden; background-color: #1a1a2e; 
             touch-action: none; font-family: sans-serif; 
-            -webkit-touch-callout: none; 
-            -webkit-user-select: none; 
-            -khtml-user-select: none; 
-            -moz-user-select: none; 
-            -ms-user-select: none; 
-            user-select: none; 
-            width: 100vw;
-            height: 100vh;
-            height: 100dvh; 
+            -webkit-touch-callout: none; -webkit-user-select: none; 
+            -khtml-user-select: none; -moz-user-select: none; 
+            -ms-user-select: none; user-select: none; 
+            width: 100vw; height: 100vh; height: var(--app-height); 
         }
         
         #canvas-container { width: 100%; height: 100%; position: absolute; top: 0; left: 0; z-index: 1; background-color: #1a1a2e; }
-        #ui-layer { position: absolute; top: 0; bottom: 0; left: 0; right: 0; z-index: 10; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; }
-        
+        #ui-layer { position: fixed; top: 0; bottom: 0; left: 0; right: 0; z-index: 10; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; }
         .pointer-events-auto { pointer-events: auto; }
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         .tool-btn { transition: all 0.2s; }
         .tool-btn.active { background-color: #3b82f6; color: white; border-color: #2563eb; transform: scale(1.05); }
+        .tool-btn.active-green { background-color: #15803d; color: white; border-color: #166534; transform: scale(1.05); }
+        .tool-btn.active-red { background-color: #dc2626; color: white; border-color: #b91c1c; transform: scale(1.05); }
         .element-btn { transition: all 0.2s; border-width: 2px; }
         .element-btn.active { border-color: #3b82f6; transform: scale(1.1); box-shadow: 0 0 10px rgba(59,130,246,0.5); }
         
@@ -40,982 +38,981 @@
 </head>
 <body>
 
-    <div id="canvas-container"></div>
+<div id="canvas-container"></div>
 
-    <div id="info-modal" class="hidden absolute inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center pointer-events-auto backdrop-blur-sm transition-opacity">
-        <div class="bg-gray-800 text-white p-6 rounded-2xl max-w-md w-11/12 shadow-2xl border border-gray-600 modal-animate relative">
-            <button onclick="toggleInfo()" class="absolute top-4 right-4 text-gray-400 hover:text-white text-2xl leading-none">&times;</button>
-            <h2 class="text-xl font-bold mb-4 flex items-center gap-2">📖 使用說明與限制</h2>
-            <div class="space-y-3 text-sm text-gray-300 leading-relaxed">
-                <p>歡迎使用 3D 分子建構器！您可以透過下方工具列來建立、連線與修改分子結構。</p>
-                <ul class="list-disc pl-5 space-y-1">
-                    <li><strong>連線/換鍵：</strong>點擊或拖曳兩原子可建立連線；再次點擊連線可切換雙鍵/三鍵。</li>
-                    <li><strong>最佳化：</strong>點擊「✨ 最佳化」將利用力場引擎，依據 VSEPR 理論自動推算分子的立體構型。</li>
-                </ul>
-                <div class="mt-4 p-3 bg-yellow-900 bg-opacity-30 border border-yellow-700 rounded-lg">
-                    <p class="text-yellow-400 font-bold mb-1 flex items-center gap-1">⚠️ 系統力場限制聲明</p>
-                    <p class="text-xs text-yellow-200">本系統採用簡化之共價與靜電力場模型，旨在展示基礎分子之空間構型。<strong>不適用於建構「有機金屬 (Organometallics)」、「純金屬晶格」或「巨型離子晶體 (Ionic Crystals)」</strong>。由於此類結構涉及複雜之多中心鍵結或整體晶格能，若強制執行「最佳化」，將導致結構變形或解體。</p>
-                </div>
-            </div>
-            <div class="mt-6 flex justify-end">
-                <button onclick="toggleInfo()" class="bg-blue-600 hover:bg-blue-500 px-5 py-2 rounded-lg text-sm font-semibold transition-colors">了解</button>
-            </div>
+<div id="info-modal" class="hidden absolute inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center pointer-events-auto backdrop-blur-sm">
+    <div class="bg-gray-800 text-white p-6 rounded-2xl max-w-lg w-11/12 shadow-2xl border border-gray-600 modal-animate relative" style="max-height:90vh;overflow-y:auto;">
+        <button onclick="toggleInfo()" class="absolute top-4 right-4 text-gray-400 hover:text-white text-2xl leading-none">&times;</button>
+        <h2 class="text-xl font-bold mb-1">📖 使用說明</h2>
+        <p class="text-xs text-gray-500 mb-4">3D 分子建構器 V14(iPad需直立使用)</p>
+
+        <!-- 顯示設定 -->
+        <div class="mb-4">
+            <p class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">顯示設定</p>
+            <ul class="space-y-1.5 text-sm text-gray-300">
+                <li><span class="text-white font-semibold">球棍模型</span>　原子以小球呈現，鍵結以棍棒連接，預設模式。</li>
+                <li><span class="text-white font-semibold">原子模式</span>　原子以較大球體呈現，適合觀察相對大小。</li>
+                <li><span class="text-white font-semibold">空間填充</span>　以凡得瓦半徑填滿空間，展示分子實際占據體積。</li>
+                <li><span class="text-white font-semibold">🏷️ 顯示標籤</span>　切換元素符號標籤的顯示；開啟後鍵結變細以保持清晰。</li>
+            </ul>
+        </div>
+
+        <!-- 工具列 -->
+        <div class="mb-4">
+            <p class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">工具列</p>
+            <ul class="space-y-2 text-sm text-gray-300">
+                <li>
+                    <span class="text-white font-semibold">✋ 旋轉／縮放</span>　拖曳旋轉整個場景視角；雙指縮放調整遠近。
+                </li>
+                <li>
+                    <span class="text-white font-semibold">🤏 移動原子</span>　按住單一原子拖曳，僅移動該原子，相連鍵結自動更新。
+                </li>
+                <li>
+                    <span class="text-white font-semibold">🫧 移動分子</span>
+                    <ul class="list-disc pl-5 mt-1 space-y-0.5 text-gray-400">
+                        <li>點擊原子 → 自動選取整個相連分子（<span class="text-green-400">綠色高亮</span>）</li>
+                        <li>按住<span class="text-green-300">已選分子的原子</span>拖曳 → 平移整個分子</li>
+                        <li>按住<span class="text-gray-300">空白處</span>拖曳 → 旋轉已選分子（繞重心旋轉）</li>
+                        <li>點擊空白處（不拖曳）→ 取消選取</li>
+                    </ul>
+                </li>
+                <li>
+                    <span class="text-white font-semibold">➕ 加原子</span>　點擊空白處新增孤立原子；點擊已有原子則自動沿理想鍵角方向附加新原子並建立鍵結。下方元素列可切換元素。
+                </li>
+                <li>
+                    <span class="text-white font-semibold">🔗 連線／換鍵</span>　依序點擊兩個原子建立鍵結；若鍵結已存在，再次點擊可循環切換 單鍵 → 雙鍵 → 三鍵 → 單鍵。亦可拖曳連接兩原子。
+                </li>
+                <li>
+                    <span class="text-white font-semibold">✂️ 斷開連線</span>　點擊鍵結直接移除；或依序點擊兩個原子，減少一個鍵級（三鍵→雙鍵→單鍵→移除）。
+                </li>
+                <li>
+                    <span class="text-white font-semibold">🗑️ 刪除物件</span>　點擊原子將其與所有相連鍵結一併刪除；點擊鍵結僅刪除該鍵結。
+                </li>
+                <li>
+                    <span class="text-white font-semibold">🎯 置中視角</span>　自動調整鏡頭，使所有原子完整填滿視野。
+                </li>
+                <li>
+                    <span class="text-amber-400 font-semibold">⚡ 自動排列</span>　將場景內所有分子依包圍球大小排序，沿水平方向均勻並排於畫面中央，並自動執行置中視角。適合多分子教學展示前的快速整理。
+                </li>
+                <li>
+                    <span class="text-indigo-300 font-semibold">✨ 最佳化</span>　啟動力場引擎，依據 VSEPR 理論對整個場景執行結構最佳化，自動推算鍵角與立體構型（約執行 200 步）。
+                </li>
+            </ul>
+        </div>
+
+        <!-- 匯出匯入 -->
+        <div class="mb-4">
+            <p class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">儲存與分享</p>
+            <ul class="space-y-1.5 text-sm text-gray-300">
+                <li><span class="text-white font-semibold">📸 PNG</span>　匯出目前視角的透明背景圖片，可直接貼入簡報或文件。</li>
+                <li><span class="text-white font-semibold">⬇️ .mc</span>　將分子結構（原子座標與所有鍵結）儲存為 .mc 檔，可供日後重新載入繼續編輯。</li>
+                <li><span class="text-white font-semibold">⬆️ 匯入</span>　載入先前儲存的 .mc 檔，場景中原有內容會被替換。</li>
+            </ul>
+        </div>
+
+        <!-- 限制聲明 -->
+        <div class="p-3 bg-yellow-900 bg-opacity-30 border border-yellow-700 rounded-lg">
+            <p class="text-yellow-400 font-bold mb-1.5">⚠️ 系統力場限制聲明</p>
+            <p class="text-xs text-yellow-200 leading-relaxed">本系統採用簡化之共價與靜電力場模型，旨在展示基礎分子之空間構型。<strong>不適用於建構「有機金屬（Organometallics）」、「純金屬晶格」或「巨型離子晶體（Ionic Crystals）」</strong>。此類結構涉及多中心鍵結或整體晶格能，若強制執行「最佳化」，將導致結構變形或解體。</p>
+        </div>
+
+        <div class="mt-6 flex justify-end">
+            <button onclick="toggleInfo()" class="bg-blue-600 hover:bg-blue-500 px-5 py-2 rounded-lg text-sm font-semibold transition-colors">了解</button>
+        </div>
+    </div>
+</div>
+
+<div id="ui-layer">
+    <div class="p-4 flex justify-between items-center bg-gray-900 bg-opacity-80 pointer-events-auto text-white backdrop-blur-sm shadow-md">
+        <div class="flex items-center gap-2">
+            <h1 class="text-lg font-bold">🧪 3D 分子建構器V12</h1>
+            <button onclick="toggleInfo()" class="bg-gray-700 hover:bg-gray-600 text-gray-200 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold border border-gray-500 transition-colors">?</button>
+        </div>
+        <div class="flex gap-2">
+            <button onclick="exportPNG()" class="bg-purple-600 hover:bg-purple-500 px-3 py-1.5 rounded text-sm font-semibold shadow transition-colors">📸 PNG</button>
+            <button onclick="exportMC()" class="bg-green-600 hover:bg-green-500 px-3 py-1.5 rounded text-sm font-semibold shadow transition-colors">⬇️ .mc</button>
+            <button onclick="document.getElementById('import-file').click()" class="bg-blue-600 hover:bg-blue-500 px-3 py-1.5 rounded text-sm font-semibold shadow transition-colors">⬆️ 匯入</button>
+            <input type="file" id="import-file" accept=".mc" class="hidden" onchange="importMC(event)">
         </div>
     </div>
 
-    <div id="ui-layer">
-        <div class="p-4 flex justify-between items-center bg-gray-900 bg-opacity-80 pointer-events-auto text-white backdrop-blur-sm shadow-md">
-            <div class="flex items-center gap-2">
-                <h1 class="text-lg font-bold">🧪 3D 分子建構器V10(iPad需直向使用)</h1>
-                <button onclick="toggleInfo()" class="bg-gray-700 hover:bg-gray-600 text-gray-200 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold border border-gray-500 transition-colors" title="使用說明">?</button>
-            </div>
-            <div class="flex gap-2">
-                <button onclick="exportPNG()" class="bg-purple-600 hover:bg-purple-500 px-3 py-1.5 rounded text-sm font-semibold shadow transition-colors">📸 PNG</button>
-                <button onclick="exportMC()" class="bg-green-600 hover:bg-green-500 px-3 py-1.5 rounded text-sm font-semibold shadow transition-colors">⬇️ .mc</button>
-                <button onclick="document.getElementById('import-file').click()" class="bg-blue-600 hover:bg-blue-500 px-3 py-1.5 rounded text-sm font-semibold shadow transition-colors">⬆️ 匯入</button>
-                <input type="file" id="import-file" accept=".mc" class="hidden" onchange="importMC(event)">
-            </div>
-        </div>
-
-        <div class="bg-gray-900 bg-opacity-90 pointer-events-auto rounded-t-2xl pt-4 px-2 backdrop-blur-md shadow-lg border-t border-gray-700" 
-             style="padding-bottom: max(1.5rem, env(safe-area-inset-bottom));">
-            
-            <div class="flex justify-center gap-2 mb-4 px-2">
-                <button onclick="setStyle('ball_and_stick')" id="style-ball" class="bg-gray-700 text-white px-3 py-1 rounded-full text-xs active bg-blue-600 transition-colors">球棍模型</button>
-                <button onclick="setStyle('atom_mode')" id="style-atom" class="bg-gray-700 text-white px-3 py-1 rounded-full text-xs transition-colors">原子模式</button>
-                <button onclick="setStyle('spacefill')" id="style-space" class="bg-gray-700 text-white px-3 py-1 rounded-full text-xs transition-colors">空間填充</button>
-                <div class="w-px h-6 bg-gray-600 mx-1"></div>
-                <button onclick="toggleLabels()" id="btn-labels" class="bg-gray-700 text-white px-3 py-1 rounded-full text-xs transition-colors">🏷️ 顯示標籤</button>
-            </div>
-
-            <div class="flex gap-3 overflow-x-auto no-scrollbar px-2 mb-4 snap-x">
-                <button onclick="setTool('camera')" id="tool-camera" class="tool-btn active flex-none bg-gray-800 text-gray-200 border border-gray-600 px-4 py-2 rounded-xl flex flex-col items-center snap-center">
-                    <span class="text-xl">✋</span><span class="text-xs mt-1">旋轉/縮放</span>
-                </button>
-                <button onclick="setTool('drag')" id="tool-drag" class="tool-btn flex-none bg-gray-800 text-gray-200 border border-gray-600 px-4 py-2 rounded-xl flex flex-col items-center snap-center">
-                    <span class="text-xl">🤏</span><span class="text-xs mt-1">移動原子</span>
-                </button>
-                <button onclick="setTool('add')" id="tool-add" class="tool-btn flex-none bg-gray-800 text-gray-200 border border-gray-600 px-4 py-2 rounded-xl flex flex-col items-center snap-center">
-                    <span class="text-xl">➕</span><span class="text-xs mt-1">加原子</span>
-                </button>
-                <button onclick="setTool('bond')" id="tool-bond" class="tool-btn flex-none bg-gray-800 text-gray-200 border border-gray-600 px-4 py-2 rounded-xl flex flex-col items-center snap-center">
-                    <span class="text-xl">🔗</span><span class="text-xs mt-1">連線/換鍵</span>
-                </button>
-                <button onclick="setTool('delete-bond')" id="tool-delete-bond" class="tool-btn flex-none bg-gray-800 text-gray-200 border border-gray-600 px-4 py-2 rounded-xl flex flex-col items-center snap-center">
-                    <span class="text-xl">✂️</span><span class="text-xs mt-1">斷開連線</span>
-                </button>
-                <button onclick="setTool('delete')" id="tool-delete" class="tool-btn flex-none bg-gray-800 text-gray-200 border border-gray-600 px-4 py-2 rounded-xl flex flex-col items-center snap-center">
-                    <span class="text-xl">🗑️</span><span class="text-xs mt-1">刪除物件</span>
-                </button>
-                <button onclick="centerCamera()" id="tool-center" class="tool-btn flex-none bg-gray-800 text-gray-200 border border-gray-600 px-4 py-2 rounded-xl flex flex-col items-center snap-center active:bg-blue-600 transition-colors">
-                    <span class="text-xl">🎯</span><span class="text-xs mt-1">置中視角</span>
-                </button>
-                <button onclick="startOptimization()" id="tool-optimize" class="tool-btn flex-none bg-indigo-700 text-gray-200 border border-indigo-500 px-4 py-2 rounded-xl flex flex-col items-center snap-center active:bg-indigo-500 transition-colors shadow-lg shadow-indigo-500/30">
-                    <span class="text-xl">✨</span><span class="text-xs mt-1">最佳化</span>
-                </button>
-            </div>
-
-            <div id="element-bar" class="flex gap-3 overflow-x-auto no-scrollbar px-2 hidden pb-2">
-                <!-- Javascript 動態產生元素按鈕 -->
-            </div>
-        </div>
-    </div>
-
-    <script>
-        // --- 1. 化學資料定義 ---
-        const ELEMENTS = {
-            'C':  { color: 0x555555, covalent: 0.77, ionic: 0.15, vdw: 1.70, maxBonds: 4, isMetal: false },
-            'H':  { color: 0xffffff, covalent: 0.37, ionic: 1.20, vdw: 1.20, maxBonds: 1, isMetal: false },
-            'O':  { color: 0xff0000, covalent: 0.73, ionic: 1.40, vdw: 1.52, maxBonds: 2, isMetal: false },
-            'N':  { color: 0x0000ff, covalent: 0.75, ionic: 1.46, vdw: 1.55, maxBonds: 4, isMetal: false },
-            'Cl': { color: 0x00ff00, covalent: 0.99, ionic: 1.81, vdw: 1.75, maxBonds: 1, isMetal: false },
-            'S':  { color: 0xffff00, covalent: 1.02, ionic: 1.84, vdw: 1.80, maxBonds: 6, isMetal: false },
-            'P':  { color: 0xffa500, covalent: 1.06, ionic: 2.12, vdw: 1.80, maxBonds: 5, isMetal: false },
-            'Na': { color: 0x8b5cf6, covalent: 1.54, ionic: 1.02, vdw: 1.02, maxBonds: 6, isMetal: true },
-            'K':  { color: 0xc026d3, covalent: 1.96, ionic: 1.38, vdw: 1.38, maxBonds: 8, isMetal: true },
-            'Mg': { color: 0x84cc16, covalent: 1.36, ionic: 0.72, vdw: 0.72, maxBonds: 6, isMetal: true },
-            'Ca': { color: 0x10b981, covalent: 1.74, ionic: 1.00, vdw: 1.00, maxBonds: 8, isMetal: true },
-        };
-
-        // --- 2. 系統狀態 ---
-        let scene, camera, renderer, controls;
-        let atoms = []; 
-        let bonds = []; 
+    <div class="bg-gray-900 bg-opacity-90 pointer-events-auto rounded-t-2xl pt-4 px-2 backdrop-blur-md shadow-lg border-t border-gray-700"
+         style="padding-bottom: max(1.5rem, env(safe-area-inset-bottom));">
         
-        let currentTool = 'camera'; 
-        let currentElement = 'C';
-        let currentStyle = 'ball_and_stick'; 
-        let showLabels = false; 
-        let bondSelection = null; 
-        let deleteBondSelection = null; 
-        let dragStartAtomId = null; 
+        <div class="flex justify-center gap-2 mb-4 px-2">
+            <button onclick="setStyle('ball_and_stick')" id="style-ball" class="bg-blue-600 text-white px-3 py-1 rounded-full text-xs transition-colors">球棍模型</button>
+            <button onclick="setStyle('atom_mode')" id="style-atom" class="bg-gray-700 text-white px-3 py-1 rounded-full text-xs transition-colors">原子模式</button>
+            <button onclick="setStyle('spacefill')" id="style-space" class="bg-gray-700 text-white px-3 py-1 rounded-full text-xs transition-colors">空間填充</button>
+            <div class="w-px h-6 bg-gray-600 mx-1"></div>
+            <button onclick="toggleLabels()" id="btn-labels" class="bg-gray-700 text-white px-3 py-1 rounded-full text-xs transition-colors">🏷️ 顯示標籤</button>
+        </div>
 
-        let draggedAtom = null;
-        let dragPlane = new THREE.Plane();
-        let dragOffset = new THREE.Vector3();
+        <div class="flex gap-3 overflow-x-auto no-scrollbar px-2 mb-4 snap-x">
+            <button onclick="setTool('camera')" id="tool-camera" class="tool-btn active flex-none bg-gray-800 text-gray-200 border border-gray-600 px-4 py-2 rounded-xl flex flex-col items-center snap-center">
+                <span class="text-xl">✋</span><span class="text-xs mt-1">旋轉/縮放</span>
+            </button>
+            <button onclick="setTool('drag')" id="tool-drag" class="tool-btn flex-none bg-gray-800 text-gray-200 border border-gray-600 px-4 py-2 rounded-xl flex flex-col items-center snap-center">
+                <span class="text-xl">🤏</span><span class="text-xs mt-1">移動原子</span>
+            </button>
+            <button onclick="setTool('move-mol')" id="tool-move-mol" class="tool-btn flex-none bg-gray-800 text-gray-200 border border-gray-600 px-4 py-2 rounded-xl flex flex-col items-center snap-center">
+                <span class="text-xl">🫧</span><span class="text-xs mt-1">移動分子</span>
+            </button>
+            <button onclick="setTool('add')" id="tool-add" class="tool-btn flex-none bg-gray-800 text-gray-200 border border-gray-600 px-4 py-2 rounded-xl flex flex-col items-center snap-center">
+                <span class="text-xl">➕</span><span class="text-xs mt-1">加原子</span>
+            </button>
+            <button onclick="setTool('bond')" id="tool-bond" class="tool-btn flex-none bg-gray-800 text-gray-200 border border-gray-600 px-4 py-2 rounded-xl flex flex-col items-center snap-center">
+                <span class="text-xl">🔗</span><span class="text-xs mt-1">連線/換鍵</span>
+            </button>
+            <button onclick="setTool('delete-bond')" id="tool-delete-bond" class="tool-btn flex-none bg-gray-800 text-gray-200 border border-gray-600 px-4 py-2 rounded-xl flex flex-col items-center snap-center">
+                <span class="text-xl">✂️</span><span class="text-xs mt-1">斷開連線</span>
+            </button>
+            <button onclick="setTool('delete')" id="tool-delete" class="tool-btn flex-none bg-gray-800 text-gray-200 border border-gray-600 px-4 py-2 rounded-xl flex flex-col items-center snap-center">
+                <span class="text-xl">🗑️</span><span class="text-xs mt-1">刪除物件</span>
+            </button>
+            <button onclick="centerCamera()" class="tool-btn flex-none bg-gray-800 text-gray-200 border border-gray-600 px-4 py-2 rounded-xl flex flex-col items-center snap-center">
+                <span class="text-xl">🎯</span><span class="text-xs mt-1">置中視角</span>
+            </button>
+            <!-- 【新增】自動排列按鈕 -->
+            <button onclick="autoArrange()" class="tool-btn flex-none bg-amber-700 text-gray-200 border border-amber-500 px-4 py-2 rounded-xl flex flex-col items-center snap-center shadow-lg shadow-amber-500/20 transition-colors hover:bg-amber-600">
+                <span class="text-xl">⚡</span><span class="text-xs mt-1">自動排列</span>
+            </button>
+            <button onclick="startOptimization()" class="tool-btn flex-none bg-indigo-700 text-gray-200 border border-indigo-500 px-4 py-2 rounded-xl flex flex-col items-center snap-center shadow-lg shadow-indigo-500/30">
+                <span class="text-xl">✨</span><span class="text-xs mt-1">最佳化</span>
+            </button>
+        </div>
 
-        const raycaster = new THREE.Raycaster();
-        const mouse = new THREE.Vector2();
-        let pointerDownPos = new THREE.Vector2();
-        let optimizationFrames = 0;
+        <div id="element-bar" class="flex gap-3 overflow-x-auto no-scrollbar px-2 hidden pb-2"></div>
+    </div>
+</div>
 
-        function toggleInfo() {
-            const modal = document.getElementById('info-modal');
-            modal.classList.toggle('hidden');
+<script>
+// --- 1. 化學資料 ---
+const ELEMENTS = {
+    'C':  { color: 0x555555, covalent: 0.77, ionic: 0.15, vdw: 1.70, maxBonds: 4, isMetal: false },
+    'H':  { color: 0xffffff, covalent: 0.37, ionic: 1.20, vdw: 1.20, maxBonds: 1, isMetal: false },
+    'O':  { color: 0xff0000, covalent: 0.73, ionic: 1.40, vdw: 1.52, maxBonds: 2, isMetal: false },
+    'N':  { color: 0x0000ff, covalent: 0.75, ionic: 1.46, vdw: 1.55, maxBonds: 4, isMetal: false },
+    'Cl': { color: 0x00ff00, covalent: 0.99, ionic: 1.81, vdw: 1.75, maxBonds: 1, isMetal: false },
+    'S':  { color: 0xffff00, covalent: 1.02, ionic: 1.84, vdw: 1.80, maxBonds: 6, isMetal: false },
+    'P':  { color: 0xffa500, covalent: 1.06, ionic: 2.12, vdw: 1.80, maxBonds: 5, isMetal: false },
+    'Na': { color: 0x8b5cf6, covalent: 1.54, ionic: 1.02, vdw: 1.02, maxBonds: 6, isMetal: true },
+    'K':  { color: 0xc026d3, covalent: 1.96, ionic: 1.38, vdw: 1.38, maxBonds: 8, isMetal: true },
+    'Mg': { color: 0x84cc16, covalent: 1.36, ionic: 0.72, vdw: 0.72, maxBonds: 6, isMetal: true },
+    'Ca': { color: 0x10b981, covalent: 1.74, ionic: 1.00, vdw: 1.00, maxBonds: 8, isMetal: true },
+};
+
+// --- 2. 狀態 ---
+let scene, camera, renderer, controls;
+let atoms = [], bonds = [];
+let currentTool = 'camera', currentElement = 'C', currentStyle = 'ball_and_stick';
+let showLabels = false, bondSelection = null, deleteBondSelection = null;
+let dragStartAtomId = null;
+let optimizationFrames = 0;
+
+// 移動單一原子
+let draggedAtom = null;
+let dragPlane = new THREE.Plane();
+let dragOffset = new THREE.Vector3();
+
+// 移動分子工具狀態
+let selectedMolGroup = [];
+let molDragMode = null;             // null | 'translate' | 'rotate'
+let molDragPlane = new THREE.Plane();
+let molDragLastPos = new THREE.Vector3();
+let rotLastX = 0, rotLastY = 0;
+
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+let pointerDownPos = new THREE.Vector2();
+
+// --- 3. Flood Fill ---
+function getMoleculeGroup(startAtomId) {
+    let visited = new Set();
+    let queue = [startAtomId];
+    while (queue.length > 0) {
+        let cur = queue.shift();
+        if (visited.has(cur)) continue;
+        visited.add(cur);
+        bonds.forEach(b => {
+            if (b.atom1_id === cur && !visited.has(b.atom2_id)) queue.push(b.atom2_id);
+            if (b.atom2_id === cur && !visited.has(b.atom1_id)) queue.push(b.atom1_id);
+        });
+    }
+    return Array.from(visited);
+}
+
+// 找出場景中所有獨立分子（各自的原子 id 陣列）
+function getAllMolecules() {
+    let unvisited = new Set(atoms.map(a => a.id));
+    let molecules = [];
+    while (unvisited.size > 0) {
+        let startId = unvisited.values().next().value;
+        let group = getMoleculeGroup(startId);
+        molecules.push(group);
+        group.forEach(id => unvisited.delete(id));
+    }
+    return molecules;
+}
+
+function getMolCentroid(atomIds) {
+    let c = new THREE.Vector3();
+    atomIds.forEach(id => { let a = atoms.find(a => a.id === id); if (a) c.add(a.mesh.position); });
+    c.divideScalar(atomIds.length);
+    return c;
+}
+
+// 計算分子群的包圍球半徑
+function getMolRadius(atomIds) {
+    let centroid = getMolCentroid(atomIds);
+    let maxR = 0;
+    atomIds.forEach(id => {
+        let a = atoms.find(a => a.id === id);
+        if (!a) return;
+        let r = a.mesh.position.distanceTo(centroid) + getAtomRadius(a.element, currentStyle);
+        if (r > maxR) maxR = r;
+    });
+    return Math.max(maxR, 0.5);
+}
+
+function setMolHighlight(atomIds, on) {
+    atomIds.forEach(id => {
+        let a = atoms.find(a => a.id === id);
+        if (a) a.mesh.material.emissive.setHex(on ? 0x1a4a1a : 0x000000);
+    });
+}
+
+function clearMolSelection() {
+    setMolHighlight(selectedMolGroup, false);
+    selectedMolGroup = [];
+    molDragMode = null;
+}
+
+// --- 【新增】自動排列 ---
+function autoArrange() {
+    if (atoms.length === 0) { showToast("場景中沒有任何原子！"); return; }
+
+    let molecules = getAllMolecules();
+    if (molecules.length === 0) return;
+
+    // 計算每個分子的包圍球半徑，按半徑由大到小排序（視覺上較均衡）
+    let molInfos = molecules.map(group => ({
+        group,
+        radius: getMolRadius(group),
+        centroid: getMolCentroid(group),
+    }));
+    molInfos.sort((a, b) => b.radius - a.radius);
+
+    // 間距係數：分子間留 0.8 個單位的空隙
+    const GAP = 0.8;
+
+    // 計算各分子排列後的 X 軸起始位置
+    // 先算出所有分子並排後的總寬度，再從中央往兩側展開
+    let totalWidth = 0;
+    molInfos.forEach((m, i) => {
+        totalWidth += m.radius * 2;
+        if (i < molInfos.length - 1) totalWidth += GAP;
+    });
+
+    let curX = -totalWidth / 2;
+
+    molInfos.forEach(info => {
+        let targetX = curX + info.radius; // 此分子中心的目標 X
+        curX += info.radius * 2 + GAP;
+
+        // 計算位移 delta（僅移動 X、Y，Z 歸零讓所有分子都在同一深度）
+        let delta = new THREE.Vector3(
+            targetX - info.centroid.x,
+            -info.centroid.y,       // Y 置中到 0
+            -info.centroid.z        // Z 置中到 0
+        );
+
+        // 平移分子群內所有原子
+        let groupSet = new Set(info.group);
+        info.group.forEach(id => {
+            let a = atoms.find(a => a.id === id);
+            if (a) a.mesh.position.add(delta);
+        });
+
+        // 更新相關鍵結
+        bonds.forEach(b => {
+            if (groupSet.has(b.atom1_id) || groupSet.has(b.atom2_id)) updateBondMesh(b);
+        });
+    });
+
+    // 排列完成後自動置中相機
+    centerCamera();
+    showToast(`⚡ 已排列 ${molecules.length} 個分子`);
+}
+
+// --- 4. 工具函式 ---
+function toggleInfo() { document.getElementById('info-modal').classList.toggle('hidden'); }
+
+function getAtomValencyInfo(atomId) {
+    let covalent = 0, total = 0;
+    bonds.forEach(b => {
+        if (b.atom1_id === atomId || b.atom2_id === atomId) {
+            total++;
+            if (b.bondType === 'covalent') covalent += b.order;
         }
+    });
+    return { covalent, total };
+}
 
-        function getAtomValencyInfo(atomId) {
-            let covalent = 0;
-            let total = 0;
-            bonds.forEach(b => {
-                if (b.atom1_id === atomId || b.atom2_id === atomId) {
-                    total++;
-                    if (b.bondType === 'covalent') covalent += b.order;
-                }
-            });
-            return { covalent, total };
-        }
+function getIdealBondLength(el1, el2, isIonic) {
+    let e1 = ELEMENTS[el1], e2 = ELEMENTS[el2];
+    return isIonic ? e1.ionic + e2.ionic : e1.covalent + e2.covalent;
+}
 
-        function getIdealBondLength(el1Name, el2Name, isIonic) {
-            let e1 = ELEMENTS[el1Name];
-            let e2 = ELEMENTS[el2Name];
-            if (isIonic) return e1.ionic + e2.ionic;
-            return e1.covalent + e2.covalent;
-        }
+function getTargetAngle(centerAtomId) {
+    let neighbors = [], totalOrder = 0;
+    bonds.forEach(b => {
+        if (b.atom1_id === centerAtomId) { neighbors.push(b.atom2_id); totalOrder += b.order; }
+        if (b.atom2_id === centerAtomId) { neighbors.push(b.atom1_id); totalOrder += b.order; }
+    });
+    let N = neighbors.length;
+    let el = atoms.find(a => a.id === centerAtomId).element;
+    if (N === 2) { if (totalOrder >= 3 || el === 'C' || ELEMENTS[el].isMetal) return 180; if (el === 'O' || el === 'S') return 104.5; return 180; }
+    if (N === 3) { if (totalOrder >= 4) return 120; if (el === 'N' || el === 'P') return 107; return 120; }
+    if (N === 4) return 109.5;
+    if (N === 5) return 90;
+    if (N === 6) return 90;
+    return 109.5;
+}
 
-        function getTargetAngle(centerAtomId) {
-            let neighbors = [];
-            let totalOrder = 0;
-            bonds.forEach(b => {
-                if (b.atom1_id === centerAtomId) { neighbors.push(b.atom2_id); totalOrder += b.order; }
-                if (b.atom2_id === centerAtomId) { neighbors.push(b.atom1_id); totalOrder += b.order; }
-            });
-            let N = neighbors.length;
-            let el = atoms.find(a => a.id === centerAtomId).element;
+function showToast(message) {
+    let toast = document.createElement('div');
+    toast.className = 'absolute top-20 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white px-4 py-2 rounded-full shadow-lg text-sm z-50 pointer-events-none transition-opacity duration-300 border border-gray-600';
+    toast.innerText = message;
+    document.getElementById('ui-layer').appendChild(toast);
+    setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 300); }, 2000);
+}
 
-            if (N === 2) {
-                if (totalOrder >= 3 || el === 'C' || ELEMENTS[el].isMetal) return 180; 
-                if (el === 'O' || el === 'S') return 104.5; 
-                return 180; 
-            }
-            if (N === 3) {
-                if (totalOrder >= 4) return 120; 
-                if (el === 'N' || el === 'P') return 107; 
-                return 120; 
-            }
-            if (N === 4) return 109.5; 
-            if (N === 5) return 90; 
-            if (N === 6) return 90; 
-            return 109.5;
-        }
+function updateAppHeight() {
+    const h = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+    document.documentElement.style.setProperty('--app-height', `${h}px`);
+}
 
-        function showToast(message) {
-            let toast = document.createElement('div');
-            toast.className = 'absolute top-20 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white px-4 py-2 rounded-full shadow-lg text-sm z-50 pointer-events-none transition-opacity duration-300 border border-gray-600';
-            toast.innerText = message;
-            document.getElementById('ui-layer').appendChild(toast);
-            setTimeout(() => {
-                toast.style.opacity = '0';
-                setTimeout(() => toast.remove(), 300);
-            }, 2000);
-        }
+// --- 5. 初始化 ---
+function init() {
+    document.addEventListener('contextmenu', e => e.preventDefault());
+    const container = document.getElementById('canvas-container');
+    scene = new THREE.Scene();
+    scene.add(new THREE.AmbientLight(0x404040, 1.5));
+    let dl = new THREE.DirectionalLight(0xffffff, 1); dl.position.set(5, 10, 7); scene.add(dl);
+    let bl = new THREE.DirectionalLight(0xffffff, 0.5); bl.position.set(-5, -10, -7); scene.add(bl);
 
-        function toggleBond(atom1Id, atom2Id) {
-            let existingBond = bonds.find(b => 
-                (b.atom1_id === atom1Id && b.atom2_id === atom2Id) || 
-                (b.atom2_id === atom1Id && b.atom1_id === atom2Id)
-            );
+    camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+    camera.position.set(0, 0, 15);
 
-            if (!existingBond) {
-                let a1Data = atoms.find(a => a.id === atom1Id);
-                let a2Data = atoms.find(a => a.id === atom2Id);
-                let el1Data = ELEMENTS[a1Data.element];
-                let el2Data = ELEMENTS[a2Data.element];
-                let willBeIonic = el1Data.isMetal || el2Data.isMetal;
+    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setClearColor(0x000000, 0);
+    container.appendChild(renderer.domElement);
 
-                let v1 = getAtomValencyInfo(atom1Id);
-                let v2 = getAtomValencyInfo(atom2Id);
+    controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
 
-                if (el1Data.isMetal && v1.total >= el1Data.maxBonds) { showToast(`${a1Data.element} 離子已達配位數上限！`); return; }
-                if (!el1Data.isMetal && !willBeIonic && v1.covalent >= el1Data.maxBonds) { showToast(`${a1Data.element} 元素已達共價鍵上限！`); return; }
-                if (!el1Data.isMetal && v1.total >= 8) { showToast(`${a1Data.element} 空間過度壅擠！`); return; }
+    renderer.domElement.addEventListener('pointerdown', onPointerDown);
+    renderer.domElement.addEventListener('pointermove', onPointerMove);
+    renderer.domElement.addEventListener('pointerup', onPointerUp);
+    window.addEventListener('resize', onWindowResize);
+    window.addEventListener('orientationchange', () => setTimeout(() => { updateAppHeight(); onWindowResize(); }, 100));
+    if (window.visualViewport) window.visualViewport.addEventListener('resize', () => { updateAppHeight(); onWindowResize(); });
 
-                if (el2Data.isMetal && v2.total >= el2Data.maxBonds) { showToast(`${a2Data.element} 離子已達配位數上限！`); return; }
-                if (!el2Data.isMetal && !willBeIonic && v2.covalent >= el2Data.maxBonds) { showToast(`${a2Data.element} 元素已達共價鍵上限！`); return; }
-                if (!el2Data.isMetal && v2.total >= 8) { showToast(`${a2Data.element} 空間過度壅擠！`); return; }
+    updateAppHeight();
+    buildUI();
+    animate();
+}
 
-                createBond(atom1Id, atom2Id);
-            } else {
-                if (existingBond.bondType === 'ionic') {
-                    showToast("離子鍵無法建立多重鍵！"); return;
-                }
-                let nextOrder = (existingBond.order % 3) + 1; 
-                if (nextOrder > existingBond.order) {
-                    let additionalValency = nextOrder - existingBond.order;
-                    let a1 = atoms.find(a => a.id === existingBond.atom1_id);
-                    let a2 = atoms.find(a => a.id === existingBond.atom2_id);
-                    let v1 = getAtomValencyInfo(a1.id);
-                    let v2 = getAtomValencyInfo(a2.id);
-                    if (v1.covalent + additionalValency > ELEMENTS[a1.element].maxBonds || 
-                        v2.covalent + additionalValency > ELEMENTS[a2.element].maxBonds) {
-                        nextOrder = 1; showToast("原子價數不足，退回單鍵！");
-                    }
-                }
-                existingBond.order = nextOrder;
-                updateBondMesh(existingBond);
-            }
-        }
+// --- 6. 指標事件 ---
+function getMouseNDC(event) {
+    return { x: (event.clientX / window.innerWidth) * 2 - 1, y: -(event.clientY / window.innerHeight) * 2 + 1 };
+}
 
-        function decreaseBondOrder(bondId) {
-            let bondData = bonds.find(b => b.id === bondId);
-            if (bondData) {
-                if (bondData.order > 1) { bondData.order -= 1; updateBondMesh(bondData); } 
-                else { deleteBond(bondId); }
-            }
-        }
+function onPointerDown(event) {
+    pointerDownPos.set(event.clientX, event.clientY);
+    let ndc = getMouseNDC(event);
+    mouse.set(ndc.x, ndc.y);
+    raycaster.setFromCamera(mouse, camera);
 
-        function removeBondBetween(atom1Id, atom2Id) {
-            let existingBond = bonds.find(b => 
-                (b.atom1_id === atom1Id && b.atom2_id === atom2Id) || 
-                (b.atom2_id === atom1Id && b.atom1_id === atom2Id)
-            );
-            if (existingBond) decreaseBondOrder(existingBond.id);
-        }
+    let atomHits = raycaster.intersectObjects(atoms.map(a => a.mesh), true);
+    let hitAtomId = atomHits.length > 0 ? atomHits[0].object.userData.id : null;
+    dragStartAtomId = hitAtomId;
 
-        function startOptimization() {
-            if (atoms.length === 0) return;
-            optimizationFrames = 200;
-            atoms.forEach(a => { a.velocity = new THREE.Vector3(0, 0, 0); });
-            showToast("✨ 結構最佳化中...");
-        }
+    if (currentTool === 'camera') return;
 
-        function stepOptimization() {
-            if (optimizationFrames <= 0) return;
-            optimizationFrames--;
+    if (currentTool === 'drag' && hitAtomId) {
+        controls.enabled = false;
+        draggedAtom = atoms.find(a => a.id === hitAtomId);
+        let cameraDir = new THREE.Vector3();
+        camera.getWorldDirection(cameraDir);
+        dragPlane.setFromNormalAndCoplanarPoint(cameraDir.negate(), draggedAtom.mesh.position);
+        let pt = new THREE.Vector3();
+        if (raycaster.ray.intersectPlane(dragPlane, pt)) dragOffset.copy(pt).sub(draggedAtom.mesh.position);
+        return;
+    }
 
-            const k_bond = 2.0;       
-            const k_angle = 0.5;      
-            const damping = 0.8;      
-            const max_step = 0.2;     
-
-            let forces = {};
-            atoms.forEach(a => forces[a.id] = new THREE.Vector3(0, 0, 0));
-
-            bonds.forEach(b => {
-                let a1 = atoms.find(a => a.id === b.atom1_id);
-                let a2 = atoms.find(a => a.id === b.atom2_id);
-                if (!a1 || !a2) return;
-                
-                let idealL = getIdealBondLength(a1.element, a2.element, b.bondType === 'ionic');
-                let diff = new THREE.Vector3().subVectors(a1.mesh.position, a2.mesh.position);
-                let dist = diff.length();
-                
-                if (dist > 0.001) {
-                    let forceMag = (idealL - dist) * k_bond; 
-                    let f = diff.normalize().multiplyScalar(forceMag);
-                    forces[a1.id].add(f);
-                    forces[a2.id].sub(f);
-                }
-            });
-
-            for (let i = 0; i < atoms.length; i++) {
-                for (let j = i + 1; j < atoms.length; j++) {
-                    let a1 = atoms[i];
-                    let a2 = atoms[j];
-                    
-                    let isBonded = bonds.some(b => (b.atom1_id === a1.id && b.atom2_id === a2.id) || (b.atom2_id === a1.id && b.atom1_id === a2.id));
-                    if (isBonded) continue; 
-
-                    let commonNeighbors = [];
-                    atoms.forEach(c => {
-                        if (c.id === a1.id || c.id === a2.id) return;
-                        let b1 = bonds.find(b => (b.atom1_id===a1.id && b.atom2_id===c.id)||(b.atom2_id===a1.id && b.atom1_id===c.id));
-                        let b2 = bonds.find(b => (b.atom1_id===a2.id && b.atom2_id===c.id)||(b.atom2_id===a2.id && b.atom1_id===c.id));
-                        if (b1 && b2) commonNeighbors.push({ center: c, bond1: b1, bond2: b2 });
-                    });
-
-                    let diff = new THREE.Vector3().subVectors(a1.mesh.position, a2.mesh.position);
-                    let dist = diff.length();
-                    
-                    if (dist < 0.001) {
-                        diff.set(Math.random()-0.5, Math.random()-0.5, Math.random()-0.5).normalize().multiplyScalar(0.01);
-                        dist = 0.01;
-                    }
-
-                    if (commonNeighbors.length > 0) {
-                        let relation = commonNeighbors[0]; 
-                        let targetAngle = getTargetAngle(relation.center.id);
-                        
-                        let L1 = getIdealBondLength(a1.element, relation.center.element, relation.bond1.bondType === 'ionic');
-                        let L2 = getIdealBondLength(a2.element, relation.center.element, relation.bond2.bondType === 'ionic');
-                        
-                        let idealDist = Math.sqrt(L1*L1 + L2*L2 - 2*L1*L2*Math.cos(targetAngle * Math.PI / 180));
-                        let forceMag = (idealDist - dist) * k_angle; 
-                        let f = diff.clone().normalize().multiplyScalar(forceMag);
-                        
-                        if (optimizationFrames > 150) {
-                            let jitter = new THREE.Vector3(Math.random()-0.5, Math.random()-0.5, Math.random()-0.5).multiplyScalar(0.05);
-                            f.add(jitter);
-                        }
-                        
-                        forces[a1.id].add(f);
-                        forces[a2.id].sub(f);
-                    } else {
-                        let idealDist = ELEMENTS[a1.element].vdw + ELEMENTS[a2.element].vdw;
-                        let forceMag = 0.5 / (dist * dist); 
-                        if (dist < idealDist) forceMag += (idealDist - dist) * 0.2; 
-                        if (forceMag > 1.0) forceMag = 1.0; 
-                        
-                        let f = diff.clone().normalize().multiplyScalar(forceMag);
-                        forces[a1.id].add(f);
-                        forces[a2.id].sub(f);
-                    }
-                }
-            }
-
-            let avgVelocity = new THREE.Vector3();
-            atoms.forEach(a => {
-                let f = forces[a.id];
-                a.velocity.add(f).multiplyScalar(damping);
-                if (a.velocity.length() > max_step) a.velocity.setLength(max_step);
-                avgVelocity.add(a.velocity);
-            });
-            avgVelocity.divideScalar(atoms.length);
-
-            atoms.forEach(a => {
-                a.velocity.sub(avgVelocity); 
-                a.mesh.position.add(a.velocity);
-            });
-
-            bonds.forEach(b => updateBondMesh(b));
-        }
-
-        function getIdealBondDirection(centerAtomId, clickNormal) {
-            let centerAtom = atoms.find(a => a.id === centerAtomId);
-            let centerPos = centerAtom.mesh.position;
-            let neighbors = [];
-            bonds.forEach(b => {
-                if (b.atom1_id === centerAtomId) neighbors.push(atoms.find(a => a.id === b.atom2_id));
-                if (b.atom2_id === centerAtomId) neighbors.push(atoms.find(a => a.id === b.atom1_id));
-            });
-
-            let N = neighbors.length;
-            if (N === 0) return clickNormal.clone().normalize();
-
-            if (N === 1) {
-                let v1 = new THREE.Vector3().subVectors(neighbors[0].mesh.position, centerPos).normalize();
-                let proj = new THREE.Vector3().copy(clickNormal).sub(v1.clone().multiplyScalar(clickNormal.dot(v1)));
-                if (proj.lengthSq() < 0.001) { 
-                    let up = Math.abs(v1.y) > 0.9 ? new THREE.Vector3(1,0,0) : new THREE.Vector3(0,1,0);
-                    proj.crossVectors(v1, up);
-                }
-                proj.normalize();
-                let cosTetra = -1.0 / 3.0; 
-                let sinTetra = Math.sqrt(8.0 / 9.0); 
-                return v1.clone().multiplyScalar(cosTetra).add(proj.multiplyScalar(sinTetra)).normalize();
-            }
-
-            if (N === 2) {
-                let v1 = new THREE.Vector3().subVectors(neighbors[0].mesh.position, centerPos).normalize();
-                let v2 = new THREE.Vector3().subVectors(neighbors[1].mesh.position, centerPos).normalize();
-                let v_sum = new THREE.Vector3().addVectors(v1, v2);
-                let cross = new THREE.Vector3().crossVectors(v1, v2);
-
-                if (cross.lengthSq() < 0.001) { 
-                    return new THREE.Vector3().copy(clickNormal).sub(v1.clone().multiplyScalar(clickNormal.dot(v1))).normalize();
-                }
-
-                cross.normalize();
-                let sign = clickNormal.dot(cross) > 0 ? 1 : -1;
-                let dir = new THREE.Vector3();
-                dir.addScaledVector(v_sum, -0.5); 
-                dir.addScaledVector(cross, sign * Math.sqrt(2.0/3.0)); 
-                return dir.normalize();
-            }
-
-            let v_sum = new THREE.Vector3();
-            neighbors.forEach(n => {
-                let v = new THREE.Vector3().subVectors(n.mesh.position, centerPos).normalize();
-                v_sum.add(v);
-            });
-            if (v_sum.lengthSq() < 0.01) return clickNormal.clone().normalize(); 
-            return v_sum.multiplyScalar(-1).normalize();
-        }
-
-        // --- 3. 初始化 Three.js ---
-        function init() {
-            document.addEventListener('contextmenu', event => event.preventDefault());
-
-            const container = document.getElementById('canvas-container');
-            scene = new THREE.Scene();
-
-            const ambientLight = new THREE.AmbientLight(0x404040, 1.5); 
-            scene.add(ambientLight);
-            const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
-            directionalLight.position.set(5, 10, 7);
-            scene.add(directionalLight);
-            const backLight = new THREE.DirectionalLight(0xffffff, 0.5);
-            backLight.position.set(-5, -10, -7);
-            scene.add(backLight);
-
-            camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
-            camera.position.set(0, 0, 15);
-
-            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
-            renderer.setPixelRatio(window.devicePixelRatio);
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.setClearColor(0x000000, 0); 
-            container.appendChild(renderer.domElement);
-
-            controls = new THREE.OrbitControls(camera, renderer.domElement);
-            controls.enableDamping = true;
-            controls.dampingFactor = 0.05;
-
-            renderer.domElement.addEventListener('pointerdown', onPointerDown);
-            renderer.domElement.addEventListener('pointermove', onPointerMove); 
-            renderer.domElement.addEventListener('pointerup', onPointerUp);
-            window.addEventListener('resize', onWindowResize);
-
-            buildUI();
-            animate();
-        }
-
-        function onPointerDown(event) {
-            pointerDownPos.set(event.clientX, event.clientY);
-            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
-            raycaster.setFromCamera(mouse, camera);
-            let interactables = atoms.map(a => a.mesh);
-            let intersects = raycaster.intersectObjects(interactables, true);
-            dragStartAtomId = intersects.length > 0 ? intersects[0].object.userData.id : null;
-
-            if (currentTool === 'drag' && dragStartAtomId) {
-                controls.enabled = false; 
-                draggedAtom = atoms.find(a => a.id === dragStartAtomId);
-                
+    if (currentTool === 'move-mol') {
+        controls.enabled = false;
+        if (hitAtomId) {
+            let groupSet = new Set(selectedMolGroup);
+            if (groupSet.has(hitAtomId)) {
+                // 已選取分子內：準備平移
+                molDragMode = 'translate';
                 let cameraDir = new THREE.Vector3();
                 camera.getWorldDirection(cameraDir);
-                dragPlane.setFromNormalAndCoplanarPoint(cameraDir.negate(), draggedAtom.mesh.position);
-                
-                let intersection = new THREE.Vector3();
-                if (raycaster.ray.intersectPlane(dragPlane, intersection)) {
-                    dragOffset.copy(intersection).sub(draggedAtom.mesh.position);
-                }
-            }
-        }
-
-        function onPointerMove(event) {
-            if (!draggedAtom) return;
-
-            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
-            raycaster.setFromCamera(mouse, camera);
-
-            let intersection = new THREE.Vector3();
-            if (raycaster.ray.intersectPlane(dragPlane, intersection)) {
-                draggedAtom.mesh.position.copy(intersection.sub(dragOffset));
-                
-                bonds.forEach(b => {
-                    if (b.atom1_id === draggedAtom.id || b.atom2_id === draggedAtom.id) {
-                        updateBondMesh(b);
-                    }
-                });
-            }
-        }
-
-        function onPointerUp(event) {
-            if (draggedAtom) {
-                draggedAtom = null;
-                return;
-            }
-
-            let isDrag = pointerDownPos.distanceTo(new THREE.Vector2(event.clientX, event.clientY)) > 10;
-            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
-
-            raycaster.setFromCamera(mouse, camera);
-
-            let interactables = [];
-            atoms.forEach(a => interactables.push(a.mesh));
-            bonds.forEach(b => interactables.push(b.group));
-
-            const intersects = raycaster.intersectObjects(interactables, true);
-
-            if (currentTool === 'camera' || currentTool === 'drag') return; 
-
-            if (isDrag) {
-                if (intersects.length > 0 && intersects[0].object.userData.type === 'atom') {
-                    let dragEndAtomId = intersects[0].object.userData.id;
-                    if (dragStartAtomId && dragStartAtomId !== dragEndAtomId) {
-                        if (currentTool === 'bond') {
-                            toggleBond(dragStartAtomId, dragEndAtomId);
-                        } else if (currentTool === 'delete-bond') {
-                            removeBondBetween(dragStartAtomId, dragEndAtomId);
-                        }
-                    }
-                }
-                if (bondSelection) { highlightAtom(bondSelection, false); bondSelection = null; }
-                if (deleteBondSelection) { highlightAtom(deleteBondSelection, false); deleteBondSelection = null; }
-                dragStartAtomId = null;
-                return; 
-            }
-
-            if (currentTool === 'add') {
-                if (intersects.length > 0) {
-                    let hitObject = intersects[0].object;
-                    if (hitObject.userData.type === 'atom') {
-                        let parentAtomId = hitObject.userData.id;
-                        let parentAtomData = atoms.find(a => a.id === parentAtomId);
-                        let parentElData = ELEMENTS[parentAtomData.element];
-                        let currentElData = ELEMENTS[currentElement];
-                        let willBeIonic = parentElData.isMetal || currentElData.isMetal;
-                        
-                        let valInfo = getAtomValencyInfo(parentAtomId);
-                        
-                        if (parentElData.isMetal && valInfo.total >= parentElData.maxBonds) {
-                            showToast(`${parentAtomData.element} 離子已達配位數上限！`); return; 
-                        } else if (!parentElData.isMetal) {
-                            if (!willBeIonic && valInfo.covalent >= parentElData.maxBonds) {
-                                showToast(`${parentAtomData.element} 元素已達到最大共價鍵結數！`); return; 
-                            }
-                            if (valInfo.total >= 8) {
-                                showToast(`${parentAtomData.element} 空間過度壅擠！`); return; 
-                            }
-                        }
-
-                        let normal = intersects[0].face.normal.clone();
-                        normal.transformDirection(hitObject.matrixWorld).normalize(); 
-                        
-                        let idealDir = getIdealBondDirection(parentAtomId, normal);
-                        
-                        let bondLength = getIdealBondLength(parentAtomData.element, currentElement, willBeIonic);
-                        let pos = hitObject.position.clone().add(idealDir.multiplyScalar(bondLength));
-                        
-                        let newAtom = createAtom(currentElement, pos);
-                        createBond(parentAtomId, newAtom.id);
-                    }
-                } else {
-                    let target = new THREE.Vector3();
-                    raycaster.ray.at(15, target); 
-                    createAtom(currentElement, target);
-                }
-            } 
-            else if (currentTool === 'bond') {
-                if (intersects.length > 0) {
-                    let hitObject = intersects[0].object;
-                    if (hitObject.userData.type === 'atom') {
-                        let clickedAtomId = hitObject.userData.id;
-                        if (!bondSelection) {
-                            let aData = atoms.find(a => a.id === clickedAtomId);
-                            let elData = ELEMENTS[aData.element];
-                            let vInfo = getAtomValencyInfo(clickedAtomId);
-                            
-                            if ((elData.isMetal && vInfo.total >= elData.maxBonds) || (!elData.isMetal && vInfo.total >= 8)) {
-                                showToast(`${aData.element} 周圍已沒有空間建立新連線！`);
-                                return;
-                            }
-                            bondSelection = clickedAtomId;
-                            highlightAtom(bondSelection, true, 0x555555);
-                        } else {
-                            if (bondSelection !== clickedAtomId) toggleBond(bondSelection, clickedAtomId);
-                            highlightAtom(bondSelection, false);
-                            bondSelection = null;
-                        }
-                    } else if (hitObject.userData.type === 'bond') {
-                        let bondData = bonds.find(b => b.id === hitObject.userData.id);
-                        if (bondData) toggleBond(bondData.atom1_id, bondData.atom2_id);
-                    }
-                } else {
-                    if (bondSelection) { highlightAtom(bondSelection, false); bondSelection = null; }
-                }
-            }
-            else if (currentTool === 'delete-bond') {
-                if (intersects.length > 0) {
-                    let hitObject = intersects[0].object;
-                    if (hitObject.userData.type === 'atom') {
-                        let clickedAtomId = hitObject.userData.id;
-                        if (!deleteBondSelection) {
-                            deleteBondSelection = clickedAtomId;
-                            highlightAtom(deleteBondSelection, true, 0xaa0000); 
-                        } else {
-                            if (deleteBondSelection !== clickedAtomId) removeBondBetween(deleteBondSelection, clickedAtomId);
-                            highlightAtom(deleteBondSelection, false);
-                            deleteBondSelection = null;
-                        }
-                    } else if (hitObject.userData.type === 'bond') {
-                        decreaseBondOrder(hitObject.userData.id);
-                    }
-                } else {
-                    if (deleteBondSelection) { highlightAtom(deleteBondSelection, false); deleteBondSelection = null; }
-                }
-            }
-            else if (currentTool === 'delete') {
-                if (intersects.length > 0) {
-                    let hitObject = intersects[0].object;
-                    if (hitObject.userData.type === 'atom') {
-                        deleteAtom(hitObject.userData.id);
-                    } else if (hitObject.userData.type === 'bond') {
-                        deleteBond(hitObject.userData.id);
-                    }
-                }
-            }
-        }
-
-        // --- 5. 核心繪圖邏輯 ---
-        function getAtomRadius(element, style) {
-            let elData = ELEMENTS[element];
-            let baseRadius = elData.isMetal ? elData.ionic : elData.covalent;
-            
-            if (style === 'spacefill') return elData.isMetal ? elData.ionic : elData.vdw;         
-            if (style === 'atom_mode') return baseRadius * 1.25; 
-            return baseRadius * 0.4;                         
-        }
-
-        function createTextSprite(element) {
-            const canvas = document.createElement('canvas');
-            canvas.width = 128;
-            canvas.height = 128;
-            const ctx = canvas.getContext('2d');
-            
-            ctx.font = 'bold 72px sans-serif';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            
-            ctx.strokeStyle = '#222222';
-            ctx.lineWidth = 10;
-            ctx.lineJoin = 'round';
-            ctx.strokeText(element, 64, 64);
-            
-            ctx.fillStyle = '#ffffff';
-            ctx.fillText(element, 64, 64);
-
-            const texture = new THREE.CanvasTexture(canvas);
-            const spriteMaterial = new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false }); 
-            const sprite = new THREE.Sprite(spriteMaterial);
-            
-            sprite.raycast = function() {}; 
-            
-            sprite.scale.set(1.5, 1.5, 1);
-            return sprite;
-        }
-
-        // 【更新】負責統一切換網格與標籤可見度的函數，實現完美替換
-        function updateVisibility() {
-            atoms.forEach(a => {
-                a.sprite.visible = showLabels;
-                a.mesh.material.visible = !showLabels; // 顯示標籤時，隱藏 3D 圓球
-            });
-            bonds.forEach(b => updateBondMesh(b));
-        }
-
-        function createAtom(element, position, id = null) {
-            let elData = ELEMENTS[element];
-            let radius = getAtomRadius(element, currentStyle);
-            
-            const geometry = new THREE.SphereGeometry(radius, 32, 32);
-            const material = new THREE.MeshPhongMaterial({ color: elData.color, shininess: 60 });
-            const mesh = new THREE.Mesh(geometry, material);
-            mesh.position.copy(position);
-            
-            const sprite = createTextSprite(element);
-            
-            mesh.add(sprite); 
-            
-            let atomId = id || Math.random().toString(36).substr(2, 9);
-            mesh.userData = { type: 'atom', id: atomId, element: element };
-            scene.add(mesh);
-
-            let atomObj = { id: atomId, element: element, mesh: mesh, sprite: sprite, x: position.x, y: position.y, z: position.z };
-            atoms.push(atomObj);
-            
-            updateVisibility(); // 建立後同步目前顯示狀態
-            return atomObj;
-        }
-
-        function createBond(atom1_id, atom2_id, order = 1, id = null) {
-            let el1 = atoms.find(a => a.id === atom1_id).element;
-            let el2 = atoms.find(a => a.id === atom2_id).element;
-            let isIonic = ELEMENTS[el1].isMetal || ELEMENTS[el2].isMetal;
-
-            let bondId = id || Math.random().toString(36).substr(2, 9);
-            let bondObj = { 
-                id: bondId, atom1_id: atom1_id, atom2_id: atom2_id, 
-                order: isIonic ? 1 : order, bondType: isIonic ? 'ionic' : 'covalent', group: new THREE.Group() 
-            };
-            scene.add(bondObj.group);
-            bonds.push(bondObj);
-            updateBondMesh(bondObj);
-            return bondObj;
-        }
-
-        function updateBondMesh(bondObj) {
-            while(bondObj.group.children.length > 0){ 
-                let child = bondObj.group.children[0];
-                bondObj.group.remove(child); 
-                child.geometry.dispose();
-                child.material.dispose();
-            }
-
-            if (currentStyle !== 'ball_and_stick') return; 
-
-            let a1 = atoms.find(a => a.id === bondObj.atom1_id).mesh.position;
-            let a2 = atoms.find(a => a.id === bondObj.atom2_id).mesh.position;
-            let isIonic = bondObj.bondType === 'ionic';
-            
-            let distance = a1.distanceTo(a2);
-            let direction = new THREE.Vector3().subVectors(a2, a1).normalize();
-
-            let up = new THREE.Vector3(0, 1, 0);
-            if (Math.abs(direction.y) > 0.9) up.set(1, 0, 0); 
-            let perpendicular = new THREE.Vector3().crossVectors(direction, up).normalize();
-
-            // 【更新】如果顯示標籤，所有連線強制變細，呈現 2D 骨架風格
-            let bondRadius = showLabels ? 0.04 : (isIonic ? 0.06 : 0.12);
-
-            if (isIonic) {
-                let dashLength = 0.15; 
-                let gapLength = 0.15;  
-                let step = dashLength + gapLength;
-                let numDashes = Math.floor(distance / step); 
-                if (numDashes < 1) numDashes = 1;
-                
-                let remainingSpace = distance - (numDashes * step - gapLength);
-                let startOffset = remainingSpace / 2 + dashLength / 2;
-
-                const material = new THREE.MeshPhongMaterial({ 
-                    color: 0x99ccff, transparent: true, opacity: 0.8, depthWrite: false
-                });
-
-                for (let i = 0; i < numDashes; i++) {
-                    const geometry = new THREE.CylinderGeometry(bondRadius, bondRadius, dashLength, 16);
-                    geometry.translate(0, dashLength / 2, 0);
-                    geometry.rotateX(Math.PI / 2);
-
-                    const mesh = new THREE.Mesh(geometry, material);
-                    let currentDist = startOffset + i * step;
-                    let pos = a1.clone().add(direction.clone().multiplyScalar(currentDist));
-
-                    mesh.position.copy(pos);
-                    mesh.lookAt(pos.clone().add(direction));
-
-                    mesh.userData = { type: 'bond', id: bondObj.id };
-                    bondObj.group.add(mesh);
-                }
-            } 
-            else {
-                // 【更新】如果顯示標籤，多重鍵的距離也縮小，避免看起來笨重
-                let offsetDist = showLabels ? 0.15 : 0.3; 
-                let offsets = [];
-                if (bondObj.order === 1) offsets = [0];
-                else if (bondObj.order === 2) offsets = [-offsetDist/2, offsetDist/2];
-                else if (bondObj.order === 3) offsets = [-offsetDist, 0, offsetDist];
-
-                const material = new THREE.MeshPhongMaterial({ color: 0xaaaaaa });
-
-                offsets.forEach(offset => {
-                    const geometry = new THREE.CylinderGeometry(bondRadius, bondRadius, distance, 16);
-                    geometry.translate(0, distance / 2, 0);
-                    geometry.rotateX(Math.PI / 2);
-
-                    const mesh = new THREE.Mesh(geometry, material);
-                    
-                    let pos = a1.clone().add(perpendicular.clone().multiplyScalar(offset));
-                    mesh.position.copy(pos);
-                    mesh.lookAt(pos.clone().add(direction));
-
-                    mesh.userData = { type: 'bond', id: bondObj.id };
-                    bondObj.group.add(mesh);
-                });
-            }
-        }
-
-        function deleteAtom(id) {
-            let index = atoms.findIndex(a => a.id === id);
-            if (index > -1) {
-                scene.remove(atoms[index].mesh);
-                atoms[index].mesh.geometry.dispose();
-                atoms[index].mesh.material.dispose();
-                atoms.splice(index, 1);
-            }
-            let bondsToDelete = bonds.filter(b => b.atom1_id === id || b.atom2_id === id);
-            bondsToDelete.forEach(b => deleteBond(b.id));
-        }
-
-        function deleteBond(id) {
-            let index = bonds.findIndex(b => b.id === id);
-            if (index > -1) {
-                scene.remove(bonds[index].group);
-                bonds.splice(index, 1);
-            }
-        }
-
-        function highlightAtom(id, isHighlighted, colorHex = 0x555555) {
-            let atom = atoms.find(a => a.id === id);
-            if (atom) {
-                if (isHighlighted) {
-                    atom.mesh.material.emissive.setHex(colorHex);
-                    atom.sprite.scale.set(2.0, 2.0, 1);
-                } else {
-                    atom.mesh.material.emissive.setHex(0x000000);
-                    atom.sprite.scale.set(1.5, 1.5, 1);
-                }
-            }
-        }
-
-        // --- 6. UI 與樣式控制 ---
-        function setTool(tool) {
-            currentTool = tool;
-            ['camera', 'drag', 'add', 'bond', 'delete-bond', 'delete'].forEach(t => {
-                let btn = document.getElementById(`tool-${t}`);
-                if (btn) btn.classList.remove('active', 'bg-blue-600', 'bg-red-600', 'border-blue-500', 'border-red-500');
-            });
-            let activeBtn = document.getElementById(`tool-${tool}`);
-            if (tool === 'delete' || tool === 'delete-bond') {
-                activeBtn.classList.add('active', 'bg-red-600', 'border-red-500'); 
+                molDragPlane.setFromNormalAndCoplanarPoint(cameraDir.negate(), atomHits[0].object.position);
+                let pt = new THREE.Vector3();
+                if (raycaster.ray.intersectPlane(molDragPlane, pt)) molDragLastPos.copy(pt);
             } else {
-                activeBtn.classList.add('active', 'bg-blue-600', 'border-blue-500');
+                // 點到其他分子：重新選取
+                clearMolSelection();
+                selectedMolGroup = getMoleculeGroup(hitAtomId);
+                setMolHighlight(selectedMolGroup, true);
+                showToast(`已選取分子（${selectedMolGroup.length} 個原子）`);
+                molDragMode = null;
             }
-            let elementBar = document.getElementById('element-bar');
-            if (tool === 'add') { 
-                elementBar.classList.remove('hidden'); 
-                controls.enabled = false; 
-            } else {
-                elementBar.classList.add('hidden');
-                if (bondSelection) { highlightAtom(bondSelection, false); bondSelection = null; }
-                if (deleteBondSelection) { highlightAtom(deleteBondSelection, false); deleteBondSelection = null; }
-                
-                controls.enabled = (tool === 'camera'); 
+        } else {
+            // 空白處：若有選取則準備旋轉
+            if (selectedMolGroup.length > 0) {
+                molDragMode = 'rotate';
+                rotLastX = event.clientX;
+                rotLastY = event.clientY;
             }
         }
+        return;
+    }
+}
 
-        function setStyle(style) {
-            currentStyle = style;
-            document.getElementById('style-ball').classList.toggle('bg-blue-600', style === 'ball_and_stick');
-            document.getElementById('style-atom').classList.toggle('bg-blue-600', style === 'atom_mode');
-            document.getElementById('style-space').classList.toggle('bg-blue-600', style === 'spacefill');
-            
-            atoms.forEach(a => {
-                let radius = getAtomRadius(a.element, style);
-                a.mesh.geometry.dispose();
-                a.mesh.geometry = new THREE.SphereGeometry(radius, 32, 32);
+function onPointerMove(event) {
+    let ndc = getMouseNDC(event);
+    mouse.set(ndc.x, ndc.y);
+    raycaster.setFromCamera(mouse, camera);
+
+    // 移動單一原子
+    if (draggedAtom) {
+        let pt = new THREE.Vector3();
+        if (raycaster.ray.intersectPlane(dragPlane, pt)) {
+            draggedAtom.mesh.position.copy(pt.sub(dragOffset));
+            bonds.forEach(b => {
+                if (b.atom1_id === draggedAtom.id || b.atom2_id === draggedAtom.id) updateBondMesh(b);
             });
-            updateVisibility();
         }
+        return;
+    }
 
-        // 【修改】控制標籤顯示開關，並連動隱藏實體球模型
-        function toggleLabels() {
-            showLabels = !showLabels;
-            let btn = document.getElementById('btn-labels');
-            btn.classList.toggle('bg-blue-600', showLabels);
-            btn.classList.toggle('bg-gray-700', !showLabels);
-            updateVisibility();
+    // 移動分子：平移
+    if (currentTool === 'move-mol' && molDragMode === 'translate') {
+        let pt = new THREE.Vector3();
+        if (raycaster.ray.intersectPlane(molDragPlane, pt)) {
+            let delta = new THREE.Vector3().subVectors(pt, molDragLastPos);
+            molDragLastPos.copy(pt);
+            let groupSet = new Set(selectedMolGroup);
+            selectedMolGroup.forEach(id => { let a = atoms.find(a => a.id === id); if (a) a.mesh.position.add(delta); });
+            bonds.forEach(b => { if (groupSet.has(b.atom1_id) || groupSet.has(b.atom2_id)) updateBondMesh(b); });
         }
+        return;
+    }
 
-        function centerCamera() {
-            if (atoms.length === 0) { controls.target.set(0, 0, 0); camera.position.set(0, 0, 15); controls.update(); return; }
-            let box = new THREE.Box3();
-            atoms.forEach(a => {
-                let r = getAtomRadius(a.element, currentStyle);
-                let minNode = new THREE.Vector3(a.mesh.position.x - r, a.mesh.position.y - r, a.mesh.position.z - r);
-                let maxNode = new THREE.Vector3(a.mesh.position.x + r, a.mesh.position.y + r, a.mesh.position.z + r);
-                box.expandByPoint(minNode); box.expandByPoint(maxNode);
-            });
-            let center = new THREE.Vector3(); box.getCenter(center);
-            let size = new THREE.Vector3(); box.getSize(size);
-            
-            let maxDim = Math.max(size.x, size.y, size.z); if (maxDim < 2) maxDim = 2; 
-            let fov = camera.fov * (Math.PI / 180);
-            let cameraDistance = (maxDim / 2) / Math.tan(fov / 2) * 1.5; 
-            
-            let dir = new THREE.Vector3().subVectors(camera.position, controls.target).normalize();
-            if (dir.lengthSq() < 0.01) dir.set(0, 0, 1);
-            
-            controls.target.copy(center);
-            camera.position.copy(center).add(dir.multiplyScalar(cameraDistance));
-            camera.lookAt(center); controls.update();
-        }
+    // 移動分子：旋轉
+    if (currentTool === 'move-mol' && molDragMode === 'rotate' && selectedMolGroup.length > 0) {
+        let dx = event.clientX - rotLastX;
+        let dy = event.clientY - rotLastY;
+        rotLastX = event.clientX;
+        rotLastY = event.clientY;
 
-        function selectElement(el) {
-            currentElement = el;
-            document.querySelectorAll('.element-btn').forEach(btn => btn.classList.remove('active', 'border-blue-500'));
-            document.getElementById(`el-${el}`).classList.add('active', 'border-blue-500');
-        }
+        let centroid = getMolCentroid(selectedMolGroup);
+        let speed = 0.01;
+        let camUp = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 1).normalize();
+        let camRight = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 0).normalize();
+        let quat = new THREE.Quaternion().setFromAxisAngle(camUp, dx * speed)
+                                        .multiply(new THREE.Quaternion().setFromAxisAngle(camRight, dy * speed));
 
-        function buildUI() {
-            const bar = document.getElementById('element-bar');
-            for (const [symbol, data] of Object.entries(ELEMENTS)) {
-                let colorHex = '#' + data.color.toString(16).padStart(6, '0');
-                if (symbol === 'H') colorHex = '#e2e8f0'; 
-                
-                let btn = document.createElement('button');
-                btn.id = `el-${symbol}`;
-                btn.className = `element-btn flex-none w-12 h-12 rounded-full font-bold text-gray-800 border-gray-400 bg-white snap-center ${symbol === currentElement ? 'active border-blue-500' : ''}`;
-                btn.style.boxShadow = `inset 0 0 10px ${colorHex}55`;
-                btn.innerHTML = `<div style="color:${symbol==='H'?'#333':colorHex}">${symbol}</div>`;
-                btn.onclick = () => selectElement(symbol);
-                bar.appendChild(btn);
+        let groupSet = new Set(selectedMolGroup);
+        selectedMolGroup.forEach(id => {
+            let a = atoms.find(a => a.id === id);
+            if (!a) return;
+            a.mesh.position.sub(centroid).applyQuaternion(quat).add(centroid);
+        });
+        bonds.forEach(b => { if (groupSet.has(b.atom1_id) || groupSet.has(b.atom2_id)) updateBondMesh(b); });
+    }
+}
+
+function onPointerUp(event) {
+    let wasDrag = pointerDownPos.distanceTo(new THREE.Vector2(event.clientX, event.clientY)) > 8;
+
+    if (draggedAtom) {
+        draggedAtom = null;
+        controls.enabled = (currentTool === 'camera');
+        return;
+    }
+
+    if (currentTool === 'move-mol') {
+        let ndc = getMouseNDC(event);
+        mouse.set(ndc.x, ndc.y);
+        raycaster.setFromCamera(mouse, camera);
+        let hitAtomId = raycaster.intersectObjects(atoms.map(a => a.mesh), true)[0]?.object.userData.id || null;
+        if (!hitAtomId && !wasDrag) clearMolSelection();
+        molDragMode = null;
+        controls.enabled = false;
+        return;
+    }
+
+    controls.enabled = (currentTool === 'camera');
+
+    let ndc = getMouseNDC(event);
+    mouse.set(ndc.x, ndc.y);
+    raycaster.setFromCamera(mouse, camera);
+    let interactables = [];
+    atoms.forEach(a => interactables.push(a.mesh));
+    bonds.forEach(b => interactables.push(b.group));
+    const intersects = raycaster.intersectObjects(interactables, true);
+
+    if (currentTool === 'camera' || currentTool === 'drag') return;
+
+    if (wasDrag) {
+        if (intersects.length > 0 && intersects[0].object.userData.type === 'atom') {
+            let endId = intersects[0].object.userData.id;
+            if (dragStartAtomId && dragStartAtomId !== endId) {
+                if (currentTool === 'bond') toggleBond(dragStartAtomId, endId);
+                else if (currentTool === 'delete-bond') removeBondBetween(dragStartAtomId, endId);
             }
         }
+        if (bondSelection) { highlightAtom(bondSelection, false); bondSelection = null; }
+        if (deleteBondSelection) { highlightAtom(deleteBondSelection, false); deleteBondSelection = null; }
+        dragStartAtomId = null;
+        return;
+    }
 
-        // --- 7. 匯出功能 ---
-        function exportPNG() {
-            renderer.render(scene, camera); 
-            const dataURL = renderer.domElement.toDataURL("image/png");
-            const link = document.createElement('a'); link.href = dataURL; link.download = 'molecule.png';
-            document.body.appendChild(link); link.click(); document.body.removeChild(link);
-            showToast("📸 成功匯出透明背景 PNG！");
+    if (currentTool === 'add') {
+        if (intersects.length > 0) {
+            let hit = intersects[0].object;
+            if (hit.userData.type === 'atom') {
+                let parentId = hit.userData.id;
+                let parentData = atoms.find(a => a.id === parentId);
+                let pEl = ELEMENTS[parentData.element], cEl = ELEMENTS[currentElement];
+                let willIonic = pEl.isMetal || cEl.isMetal;
+                let val = getAtomValencyInfo(parentId);
+                if (pEl.isMetal && val.total >= pEl.maxBonds) { showToast(`${parentData.element} 離子已達配位數上限！`); return; }
+                if (!pEl.isMetal) {
+                    if (!willIonic && val.covalent >= pEl.maxBonds) { showToast(`${parentData.element} 元素已達到最大共價鍵結數！`); return; }
+                    if (val.total >= 8) { showToast(`${parentData.element} 空間過度壅擠！`); return; }
+                }
+                let normal = intersects[0].face.normal.clone().transformDirection(hit.matrixWorld).normalize();
+                let dir = getIdealBondDirection(parentId, normal);
+                let len = getIdealBondLength(parentData.element, currentElement, willIonic);
+                let pos = hit.position.clone().add(dir.multiplyScalar(len));
+                createBond(parentId, createAtom(currentElement, pos).id);
+            }
+        } else {
+            let target = new THREE.Vector3();
+            raycaster.ray.at(15, target);
+            createAtom(currentElement, target);
         }
-
-        function exportMC() {
-            let saveData = {
-                version: "1.0",
-                atoms: atoms.map(a => ({ id: a.id, element: a.element, x: a.mesh.position.x, y: a.mesh.position.y, z: a.mesh.position.z })),
-                bonds: bonds.map(b => ({ id: b.id, atom1_id: b.atom1_id, atom2_id: b.atom2_id, order: b.order, bondType: b.bondType }))
-            };
-            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(saveData));
-            const downloadAnchorNode = document.createElement('a');
-            downloadAnchorNode.setAttribute("href", dataStr); downloadAnchorNode.setAttribute("download", "molecule.mc");
-            document.body.appendChild(downloadAnchorNode); downloadAnchorNode.click(); downloadAnchorNode.remove();
+    }
+    else if (currentTool === 'bond') {
+        if (intersects.length > 0) {
+            let hit = intersects[0].object;
+            if (hit.userData.type === 'atom') {
+                let cid = hit.userData.id;
+                if (!bondSelection) {
+                    let aData = atoms.find(a => a.id === cid);
+                    let vInfo = getAtomValencyInfo(cid);
+                    let elData = ELEMENTS[aData.element];
+                    if ((elData.isMetal && vInfo.total >= elData.maxBonds) || (!elData.isMetal && vInfo.total >= 8)) { showToast(`${aData.element} 周圍已沒有空間建立新連線！`); return; }
+                    bondSelection = cid; highlightAtom(bondSelection, true, 0x555555);
+                } else {
+                    if (bondSelection !== cid) toggleBond(bondSelection, cid);
+                    highlightAtom(bondSelection, false); bondSelection = null;
+                }
+            } else if (hit.userData.type === 'bond') {
+                let bd = bonds.find(b => b.id === hit.userData.id);
+                if (bd) toggleBond(bd.atom1_id, bd.atom2_id);
+            }
+        } else { if (bondSelection) { highlightAtom(bondSelection, false); bondSelection = null; } }
+    }
+    else if (currentTool === 'delete-bond') {
+        if (intersects.length > 0) {
+            let hit = intersects[0].object;
+            if (hit.userData.type === 'atom') {
+                let cid = hit.userData.id;
+                if (!deleteBondSelection) { deleteBondSelection = cid; highlightAtom(deleteBondSelection, true, 0xaa0000); }
+                else { if (deleteBondSelection !== cid) removeBondBetween(deleteBondSelection, cid); highlightAtom(deleteBondSelection, false); deleteBondSelection = null; }
+            } else if (hit.userData.type === 'bond') { decreaseBondOrder(hit.userData.id); }
+        } else { if (deleteBondSelection) { highlightAtom(deleteBondSelection, false); deleteBondSelection = null; } }
+    }
+    else if (currentTool === 'delete') {
+        if (intersects.length > 0) {
+            let hit = intersects[0].object;
+            if (hit.userData.type === 'atom') deleteAtom(hit.userData.id);
+            else if (hit.userData.type === 'bond') deleteBond(hit.userData.id);
         }
+    }
+}
 
-        function importMC(event) {
-            const file = event.target.files[0]; if (!file) return;
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                try {
-                    const data = JSON.parse(e.target.result);
-                    atoms.slice().forEach(a => deleteAtom(a.id)); atoms = []; bonds = [];
-                    if (data.atoms) data.atoms.forEach(a => createAtom(a.element, new THREE.Vector3(a.x, a.y, a.z), a.id));
-                    if (data.bonds) {
-                        data.bonds.forEach(b => {
-                            let el1 = atoms.find(a => a.id === b.atom1_id).element;
-                            let el2 = atoms.find(a => a.id === b.atom2_id).element;
-                            let isIonic = ELEMENTS[el1].isMetal || ELEMENTS[el2].isMetal;
-                            let bType = b.bondType ? b.bondType : (isIonic ? 'ionic' : 'covalent');
-                            let bondObj = { id: b.id, atom1_id: b.atom1_id, atom2_id: b.atom2_id, order: b.order, bondType: bType, group: new THREE.Group() };
-                            scene.add(bondObj.group); bonds.push(bondObj); updateBondMesh(bondObj);
-                        });
-                    }
-                    showToast("載入成功！");
-                } catch (err) { showToast("檔案格式錯誤或不相容！"); }
-            };
-            reader.readAsText(file); event.target.value = ''; 
+// --- 7. 鍵結操作 ---
+function toggleBond(a1Id, a2Id) {
+    let ex = bonds.find(b => (b.atom1_id===a1Id&&b.atom2_id===a2Id)||(b.atom2_id===a1Id&&b.atom1_id===a2Id));
+    if (!ex) {
+        let a1d=atoms.find(a=>a.id===a1Id), a2d=atoms.find(a=>a.id===a2Id);
+        let e1=ELEMENTS[a1d.element], e2=ELEMENTS[a2d.element], ionic=e1.isMetal||e2.isMetal;
+        let v1=getAtomValencyInfo(a1Id), v2=getAtomValencyInfo(a2Id);
+        if (e1.isMetal&&v1.total>=e1.maxBonds){showToast(`${a1d.element} 離子已達配位數上限！`);return;}
+        if (!e1.isMetal&&!ionic&&v1.covalent>=e1.maxBonds){showToast(`${a1d.element} 元素已達共價鍵上限！`);return;}
+        if (!e1.isMetal&&v1.total>=8){showToast(`${a1d.element} 空間過度壅擠！`);return;}
+        if (e2.isMetal&&v2.total>=e2.maxBonds){showToast(`${a2d.element} 離子已達配位數上限！`);return;}
+        if (!e2.isMetal&&!ionic&&v2.covalent>=e2.maxBonds){showToast(`${a2d.element} 元素已達共價鍵上限！`);return;}
+        if (!e2.isMetal&&v2.total>=8){showToast(`${a2d.element} 空間過度壅擠！`);return;}
+        createBond(a1Id, a2Id);
+    } else {
+        if (ex.bondType==='ionic'){showToast("離子鍵無法建立多重鍵！");return;}
+        let next=(ex.order%3)+1;
+        if (next>ex.order) {
+            let add=next-ex.order;
+            let a1=atoms.find(a=>a.id===ex.atom1_id), a2=atoms.find(a=>a.id===ex.atom2_id);
+            let v1=getAtomValencyInfo(a1.id), v2=getAtomValencyInfo(a2.id);
+            if (v1.covalent+add>ELEMENTS[a1.element].maxBonds||v2.covalent+add>ELEMENTS[a2.element].maxBonds){next=1;showToast("原子價數不足，退回單鍵！");}
         }
+        ex.order=next; updateBondMesh(ex);
+    }
+}
 
-        // --- 8. 系統循環 ---
-        function onWindowResize() {
-            camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
+function decreaseBondOrder(bondId) {
+    let b=bonds.find(b=>b.id===bondId);
+    if (b){if(b.order>1){b.order--;updateBondMesh(b);}else deleteBond(bondId);}
+}
+
+function removeBondBetween(a1Id, a2Id) {
+    let b=bonds.find(b=>(b.atom1_id===a1Id&&b.atom2_id===a2Id)||(b.atom2_id===a1Id&&b.atom1_id===a2Id));
+    if (b) decreaseBondOrder(b.id);
+}
+
+// --- 8. 最佳化 ---
+function startOptimization() {
+    if (atoms.length===0) return;
+    optimizationFrames=200;
+    atoms.forEach(a=>{a.velocity=new THREE.Vector3();});
+    showToast("✨ 結構最佳化中...");
+}
+
+function stepOptimization() {
+    if (optimizationFrames<=0) return;
+    optimizationFrames--;
+    const k_bond=2.0,k_angle=0.5,damping=0.8,max_step=0.2;
+    let forces={};
+    atoms.forEach(a=>forces[a.id]=new THREE.Vector3());
+
+    bonds.forEach(b=>{
+        let a1=atoms.find(a=>a.id===b.atom1_id),a2=atoms.find(a=>a.id===b.atom2_id);
+        if(!a1||!a2)return;
+        let ideal=getIdealBondLength(a1.element,a2.element,b.bondType==='ionic');
+        let diff=new THREE.Vector3().subVectors(a1.mesh.position,a2.mesh.position);
+        let dist=diff.length();
+        if(dist>0.001){let f=diff.normalize().multiplyScalar((ideal-dist)*k_bond);forces[a1.id].add(f);forces[a2.id].sub(f);}
+    });
+
+    for(let i=0;i<atoms.length;i++)for(let j=i+1;j<atoms.length;j++){
+        let a1=atoms[i],a2=atoms[j];
+        let bonded=bonds.some(b=>(b.atom1_id===a1.id&&b.atom2_id===a2.id)||(b.atom2_id===a1.id&&b.atom1_id===a2.id));
+        if(bonded)continue;
+        let common=[];
+        atoms.forEach(c=>{
+            if(c.id===a1.id||c.id===a2.id)return;
+            let b1=bonds.find(b=>(b.atom1_id===a1.id&&b.atom2_id===c.id)||(b.atom2_id===a1.id&&b.atom1_id===c.id));
+            let b2=bonds.find(b=>(b.atom1_id===a2.id&&b.atom2_id===c.id)||(b.atom2_id===a2.id&&b.atom1_id===c.id));
+            if(b1&&b2)common.push({center:c,bond1:b1,bond2:b2});
+        });
+        let diff=new THREE.Vector3().subVectors(a1.mesh.position,a2.mesh.position);
+        let dist=diff.length();
+        if(dist<0.001){diff.set(Math.random()-.5,Math.random()-.5,Math.random()-.5).normalize().multiplyScalar(0.01);dist=0.01;}
+        if(common.length>0){
+            let rel=common[0],angle=getTargetAngle(rel.center.id);
+            let L1=getIdealBondLength(a1.element,rel.center.element,rel.bond1.bondType==='ionic');
+            let L2=getIdealBondLength(a2.element,rel.center.element,rel.bond2.bondType==='ionic');
+            let ideal=Math.sqrt(L1*L1+L2*L2-2*L1*L2*Math.cos(angle*Math.PI/180));
+            let f=diff.clone().normalize().multiplyScalar((ideal-dist)*k_angle);
+            if(optimizationFrames>150)f.add(new THREE.Vector3(Math.random()-.5,Math.random()-.5,Math.random()-.5).multiplyScalar(0.05));
+            forces[a1.id].add(f);forces[a2.id].sub(f);
+        }else{
+            let ideal=ELEMENTS[a1.element].vdw+ELEMENTS[a2.element].vdw;
+            let mag=Math.min(0.5/(dist*dist)+(dist<ideal?(ideal-dist)*0.2:0),1.0);
+            let f=diff.clone().normalize().multiplyScalar(mag);
+            forces[a1.id].add(f);forces[a2.id].sub(f);
         }
+    }
 
-        function animate() {
-            requestAnimationFrame(animate);
-            if(controls.enabled) controls.update(); 
-            if (optimizationFrames > 0) stepOptimization();
-            renderer.render(scene, camera);
+    let avg=new THREE.Vector3();
+    atoms.forEach(a=>{a.velocity.add(forces[a.id]).multiplyScalar(damping);if(a.velocity.length()>max_step)a.velocity.setLength(max_step);avg.add(a.velocity);});
+    avg.divideScalar(atoms.length);
+    atoms.forEach(a=>{a.velocity.sub(avg);a.mesh.position.add(a.velocity);});
+    bonds.forEach(b=>updateBondMesh(b));
+}
+
+// --- 9. 繪圖 ---
+function getIdealBondDirection(centerAtomId, clickNormal) {
+    let center=atoms.find(a=>a.id===centerAtomId);
+    let cp=center.mesh.position;
+    let neighbors=[];
+    bonds.forEach(b=>{
+        if(b.atom1_id===centerAtomId)neighbors.push(atoms.find(a=>a.id===b.atom2_id));
+        if(b.atom2_id===centerAtomId)neighbors.push(atoms.find(a=>a.id===b.atom1_id));
+    });
+    let N=neighbors.length;
+    if(N===0)return clickNormal.clone().normalize();
+    if(N===1){
+        let v1=new THREE.Vector3().subVectors(neighbors[0].mesh.position,cp).normalize();
+        let proj=new THREE.Vector3().copy(clickNormal).sub(v1.clone().multiplyScalar(clickNormal.dot(v1)));
+        if(proj.lengthSq()<0.001){let up=Math.abs(v1.y)>0.9?new THREE.Vector3(1,0,0):new THREE.Vector3(0,1,0);proj.crossVectors(v1,up);}
+        proj.normalize();
+        return v1.clone().multiplyScalar(-1/3).add(proj.multiplyScalar(Math.sqrt(8/9))).normalize();
+    }
+    if(N===2){
+        let v1=new THREE.Vector3().subVectors(neighbors[0].mesh.position,cp).normalize();
+        let v2=new THREE.Vector3().subVectors(neighbors[1].mesh.position,cp).normalize();
+        let cross=new THREE.Vector3().crossVectors(v1,v2);
+        if(cross.lengthSq()<0.001)return new THREE.Vector3().copy(clickNormal).sub(v1.clone().multiplyScalar(clickNormal.dot(v1))).normalize();
+        cross.normalize();
+        let dir=new THREE.Vector3();
+        dir.addScaledVector(new THREE.Vector3().addVectors(v1,v2),-0.5);
+        dir.addScaledVector(cross,(clickNormal.dot(cross)>0?1:-1)*Math.sqrt(2/3));
+        return dir.normalize();
+    }
+    let vs=new THREE.Vector3();
+    neighbors.forEach(n=>vs.add(new THREE.Vector3().subVectors(n.mesh.position,cp).normalize()));
+    if(vs.lengthSq()<0.01)return clickNormal.clone().normalize();
+    return vs.multiplyScalar(-1).normalize();
+}
+
+function getAtomRadius(element, style) {
+    let d=ELEMENTS[element], base=d.isMetal?d.ionic:d.covalent;
+    if(style==='spacefill')return d.isMetal?d.ionic:d.vdw;
+    if(style==='atom_mode')return base*1.25;
+    return base*0.4;
+}
+
+function createTextSprite(element) {
+    const canvas=document.createElement('canvas');
+    canvas.width=canvas.height=128;
+    const ctx=canvas.getContext('2d');
+    ctx.font='bold 72px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.strokeStyle='#222222';ctx.lineWidth=10;ctx.lineJoin='round';ctx.strokeText(element,64,64);
+    ctx.fillStyle='#ffffff';ctx.fillText(element,64,64);
+    const sprite=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(canvas),transparent:true,depthTest:false}));
+    sprite.raycast=()=>{};
+    sprite.scale.set(1.5,1.5,1);
+    return sprite;
+}
+
+function updateVisibility() {
+    atoms.forEach(a=>{a.sprite.visible=showLabels;a.mesh.material.visible=!showLabels;});
+    bonds.forEach(b=>updateBondMesh(b));
+}
+
+function createAtom(element, position, id=null) {
+    let d=ELEMENTS[element];
+    const mesh=new THREE.Mesh(new THREE.SphereGeometry(getAtomRadius(element,currentStyle),32,32),new THREE.MeshPhongMaterial({color:d.color,shininess:60}));
+    mesh.position.copy(position);
+    const sprite=createTextSprite(element);
+    mesh.add(sprite);
+    let atomId=id||Math.random().toString(36).substr(2,9);
+    mesh.userData={type:'atom',id:atomId,element};
+    scene.add(mesh);
+    let obj={id:atomId,element,mesh,sprite};
+    atoms.push(obj);
+    updateVisibility();
+    return obj;
+}
+
+function createBond(a1id, a2id, order=1, id=null) {
+    let e1=atoms.find(a=>a.id===a1id).element,e2=atoms.find(a=>a.id===a2id).element;
+    let ionic=ELEMENTS[e1].isMetal||ELEMENTS[e2].isMetal;
+    let obj={id:id||Math.random().toString(36).substr(2,9),atom1_id:a1id,atom2_id:a2id,order:ionic?1:order,bondType:ionic?'ionic':'covalent',group:new THREE.Group()};
+    scene.add(obj.group);bonds.push(obj);updateBondMesh(obj);return obj;
+}
+
+function updateBondMesh(b) {
+    while(b.group.children.length>0){let c=b.group.children[0];b.group.remove(c);c.geometry.dispose();c.material.dispose();}
+    if(currentStyle!=='ball_and_stick')return;
+    let p1=atoms.find(a=>a.id===b.atom1_id).mesh.position,p2=atoms.find(a=>a.id===b.atom2_id).mesh.position;
+    let ionic=b.bondType==='ionic',dist=p1.distanceTo(p2),dir=new THREE.Vector3().subVectors(p2,p1).normalize();
+    let up=Math.abs(dir.y)>0.9?new THREE.Vector3(1,0,0):new THREE.Vector3(0,1,0);
+    let perp=new THREE.Vector3().crossVectors(dir,up).normalize();
+    let br=showLabels?0.04:(ionic?0.06:0.12);
+    if(ionic){
+        let dl=0.15,gl=0.15,step=dl+gl,n=Math.max(Math.floor(dist/step),1);
+        let start=(dist-(n*step-gl))/2+dl/2;
+        let mat=new THREE.MeshPhongMaterial({color:0x99ccff,transparent:true,opacity:0.8,depthWrite:false});
+        for(let i=0;i<n;i++){
+            let geo=new THREE.CylinderGeometry(br,br,dl,16);geo.translate(0,dl/2,0);geo.rotateX(Math.PI/2);
+            let mesh=new THREE.Mesh(geo,mat);
+            let pos=p1.clone().add(dir.clone().multiplyScalar(start+i*step));
+            mesh.position.copy(pos);mesh.lookAt(pos.clone().add(dir));
+            mesh.userData={type:'bond',id:b.id};b.group.add(mesh);
         }
+    }else{
+        let od=showLabels?0.15:0.3;
+        let offsets=b.order===1?[0]:b.order===2?[-od/2,od/2]:[-od,0,od];
+        let mat=new THREE.MeshPhongMaterial({color:0xaaaaaa});
+        offsets.forEach(off=>{
+            let geo=new THREE.CylinderGeometry(br,br,dist,16);geo.translate(0,dist/2,0);geo.rotateX(Math.PI/2);
+            let mesh=new THREE.Mesh(geo,mat);
+            let pos=p1.clone().add(perp.clone().multiplyScalar(off));
+            mesh.position.copy(pos);mesh.lookAt(pos.clone().add(dir));
+            mesh.userData={type:'bond',id:b.id};b.group.add(mesh);
+        });
+    }
+}
 
-        window.onload = init;
-    </script>
+function deleteAtom(id) {
+    let idx=atoms.findIndex(a=>a.id===id);
+    if(idx>-1){scene.remove(atoms[idx].mesh);atoms[idx].mesh.geometry.dispose();atoms[idx].mesh.material.dispose();atoms.splice(idx,1);}
+    bonds.filter(b=>b.atom1_id===id||b.atom2_id===id).forEach(b=>deleteBond(b.id));
+    if(selectedMolGroup.includes(id))clearMolSelection();
+}
+
+function deleteBond(id) {
+    let idx=bonds.findIndex(b=>b.id===id);
+    if(idx>-1){scene.remove(bonds[idx].group);bonds.splice(idx,1);}
+}
+
+function highlightAtom(id, on, colorHex=0x555555) {
+    let a=atoms.find(a=>a.id===id);
+    if(a){a.mesh.material.emissive.setHex(on?colorHex:0x000000);a.sprite.scale.set(on?2:1.5,on?2:1.5,1);}
+}
+
+// --- 10. UI 控制 ---
+function setTool(tool) {
+    currentTool=tool;
+    ['camera','drag','move-mol','add','bond','delete-bond','delete'].forEach(t=>{
+        let btn=document.getElementById(`tool-${t}`);
+        if(btn)btn.className=btn.className.replace(/\bactive\b|\bactive-green\b|\bactive-red\b/g,'').trim();
+    });
+    let btn=document.getElementById(`tool-${tool}`);
+    if(btn){
+        if(tool==='delete'||tool==='delete-bond')btn.classList.add('active-red');
+        else if(tool==='move-mol')btn.classList.add('active-green');
+        else btn.classList.add('active');
+    }
+    document.getElementById('element-bar').classList.toggle('hidden',tool!=='add');
+    if(bondSelection){highlightAtom(bondSelection,false);bondSelection=null;}
+    if(deleteBondSelection){highlightAtom(deleteBondSelection,false);deleteBondSelection=null;}
+    if(tool!=='move-mol')clearMolSelection();
+    controls.enabled=(tool==='camera');
+}
+
+function setStyle(style) {
+    currentStyle=style;
+    ['ball','atom','space'].forEach(s=>{
+        let btn=document.getElementById(`style-${s}`);
+        btn.classList.remove('bg-blue-600','bg-gray-700');
+        btn.classList.add('bg-gray-700');
+    });
+    let map={ball_and_stick:'ball',atom_mode:'atom',spacefill:'space'};
+    let btn=document.getElementById(`style-${map[style]}`);
+    btn.classList.replace('bg-gray-700','bg-blue-600');
+    atoms.forEach(a=>{a.mesh.geometry.dispose();a.mesh.geometry=new THREE.SphereGeometry(getAtomRadius(a.element,style),32,32);});
+    updateVisibility();
+}
+
+function toggleLabels() {
+    showLabels=!showLabels;
+    let btn=document.getElementById('btn-labels');
+    btn.classList.toggle('bg-blue-600',showLabels);btn.classList.toggle('bg-gray-700',!showLabels);
+    updateVisibility();
+}
+
+function centerCamera() {
+    if(atoms.length===0){controls.target.set(0,0,0);camera.position.set(0,0,15);controls.update();return;}
+    let box=new THREE.Box3();
+    atoms.forEach(a=>{
+        let r=getAtomRadius(a.element,currentStyle);
+        box.expandByPoint(new THREE.Vector3(a.mesh.position.x-r,a.mesh.position.y-r,a.mesh.position.z-r));
+        box.expandByPoint(new THREE.Vector3(a.mesh.position.x+r,a.mesh.position.y+r,a.mesh.position.z+r));
+    });
+    let center=new THREE.Vector3();box.getCenter(center);
+    let size=new THREE.Vector3();box.getSize(size);
+    let maxDim=Math.max(size.x,size.y,size.z,2);
+    let dist=maxDim/2/Math.tan(camera.fov*Math.PI/360)*1.5;
+    let dir=new THREE.Vector3().subVectors(camera.position,controls.target).normalize();
+    if(dir.lengthSq()<0.01)dir.set(0,0,1);
+    controls.target.copy(center);
+    camera.position.copy(center).add(dir.multiplyScalar(dist));
+    camera.lookAt(center);controls.update();
+}
+
+function selectElement(el) {
+    currentElement=el;
+    document.querySelectorAll('.element-btn').forEach(b=>b.classList.remove('active','border-blue-500'));
+    document.getElementById(`el-${el}`).classList.add('active','border-blue-500');
+}
+
+function buildUI() {
+    const bar=document.getElementById('element-bar');
+    for(const [sym,data] of Object.entries(ELEMENTS)){
+        let hex='#'+data.color.toString(16).padStart(6,'0');
+        if(sym==='H')hex='#e2e8f0';
+        let btn=document.createElement('button');
+        btn.id=`el-${sym}`;
+        btn.className=`element-btn flex-none w-12 h-12 rounded-full font-bold text-gray-800 border-gray-400 bg-white snap-center ${sym===currentElement?'active border-blue-500':''}`;
+        btn.style.boxShadow=`inset 0 0 10px ${hex}55`;
+        btn.innerHTML=`<div style="color:${sym==='H'?'#333':hex}">${sym}</div>`;
+        btn.onclick=()=>selectElement(sym);
+        bar.appendChild(btn);
+    }
+}
+
+// --- 11. 匯出 ---
+function exportPNG() {
+    renderer.render(scene,camera);
+    let link=document.createElement('a');link.href=renderer.domElement.toDataURL("image/png");link.download='molecule.png';
+    document.body.appendChild(link);link.click();document.body.removeChild(link);
+    showToast("📸 成功匯出透明背景 PNG！");
+}
+
+function exportMC() {
+    let data={version:"1.0",atoms:atoms.map(a=>({id:a.id,element:a.element,x:a.mesh.position.x,y:a.mesh.position.y,z:a.mesh.position.z})),bonds:bonds.map(b=>({id:b.id,atom1_id:b.atom1_id,atom2_id:b.atom2_id,order:b.order,bondType:b.bondType}))};
+    let a=document.createElement('a');a.href="data:text/json;charset=utf-8,"+encodeURIComponent(JSON.stringify(data));a.download='molecule.mc';
+    document.body.appendChild(a);a.click();a.remove();
+}
+
+function importMC(event) {
+    let file=event.target.files[0];if(!file)return;
+    let reader=new FileReader();
+    reader.onload=function(e){
+        try{
+            let data=JSON.parse(e.target.result);
+            atoms.slice().forEach(a=>deleteAtom(a.id));atoms=[];bonds=[];
+            if(data.atoms)data.atoms.forEach(a=>createAtom(a.element,new THREE.Vector3(a.x,a.y,a.z),a.id));
+            if(data.bonds)data.bonds.forEach(b=>{
+                let e1=atoms.find(a=>a.id===b.atom1_id).element,e2=atoms.find(a=>a.id===b.atom2_id).element;
+                let ionic=ELEMENTS[e1].isMetal||ELEMENTS[e2].isMetal;
+                let obj={id:b.id,atom1_id:b.atom1_id,atom2_id:b.atom2_id,order:b.order,bondType:b.bondType||(ionic?'ionic':'covalent'),group:new THREE.Group()};
+                scene.add(obj.group);bonds.push(obj);updateBondMesh(obj);
+            });
+            showToast("載入成功！");
+        }catch(err){showToast("檔案格式錯誤或不相容！");}
+    };
+    reader.readAsText(file);event.target.value='';
+}
+
+// --- 12. 系統循環 ---
+function onWindowResize() {
+    updateAppHeight();
+    camera.aspect=window.innerWidth/window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth,window.innerHeight);
+}
+
+function animate() {
+    requestAnimationFrame(animate);
+    if(controls.enabled)controls.update();
+    if(optimizationFrames>0)stepOptimization();
+    renderer.render(scene,camera);
+}
+
+window.onload=init;
+</script>
 </body>
 </html>
