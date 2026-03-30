@@ -312,7 +312,7 @@
         }
       }, [eqState.co2Generated]);
 
-      // 粒子物理同步與 H2O 轉場動畫
+      // 粒子數量同步
       useEffect(() => {
         const currentParticles = particlesRef.current;
         const newParticles = [];
@@ -331,15 +331,20 @@
           const moles = eqState.species[spId] || 0;
           let targetCount = Math.floor(moles / MOLES_PER_PARTICLE);
 
-          if (targetCount === 0 && moles > 1e-6) {
-            targetCount = 1;
-          }
+          if (targetCount === 0 && moles > 1e-6) targetCount = 1;
 
           const existing = particlesByType[spId] || [];
 
-          if (existing.length < targetCount) {
+          // 軟同步：CH₃COO⁻ 與 CH₃COOH 是動態平衡物種，容許粒子數在合理範圍內波動
+          // 其他物種嚴格同步，確保中和後正確歸零
+          const isReactive = ['CH3COO', 'CH3COOH'].includes(spId);
+          const effectiveTarget = isReactive
+            ? Math.max(targetCount, Math.min(existing.length, targetCount * 2 + 2))
+            : targetCount;
+
+          if (existing.length < effectiveTarget) {
             newParticles.push(...existing);
-            const toAdd = targetCount - existing.length;
+            const toAdd = effectiveTarget - existing.length;
             for(let i=0; i < toAdd; i++) {
                 const w = containerRef.current?.clientWidth || 400;
                 const h = containerRef.current?.clientHeight || 400;
@@ -347,8 +352,6 @@
                 const currentIndex = existing.length + i;
                 
                 let precursor = REACTION_PRECURSORS[spId];
-                
-                // 動態判定：如果 H+ 或 OH- 是由強酸/強鹼直接解離而來，則不播放水膠囊動畫；若是水解產生則播放
                 if (spId === 'H') {
                     precursor = (currentIndex >= directHCount) ? 'H2O' : null;
                 } else if (spId === 'OH') {
@@ -367,25 +370,18 @@
                     sourceType: precursor
                 });
             }
-          } else if (existing.length > targetCount) {
-            const removed = existing.slice(targetCount);
+          } else {
+            const removed = existing.slice(effectiveTarget);
             removed.forEach(p => {
                 let fadeType = p.type;
-                if (p.type === 'H' || p.type === 'OH') {
-                    fadeType = 'H2O';
-                }
+                if (p.type === 'H' || p.type === 'OH') fadeType = 'H2O';
                 fadingParticlesRef.current.push({
-                    x: p.x,
-                    y: p.y,
-                    vx: p.vx * 0.5,
-                    vy: p.vy * 0.5,
-                    type: fadeType,
-                    life: 1.0 
+                    x: p.x, y: p.y,
+                    vx: p.vx * 0.5, vy: p.vy * 0.5,
+                    type: fadeType, life: 1.0 
                 });
             });
-            newParticles.push(...existing.slice(0, targetCount));
-          } else {
-            newParticles.push(...existing);
+            newParticles.push(...existing.slice(0, effectiveTarget));
           }
         });
         particlesRef.current = newParticles;
@@ -434,6 +430,69 @@
             ctx.globalAlpha = 1.0;
         };
 
+        // --- 動態反應規則 ---
+        const REACTION_RULES = [
+          {
+            r1: 'H', r2: 'CH3COO', product: 'CH3COOH',
+            prob: 0.35, dissocProb: 0.004, flashColor: '#6366f1'
+          },
+          {
+            r1: 'H', r2: 'OH', product: null,
+            prob: 0.80, dissocProb: 0, flashColor: '#f59e0b'
+          },
+        ];
+
+        const flashRef_local = [];
+        const getFlash = () => flashRef_local;
+
+        // 結合：移除兩粒子，在原位生成 product
+        const combine = (particles, i, j, productType, x, y, color) => {
+          const removed = new Set([i, j]);
+          const next = particles.filter((_, idx) => !removed.has(idx));
+          if (productType) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = 3 + Math.random() * 2;
+            next.push({
+              id: Math.random().toString(36).substr(2,9),
+              type: productType,
+              charge: SPECIES_DEFS[productType].charge,
+              x, y,
+              vx: Math.cos(angle) * speed,
+              vy: Math.sin(angle) * speed,
+              reactionCooldown: 20,
+              dissocTimer: Math.floor(20 + Math.random() * 20),
+              spawnAge: 1,
+            });
+          }
+          flashRef_local.push({ x, y, r: 18, alpha: 1.0, color });
+          return next;
+        };
+
+        // 解離：移除 parent，兩個子粒子從同位置往反方向飛出
+        const dissociate = (particles, i, rule, x, y) => {
+          const next = particles.filter((_, idx) => idx !== i);
+          const angle = Math.random() * Math.PI * 2;
+          const speed = 3 + Math.random() * 2;
+          [rule.r1, rule.r2].forEach((t, idx) => {
+            const dir = idx === 0 ? 1 : -1;
+            next.push({
+              id: Math.random().toString(36).substr(2,9),
+              type: t,
+              charge: SPECIES_DEFS[t].charge,
+              x: x + Math.cos(angle) * dir * 14,
+              y: y + Math.sin(angle) * dir * 14,
+              vx: Math.cos(angle) * dir * speed,
+              vy: Math.sin(angle) * dir * speed,
+              reactionCooldown: 120,
+              noAttractTimer: 180,
+              spawnAge: 1,
+            });
+          });
+          flashRef_local.push({ x, y, r: 22, alpha: 1.0, color: rule.flashColor });
+          return next;
+        };
+
+
         const renderLoop = () => {
           if (!isRunning) return;
           if (!isPausedRef.current) time += 0.05;
@@ -443,11 +502,13 @@
           const waterTop = height * (1 - volume / MAX_VOLUME);
           ctx.clearRect(0, 0, width, height);
 
-          // 1. 處理物理運動
-          const particles = particlesRef.current;
+          // 1. 物理運動
+          let particles = particlesRef.current;
           if (!isPausedRef.current) {
             for (let i = 0; i < particles.length; i++) {
               let p1 = particles[i];
+              if (p1.reactionCooldown > 0) p1.reactionCooldown--;
+              if (p1.noAttractTimer > 0) p1.noAttractTimer--;
               p1.vx += (Math.random() - 0.5) * THERMAL_JITTER;
               p1.vy += (Math.random() - 0.5) * THERMAL_JITTER;
               if (p1.y < waterTop) p1.vy += 0.5;
@@ -459,7 +520,13 @@
                   let dist = Math.sqrt(distSq);
                   if (dist < 1) dist = 1;
 
-                  let force = (K_COULOMB * p1.charge * p2.charge) / distSq;
+                  const suppressAttract = (p1.noAttractTimer > 0) || (p2.noAttractTimer > 0);
+                  let force;
+                  if (suppressAttract && p1.charge * p2.charge < 0) {
+                    force = 0;
+                  } else {
+                    force = (K_COULOMB * p1.charge * p2.charge) / distSq;
+                  }
                   let minDist = BASE_PARTICLE_RADIUS * 2.2;
                   if (dist < minDist) force += K_REPULSION * (minDist - dist);
 
@@ -477,7 +544,72 @@
               if (p1.x > width - BASE_PARTICLE_RADIUS) { p1.x = width - BASE_PARTICLE_RADIUS; p1.vx *= -0.8; }
               if (p1.y > height - BASE_PARTICLE_RADIUS) { p1.y = height - BASE_PARTICLE_RADIUS; p1.vy *= -0.8; }
             }
+
+            // 1b. 碰撞結合反應（shuffle 後每幀最多一次）
+            const shuffled = [...particles];
+            for (let k = shuffled.length - 1; k > 0; k--) {
+              const m = Math.floor(Math.random() * (k + 1));
+              [shuffled[k], shuffled[m]] = [shuffled[m], shuffled[k]];
+            }
+            outer: for (let rule of REACTION_RULES) {
+              for (let si = 0; si < shuffled.length; si++) {
+                let p1 = shuffled[si];
+                if (p1.type !== rule.r1 || (p1.reactionCooldown||0) > 0) continue;
+                for (let sj = 0; sj < shuffled.length; sj++) {
+                  if (si === sj) continue;
+                  let p2 = shuffled[sj];
+                  if (p2.type !== rule.r2 || (p2.reactionCooldown||0) > 0) continue;
+                  let dx = p2.x - p1.x, dy = p2.y - p1.y;
+                  let dist = Math.sqrt(dx*dx + dy*dy);
+                  if (dist < BASE_PARTICLE_RADIUS * 2.8 && Math.random() < rule.prob) {
+                    let mx = (p1.x+p2.x)/2, my = (p1.y+p2.y)/2;
+                    const oi = particles.findIndex(p => p.id === p1.id);
+                    const oj = particles.findIndex(p => p.id === p2.id);
+                    if (oi !== -1 && oj !== -1) {
+                      particles = combine(particles, oi, oj, rule.product, mx, my, rule.flashColor);
+                      particlesRef.current = particles;
+                    }
+                    break outer;
+                  }
+                }
+              }
+            }
+
+            // 1c. 自發解離（dissocTimer 倒數到零時觸發）
+            const dissocCandidates = [];
+            for (let i = 0; i < particles.length; i++) {
+              let p = particles[i];
+              if ((p.reactionCooldown||0) > 0) continue;
+              const rule = REACTION_RULES.find(r => r.product === p.type && r.dissocProb > 0);
+              if (!rule) continue;
+              if (p.dissocTimer !== undefined) {
+                p.dissocTimer--;
+                if (p.dissocTimer <= 0) dissocCandidates.push({ i, rule });
+              }
+            }
+            if (dissocCandidates.length > 0) {
+              const pick = dissocCandidates[Math.floor(Math.random() * dissocCandidates.length)];
+              const p = particles[pick.i];
+              particles = dissociate(particles, pick.i, pick.rule, p.x, p.y);
+              particlesRef.current = particles;
+            }
           }
+
+          // 繪製閃光特效
+          const activeFlash = [];
+          for (let f of flashRef_local) {
+            if (!isPausedRef.current) f.alpha -= 0.07;
+            if (f.alpha > 0) {
+              ctx.beginPath();
+              ctx.arc(f.x, f.y, f.r * (1.5 - f.alpha), 0, Math.PI*2);
+              ctx.strokeStyle = f.color + Math.floor(f.alpha*255).toString(16).padStart(2,'0');
+              ctx.lineWidth = 2.5;
+              ctx.stroke();
+              activeFlash.push(f);
+            }
+          }
+          flashRef_local.length = 0;
+          flashRef_local.push(...activeFlash);
 
           // 2. 繪製常規粒子與「水膠囊水解動畫」
           for (let p of particles) {
