@@ -1,0 +1,1026 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>酸鹼鹽水解與電解動態模擬器</title>
+  
+  <!-- 引入 Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- 引入 React 與 ReactDOM -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  
+  <!-- 引入 Babel -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body class="bg-slate-50">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useMemo, useEffect, useRef } = React;
+
+    // --- 內建 SVG 圖示元件 ---
+    const IconDroplet = ({ className }) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z"/></svg>;
+    const IconZap = ({ className }) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>;
+    const IconActivity = ({ className }) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>;
+    const IconFlaskConical = ({ className }) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 2v7.31"/><path d="M14 9.3V2"/><path d="M8.5 2h7"/><path d="M14 9.3a6.5 6.5 0 1 1-4 0"/><line x1="5.52" x2="18.48" y1="16" y2="16"/></svg>;
+    const IconMousePointer2 = ({ className }) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/><path d="M13 13l6 6"/></svg>;
+    const IconRefreshCcw = ({ className }) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 21v-5h5"/></svg>;
+    const IconBattery = ({ className }) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="7" width="16" height="10" rx="2" ry="2"></rect><line x1="22" y1="11" x2="22" y2="13"></line></svg>;
+    const IconPower = ({ className }) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>;
+    const IconPause = ({ className }) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>;
+    const IconPlay = ({ className }) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>;
+    const IconInfo = ({ className }) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>;
+
+    // --- 物理與化學常數 ---
+    const MAX_VOLUME = 5.0;
+    const INITIAL_VOLUME = 4.0;
+    const MOLES_PER_PARTICLE = 0.05;
+
+    const K_COULOMB = 40.0;
+    const K_REPULSION = 2.0;
+    const THERMAL_JITTER = 1.0;
+    const FRICTION = 0.90;
+    const MAX_VELOCITY = 4.0;
+    const BASE_PARTICLE_RADIUS = 13;
+
+    // 定義所有參與反應的離子與分子
+    const SPECIES_DEFS = {
+      Na: { symbol: 'Na⁺', charge: 1, name: '鈉離子', color: '#1e40af', bg: '#dbeafe' },
+      Cl: { symbol: 'Cl⁻', charge: -1, name: '氯離子', color: '#115e59', bg: '#ccfbf1' },
+      H:  { symbol: 'H⁺', charge: 1, name: '氫離子', color: '#dc2626', bg: '#fecaca' },
+      OH: { symbol: 'OH⁻', charge: -1, name: '氫氧根', color: '#7c3aed', bg: '#ede9fe' },
+      CH3COO: { symbol: 'CH₃COO⁻', charge: -1, name: '醋酸根', color: '#4f46e5', bg: '#e0e7ff' },
+      CH3COOH: { symbol: 'CH₃COOH', charge: 0, name: '醋酸分子', color: '#4338ca', bg: '#c7d2fe' },
+      NH4: { symbol: 'NH₄⁺', charge: 1, name: '銨根', color: '#c2410c', bg: '#ffedd5' },
+      NH3: { symbol: 'NH₃', charge: 0, name: '氨分子', color: '#b45309', bg: '#fef3c7' },
+      CO3: { symbol: 'CO₃²⁻', charge: -2, name: '碳酸根', color: '#be123c', bg: '#ffe4e6' },
+      HCO3: { symbol: 'HCO₃⁻', charge: -1, name: '碳酸氫根', color: '#db2777', bg: '#fce7f3' },
+      H2CO3: { symbol: 'H₂CO₃', charge: 0, name: '碳酸分子', color: '#4b5563', bg: '#f3f4f6' },
+      H2O: { symbol: 'H₂O', charge: 0, name: '水分子', color: '#0284c7', bg: '#e0f2fe' },
+      K: { symbol: 'K⁺', charge: 1, name: '鉀離子', color: '#6b21a8', bg: '#f3e8ff' },
+      NO3: { symbol: 'NO₃⁻', charge: -1, name: '硝酸根', color: '#0369a1', bg: '#e0f2fe' },
+      SO4: { symbol: 'SO₄²⁻', charge: -2, name: '硫酸根', color: '#854d0e', bg: '#fef08a' },
+      Cu: { symbol: 'Cu²⁺', charge: 2, name: '銅離子', color: '#0369a1', bg: '#bae6fd' },
+      CuOH: { symbol: 'Cu(OH)⁺', charge: 1, name: '氫氧銅離子', color: '#0284c7', bg: '#e0f2fe' },
+      Zn: { symbol: 'Zn²⁺', charge: 2, name: '鋅離子', color: '#334155', bg: '#cbd5e1' },
+      ZnOH: { symbol: 'Zn(OH)⁺', charge: 1, name: '氫氧鋅離子', color: '#475569', bg: '#e2e8f0' },
+      C2H5OH: { symbol: 'C₂H₅OH', charge: 0, name: '乙醇(酒精)', color: '#0f766e', bg: '#ccfbf1' },
+      C6H12O6: { symbol: '葡萄糖', charge: 0, name: '葡萄糖分子', color: '#9a3412', bg: '#ffedd5' },
+    };
+
+    const REACTION_PRECURSORS = {
+      'HCO3': 'CO3', 'CH3COOH': 'CH3COO', 'NH3': 'NH4', 'CuOH': 'Cu', 'ZnOH': 'Zn', 'H2CO3': 'HCO3'
+    };
+
+    const ELECTROLYTES = [
+      { id: 'NaCl', name: '強酸強鹼鹽 (中性)', formula: 'NaCl', inputs: { Na: 1, Cl: 1 }, uiColor: 'bg-white border-slate-300 text-slate-700' },
+      { id: 'Na2CO3', name: '弱酸強鹼鹽 (強鹼性)', formula: 'Na₂CO₃', inputs: { Na: 2, CO3: 1 }, uiColor: 'bg-indigo-50 border-indigo-300 text-indigo-800' },
+      { id: 'NaHCO3', name: '酸式弱酸鹽 (弱鹼性)', formula: 'NaHCO₃', inputs: { Na: 1, HCO3: 1 }, uiColor: 'bg-blue-50 border-blue-300 text-blue-800' },
+      { id: 'CH3COONa', name: '弱酸強鹼鹽 (弱鹼性)', formula: 'CH₃COONa', inputs: { Na: 1, Acetic: 1 }, uiColor: 'bg-violet-50 border-violet-300 text-violet-800' },
+      { id: 'NH4Cl', name: '強酸弱鹼鹽 (弱酸性)', formula: 'NH₄Cl', inputs: { NH4: 1, Cl: 1 }, uiColor: 'bg-rose-50 border-rose-300 text-rose-800' },
+      { id: 'CuSO4', name: '強酸弱鹼鹽 (弱酸性)', formula: 'CuSO₄', inputs: { Cu: 1, SO4: 1 }, uiColor: 'bg-sky-50 border-sky-300 text-sky-800' },
+      { id: 'ZnSO4', name: '強酸弱鹼鹽 (弱酸性)', formula: 'ZnSO₄', inputs: { Zn: 1, SO4: 1 }, uiColor: 'bg-slate-100 border-slate-300 text-slate-800' },
+      { id: 'KNO3', name: '強酸強鹼鹽 (中性)', formula: 'KNO₃', inputs: { K: 1, NO3: 1 }, uiColor: 'bg-gray-50 border-gray-300 text-gray-700' },
+      { id: 'HCl', name: '強酸 (對照組)', formula: 'HCl', inputs: { NetH: 1, Cl: 1 }, uiColor: 'bg-red-100 border-red-400 text-red-900 font-bold' },
+      { id: 'NaOH', name: '強鹼 (對照組)', formula: 'NaOH', inputs: { Na: 1, NetH: -1 }, uiColor: 'bg-purple-100 border-purple-400 text-purple-900 font-bold' },
+      { id: 'C2H5OH', name: '非電解質', formula: 'C₂H₅OH', inputs: { C2H5OH: 1 }, uiColor: 'bg-teal-50 border-teal-300 text-teal-800' },
+      { id: 'C6H12O6', name: '非電解質', formula: 'C₆H₁₂O₆', inputs: { C6H12O6: 1 }, uiColor: 'bg-orange-50 border-orange-300 text-orange-800' },
+    ];
+
+    // --- 核心演算法：化學平衡與電解累加 ---
+
+    function getStableKaShift(cHA, cA, cH, Ka) {
+      let p = cH + cA + Ka; let q = cH * cA - Ka * cHA;
+      let disc = Math.max(0, p * p - 4 * q);
+      let shift = (-2 * q) / (p + Math.sqrt(disc));
+      if (shift < 0) shift = Math.max(shift, -cA, -cH);
+      if (shift > 0) shift = Math.min(shift, cHA); return shift;
+    }
+
+    function getStableKwShift(cH, cOH, Kw) {
+      let p = cH + cOH; let q = cH * cOH - Kw;
+      let disc = Math.max(0, p * p - 4 * q);
+      let shift = (-2 * q) / (p + Math.sqrt(disc));
+      if (shift < 0) shift = Math.max(shift, -cH, -cOH); return shift;
+    }
+
+    function getStableKbShift(cA, cHA, cOH, Kb) {
+      let p = cHA + cOH + Kb; let q = cHA * cOH - Kb * cA;
+      let disc = Math.max(0, p * p - 4 * q);
+      let shift = (-2 * q) / (p + Math.sqrt(disc));
+      if (shift < 0) shift = Math.max(shift, -cHA, -cOH);
+      if (shift > 0) shift = Math.min(shift, cA); return shift;
+    }
+
+    function calculateEquilibrium(inputs, electroDelta, volume) {
+      let netElectroCharge = 0;
+      Object.keys(electroDelta).forEach(id => {
+          if (SPECIES_DEFS[id]) {
+              netElectroCharge += electroDelta[id] * SPECIES_DEFS[id].charge;
+          }
+      });
+
+      let H_input = 1e-7 * volume + Math.max(0, inputs.NetH || 0) + (electroDelta.H || 0);
+      let OH_input = 1e-7 * volume + Math.max(0, -(inputs.NetH || 0)) + (electroDelta.OH || 0);
+
+      if (netElectroCharge > 1e-6) {
+          H_input = Math.max(1e-15, H_input - netElectroCharge);
+      } else if (netElectroCharge < -1e-6) {
+          OH_input = Math.max(1e-15, OH_input - Math.abs(netElectroCharge));
+      }
+
+      let species = {
+          Na: Math.max(0, (inputs.Na || 0) + (electroDelta.Na || 0)),
+          Cl: Math.max(0, (inputs.Cl || 0) + (electroDelta.Cl || 0)),
+          K: Math.max(0, (inputs.K || 0) + (electroDelta.K || 0)),
+          NO3: Math.max(0, (inputs.NO3 || 0) + (electroDelta.NO3 || 0)),
+          SO4: Math.max(0, (inputs.SO4 || 0) + (electroDelta.SO4 || 0)),
+          Cu: Math.max(0, (inputs.Cu || 0) + (electroDelta.Cu || 0)),
+          CuOH: Math.max(0, electroDelta.CuOH || 0),
+          Zn: Math.max(0, (inputs.Zn || 0) + (electroDelta.Zn || 0)),
+          ZnOH: Math.max(0, electroDelta.ZnOH || 0),
+          CH3COO: Math.max(0, (inputs.Acetic || 0) + (electroDelta.CH3COO || 0)),
+          CH3COOH: Math.max(0, electroDelta.CH3COOH || 0),
+          NH3: Math.max(0, (inputs.NH3 || 0) + (electroDelta.NH3 || 0)),
+          NH4: Math.max(0, (inputs.NH4 || 0) + (electroDelta.NH4 || 0)),
+          CO3: Math.max(0, (inputs.CO3 || 0) + (electroDelta.CO3 || 0)),
+          HCO3: Math.max(0, (inputs.HCO3 || 0) + (electroDelta.HCO3 || 0)),
+          H2CO3: Math.max(0, electroDelta.H2CO3 || 0),
+          C2H5OH: Math.max(0, (inputs.C2H5OH || 0)),
+          C6H12O6: Math.max(0, (inputs.C6H12O6 || 0)),
+          H: H_input,
+          OH: OH_input
+      };
+      let co2Generated = 0;
+
+      let hAvail = species.H;
+      let directCO2_from_CO3 = Math.min(hAvail / 2, species.CO3);
+      if (directCO2_from_CO3 > 1e-8) {
+          species.H -= directCO2_from_CO3 * 2; species.CO3 -= directCO2_from_CO3;
+          co2Generated += directCO2_from_CO3; hAvail = species.H;
+      }
+      let directCO2_from_HCO3 = Math.min(hAvail, species.HCO3);
+      if (directCO2_from_HCO3 > 1e-8) {
+          species.H -= directCO2_from_HCO3; species.HCO3 -= directCO2_from_HCO3;
+          co2Generated += directCO2_from_HCO3;
+      }
+
+      for (let i = 0; i < 200; i++) {
+          let shiftKw = getStableKwShift(species.H/volume, species.OH/volume, 1e-14);
+          species.H = Math.max(1e-16, species.H + shiftKw * volume); species.OH = Math.max(1e-16, species.OH + shiftKw * volume);
+
+          let shiftAc = getStableKaShift(species.CH3COOH/volume, species.CH3COO/volume, species.H/volume, 1.8e-5);
+          species.CH3COOH -= shiftAc * volume; species.CH3COO += shiftAc * volume; species.H = Math.max(1e-16, species.H + shiftAc * volume);
+
+          let shiftAcKb = getStableKbShift(species.CH3COO/volume, species.CH3COOH/volume, species.OH/volume, 1e-14 / 1.8e-5);
+          species.CH3COO -= shiftAcKb * volume; species.CH3COOH += shiftAcKb * volume; species.OH = Math.max(1e-16, species.OH + shiftAcKb * volume);
+
+          let shiftNH4 = getStableKaShift(species.NH4/volume, species.NH3/volume, species.H/volume, 5.6e-10);
+          species.NH4 -= shiftNH4 * volume; species.NH3 += shiftNH4 * volume; species.H = Math.max(1e-16, species.H + shiftNH4 * volume);
+
+          let shiftNH3Kb = getStableKbShift(species.NH3/volume, species.NH4/volume, species.OH/volume, 1e-14 / 5.6e-10);
+          species.NH3 -= shiftNH3Kb * volume; species.NH4 += shiftNH3Kb * volume; species.OH = Math.max(1e-16, species.OH + shiftNH3Kb * volume);
+
+          let shiftCO3 = getStableKaShift(species.HCO3/volume, species.CO3/volume, species.H/volume, 4.7e-11);
+          species.HCO3 -= shiftCO3 * volume; species.CO3 += shiftCO3 * volume; species.H = Math.max(1e-16, species.H + shiftCO3 * volume);
+
+          let shiftCO3Kb = getStableKbShift(species.CO3/volume, species.HCO3/volume, species.OH/volume, 1e-14 / 4.7e-11);
+          species.CO3 -= shiftCO3Kb * volume; species.HCO3 += shiftCO3Kb * volume; species.OH = Math.max(1e-16, species.OH + shiftCO3Kb * volume);
+
+          let shiftHCO3 = getStableKaShift(species.H2CO3/volume, species.HCO3/volume, species.H/volume, 4.3e-7);
+          species.H2CO3 -= shiftHCO3 * volume; species.HCO3 += shiftHCO3 * volume; species.H = Math.max(1e-16, species.H + shiftHCO3 * volume);
+
+          let shiftHCO3Kb = getStableKbShift(species.HCO3/volume, species.H2CO3/volume, species.OH/volume, 1e-14 / 4.3e-7);
+          species.HCO3 -= shiftHCO3Kb * volume; species.H2CO3 += shiftHCO3Kb * volume; species.OH = Math.max(1e-16, species.OH + shiftHCO3Kb * volume);
+
+          let shiftCu = getStableKaShift(species.Cu/volume, species.CuOH/volume, species.H/volume, 3e-8);
+          species.Cu -= shiftCu * volume; species.CuOH += shiftCu * volume; species.H = Math.max(1e-16, species.H + shiftCu * volume);
+
+          let shiftCuKb = getStableKbShift(species.CuOH/volume, species.Cu/volume, species.OH/volume, 1e-14 / 3e-8);
+          species.CuOH -= shiftCuKb * volume; species.Cu += shiftCuKb * volume; species.OH = Math.max(1e-16, species.OH + shiftCuKb * volume);
+
+          let shiftZn = getStableKaShift(species.Zn/volume, species.ZnOH/volume, species.H/volume, 1e-9);
+          species.Zn -= shiftZn * volume; species.ZnOH += shiftZn * volume; species.H = Math.max(1e-16, species.H + shiftZn * volume);
+
+          let shiftZnKb = getStableKbShift(species.ZnOH/volume, species.Zn/volume, species.OH/volume, 1e-14 / 1e-9);
+          species.ZnOH -= shiftZnKb * volume; species.Zn += shiftZnKb * volume; species.OH = Math.max(1e-16, species.OH + shiftZnKb * volume);
+      }
+
+      if (species.H2CO3 / volume > 0.03) {
+          let excess = species.H2CO3 - 0.03 * volume;
+          species.H2CO3 = 0.03 * volume; co2Generated += excess;
+      }
+
+      let pH = -Math.log10(Math.max(species.H / volume, 1e-15));
+      pH = Math.max(0, Math.min(14, pH));
+
+      return { species, co2Generated, pH };
+    }
+
+    const PhChart = ({ history }) => {
+      const width = 300; const height = 110;
+      const xStep = width / Math.max(history.length - 1, 10);
+      
+      const bulkPoints = history.map((d, i) => `${i * xStep},${height - (d.bulk / 14) * height}`).join(' ');
+      const anodePoints = history.map((d, i) => `${i * xStep},${height - (d.anode / 14) * height}`).join(' ');
+      const cathodePoints = history.map((d, i) => `${i * xStep},${height - (d.cathode / 14) * height}`).join(' ');
+
+      return (
+        <div className="relative w-full h-36 rounded-xl overflow-hidden border-2 border-slate-300 shadow-inner flex flex-col">
+          <div className="absolute inset-0 opacity-80" style={{ background: 'linear-gradient(to top, #dc2626 0%, #f97316 21%, #eab308 42%, #22c55e 50%, #3b82f6 78%, #9333ea 100%)' }}></div>
+          <div className="absolute inset-0 bg-white/20 backdrop-blur-[1px]"></div>
+          <svg viewBox={`0 0 ${width} ${height}`} className="absolute inset-0 w-full h-full drop-shadow-md overflow-visible" style={{ padding: '4px 0' }}>
+            
+            {/* 陽極局部 pH 虛線 */}
+            <polyline points={anodePoints} fill="none" stroke="#ef4444" strokeWidth="2.5" strokeDasharray="4 2" strokeLinecap="round" strokeLinejoin="round" />
+            {/* 陰極局部 pH 虛線 */}
+            <polyline points={cathodePoints} fill="none" stroke="#2563eb" strokeWidth="2.5" strokeDasharray="4 2" strokeLinecap="round" strokeLinejoin="round" />
+            {/* 整體巨觀 pH 實線 */}
+            <polyline points={bulkPoints} fill="none" stroke="rgba(255, 255, 255, 0.4)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            
+            {history.map((d, i) => <circle key={i} cx={i * xStep} cy={height - (d.bulk / 14) * height} r="2.5" fill="rgba(255,255,255,0.4)" stroke="rgba(51,51,51,0.4)" strokeWidth="1" />)}
+          </svg>
+          
+          <div className="absolute top-1 left-2 flex flex-col gap-0.5">
+              <span className="text-[9px] font-bold text-white drop-shadow-md flex items-center gap-1"><div className="w-2 h-[1.5px] bg-white/50"></div> 整體 pH</span>
+              <span className="text-[9px] font-bold text-white drop-shadow-md flex items-center gap-1"><div className="w-2 h-[2px] bg-red-500"></div> 陽極(+) pH</span>
+              <span className="text-[9px] font-bold text-white drop-shadow-md flex items-center gap-1"><div className="w-2 h-[2px] bg-blue-500"></div> 陰極(-) pH</span>
+          </div>
+
+          <span className="absolute top-1 right-2 text-[10px] font-bold text-white drop-shadow-md">14</span>
+          <span className="absolute top-1/2 -translate-y-1/2 right-2 text-[10px] font-bold text-white drop-shadow-md">7</span>
+          <span className="absolute bottom-1 right-2 text-[10px] font-bold text-white drop-shadow-md">0</span>
+        </div>
+      );
+    }
+
+    // 💡 新增：科學記號格式化元件
+    const FormatSciNum = ({ num }) => {
+      if (num === 0) return <span>0.000</span>;
+      if (num >= 0.001 && num < 1000) return <span>{num.toFixed(3)}</span>;
+      
+      const expStr = num.toExponential(2);
+      const [base, exp] = expStr.split('e');
+      return (
+        <span className="inline-flex items-baseline">
+          {base} <span className="mx-1">×</span> 10<sup className="text-[0.7em]">{parseInt(exp, 10)}</sup>
+        </span>
+      );
+    };
+
+    // --- 主應用元件 ---
+    function App() {
+      const [volume, setVolume] = useState(INITIAL_VOLUME); 
+      const [addAmount, setAddAmount] = useState(0.5); 
+      const [inputs, setInputs] = useState({}); 
+      const [draggedItem, setDraggedItem] = useState(null);
+      const [isPaused, setIsPaused] = useState(false);
+      
+      const [powerOn, setPowerOn] = useState(false);
+      const [voltage, setVoltage] = useState(12);
+      const [leftPolarity, setLeftPolarity] = useState(1);
+      const [leftElectrode, setLeftElectrode] = useState('graphite');
+      const [rightElectrode, setRightElectrode] = useState('graphite');
+      
+      const [electroDelta, setElectroDelta] = useState({});
+      const pendingElectroDeltaRef = useRef({});
+      const platedMolesRef = useRef({ left: { Cu: 0, Zn: 0 }, right: { Cu: 0, Zn: 0 } });
+      const wireElectronsRef = useRef(0); 
+      
+      const localExcessRef = useRef({ leftH: 0, leftOH: 0, rightH: 0, rightOH: 0 });
+      const [phHistory, setPhHistory] = useState([{ bulk: 7.0, anode: 7.0, cathode: 7.0 }]);
+      
+      // 💡 新增：說明書收折狀態
+      const [showHelp, setShowHelp] = useState(false);
+
+      const canvasRef = useRef(null);
+      const containerRef = useRef(null);
+      const particlesRef = useRef([]); 
+      const bubblesRef = useRef([]); 
+      const fadingParticlesRef = useRef([]); 
+      const cumulativeCO2Ref = useRef(0); 
+      const animationRef = useRef(null);
+      
+      const isPausedRef = useRef(isPaused);
+
+      const powerOnRef = useRef(powerOn);
+      const voltageRef = useRef(voltage);
+      const leftPolarityRef = useRef(leftPolarity);
+      const leftElectrodeRef = useRef(leftElectrode);
+      const rightElectrodeRef = useRef(rightElectrode);
+      const eqStateRef = useRef({pH: 7.0});
+
+      useEffect(() => { powerOnRef.current = powerOn; }, [powerOn]);
+      useEffect(() => { voltageRef.current = voltage; }, [voltage]);
+      useEffect(() => { leftPolarityRef.current = leftPolarity; }, [leftPolarity]);
+      useEffect(() => { leftElectrodeRef.current = leftElectrode; }, [leftElectrode]);
+      useEffect(() => { rightElectrodeRef.current = rightElectrode; }, [rightElectrode]);
+      useEffect(() => { isPausedRef.current = isPaused; }, [isPaused]);
+
+      const eqState = useMemo(() => calculateEquilibrium(inputs, electroDelta, volume), [inputs, electroDelta, volume]);
+      useEffect(() => { eqStateRef.current = eqState; }, [eqState]);
+
+      useEffect(() => {
+        setPhHistory(prev => {
+          const next = [...prev, { bulk: eqState.pH, anode: eqState.pH, cathode: eqState.pH }];
+          if (next.length > 40) return next.slice(next.length - 40);
+          return next;
+        });
+      }, [inputs, volume]);
+
+      useEffect(() => {
+        const timer = setInterval(() => {
+          if (Object.keys(pendingElectroDeltaRef.current).length > 0) {
+            const pending = { ...pendingElectroDeltaRef.current };
+            pendingElectroDeltaRef.current = {};
+            setElectroDelta(prev => {
+              const next = { ...prev };
+              for (let k in pending) {
+                next[k] = (next[k] || 0) + pending[k];
+              }
+              return next;
+            });
+          }
+
+          const localVol = 0.5; 
+          const calcLocalPH = (side) => {
+              const bulkH = Math.pow(10, -eqStateRef.current.pH) * localVol;
+              const bulkOH = Math.pow(10, -(14 - eqStateRef.current.pH)) * localVol;
+              
+              let totalH = bulkH + localExcessRef.current[side + 'H'];
+              let totalOH = bulkOH + localExcessRef.current[side + 'OH'];
+              
+              totalH = Math.max(1e-15, totalH);
+              totalOH = Math.max(1e-15, totalOH);
+
+              if (totalH > totalOH) {
+                  totalH -= totalOH;
+              } else if (totalOH > totalH) {
+                  totalOH -= totalH;
+                  totalH = 1e-14 / (totalOH / localVol) * localVol;
+              } else {
+                  totalH = Math.sqrt(1e-14) * localVol;
+              }
+              return Math.max(0, Math.min(14, -Math.log10(totalH / localVol)));
+          };
+
+          let leftPH = calcLocalPH('left');
+          let rightPH = calcLocalPH('right');
+          let anodePH = leftPolarityRef.current === 1 ? leftPH : rightPH;
+          let cathodePH = leftPolarityRef.current === 1 ? rightPH : leftPH;
+
+          setPhHistory(prev => {
+              const next = [...prev, { bulk: eqStateRef.current.pH, anode: anodePH, cathode: cathodePH }];
+              if (next.length > 40) return next.slice(next.length - 40);
+              return next;
+          });
+
+          localExcessRef.current.leftH *= 0.5;
+          localExcessRef.current.leftOH *= 0.5;
+          localExcessRef.current.rightH *= 0.5;
+          localExcessRef.current.rightOH *= 0.5;
+
+        }, 1000);
+        return () => clearInterval(timer);
+      }, []);
+
+      useEffect(() => {
+        const parent = containerRef.current;
+        if (!parent) return;
+        const canvasWidth = parent.clientWidth;
+        const canvasHeight = parent.clientHeight;
+
+        if (eqState.co2Generated > cumulativeCO2Ref.current) {
+          const diff = eqState.co2Generated - cumulativeCO2Ref.current;
+          const bubbleCount = Math.floor(diff / MOLES_PER_PARTICLE) * 2; 
+          for (let i = 0; i < bubbleCount; i++) {
+            bubblesRef.current.push({
+              x: 50 + Math.random() * (canvasWidth - 100),
+              y: canvasHeight - 20, 
+              vy: -2 - Math.random() * 2,
+              radius: 3 + Math.random() * 4,
+              phase: Math.random() * Math.PI * 2,
+              color: 'rgba(255,255,255,0.6)'
+            });
+          }
+          cumulativeCO2Ref.current = eqState.co2Generated;
+        }
+      }, [eqState.co2Generated]);
+
+      useEffect(() => {
+        const currentParticles = particlesRef.current;
+        const newParticles = [];
+        const particlesByType = {};
+        currentParticles.forEach(p => {
+          if (p.consumed) return; 
+          if(!particlesByType[p.type]) particlesByType[p.type] = [];
+          particlesByType[p.type].push(p);
+        });
+
+        const directHCount = Math.round(Math.max(0, inputs.NetH || 0) / MOLES_PER_PARTICLE);
+        const directOHCount = Math.round(Math.max(0, -(inputs.NetH || 0)) / MOLES_PER_PARTICLE);
+
+        Object.keys(SPECIES_DEFS).forEach(spId => {
+          if (spId === 'H2O') return; 
+          const moles = eqState.species[spId] || 0;
+          let targetCount = Math.round(moles / MOLES_PER_PARTICLE);
+
+          if (targetCount === 0 && moles > 1e-6 && spId !== 'C2H5OH' && spId !== 'C6H12O6') {
+            targetCount = 1;
+          }
+
+          const existing = particlesByType[spId] || [];
+
+          if (existing.length < targetCount) {
+            newParticles.push(...existing); 
+            const toAdd = targetCount - existing.length;
+            for(let i=0; i < toAdd; i++) {
+                const w = containerRef.current?.clientWidth || 400;
+                const h = containerRef.current?.clientHeight || 400;
+                const waterTop = h * (1 - volume / MAX_VOLUME);
+                const currentIndex = existing.length + i;
+                
+                let precursor = REACTION_PRECURSORS[spId];
+                if (spId === 'H') precursor = (currentIndex >= directHCount) ? 'H2O' : null;
+                else if (spId === 'OH') precursor = (currentIndex >= directOHCount) ? 'H2O' : null;
+
+                newParticles.push({
+                    id: Math.random().toString(36).substr(2, 9),
+                    type: spId,
+                    charge: SPECIES_DEFS[spId].charge,
+                    x: 60 + Math.random() * (w - 120),
+                    y: waterTop + 20 + Math.random() * (Math.max(10, h - waterTop - 60)), 
+                    vx: (Math.random() - 0.5) * 2,
+                    vy: (Math.random() - 0.5) * 2,
+                    spawnAge: precursor ? 0 : 1,
+                    sourceType: precursor
+                });
+            }
+          } else if (existing.length > targetCount) {
+            const removed = existing.slice(targetCount);
+            removed.forEach(p => {
+                if (p.consumed) return; 
+                let fadeType = p.type;
+                if (p.type === 'H' || p.type === 'OH') fadeType = 'H2O';
+                fadingParticlesRef.current.push({
+                    x: p.x, y: p.y, vx: p.vx * 0.5, vy: p.vy * 0.5,
+                    type: fadeType, life: 1.0 
+                });
+            });
+            newParticles.push(...existing.slice(0, targetCount));
+          } else {
+            newParticles.push(...existing);
+          }
+        });
+        particlesRef.current = newParticles;
+      }, [eqState.species, volume, inputs]); 
+
+      useEffect(() => {
+        const canvas = canvasRef.current;
+        const ctx = canvas.getContext('2d');
+        let isRunning = true;
+        let time = 0;
+
+        const resizeCanvas = () => {
+          const parent = containerRef.current;
+          if (parent) { canvas.width = parent.clientWidth; canvas.height = parent.clientHeight; }
+        };
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+
+        const drawParticle = (type, x, y, alpha = 1.0, scale = 1.0) => {
+            const def = SPECIES_DEFS[type] || SPECIES_DEFS['H2O'];
+            ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
+            ctx.font = `bold ${11 * scale}px sans-serif`;
+            let textWidth = ctx.measureText(def.symbol).width;
+            let radius = Math.max(BASE_PARTICLE_RADIUS, (textWidth/2) + 4) * scale; 
+            ctx.beginPath();
+            if(radius > BASE_PARTICLE_RADIUS * scale) ctx.roundRect(x - radius, y - BASE_PARTICLE_RADIUS * scale, radius*2, BASE_PARTICLE_RADIUS*2 * scale, BASE_PARTICLE_RADIUS * scale);
+            else ctx.arc(x, y, radius, 0, Math.PI * 2);
+            ctx.fillStyle = def.bg; ctx.fill(); ctx.lineWidth = 2 * scale; ctx.strokeStyle = def.color; ctx.stroke();
+            ctx.fillStyle = def.color; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(def.symbol, x, y);
+            ctx.globalAlpha = 1.0;
+        };
+
+        const spawnBubble = (x, y, color) => {
+            bubblesRef.current.push({ x, y, vy: -2 - Math.random(), radius: 3 + Math.random()*3, phase: Math.random()*Math.PI*2, color });
+        };
+
+        const renderLoop = () => {
+          if (!isRunning) return;
+          if (!isPausedRef.current) time += 0.05;
+          
+          const width = canvas.width;
+          const height = canvas.height;
+          const waterTop = height * (1 - volume / MAX_VOLUME);
+          ctx.clearRect(0, 0, width, height);
+
+          const ELECTRODE_W = 20;
+          const LEFT_X = 15, RIGHT_X = width - 15 - ELECTRODE_W;
+          const LEFT_SURFACE = LEFT_X + ELECTRODE_W;
+          const RIGHT_SURFACE = RIGHT_X;
+          
+          const pOn = powerOnRef.current;
+          const vol = voltageRef.current;
+          const lPol = leftPolarityRef.current;
+          const rPol = -lPol;
+
+          const batW = 60; const batH = 24; const batX = width / 2 - batW / 2; const batY = 15;
+          const bumpW = 6, bumpH = 10;
+
+          const l_p0 = {x: batX, y: batY + batH/2};
+          const l_p1 = {x: batX - 30, y: batY + batH/2};
+          const l_p2 = {x: LEFT_X + ELECTRODE_W/2, y: batY + 10};
+          const l_p3 = {x: LEFT_X + ELECTRODE_W/2, y: waterTop - 40};
+
+          const r_p0 = {x: batX + batW, y: batY + batH/2};
+          const r_p1 = {x: batX + batW + 30, y: batY + batH/2};
+          const r_p2 = {x: RIGHT_X + ELECTRODE_W/2, y: batY + 10};
+          const r_p3 = {x: RIGHT_X + ELECTRODE_W/2, y: waterTop - 40};
+
+          const leftWirePath = new Path2D();
+          leftWirePath.moveTo(l_p0.x, l_p0.y);
+          leftWirePath.bezierCurveTo(l_p1.x, l_p1.y, l_p2.x, l_p2.y, l_p3.x, l_p3.y);
+
+          const rightWirePath = new Path2D();
+          rightWirePath.moveTo(r_p0.x, r_p0.y);
+          rightWirePath.bezierCurveTo(r_p1.x, r_p1.y, r_p2.x, r_p2.y, r_p3.x, r_p3.y);
+
+          ctx.strokeStyle = lPol === 1 ? '#ef4444' : '#1e293b'; ctx.lineWidth = 3; ctx.stroke(leftWirePath);
+          ctx.strokeStyle = rPol === 1 ? '#ef4444' : '#1e293b'; ctx.lineWidth = 3; ctx.stroke(rightWirePath);
+
+          const hasConductingIons = particlesRef.current.some(p => !p.consumed && p.charge !== 0);
+
+          if (pOn && hasConductingIons) {
+              const getBez = (t, p0, p1, p2, p3) => {
+                  const u = 1 - t, tt = t * t, uu = u * u;
+                  const x = uu*u*p0.x + 3*uu*t*p1.x + 3*u*tt*p2.x + tt*t*p3.x;
+                  const y = uu*u*p0.y + 3*uu*t*p1.y + 3*u*tt*p2.y + tt*t*p3.y;
+                  return {x, y};
+              };
+
+              const drawElectrons = (p0, p1, p2, p3, isCathode) => {
+                  for (let i = 0; i < 6; i++) {
+                      let rawT = ((time * 0.4) + i / 6) % 1.0; 
+                      let t = isCathode ? rawT : (1 - rawT);
+                      let pos = getBez(t, p0, p1, p2, p3);
+                      
+                      ctx.beginPath();
+                      ctx.arc(pos.x, pos.y, 6, 0, Math.PI * 2);
+                      ctx.fillStyle = '#3b82f6'; 
+                      ctx.fill();
+                      ctx.lineWidth = 1;
+                      ctx.strokeStyle = '#ffffff';
+                      ctx.stroke();
+                      
+                      ctx.fillStyle = '#ffffff';
+                      ctx.font = 'bold 12px monospace';
+                      ctx.textAlign = 'center';
+                      ctx.textBaseline = 'middle';
+                      ctx.fillText('-', pos.x, pos.y + 1);
+                  }
+              };
+
+              drawElectrons(l_p0, l_p1, l_p2, l_p3, lPol === -1);
+              drawElectrons(r_p0, r_p1, r_p2, r_p3, rPol === -1);
+          }
+
+          ctx.fillStyle = '#ffffff'; ctx.fillRect(batX, batY, batW, batH);
+          ctx.strokeStyle = '#475569'; ctx.lineWidth = 2; ctx.strokeRect(batX, batY, batW, batH);
+          ctx.font = 'bold 14px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+
+          if (lPol === 1) { 
+              ctx.fillStyle = '#ef4444'; ctx.fillRect(batX - bumpW, batY + batH/2 - bumpH/2, bumpW, bumpH);
+              ctx.fillStyle = '#ef4444'; ctx.fillText('+', batX + 15, batY + batH/2 + 1);
+              ctx.fillStyle = '#1e293b'; ctx.fillText('-', batX + batW - 15, batY + batH/2 + 1);
+          } else { 
+              ctx.fillStyle = '#ef4444'; ctx.fillRect(batX + batW, batY + batH/2 - bumpH/2, bumpW, bumpH);
+              ctx.fillStyle = '#1e293b'; ctx.fillText('-', batX + 15, batY + batH/2 + 1);
+              ctx.fillStyle = '#ef4444'; ctx.fillText('+', batX + batW - 15, batY + batH/2 + 1);
+          }
+          ctx.fillStyle = '#94a3b8'; ctx.font = '10px sans-serif'; ctx.fillText(vol + 'V', batX + batW/2, batY + batH/2 + 1);
+
+          const handleReaction = (p, side) => {
+              const isAnode = (side === 'left' ? lPol : rPol) === 1;
+              const material = side === 'left' ? leftElectrodeRef.current : rightElectrodeRef.current;
+              const surfaceX = side === 'left' ? LEFT_SURFACE + 5 : RIGHT_SURFACE - 5;
+              const pushDir = side === 'left' ? 1 : -1;
+
+              if (Math.random() > vol * 0.015) { p.vx *= -1; return; }
+
+              if (isAnode) { 
+                  if (wireElectronsRef.current >= 2) { p.vx *= -1; return; }
+
+                  const pMoles = platedMolesRef.current[side];
+                  if (pMoles.Zn >= MOLES_PER_PARTICLE * 0.5) { 
+                      pMoles.Zn = Math.max(0, pMoles.Zn - MOLES_PER_PARTICLE);
+                      pendingElectroDeltaRef.current.Zn = (pendingElectroDeltaRef.current.Zn || 0) + MOLES_PER_PARTICLE;
+                      particlesRef.current.push({ id: Math.random().toString(36).substr(2, 9), type: 'Zn', charge: 2, x: surfaceX, y: p.y, vx: pushDir * 3, vy: (Math.random()-0.5)*2, spawnAge: 1 });
+                      wireElectronsRef.current += 2; p.vx *= -1; return;
+                  }
+                  if (pMoles.Cu >= MOLES_PER_PARTICLE * 0.5) { 
+                      pMoles.Cu = Math.max(0, pMoles.Cu - MOLES_PER_PARTICLE);
+                      pendingElectroDeltaRef.current.Cu = (pendingElectroDeltaRef.current.Cu || 0) + MOLES_PER_PARTICLE;
+                      particlesRef.current.push({ id: Math.random().toString(36).substr(2, 9), type: 'Cu', charge: 2, x: surfaceX, y: p.y, vx: pushDir * 3, vy: (Math.random()-0.5)*2, spawnAge: 1 });
+                      wireElectronsRef.current += 2; p.vx *= -1; return;
+                  }
+
+                  if (material === 'copper') {
+                      pendingElectroDeltaRef.current.Cu = (pendingElectroDeltaRef.current.Cu || 0) + MOLES_PER_PARTICLE;
+                      particlesRef.current.push({ id: Math.random().toString(36).substr(2, 9), type: 'Cu', charge: 2, x: surfaceX, y: p.y, vx: pushDir * 3, vy: (Math.random()-0.5)*2, spawnAge: 1 });
+                      wireElectronsRef.current += 2; p.vx *= -1; 
+                  } else {
+                      if (p.type === 'Cl') {
+                          p.consumed = true; pendingElectroDeltaRef.current.Cl = (pendingElectroDeltaRef.current.Cl || 0) - MOLES_PER_PARTICLE;
+                          spawnBubble(surfaceX, p.y, 'rgba(163, 230, 53, 0.7)'); 
+                          wireElectronsRef.current += 1;
+                      } else if (p.type === 'OH') {
+                          p.consumed = true; pendingElectroDeltaRef.current.OH = (pendingElectroDeltaRef.current.OH || 0) - MOLES_PER_PARTICLE;
+                          localExcessRef.current[side + 'OH'] -= MOLES_PER_PARTICLE; 
+                          spawnBubble(surfaceX, p.y, 'rgba(255, 255, 255, 0.7)'); 
+                          wireElectronsRef.current += 1;
+                      } else if (p.charge < 0) {
+                          pendingElectroDeltaRef.current.H = (pendingElectroDeltaRef.current.H || 0) + MOLES_PER_PARTICLE;
+                          localExcessRef.current[side + 'H'] += MOLES_PER_PARTICLE; 
+                          particlesRef.current.push({ id: Math.random().toString(36).substr(2, 9), type: 'H', charge: 1, x: surfaceX, y: p.y, vx: pushDir * 3, vy: 0, spawnAge: 1 });
+                          spawnBubble(surfaceX, p.y, 'rgba(255, 255, 255, 0.7)'); 
+                          wireElectronsRef.current += 1;
+                          p.vx *= -1; 
+                      } else { p.vx *= -1; }
+                  }
+              } else { 
+                  if (wireElectronsRef.current <= -2) { p.vx *= -1; return; }
+
+                  if (['Cu', 'CuOH', 'Zn', 'ZnOH'].includes(p.type)) {
+                      p.consumed = true;
+                      pendingElectroDeltaRef.current[p.type] = (pendingElectroDeltaRef.current[p.type] || 0) - MOLES_PER_PARTICLE;
+                      
+                      if (p.type.includes('OH')) {
+                          pendingElectroDeltaRef.current.OH = (pendingElectroDeltaRef.current.OH || 0) + MOLES_PER_PARTICLE;
+                          localExcessRef.current[side + 'OH'] += MOLES_PER_PARTICLE;
+                          particlesRef.current.push({ id: Math.random().toString(36).substr(2, 9), type: 'OH', charge: -1, x: surfaceX, y: p.y, vx: pushDir * 3, vy: 0, spawnAge: 1 });
+                      }
+
+                      const plateType = p.type.includes('Zn') ? 'Zn' : 'Cu';
+                      platedMolesRef.current[side][plateType] += MOLES_PER_PARTICLE; 
+                      wireElectronsRef.current -= 2;
+                  } else if (p.type === 'H') {
+                      p.consumed = true; pendingElectroDeltaRef.current.H = (pendingElectroDeltaRef.current.H || 0) - MOLES_PER_PARTICLE;
+                      localExcessRef.current[side + 'H'] -= MOLES_PER_PARTICLE;
+                      spawnBubble(surfaceX, p.y, 'rgba(255, 255, 255, 0.7)'); 
+                      wireElectronsRef.current -= 1;
+                  } else if (p.charge > 0) {
+                      pendingElectroDeltaRef.current.OH = (pendingElectroDeltaRef.current.OH || 0) + MOLES_PER_PARTICLE;
+                      localExcessRef.current[side + 'OH'] += MOLES_PER_PARTICLE;
+                      particlesRef.current.push({ id: Math.random().toString(36).substr(2, 9), type: 'OH', charge: -1, x: surfaceX, y: p.y, vx: pushDir * 3, vy: 0, spawnAge: 1 });
+                      spawnBubble(surfaceX, p.y, 'rgba(255, 255, 255, 0.7)'); 
+                      wireElectronsRef.current -= 1;
+                      p.vx *= -1; 
+                  } else { p.vx *= -1; }
+              }
+          };
+
+          const particles = particlesRef.current;
+          const activeParticles = [];
+          if (!isPausedRef.current) {
+            for (let i = 0; i < particles.length; i++) {
+              let p1 = particles[i];
+              if (p1.consumed) continue;
+
+              p1.vx += (Math.random() - 0.5) * THERMAL_JITTER;
+              p1.vy += (Math.random() - 0.5) * THERMAL_JITTER;
+              if (p1.y < waterTop) p1.vy += 0.5;
+
+              if (pOn) {
+                  const E_field = (lPol * vol * 0.05); 
+                  p1.vx += E_field * p1.charge;
+              }
+
+              for (let j = i + 1; j < particles.length; j++) {
+                  let p2 = particles[j];
+                  if (p2.consumed) continue;
+                  let dx = p2.x - p1.x; let dy = p2.y - p1.y;
+                  
+                  if (dx === 0 && dy === 0) { 
+                      dx = (Math.random() - 0.5) * 0.1; 
+                      dy = (Math.random() - 0.5) * 0.1; 
+                  }
+                  
+                  let distSq = dx*dx + dy*dy;
+                  let dist = Math.sqrt(distSq);
+                  
+                  if (dist < 1) { 
+                      dist = 1; 
+                      distSq = 1; 
+                  }
+
+                  let force = (K_COULOMB * p1.charge * p2.charge) / distSq;
+                  let minDist = BASE_PARTICLE_RADIUS * 2.2;
+                  if (dist < minDist) force += K_REPULSION * (minDist - dist);
+
+                  let fx = (dx / dist) * force; let fy = (dy / dist) * force;
+                  
+                  if (!isNaN(fx)) { p1.vx -= fx; p2.vx += fx; }
+                  if (!isNaN(fy)) { p1.vy -= fy; p2.vy += fy; }
+              }
+
+              p1.vx = Math.max(-MAX_VELOCITY, Math.min(MAX_VELOCITY, p1.vx)) * FRICTION;
+              p1.vy = Math.max(-MAX_VELOCITY, Math.min(MAX_VELOCITY, p1.vy)) * FRICTION;
+              p1.x += p1.vx; p1.y += p1.vy;
+
+              let radius = BASE_PARTICLE_RADIUS + 4; 
+              if (p1.y > waterTop) {
+                  if (p1.x < LEFT_SURFACE + radius) {
+                      p1.x = LEFT_SURFACE + radius; 
+                      if (pOn && ((lPol === 1 && p1.charge < 0) || (lPol === -1 && p1.charge > 0))) handleReaction(p1, 'left');
+                      else p1.vx *= -0.8;
+                  } else if (p1.x > RIGHT_SURFACE - radius) {
+                      p1.x = RIGHT_SURFACE - radius;
+                      if (pOn && ((rPol === 1 && p1.charge < 0) || (rPol === -1 && p1.charge > 0))) handleReaction(p1, 'right');
+                      else p1.vx *= -0.8;
+                  }
+              } else {
+                  if (p1.x < radius) { p1.x = radius; p1.vx *= -0.8; }
+                  if (p1.x > width - radius) { p1.x = width - radius; p1.vx *= -0.8; }
+              }
+              if (p1.y > height - radius) { p1.y = height - radius; p1.vy *= -0.8; }
+
+              if (!p1.consumed) activeParticles.push(p1);
+            }
+            particlesRef.current = activeParticles;
+          }
+
+          const drawElectrode = (side, xPos, isLeft) => {
+              const material = side === 'left' ? leftElectrodeRef.current : rightElectrodeRef.current;
+              ctx.fillStyle = material === 'graphite' ? '#334155' : '#b45309';
+              ctx.fillRect(xPos, waterTop - 40, ELECTRODE_W, height - waterTop + 40);
+              
+              const pMoles = platedMolesRef.current[side];
+              let currentThick = 0;
+              if (pMoles.Zn > 0) {
+                  ctx.fillStyle = '#94a3b8';
+                  const thick = Math.min(6, pMoles.Zn * 4);
+                  ctx.fillRect(isLeft ? xPos + ELECTRODE_W : xPos - thick, waterTop, thick, height - waterTop);
+                  currentThick += thick;
+              }
+              if (pMoles.Cu > 0) {
+                  ctx.fillStyle = '#b45309';
+                  const thick = Math.min(6, pMoles.Cu * 4);
+                  ctx.fillRect(isLeft ? xPos + ELECTRODE_W + currentThick : xPos - currentThick - thick, waterTop, thick, height - waterTop);
+              }
+          };
+
+          drawElectrode('left', LEFT_X, true);
+          drawElectrode('right', RIGHT_X, false);
+
+          const drawParticlesArray = isPausedRef.current ? particlesRef.current : activeParticles;
+          for (let p of drawParticlesArray) {
+            if (p.spawnAge !== undefined && p.spawnAge < 1) {
+                if (!isPausedRef.current) p.spawnAge += 0.012; 
+                if (p.spawnAge < 0.5) {
+                    drawParticle(p.sourceType, p.x, p.y);
+                    const capsuleScale = 1.3 + Math.sin(p.spawnAge * Math.PI * 4) * 0.1;
+                    drawParticle('H2O', p.x, p.y, p.spawnAge * 1.5, capsuleScale);
+                } else {
+                    drawParticle(p.type, p.x, p.y);
+                    const dissipate = (p.spawnAge - 0.5) * 2; 
+                    drawParticle('H2O', p.x, p.y, 0.75 * (1 - dissipate), 1.3 + dissipate * 0.6);
+                }
+            } else { drawParticle(p.type, p.x, p.y); }
+          }
+
+          const activeFading = [];
+          for (let fp of fadingParticlesRef.current) {
+            if (!isPausedRef.current) {
+              fp.x += fp.vx; fp.y += fp.vy; fp.life -= 0.02;
+            }
+            if (fp.life > 0) { drawParticle(fp.type, fp.x, fp.y, fp.life); activeFading.push(fp); }
+          }
+          fadingParticlesRef.current = activeFading;
+
+          const activeBubbles = [];
+          for (let b of bubblesRef.current) {
+            if (!isPausedRef.current) {
+              b.y += b.vy; b.x += Math.sin(time * 3 + b.phase) * 1.0;
+            }
+            if (isPausedRef.current || b.y > waterTop) {
+               ctx.beginPath(); ctx.arc(b.x, b.y, b.radius, 0, Math.PI*2);
+               ctx.fillStyle = b.color; ctx.fill(); ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.stroke();
+               activeBubbles.push(b);
+            } 
+          }
+          bubblesRef.current = activeBubbles;
+
+          animationRef.current = requestAnimationFrame(renderLoop);
+        };
+
+        renderLoop();
+        return () => { isRunning = false; cancelAnimationFrame(animationRef.current); window.removeEventListener('resize', resizeCanvas); };
+      }, [volume]);
+
+      const handleReset = () => {
+        setInputs({}); setElectroDelta({});
+        setVolume(INITIAL_VOLUME); setPowerOn(false);
+        cumulativeCO2Ref.current = 0; wireElectronsRef.current = 0;
+        localExcessRef.current = { leftH: 0, leftOH: 0, rightH: 0, rightOH: 0 };
+        particlesRef.current = []; fadingParticlesRef.current = []; bubblesRef.current = [];
+        pendingElectroDeltaRef.current = {}; platedMolesRef.current = { left: {Cu:0, Zn:0}, right: {Cu:0, Zn:0} };
+        setPhHistory([{ bulk: 7.0, anode: 7.0, cathode: 7.0 }]);
+        setIsPaused(false);
+      };
+
+      const handleAddElectrolyte = (electrolyteId) => {
+        const el = ELECTROLYTES.find(e => e.id === electrolyteId);
+        if (!el) return;
+        setInputs(prev => {
+          const next = { ...prev };
+          const parsedAmount = parseFloat(addAmount);
+          Object.entries(el.inputs).forEach(([spId, count]) => { 
+              next[spId] = (next[spId] || 0) + count * parsedAmount; 
+          });
+          return next;
+        });
+      };
+
+      const onDragStart = (e, id) => { e.dataTransfer.setData('text/plain', id); setDraggedItem(id); };
+      const onDragOver = (e) => e.preventDefault();
+      const onDrop = (e) => { e.preventDefault(); handleAddElectrolyte(e.dataTransfer.getData('text/plain')); setDraggedItem(null); };
+
+      const getPhColor = (ph) => {
+        if (ph < 3) return 'text-red-600'; if (ph < 6) return 'text-orange-500';
+        if (ph < 8) return 'text-green-600'; if (ph < 11) return 'text-blue-600'; return 'text-purple-600';
+      };
+
+      return (
+        <div className="min-h-screen text-slate-800 font-sans p-4 md:p-6 flex flex-col">
+          <header className="mb-4 flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+            <div className="flex items-center gap-3">
+              <IconFlaskConical className="w-8 h-8 text-indigo-600" />
+              <h1 className="text-2xl font-bold text-slate-800">酸鹼鹽水解與電解動態模擬器</h1>
+            </div>
+            <div className="flex items-center gap-3 bg-slate-100 px-6 py-2 rounded-full border border-slate-200 shadow-inner">
+              <span className="font-bold text-slate-600 tracking-wider">目前整體 pH 值</span>
+              <span className={`text-3xl font-black ${getPhColor(eqState.pH)}`}>{eqState.pH.toFixed(2)}</span>
+            </div>
+          </header>
+
+          <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-4">
+            
+            <div className="lg:col-span-3 flex flex-col gap-4">
+              <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 border-t-4 border-t-amber-400">
+                <h2 className="text-md font-bold mb-3 flex items-center gap-2"><IconBattery className="w-5 h-5 text-amber-500"/> 電極材質設定</h2>
+                
+                <div className="flex justify-between text-xs font-bold font-mono mb-3">
+                  <div className={`px-2 py-1 rounded transition-colors ${leftPolarity===1 ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}`}>左: {leftPolarity===1 ? '(+) 陽極' : '(-) 陰極'}</div>
+                  <div className={`px-2 py-1 rounded transition-colors ${leftPolarity===-1 ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}`}>右: {leftPolarity===-1 ? '(+) 陽極' : '(-) 陰極'}</div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div>
+                    <label className="block text-slate-500 mb-1">左側電極</label>
+                    <select value={leftElectrode} onChange={e=>setLeftElectrode(e.target.value)} disabled={powerOn} className="w-full p-1.5 border rounded bg-slate-50 disabled:opacity-50 font-medium">
+                      <option value="graphite">石墨 (惰性)</option>
+                      <option value="copper">銅片 (活性)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-slate-500 mb-1">右側電極</label>
+                    <select value={rightElectrode} onChange={e=>setRightElectrode(e.target.value)} disabled={powerOn} className="w-full p-1.5 border rounded bg-slate-50 disabled:opacity-50 font-medium">
+                      <option value="graphite">石墨 (惰性)</option>
+                      <option value="copper">銅片 (活性)</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex-1 overflow-y-auto">
+                <div className="flex justify-between items-center mb-3">
+                  <h2 className="text-md font-bold flex items-center gap-2"><IconMousePointer2 className="w-5 h-5 text-indigo-500"/> 藥品櫃</h2>
+                  <select value={addAmount} onChange={e=>setAddAmount(parseFloat(e.target.value))} className="text-xs border rounded p-1">
+                    <option value={0.1}>加 0.1 mol</option><option value={0.5}>加 0.5 mol</option><option value={1.0}>加 1.0 mol</option>
+                  </select>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {ELECTROLYTES.map(el => (
+                    <div 
+                      key={el.id} draggable onDragStart={(e) => onDragStart(e, el.id)} onClick={() => handleAddElectrolyte(el.id)}
+                      className={`p-2 border-2 border-dashed rounded-lg cursor-grab hover:shadow-md transition-all flex flex-col items-center justify-center gap-1 ${el.uiColor}`}
+                    >
+                      <span className="font-bold text-sm tracking-wider">{el.formula}</span>
+                      <span className="text-[10px] font-medium">{el.name}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="lg:col-span-5 flex flex-col bg-white rounded-xl shadow-sm border border-slate-200 p-4 relative min-h-[500px]">
+              <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-2 mb-3">
+                <div className="flex items-center gap-2">
+                  <h2 className="text-lg font-bold text-slate-800 whitespace-nowrap">微觀互動觀察區</h2>
+                  {/* 💡 收折說明區按鈕 */}
+                  <button onClick={() => setShowHelp(!showHelp)} className="text-slate-400 hover:text-indigo-600 transition-colors" title="操作說明">
+                    <IconInfo className="w-5 h-5" />
+                  </button>
+                </div>
+                
+                <div className="flex flex-wrap items-center gap-2 justify-end w-full">
+                  <div className="flex items-center gap-2 bg-slate-50 px-2 py-1.5 rounded-md border border-slate-200">
+                    <span className="text-xs font-bold text-slate-600 w-12">電壓 {voltage}V</span>
+                    <input type="range" min="1" max="24" step="1" value={voltage} onChange={(e) => setVoltage(parseFloat(e.target.value))} className="w-16 accent-amber-500" disabled={powerOn} />
+                  </div>
+                  
+                  <button onClick={() => !powerOn && setLeftPolarity(leftPolarity * -1)} className="flex items-center gap-1 text-xs bg-slate-100 px-2 py-1.5 rounded-md hover:bg-slate-200 disabled:opacity-50 font-bold text-slate-700 border border-slate-200 transition-colors" disabled={powerOn}>
+                    🔄 反轉
+                  </button>
+
+                  <button onClick={() => setPowerOn(!powerOn)} className={`flex items-center gap-1 text-sm px-3 py-1.5 rounded-md font-bold transition-all ${powerOn ? 'bg-red-500 text-white shadow-md shadow-red-200' : 'bg-slate-200 text-slate-600 hover:bg-slate-300'}`}>
+                    <IconPower className="w-4 h-4"/> {powerOn ? 'ON' : 'OFF'}
+                  </button>
+                  
+                  <div className="hidden sm:block w-px h-5 bg-slate-300 mx-1"></div>
+
+                  <button onClick={() => setIsPaused(!isPaused)} className={`flex items-center gap-1 text-sm px-3 py-1.5 rounded-md transition-colors ${isPaused ? 'bg-amber-100 text-amber-700 hover:bg-amber-200' : 'bg-slate-100 text-slate-700 hover:bg-slate-200 font-bold'}`}>
+                    {isPaused ? <IconPlay className="w-4 h-4" /> : <IconPause className="w-4 h-4" />} {isPaused ? '繼續' : '暫停'}
+                  </button>
+                  <button onClick={handleReset} className="flex items-center gap-1 text-sm text-red-600 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-md font-bold transition-colors">
+                    <IconRefreshCcw className="w-4 h-4" /> 清空
+                  </button>
+                </div>
+              </div>
+
+              {/* 💡 收折說明區內容 */}
+              {showHelp && (
+                <div className="mb-3 p-3 bg-indigo-50 border border-indigo-100 rounded-lg text-sm text-indigo-800 shadow-inner">
+                  <h3 className="font-bold mb-1">🧪 操作說明與觀察重點</h3>
+                  <ul className="list-disc pl-5 space-y-1">
+                    <li><b>加入藥品：</b>點選或拖曳左側藥品櫃，將離子加入水中。</li>
+                    <li><b>開啟電源：</b>設定好電壓與電極材質後，打開電源，觀察帶電離子受電場吸引的移動與極板反應（酒精等非電解質不受影響）。</li>
+                    <li><b>電極反應：</b>石墨電極為惰性，會產生氣泡；銅電極為活性，作陽極時會溶解釋出 Cu²⁺，作陰極時會鍍上金屬。</li>
+                    <li><b>極性反轉：</b>關閉電源後可隨時反轉極性，觀察已鍍上的金屬層如何被重新氧化溶解。</li>
+                  </ul>
+                </div>
+              )}
+              
+              <div 
+                className={`flex-1 relative border-b-8 border-l-8 border-r-8 border-slate-300 rounded-b-[40px] overflow-hidden ${draggedItem ? 'bg-indigo-50/50' : 'bg-transparent'}`}
+                onDragOver={onDragOver} onDrop={onDrop} ref={containerRef} style={{ width: '90%', margin: '0 auto' }}
+              >
+                <div className="absolute bottom-0 w-full bg-blue-400/20 border-t border-blue-400/40" style={{ height: `${(volume / MAX_VOLUME) * 100}%` }} />
+                <canvas ref={canvasRef} className="absolute inset-0 w-full h-full pointer-events-none z-20" />
+                
+                {isPaused && (
+                  <div className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none">
+                    <div className="bg-black/20 text-white backdrop-blur-sm px-6 py-2 rounded-full font-bold tracking-widest text-lg shadow-lg">畫面已凍結</div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="lg:col-span-4 flex flex-col gap-4">
+              <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                <h2 className="text-md font-bold mb-3 flex items-center gap-2"><IconActivity className="w-5 h-5 text-rose-500"/> 歷程 pH 曲線與局部分區模型</h2>
+                <PhChart history={phHistory} />
+                <div className="bg-sky-50 text-sky-800 p-2 rounded text-xs leading-relaxed mt-3 shadow-sm border border-sky-100">
+                  <strong>💡 全域電中性緩衝機制 (Global Electroneutrality Buffer)：</strong>
+                  <ul className="list-disc pl-4 mt-1 space-y-1">
+                    <li>試著電解 <b>KNO₃</b> (硝酸鉀)：因為陰陽極反應是由動畫碰撞觸發的，可能產生 1~2 顆粒子的時間差，導致畫面瞬間產生未配對的 H⁺ 或 OH⁻。</li>
+                    <li>系統已啟用<b>全域淨電荷守門員</b>！未配對的離子會被暫時隱藏，不參與整體計算。因此，即使局部電極的 pH (<span className="text-red-500 font-bold">紅色</span> / <span className="text-blue-500 font-bold">藍色</span>虛線) 已經發散，您將觀察到 <span className="font-bold text-slate-800">白色半透明線 (整體 pH) 依然穩若泰山地保持在中性 7.00！</span></li>
+                  </ul>
+                </div>
+              </div>
+
+              <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex-1 overflow-auto">
+                <h2 className="text-md font-bold mb-3 flex items-center gap-2"><IconZap className="w-5 h-5 text-amber-500"/> 平衡後物種莫耳數 (mol)</h2>
+                <div className="grid grid-cols-2 gap-x-6 gap-y-1 mb-3">
+                  {Object.entries(eqState.species).map(([id, moles]) => {
+                    if (moles < 1e-6 && id !== 'H' && id !== 'OH') return null;
+                    const def = SPECIES_DEFS[id];
+                    if (!def || id === 'H2O') return null;
+                    return (
+                      <div key={id} className="flex justify-between items-center text-sm py-1 border-b border-slate-50">
+                        <div className="flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full" style={{ backgroundColor: def.color }}></span>
+                          <span className="font-medium text-slate-700">{def.symbol}</span>
+                        </div>
+                        {/* 💡 更新：使用專屬科學記號格式化元件 */}
+                        <span className="font-mono text-slate-600"><FormatSciNum num={moles} /></span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
