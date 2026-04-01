@@ -76,6 +76,16 @@
       'HCO3': 'CO3', 'CH3COOH': 'CH3COO', 'NH3': 'NH4', 'CuOH': 'Cu', 'ZnOH': 'Zn', 'H2CO3': 'HCO3'
     };
 
+    // 💡 新增：真實化學沉澱物定義 (Ksp)
+    const PRECIPITATES = [
+      { id: 'CuOH2', formula: 'Cu(OH)₂', cat: 'Cu', catN: 1, an: 'OH', anN: 2, ksp: 2.2e-20, color: 'rgba(56, 189, 248, 0.9)' },
+      { id: 'CuCO3', formula: 'CuCO₃', cat: 'Cu', catN: 1, an: 'CO3', anN: 1, ksp: 1.4e-10, color: 'rgba(20, 184, 166, 0.9)' },
+      { id: 'ZnOH2', formula: 'Zn(OH)₂', cat: 'Zn', catN: 1, an: 'OH', anN: 2, ksp: 3.0e-17, color: 'rgba(241, 245, 249, 0.9)' },
+      { id: 'ZnCO3', formula: 'ZnCO₃', cat: 'Zn', catN: 1, an: 'CO3', anN: 1, ksp: 1.4e-11, color: 'rgba(226, 232, 240, 0.9)' },
+      { id: 'CaOH2', formula: 'Ca(OH)₂', cat: 'Ca', catN: 1, an: 'OH', anN: 2, ksp: 5.5e-6, color: 'rgba(255, 255, 255, 0.9)' },
+      { id: 'CaCO3', formula: 'CaCO₃', cat: 'Ca', catN: 1, an: 'CO3', anN: 1, ksp: 3.3e-9, color: 'rgba(250, 250, 249, 0.9)' },
+    ];
+
     const ELECTROLYTES = [
       { id: 'NaCl', name: '強酸強鹼鹽 (中性)', formula: 'NaCl', inputs: { Na: 1, Cl: 1 }, uiColor: 'bg-white border-slate-300 text-slate-700' },
       { id: 'Na2CO3', name: '弱酸強鹼鹽 (強鹼性)', formula: 'Na₂CO₃', inputs: { Na: 2, CO3: 1 }, uiColor: 'bg-indigo-50 border-indigo-300 text-indigo-800' },
@@ -118,6 +128,32 @@
       if (shift > 0) shift = Math.min(shift, cA); return shift;
     }
 
+    // 💡 新增：Ksp 沉澱與溶解平衡二分逼近解算器
+    function solvePrecipitation(ionA, countA, ionB, countB, ksp, vol, solidMoles) {
+      let cA = ionA / vol, cB = ionB / vol;
+      let Q = Math.pow(cA, countA) * Math.pow(cB, countB);
+      if (Math.abs(Q - ksp) / ksp < 1e-4) return 0; 
+      
+      let minDelta, maxDelta;
+      if (Q > ksp) {
+        minDelta = 0; maxDelta = Math.min(ionA / countA, ionB / countB); 
+      } else {
+        if (solidMoles <= 0) return 0; 
+        minDelta = -solidMoles; 
+        maxDelta = 0;
+      }
+      
+      let delta = 0;
+      for (let i = 0; i < 40; i++) {
+        delta = (minDelta + maxDelta) / 2;
+        let newCa = Math.max(0, (ionA - countA * delta) / vol);
+        let newCb = Math.max(0, (ionB - countB * delta) / vol);
+        let currentQ = Math.pow(newCa, countA) * Math.pow(newCb, countB);
+        if (currentQ > ksp) minDelta = delta; else maxDelta = delta;
+      }
+      return delta;
+    }
+
     function calculateEquilibrium(inputs, electroDelta, volume) {
       let netElectroCharge = 0;
       Object.keys(electroDelta).forEach(id => {
@@ -158,6 +194,9 @@
           H: H_input,
           OH: OH_input
       };
+      
+      let solids = {};
+      PRECIPITATES.forEach(p => solids[p.id] = 0);
       let co2Generated = 0;
 
       let hAvail = species.H;
@@ -211,6 +250,19 @@
 
           let shiftZnKb = getStableKbShift(species.ZnOH/volume, species.Zn/volume, species.OH/volume, 1e-14 / 1e-9);
           species.ZnOH -= shiftZnKb * volume; species.Zn += shiftZnKb * volume; species.OH = Math.max(1e-16, species.OH + shiftZnKb * volume);
+
+          // 💡 新增：固體沉澱與溶解
+          for (let p of PRECIPITATES) {
+              let ionA = species[p.cat] || 0;
+              let ionB = species[p.an] || 0;
+              let solid = solids[p.id] || 0;
+              let delta = solvePrecipitation(ionA, p.catN, ionB, p.anN, p.ksp, volume, solid);
+              if (delta !== 0) {
+                  species[p.cat] = Math.max(0, ionA - p.catN * delta);
+                  species[p.an] = Math.max(0, ionB - p.anN * delta);
+                  solids[p.id] = Math.max(0, solid + delta);
+              }
+          }
       }
 
       if (species.H2CO3 / volume > 0.03) {
@@ -221,7 +273,7 @@
       let pH = -Math.log10(Math.max(species.H / volume, 1e-15));
       pH = Math.max(0, Math.min(14, pH));
 
-      return { species, co2Generated, pH };
+      return { species, solids, co2Generated, pH };
     }
 
     const PhChart = ({ history }) => {
@@ -261,7 +313,6 @@
       );
     }
 
-    // 💡 新增：科學記號格式化元件
     const FormatSciNum = ({ num }) => {
       if (num === 0) return <span>0.000</span>;
       if (num >= 0.001 && num < 1000) return <span>{num.toFixed(3)}</span>;
@@ -297,7 +348,6 @@
       const localExcessRef = useRef({ leftH: 0, leftOH: 0, rightH: 0, rightOH: 0 });
       const [phHistory, setPhHistory] = useState([{ bulk: 7.0, anode: 7.0, cathode: 7.0 }]);
       
-      // 💡 新增：說明書收折狀態
       const [showHelp, setShowHelp] = useState(false);
 
       const canvasRef = useRef(null);
@@ -305,6 +355,8 @@
       const particlesRef = useRef([]); 
       const bubblesRef = useRef([]); 
       const fadingParticlesRef = useRef([]); 
+      const snowflakesRef = useRef([]); // 💡 新增雪花粒子追蹤
+      const visualSolidsRef = useRef({}); // 💡 新增固體累積追蹤
       const cumulativeCO2Ref = useRef(0); 
       const animationRef = useRef(null);
       
@@ -315,7 +367,7 @@
       const leftPolarityRef = useRef(leftPolarity);
       const leftElectrodeRef = useRef(leftElectrode);
       const rightElectrodeRef = useRef(rightElectrode);
-      const eqStateRef = useRef({pH: 7.0});
+      const eqStateRef = useRef({pH: 7.0, solids: {}});
 
       useEffect(() => { powerOnRef.current = powerOn; }, [powerOn]);
       useEffect(() => { voltageRef.current = voltage; }, [voltage]);
@@ -396,6 +448,29 @@
         if (!parent) return;
         const canvasWidth = parent.clientWidth;
         const canvasHeight = parent.clientHeight;
+        const waterTop = canvasHeight * (1 - volume / MAX_VOLUME);
+
+        // 💡 產生沉澱動畫雪花
+        Object.keys(eqState.solids).forEach(pId => {
+            const targetSolid = eqState.solids[pId];
+            const currentVisSolid = visualSolidsRef.current[pId] || 0;
+            if (targetSolid > currentVisSolid + 1e-4) {
+                const diff = targetSolid - currentVisSolid;
+                const flakeCount = Math.floor(diff / MOLES_PER_PARTICLE);
+                const pDef = PRECIPITATES.find(p => p.id === pId);
+                for (let i = 0; i < flakeCount; i++) {
+                    snowflakesRef.current.push({
+                        id: pId, color: pDef.color,
+                        x: 20 + Math.random() * (canvasWidth - 40),
+                        y: waterTop + Math.random() * (canvasHeight - waterTop) * 0.5, 
+                        vy: 1.0 + Math.random() * 1.5,
+                        phase: Math.random() * Math.PI * 2,
+                        moles: MOLES_PER_PARTICLE
+                    });
+                }
+            }
+            visualSolidsRef.current[pId] = targetSolid; // 記錄避免重複生成
+        });
 
         if (eqState.co2Generated > cumulativeCO2Ref.current) {
           const diff = eqState.co2Generated - cumulativeCO2Ref.current;
@@ -412,7 +487,7 @@
           }
           cumulativeCO2Ref.current = eqState.co2Generated;
         }
-      }, [eqState.co2Generated]);
+      }, [eqState.solids, eqState.co2Generated, volume]);
 
       useEffect(() => {
         const currentParticles = particlesRef.current;
@@ -520,6 +595,11 @@
           const width = canvas.width;
           const height = canvas.height;
           const waterTop = height * (1 - volume / MAX_VOLUME);
+          
+          // 💡 動態調整固體地基高度 (供粒子反彈)
+          let solidTotalMoles = Object.values(eqStateRef.current.solids || {}).reduce((a, b) => a + b, 0);
+          let solidBaseY = height - Math.min((solidTotalMoles / 1.0) * 40, height * 0.4);
+
           ctx.clearRect(0, 0, width, height);
 
           const ELECTRODE_W = 20;
@@ -750,7 +830,8 @@
                   if (p1.x < radius) { p1.x = radius; p1.vx *= -0.8; }
                   if (p1.x > width - radius) { p1.x = width - radius; p1.vx *= -0.8; }
               }
-              if (p1.y > height - radius) { p1.y = height - radius; p1.vy *= -0.8; }
+              // 💡 粒子避開固體沉澱層
+              if (p1.y > solidBaseY - radius) { p1.y = solidBaseY - radius; p1.vy *= -0.8; }
 
               if (!p1.consumed) activeParticles.push(p1);
             }
@@ -796,6 +877,22 @@
             } else { drawParticle(p.type, p.x, p.y); }
           }
 
+          // 💡 繪製沉澱雪花動畫
+          const activeSnowflakes = [];
+          for (let s of snowflakesRef.current) {
+            if (!isPausedRef.current) {
+              s.y += s.vy; 
+              s.x += Math.sin(time * 2 + s.phase) * 0.5;
+            }
+            if (s.y < solidBaseY) {
+               ctx.beginPath(); ctx.arc(s.x, s.y, 3, 0, Math.PI*2);
+               ctx.fillStyle = s.color; ctx.fill(); 
+               ctx.strokeStyle = 'rgba(0,0,0,0.1)'; ctx.stroke();
+               activeSnowflakes.push(s);
+            }
+          }
+          snowflakesRef.current = activeSnowflakes;
+
           const activeFading = [];
           for (let fp of fadingParticlesRef.current) {
             if (!isPausedRef.current) {
@@ -830,7 +927,7 @@
         setVolume(INITIAL_VOLUME); setPowerOn(false);
         cumulativeCO2Ref.current = 0; wireElectronsRef.current = 0;
         localExcessRef.current = { leftH: 0, leftOH: 0, rightH: 0, rightOH: 0 };
-        particlesRef.current = []; fadingParticlesRef.current = []; bubblesRef.current = [];
+        particlesRef.current = []; fadingParticlesRef.current = []; bubblesRef.current = []; snowflakesRef.current = [];
         pendingElectroDeltaRef.current = {}; platedMolesRef.current = { left: {Cu:0, Zn:0}, right: {Cu:0, Zn:0} };
         setPhHistory([{ bulk: 7.0, anode: 7.0, cathode: 7.0 }]);
         setIsPaused(false);
@@ -925,7 +1022,6 @@
               <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-2 mb-3">
                 <div className="flex items-center gap-2">
                   <h2 className="text-lg font-bold text-slate-800 whitespace-nowrap">微觀互動觀察區</h2>
-                  {/* 💡 收折說明區按鈕 */}
                   <button onClick={() => setShowHelp(!showHelp)} className="text-slate-400 hover:text-indigo-600 transition-colors" title="操作說明">
                     <IconInfo className="w-5 h-5" />
                   </button>
@@ -956,15 +1052,14 @@
                 </div>
               </div>
 
-              {/* 💡 收折說明區內容 */}
               {showHelp && (
                 <div className="mb-3 p-3 bg-indigo-50 border border-indigo-100 rounded-lg text-sm text-indigo-800 shadow-inner">
                   <h3 className="font-bold mb-1">🧪 操作說明與觀察重點</h3>
                   <ul className="list-disc pl-5 space-y-1">
                     <li><b>加入藥品：</b>點選或拖曳左側藥品櫃，將離子加入水中。</li>
-                    <li><b>開啟電源：</b>設定好電壓與電極材質後，打開電源，觀察帶電離子受電場吸引的移動與極板反應（酒精等非電解質不受影響）。</li>
-                    <li><b>電極反應：</b>石墨電極為惰性，會產生氣泡；銅電極為活性，作陽極時會溶解釋出 Cu²⁺，作陰極時會鍍上金屬。</li>
-                    <li><b>極性反轉：</b>關閉電源後可隨時反轉極性，觀察已鍍上的金屬層如何被重新氧化溶解。</li>
+                    <li><b>開啟電源：</b>設定好電壓與極性後，打開電源，觀察帶電離子受電場吸引的移動與極板反應（非電解質不受影響）。</li>
+                    <li><b>電極反應：</b>石墨為惰性會產生氣泡；銅電極作陽極時會溶解，作陰極時會鍍上金屬。反轉極性可觀察金屬重溶。</li>
+                    <li><b>沉澱反應：</b>混合特定離子（如 Ca²⁺ 與 CO₃²⁻ 或 OH⁻）時，觀察溶液中超過 Ksp 溶解度積而產生的固體沉澱層！</li>
                   </ul>
                 </div>
               )}
@@ -974,6 +1069,21 @@
                 onDragOver={onDragOver} onDrop={onDrop} ref={containerRef} style={{ width: '90%', margin: '0 auto' }}
               >
                 <div className="absolute bottom-0 w-full bg-blue-400/20 border-t border-blue-400/40" style={{ height: `${(volume / MAX_VOLUME) * 100}%` }} />
+                
+                {/* 💡 新增：實體沉澱物堆疊層 */}
+                <div className="absolute bottom-0 left-0 w-full flex flex-col justify-end z-10 pointer-events-none">
+                  {Object.entries(eqState.solids).map(([pId, moles]) => {
+                    if (moles < 1e-4) return null;
+                    const pDef = PRECIPITATES.find(p => p.id === pId);
+                    const h = Math.min((moles / 1.0) * 40, 150); 
+                    return (
+                      <div key={pId} className="w-full flex items-center justify-center border-t border-black/10 transition-all duration-300" style={{ height: `${h}px`, backgroundColor: pDef.color }}>
+                        <span className="text-xs font-bold text-slate-800 drop-shadow-sm">{pDef.formula} 沉澱</span>
+                      </div>
+                    );
+                  })}
+                </div>
+
                 <canvas ref={canvasRef} className="absolute inset-0 w-full h-full pointer-events-none z-20" />
                 
                 {isPaused && (
@@ -989,10 +1099,9 @@
                 <h2 className="text-md font-bold mb-3 flex items-center gap-2"><IconActivity className="w-5 h-5 text-rose-500"/> 歷程 pH 曲線與局部分區模型</h2>
                 <PhChart history={phHistory} />
                 <div className="bg-sky-50 text-sky-800 p-2 rounded text-xs leading-relaxed mt-3 shadow-sm border border-sky-100">
-                  <strong>💡 全域電中性緩衝機制 (Global Electroneutrality Buffer)：</strong>
+                  <strong>💡 局部與整體 pH：</strong>
                   <ul className="list-disc pl-4 mt-1 space-y-1">
-                    <li>試著電解 <b>KNO₃</b> (硝酸鉀)：因為陰陽極反應是由動畫碰撞觸發的，可能產生 1~2 顆粒子的時間差，導致畫面瞬間產生未配對的 H⁺ 或 OH⁻。</li>
-                    <li>系統已啟用<b>全域淨電荷守門員</b>！未配對的離子會被暫時隱藏，不參與整體計算。因此，即使局部電極的 pH (<span className="text-red-500 font-bold">紅色</span> / <span className="text-blue-500 font-bold">藍色</span>虛線) 已經發散，您將觀察到 <span className="font-bold text-slate-800">白色半透明線 (整體 pH) 依然穩若泰山地保持在中性 7.00！</span></li>
+                    <li>即使局部電極的 pH (<span className="text-red-500 font-bold">紅</span> / <span className="text-blue-500 font-bold">藍</span>虛線) 因反應而劇烈發散，在全域電荷守恆下，<span className="font-bold text-slate-800">白色半透明線 (整體 pH) </span>依然能不受誤差影響，精準顯示整杯溶液的酸鹼值！</li>
                   </ul>
                 </div>
               </div>
@@ -1010,7 +1119,20 @@
                           <span className="w-2 h-2 rounded-full" style={{ backgroundColor: def.color }}></span>
                           <span className="font-medium text-slate-700">{def.symbol}</span>
                         </div>
-                        {/* 💡 更新：使用專屬科學記號格式化元件 */}
+                        <span className="font-mono text-slate-600"><FormatSciNum num={moles} /></span>
+                      </div>
+                    );
+                  })}
+                  {/* 💡 新增：顯示沉澱物莫耳數 */}
+                  {Object.entries(eqState.solids).map(([id, moles]) => {
+                    if (moles < 1e-4) return null;
+                    const pDef = PRECIPITATES.find(p => p.id === id);
+                    return (
+                      <div key={id} className="flex justify-between items-center text-sm py-1 border-b border-slate-50">
+                        <div className="flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-sm border border-slate-300" style={{ backgroundColor: pDef.color }}></span>
+                          <span className="font-medium text-slate-700">{pDef.formula} (固)</span>
+                        </div>
                         <span className="font-mono text-slate-600"><FormatSciNum num={moles} /></span>
                       </div>
                     );
