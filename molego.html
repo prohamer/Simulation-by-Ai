@@ -160,7 +160,7 @@
     <div class="bg-gray-800 text-white p-6 rounded-2xl max-w-lg w-11/12 shadow-2xl border border-gray-600 modal-animate relative" style="max-height:90vh;overflow-y:auto;">
         <button onclick="toggleInfo()" class="absolute top-4 right-4 text-gray-400 hover:text-white text-2xl leading-none">&times;</button>
         <h2 class="text-xl font-bold mb-1">📖 使用說明</h2>
-        <p class="text-xs text-gray-500 mb-4">3D 分子建構器V15</p>
+        <p class="text-xs text-gray-500 mb-4">3D 分子建構器 V16</p>
 
         <div class="mb-4">
             <p class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">顯示設定</p>
@@ -219,7 +219,7 @@
 <!-- ═══ HEADER ═══ -->
 <div id="header-bar">
     <div class="flex items-center gap-2">
-        <h1 class="text-lg font-bold text-white">🧪 3D 分子建構器V15</h1>
+        <h1 class="text-lg font-bold text-white">🧪 3D 分子建構器V12</h1>
         <button onclick="toggleInfo()" class="bg-gray-700 hover:bg-gray-600 text-gray-200 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold border border-gray-500 transition-colors">?</button>
         <!-- 工具列位置切換按鈕 -->
         <button onclick="toggleToolbarPos()" id="btn-toolbar-pos" title="切換工具列位置"
@@ -279,6 +279,12 @@
         <button onclick="startOptimization()" class="tool-btn" style="background:#3730a3;border-color:#4338ca;">
             <span class="tool-icon">✨</span><span class="tool-label">最佳化</span>
         </button>
+        <button onclick="undo()" id="btn-undo" class="tool-btn" style="opacity:0.4;cursor:not-allowed;" disabled>
+            <span class="tool-icon">↩️</span><span class="tool-label">Undo</span>
+        </button>
+        <button onclick="redo()" id="btn-redo" class="tool-btn" style="opacity:0.4;cursor:not-allowed;" disabled>
+            <span class="tool-icon">↪️</span><span class="tool-label">Redo</span>
+        </button>
     </div>
 
     <!-- 分隔線（左側模式才顯示） -->
@@ -312,6 +318,11 @@ let showLabels = false, bondSelection = null, deleteBondSelection = null;
 let dragStartAtomId = null;
 let optimizationFrames = 0;
 let toolbarPos = 'bottom'; // 'bottom' | 'sidebar'
+
+// Undo / Redo 歷史堆疊
+let undoStack = [];   // 每個元素是完整的場景快照
+let redoStack = [];
+const MAX_HISTORY = 50;
 
 // 移動單一原子
 let draggedAtom = null;
@@ -434,6 +445,7 @@ function autoArrange() {
     let totalWidth = molInfos.reduce((s, m, i) => s + m.radius * 2 + (i < molInfos.length - 1 ? GAP : 0), 0);
     let curX = -totalWidth / 2;
 
+    pushHistory();
     molInfos.forEach(info => {
         let targetX = curX + info.radius;
         curX += info.radius * 2 + GAP;
@@ -448,6 +460,88 @@ function autoArrange() {
 }
 
 // --- 6. 工具函式 ---
+// --- Undo / Redo ---
+function captureSnapshot() {
+    return {
+        atoms: atoms.map(a => ({
+            id: a.id, element: a.element,
+            x: a.mesh.position.x, y: a.mesh.position.y, z: a.mesh.position.z
+        })),
+        bonds: bonds.map(b => ({
+            id: b.id, atom1_id: b.atom1_id, atom2_id: b.atom2_id,
+            order: b.order, bondType: b.bondType
+        }))
+    };
+}
+
+function pushHistory() {
+    undoStack.push(captureSnapshot());
+    if (undoStack.length > MAX_HISTORY) undoStack.shift();
+    redoStack = [];      // 任何新操作清空 redo
+    updateUndoRedoBtns();
+}
+
+function restoreSnapshot(snap) {
+    // 清除現有場景
+    atoms.slice().forEach(a => {
+        scene.remove(a.mesh);
+        a.mesh.geometry.dispose();
+        a.mesh.material.dispose();
+    });
+    bonds.slice().forEach(b => { scene.remove(b.group); });
+    atoms = []; bonds = [];
+    clearMolSelection();
+
+    // 重建原子
+    snap.atoms.forEach(a => createAtom(a.element, new THREE.Vector3(a.x, a.y, a.z), a.id));
+
+    // 重建鍵結
+    snap.bonds.forEach(b => {
+        let e1 = atoms.find(a => a.id === b.atom1_id).element;
+        let e2 = atoms.find(a => a.id === b.atom2_id).element;
+        let ionic = ELEMENTS[e1].isMetal || ELEMENTS[e2].isMetal;
+        let obj = {
+            id: b.id, atom1_id: b.atom1_id, atom2_id: b.atom2_id,
+            order: b.order, bondType: b.bondType || (ionic ? 'ionic' : 'covalent'),
+            group: new THREE.Group()
+        };
+        scene.add(obj.group); bonds.push(obj); updateBondMesh(obj);
+    });
+}
+
+function undo() {
+    if (undoStack.length === 0) return;
+    redoStack.push(captureSnapshot());
+    restoreSnapshot(undoStack.pop());
+    updateUndoRedoBtns();
+    showToast("↩️ 已復原");
+}
+
+function redo() {
+    if (redoStack.length === 0) return;
+    undoStack.push(captureSnapshot());
+    restoreSnapshot(redoStack.pop());
+    updateUndoRedoBtns();
+    showToast("↪️ 已重做");
+}
+
+function updateUndoRedoBtns() {
+    const uBtn = document.getElementById('btn-undo');
+    const rBtn = document.getElementById('btn-redo');
+    if (uBtn) {
+        const canUndo = undoStack.length > 0;
+        uBtn.disabled = !canUndo;
+        uBtn.style.opacity = canUndo ? '1' : '0.4';
+        uBtn.style.cursor = canUndo ? 'pointer' : 'not-allowed';
+    }
+    if (rBtn) {
+        const canRedo = redoStack.length > 0;
+        rBtn.disabled = !canRedo;
+        rBtn.style.opacity = canRedo ? '1' : '0.4';
+        rBtn.style.cursor = canRedo ? 'pointer' : 'not-allowed';
+    }
+}
+
 function toggleInfo() { document.getElementById('info-modal').classList.toggle('hidden'); }
 
 function getAtomValencyInfo(atomId) {
@@ -651,12 +745,16 @@ function onPointerUp(event) {
     let wasDrag = pointerDownPos.distanceTo(new THREE.Vector2(event.clientX, event.clientY)) > 8;
 
     if (draggedAtom) {
+        pushHistory();
         draggedAtom = null;
         controls.enabled = (currentTool === 'camera');
         return;
     }
 
     if (currentTool === 'move-mol') {
+        if (wasDrag && (molDragMode === 'translate' || molDragMode === 'rotate')) {
+            pushHistory();
+        }
         let ndc = getMouseNDC(event);
         mouse.set(ndc.x, ndc.y);
         raycaster.setFromCamera(mouse, camera);
@@ -710,10 +808,11 @@ function onPointerUp(event) {
                 let normal = intersects[0].face.normal.clone().transformDirection(hit.matrixWorld).normalize();
                 let dir = getIdealBondDirection(parentId, normal);
                 let len = getIdealBondLength(parentData.element, currentElement, willIonic);
+                pushHistory();
                 createBond(parentId, createAtom(currentElement, hit.position.clone().add(dir.multiplyScalar(len))).id);
             }
         } else {
-            let target = new THREE.Vector3(); raycaster.ray.at(15, target); createAtom(currentElement, target);
+            let target = new THREE.Vector3(); raycaster.ray.at(15, target); pushHistory(); createAtom(currentElement, target);
         }
     }
     else if (currentTool === 'bond') {
@@ -768,7 +867,7 @@ function toggleBond(a1Id, a2Id) {
         if (e2.isMetal&&v2.total>=e2.maxBonds){showToast(`${a2d.element} 離子已達配位數上限！`);return;}
         if (!e2.isMetal&&!ionic&&v2.covalent>=e2.maxBonds){showToast(`${a2d.element} 元素已達共價鍵上限！`);return;}
         if (!e2.isMetal&&v2.total>=8){showToast(`${a2d.element} 空間過度壅擠！`);return;}
-        createBond(a1Id, a2Id);
+        pushHistory(); createBond(a1Id, a2Id);
     } else {
         if (ex.bondType==='ionic'){showToast("離子鍵無法建立多重鍵！");return;}
         let next=(ex.order%3)+1;
@@ -778,13 +877,13 @@ function toggleBond(a1Id, a2Id) {
             let v1=getAtomValencyInfo(a1.id), v2=getAtomValencyInfo(a2.id);
             if (v1.covalent+add>ELEMENTS[a1.element].maxBonds||v2.covalent+add>ELEMENTS[a2.element].maxBonds){next=1;showToast("原子價數不足，退回單鍵！");}
         }
-        ex.order=next; updateBondMesh(ex);
+        pushHistory(); ex.order=next; updateBondMesh(ex);
     }
 }
 
 function decreaseBondOrder(bondId) {
     let b=bonds.find(b=>b.id===bondId);
-    if (b){if(b.order>1){b.order--;updateBondMesh(b);}else deleteBond(bondId);}
+    if (b){pushHistory();if(b.order>1){b.order--;updateBondMesh(b);}else deleteBond(bondId);}
 }
 
 function removeBondBetween(a1Id, a2Id) {
@@ -795,6 +894,7 @@ function removeBondBetween(a1Id, a2Id) {
 // --- 10. 最佳化 ---
 function startOptimization() {
     if (atoms.length===0) return;
+    pushHistory();
     optimizationFrames=200;
     atoms.forEach(a=>{a.velocity=new THREE.Vector3();});
     showToast("✨ 結構最佳化中...");
@@ -955,6 +1055,7 @@ function updateBondMesh(b) {
 }
 
 function deleteAtom(id) {
+    pushHistory();
     let idx=atoms.findIndex(a=>a.id===id);
     if(idx>-1){scene.remove(atoms[idx].mesh);atoms[idx].mesh.geometry.dispose();atoms[idx].mesh.material.dispose();atoms.splice(idx,1);}
     bonds.filter(b=>b.atom1_id===id||b.atom2_id===id).forEach(b=>deleteBond(b.id));
@@ -1077,6 +1178,7 @@ function importMC(event) {
                 let obj={id:b.id,atom1_id:b.atom1_id,atom2_id:b.atom2_id,order:b.order,bondType:b.bondType||(ionic?'ionic':'covalent'),group:new THREE.Group()};
                 scene.add(obj.group);bonds.push(obj);updateBondMesh(obj);
             });
+            undoStack = []; redoStack = []; updateUndoRedoBtns();
             showToast("載入成功！");
         }catch(err){showToast("檔案格式錯誤或不相容！");}
     };
