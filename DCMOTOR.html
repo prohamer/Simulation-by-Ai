@@ -128,6 +128,9 @@
         <label class="control-group" style="color: #8a2be2;">
             <input type="checkbox" id="chk-bfield-coil-lines"> 電樞磁力線
         </label>
+        <label class="control-group" style="color: #0088aa; background: #e8f4f8; border: 1px solid #0088aa;">
+            <input type="checkbox" id="chk-bfield-dynamic"> <b>磁場互動曲線</b>
+        </label>
         <label class="control-group" style="color: #b8860b;">
             <input type="checkbox" id="chk-current" checked> 電流
         </label>
@@ -162,6 +165,11 @@
         // 磁場與物理向量
         let rhrGroup, leftF, leftB, rightF, rightB;
         let magnetBFieldGroup, coilBFieldGroup, coilLinesGroup;
+
+        // 動態磁場互動曲線
+        let dynamicCurvesGroup;
+        let curveGeometries = [];
+        const CURVE_POINTS = 40; // 原版80，降低以節省效能
         
         // 全新教科書磁力線陣列 (固定 18 條幾何線段，N-S 時隱藏一半，只顯示 9 條)
         let staticCurveGeometries = [];
@@ -212,6 +220,7 @@
             buildCurrentEffects(); 
             buildRHR(); 
             buildMagneticFields(); 
+            buildDynamicCurves();
 
             // UI 互動事件綁定
             document.getElementById('slider-voltage').addEventListener('input', (e) => {
@@ -253,6 +262,7 @@
                 coilLinesGroup.visible = e.target.checked;
                 coilBFieldGroup.visible = e.target.checked;
             });
+            document.getElementById('chk-bfield-dynamic').addEventListener('change', (e) => dynamicCurvesGroup.visible = e.target.checked);
             document.getElementById('chk-run').addEventListener('change', (e) => isRunning = e.target.checked);
 
             document.getElementById('info-toggle').addEventListener('click', () => {
@@ -921,6 +931,28 @@
             }
         }
 
+        // --- 建立磁場互動立體曲線 (磁鐵場 + 線圈偶極場疊加) ---
+        function buildDynamicCurves() {
+            dynamicCurvesGroup = new THREE.Group();
+            scene.add(dynamicCurvesGroup);
+            dynamicCurvesGroup.visible = false; // 預設關閉
+
+            const matMagnetDriven = new THREE.LineBasicMaterial({ color: 0x00aaff, linewidth: 2 });
+            const matCoilDriven   = new THREE.LineBasicMaterial({ color: 0xff00ff, linewidth: 2 });
+
+            function addCurveBuffer(material) {
+                const geometry = new THREE.BufferGeometry();
+                const positions = new Float32Array(CURVE_POINTS * 3);
+                geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+                const line = new THREE.Line(geometry, material);
+                dynamicCurvesGroup.add(line);
+                curveGeometries.push(geometry);
+            }
+
+            for(let i = 0; i < 18; i++) addCurveBuffer(matMagnetDriven); // 磁鐵驅動 18 條（藍）
+            for(let i = 0; i < 10; i++) addCurveBuffer(matCoilDriven);   // 線圈驅動 10 條（洋紅）
+        }
+
         // --- 動畫核心迴圈 ---
         function animate() {
             requestAnimationFrame(animate);
@@ -1107,6 +1139,112 @@
                     coilBFieldGroup.rotation.x = 0; 
                 } else {
                     coilBFieldGroup.rotation.x = Math.PI; 
+                }
+            }
+
+            // 6. 運算動態磁場互動立體曲線（磁鐵場 + 線圈偶極場疊加）
+            if (dynamicCurvesGroup && dynamicCurvesGroup.visible) {
+                const coilWorldPos = new THREE.Vector3(0, 0, -2.0).applyMatrix4(armatureGroup.matrixWorld);
+
+                // 線圈磁偶極方向（隨電樞旋轉）
+                let mLocal = actualCoilDir >= 0 ? new THREE.Vector3(0, -1, 0) : new THREE.Vector3(0, 1, 0);
+                let mWorld = mLocal.transformDirection(armatureGroup.matrixWorld).normalize();
+                const k_coil = 7.0 * voltageMultiplier;
+
+                // 疊加場函數：磁鐵場 + 線圈偶極場
+                function getCombinedB(pos) {
+                    const B_mag = getExternalB(pos, leftPole, rightPole);
+                    if (voltageMultiplier === 0) return B_mag;
+                    const rVec = new THREE.Vector3().subVectors(pos, coilWorldPos);
+                    let r = Math.max(rVec.length(), 0.6);
+                    const rHat = rVec.clone().normalize();
+                    const mDotR = mWorld.dot(rHat);
+                    const B_coil = rHat.clone().multiplyScalar(3 * mDotR).sub(mWorld).multiplyScalar(k_coil / (r * r * r));
+                    return new THREE.Vector3().addVectors(B_mag, B_coil);
+                }
+
+                const stepSize = 0.18;
+                let lineIdx = 0;
+
+                // 18 條：從左右磁鐵面各 9 個種子出發
+                for(let side of [-1, 1]) {
+                    for(let y of [-1.2, 0, 1.2]) {
+                        for(let z of [-3.2, -2.0, -0.8]) {
+                            if(lineIdx >= 18) break;
+                            let startX = side < 0 ? -4.5 : 4.5;
+                            let facePole = side < 0 ? leftPole : rightPole;
+                            let dirMul = facePole === 1 ? 1 : -1;
+
+                            let pos = new THREE.Vector3(startX, y, z);
+                            const positions = curveGeometries[lineIdx].attributes.position.array;
+                            let validPts = CURVE_POINTS;
+
+                            for(let step = 0; step < CURVE_POINTS; step++) {
+                                positions[step*3]   = pos.x;
+                                positions[step*3+1] = pos.y;
+                                positions[step*3+2] = pos.z;
+                                const B = getCombinedB(pos);
+                                if(B.lengthSq() < 0.001) { validPts = step + 1; break; }
+                                pos.add(B.normalize().multiplyScalar(stepSize * dirMul));
+                            }
+                            // 剩餘點縮到最後有效點
+                            for(let step = validPts; step < CURVE_POINTS; step++) {
+                                positions[step*3]   = positions[(validPts-1)*3];
+                                positions[step*3+1] = positions[(validPts-1)*3+1];
+                                positions[step*3+2] = positions[(validPts-1)*3+2];
+                            }
+                            curveGeometries[lineIdx].attributes.position.needsUpdate = true;
+                            lineIdx++;
+                        }
+                    }
+                }
+
+                // 10 條：從線圈周圍種子點雙向追蹤
+                const coilSeeds = [
+                    new THREE.Vector3(0,  1.2, -2.0), new THREE.Vector3(0, -1.2, -2.0),
+                    new THREE.Vector3(0,  0,   -0.8), new THREE.Vector3(0,  0,   -3.2),
+                    new THREE.Vector3(-1.0,  0.8, -2.0), new THREE.Vector3( 1.0, -0.8, -2.0),
+                    new THREE.Vector3( 1.0,  0.8, -2.0), new THREE.Vector3(-1.0, -0.8, -2.0),
+                    new THREE.Vector3(0,  0,   -2.0), new THREE.Vector3(0,  0,   -1.4),
+                ];
+
+                for(let i = 0; i < 10; i++) {
+                    if(lineIdx >= 28) break;
+                    const startPos = coilSeeds[i].clone().applyMatrix4(armatureGroup.matrixWorld);
+
+                    // 往反方向積分
+                    let posB = startPos.clone();
+                    let backPts = [];
+                    for(let step = 0; step < CURVE_POINTS / 2; step++) {
+                        backPts.push(posB.clone());
+                        const B = getCombinedB(posB);
+                        if(B.lengthSq() < 0.001) break;
+                        posB.sub(B.normalize().multiplyScalar(stepSize));
+                    }
+                    backPts.reverse();
+
+                    // 往正方向積分
+                    let posF = startPos.clone();
+                    let fwdPts = [];
+                    for(let step = 0; step < CURVE_POINTS / 2; step++) {
+                        const B = getCombinedB(posF);
+                        if(B.lengthSq() < 0.001) break;
+                        posF.add(B.normalize().multiplyScalar(stepSize));
+                        fwdPts.push(posF.clone());
+                    }
+
+                    let allPts = backPts.concat(fwdPts);
+                    while(allPts.length < CURVE_POINTS) allPts.push(allPts[allPts.length - 1].clone());
+                    if(allPts.length > CURVE_POINTS) allPts = allPts.slice(0, CURVE_POINTS);
+
+                    const positions = curveGeometries[lineIdx].attributes.position.array;
+                    for(let step = 0; step < CURVE_POINTS; step++) {
+                        positions[step*3]   = allPts[step].x;
+                        positions[step*3+1] = allPts[step].y;
+                        positions[step*3+2] = allPts[step].z;
+                    }
+                    curveGeometries[lineIdx].attributes.position.needsUpdate = true;
+                    lineIdx++;
                 }
             }
 
