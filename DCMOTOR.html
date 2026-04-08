@@ -1000,52 +1000,31 @@
                 rightF.position.copy(rightWorldPos);
                 rightB.position.copy(rightWorldPos);
 
-                if (!hasVoltage) {
+                // 若中央無淨磁場 (bFieldMultiplier = 0)，隱藏 B 與 F 箭頭
+                if (bFieldMultiplier === 0 || !hasVoltage) {
                     leftB.setLength(0); rightB.setLength(0);
                     leftF.setLength(0); rightF.setLength(0);
                 } else {
-                    // 精確計算左右兩側導線所在位置的「真實局部磁場向量 (B)」
-                    let bLeftVec = getExternalB(leftWorldPos, leftPole, rightPole);
-                    let bRightVec = getExternalB(rightWorldPos, leftPole, rightPole);
+                    const bDir = new THREE.Vector3(bFieldMultiplier, 0, 0);
+                    leftB.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), bDir);
+                    rightB.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), bDir);
+                    leftB.setLength(1.5);
+                    rightB.setLength(1.5);
 
-                    let bLeftLen = bLeftVec.length();
-                    let bRightLen = bRightVec.length();
+                    // 勞侖茲力公式 F = I x B
+                    let I_left = new THREE.Vector3(0, 0, -actualCoilDir);
+                    let I_right = new THREE.Vector3(0, 0, actualCoilDir);
+                    
+                    let F_left = new THREE.Vector3().crossVectors(I_left, bDir);
+                    let F_right = new THREE.Vector3().crossVectors(I_right, bDir);
 
-                    // N-N 或 S-S 抵消時，中央磁場較弱，稍微放大箭頭以利觀察排斥現象
-                    let bDisplayScale = (bFieldMultiplier === 0) ? 1.8 : 1.0; 
+                    leftF.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), F_left.clone().normalize());
+                    rightF.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), F_right.clone().normalize());
 
-                    if (bLeftLen > 0.05) {
-                        leftB.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), bLeftVec.clone().normalize());
-                        leftB.setLength(bLeftLen * bDisplayScale);
-                    } else leftB.setLength(0);
-
-                    if (bRightLen > 0.05) {
-                        rightB.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), bRightVec.clone().normalize());
-                        rightB.setLength(bRightLen * bDisplayScale);
-                    } else rightB.setLength(0);
-
-                    // 精確計算導線的「電流向量 (I)」(跟隨線圈旋轉)
-                    let I_left_local = new THREE.Vector3(0, 0, -actualCoilDir);
-                    let I_right_local = new THREE.Vector3(0, 0, actualCoilDir);
-                    let I_left_world = I_left_local.transformDirection(armatureGroup.matrixWorld).normalize();
-                    let I_right_world = I_right_local.transformDirection(armatureGroup.matrixWorld).normalize();
-
-                    // 依據真實 3D 空間公式計算勞侖茲力：F = I x B
-                    let F_left = new THREE.Vector3().crossVectors(I_left_world, bLeftVec);
-                    let F_right = new THREE.Vector3().crossVectors(I_right_world, bRightVec);
-
-                    let fLeftLen = F_left.length() * voltageMultiplier * 1.5;
-                    let fRightLen = F_right.length() * voltageMultiplier * 1.5;
-
-                    if (fLeftLen > 0.05) {
-                        leftF.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), F_left.clone().normalize());
-                        leftF.setLength(fLeftLen);
-                    } else leftF.setLength(0);
-
-                    if (fRightLen > 0.05) {
-                        rightF.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), F_right.clone().normalize());
-                        rightF.setLength(fRightLen);
-                    } else rightF.setLength(0);
+                    const effectiveForceMag = Math.abs(Math.cos(armatureAngle));
+                    const currentF_Length = 1.5 * effectiveForceMag * voltageMultiplier;
+                    leftF.setLength(currentF_Length);
+                    rightF.setLength(currentF_Length);
                 }
             }
 
