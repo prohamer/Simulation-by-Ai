@@ -51,7 +51,7 @@
             color: #333;
             border: 1px solid #ddd;
             width: 95%;
-            max-width: 1200px;
+            max-width: 1000px;
             z-index: 10;
         }
         .control-group {
@@ -90,13 +90,13 @@
 <body>
 
     <div id="info-panel">
-        <h1 id="info-toggle">直流馬達 (DC Motor) 模擬 <span id="info-icon">▼</span></h1>
+        <h1 id="info-toggle">直流馬達 (DC Motor) 教學模擬 <span id="info-icon">▼</span></h1>
         <div id="info-content" style="display: none;">
             <p>✅ 獨立翻轉磁鐵：測試 N-N 或 S-S 磁場抵消現象<br>
-               ✅ <b>真實 3D 磁場運算：N-S完美跨越間隙、N-N同極排斥</b><br>
-               ✅ 電壓與極性：可動態調整電壓、反轉電池<br>
+               ✅ <b>教科書級磁場：完美的 3x3 陣列平行直線與平滑排斥曲線</b><br>
+               ✅ 視覺聚焦：去除多餘重疊干擾，確保同極磁力線絕不接觸<br>
                ✅ 開掌定則：F(紅)與B(綠)的 3D 傾斜與動態縮放<br>
-               💡 <i>試著切換為 N-N，觀察綠色磁力線如何互相排斥而讓馬達停止！</i></p>
+               💡 <i>切換為 N-N，觀察中央平行的磁力線如何完美向外彎曲排開！</i></p>
         </div>
     </div>
 
@@ -123,13 +123,10 @@
             <input type="checkbox" id="chk-armature" checked> 顯示電樞
         </label>
         <label class="control-group" style="color: #22bb22;">
-            <input type="checkbox" id="chk-bfield-magnet" checked> 磁鐵磁場
+            <input type="checkbox" id="chk-bfield-magnet" checked> 場磁力線
         </label>
         <label class="control-group" style="color: #8a2be2;">
             <input type="checkbox" id="chk-bfield-coil-lines"> 電樞磁力線
-        </label>
-        <label class="control-group" style="color: #0088aa; background: #e8f4f8; border: 1px solid #0088aa;">
-            <input type="checkbox" id="chk-bfield-dynamic"> <b>磁場互動曲線</b>
         </label>
         <label class="control-group" style="color: #b8860b;">
             <input type="checkbox" id="chk-current" checked> 電流
@@ -145,7 +142,7 @@
     <script>
         let scene, camera, renderer, controls;
         let armatureGroup; 
-        let armatureMeshGroup; // 新增：專門放置實體線圈與換向器的群組
+        let armatureMeshGroup; 
         let magnetGroup, leftMagnet, rightMagnet;
         let batteryGroup; 
         
@@ -161,26 +158,23 @@
         const armatureParticles = [];
         const redParticles = [];
         const blueParticles = [];
-        const magnetBParticles = []; 
-        const currentSpeed = 0.005;
         
-        let armaturePathData, redWirePathData, blueWirePathData;
-
         // 磁場與物理向量
         let rhrGroup, leftF, leftB, rightF, rightB;
         let magnetBFieldGroup, coilBFieldGroup, coilLinesGroup;
         
-        // 動態磁力線系統
-        let dynamicCurvesGroup;
-        let curveGeometries = [];
+        // 全新教科書磁力線陣列 (固定 18 條幾何線段，N-S 時隱藏一半，只顯示 9 條)
         let staticCurveGeometries = [];
-        const CURVE_POINTS = 80;
-        const STATIC_CURVE_POINTS = 80;
+        const magnetBParticles = []; 
+        const STATIC_CURVE_POINTS = 50;
 
         // 動畫狀態
         let isRunning = true;
         let armatureAngle = 0;
         const motorSpeed = 0.02;
+        const currentSpeed = 0.005;
+
+        let armaturePathData, redWirePathData, blueWirePathData;
 
         init();
         animate();
@@ -218,7 +212,6 @@
             buildCurrentEffects(); 
             buildRHR(); 
             buildMagneticFields(); 
-            buildDynamicCurves(); 
 
             // UI 互動事件綁定
             document.getElementById('slider-voltage').addEventListener('input', (e) => {
@@ -245,7 +238,6 @@
                 e.target.style.color = rightMagRev ? '#ff0000' : '#0000ff';
             });
 
-            // 顯示開關
             document.getElementById('chk-current').addEventListener('change', (e) => {
                 currentGroup.visible = e.target.checked;
                 redWireCurrentGroup.visible = e.target.checked;
@@ -261,7 +253,6 @@
                 coilLinesGroup.visible = e.target.checked;
                 coilBFieldGroup.visible = e.target.checked;
             });
-            document.getElementById('chk-bfield-dynamic').addEventListener('change', (e) => dynamicCurvesGroup.visible = e.target.checked);
             document.getElementById('chk-run').addEventListener('change', (e) => isRunning = e.target.checked);
 
             document.getElementById('info-toggle').addEventListener('click', () => {
@@ -279,100 +270,53 @@
             window.addEventListener('resize', onWindowResize);
         }
 
-        // --- 核心物理運算：取得場磁鐵產生的外部真實現實磁場 ---
+        // --- 核心物理運算：取得理想的分析磁場，用於受力 F 的精確計算 ---
         function getExternalB(pos, lPole, rPole) {
-            // lPole: 1(左邊向內為N), -1(左邊向內為S)
-            // rPole: -1(右邊向內為S), 1(右邊向內為N)
-            
-            let B = new THREE.Vector3();
-            
             if (lPole !== rPole) {
-                // 【異名極相吸 (N-S)】：建立穩定跨越間隙的均勻主磁場 + 邊緣微弱的發散偶極效應
-                let baseField = lPole * 1.5; 
-                B.set(baseField, 0, 0);
-
-                let pL = new THREE.Vector3(-4.5, 0, -2.0);
-                let pR = new THREE.Vector3(4.5, 0, -2.0);
-                let rL = new THREE.Vector3().subVectors(pos, pL);
-                let rR = new THREE.Vector3().subVectors(pos, pR);
-                let dL = rL.length(); let dR = rR.length();
-                if (dL < 0.5) dL = 0.5; if (dR < 0.5) dR = 0.5;
-
-                // 邊緣效應：靠近極面時有微微的發散感，但不影響跨越
-                const fringeStr = 1.0;
-                B.add(rL.normalize().multiplyScalar(lPole * fringeStr / (dL * dL)));
-                B.add(rR.normalize().multiplyScalar(rPole * fringeStr / (dR * dR)));
-                
-                // 正規化維持強度一致
-                return B.normalize().multiplyScalar(1.5);
-
+                // 異名極相吸：完美均勻的平行直線磁場
+                return new THREE.Vector3(lPole * 1.5, 0, 0);
             } else {
-                // 【同名極相斥 (N-N, S-S)】：真實點磁荷排斥公式
-                let pL = new THREE.Vector3(-4.5, 0, -2.0);
-                let pR = new THREE.Vector3(4.5, 0, -2.0);
-                let rL = new THREE.Vector3().subVectors(pos, pL);
-                let rR = new THREE.Vector3().subVectors(pos, pR);
-                let dL = rL.length(); let dR = rR.length();
-                if (dL < 0.5) dL = 0.5; if (dR < 0.5) dR = 0.5;
-
-                // k * q / r^2 
-                let bL = rL.normalize().multiplyScalar(lPole * 8.0 / (dL * dL));
-                let bR = rR.normalize().multiplyScalar(rPole * 8.0 / (dR * dR));
-
-                return new THREE.Vector3().addVectors(bL, bR);
+                // 同名極相斥：中央抵消、兩側向外排斥的發散磁場模型
+                // 這樣可以讓 F(紅) 向量在同極時正確指向正上或正下，解釋馬達卡死的原因
+                let Bx = lPole * pos.x * 0.4; 
+                let By = lPole * pos.y * 0.4;
+                let Bz = lPole * (pos.z + 2.0) * 0.4;
+                return new THREE.Vector3(Bx, By, Bz);
             }
         }
 
-        // --- 建立磁場互動立體曲線 ---
-        function buildDynamicCurves() {
-            dynamicCurvesGroup = new THREE.Group();
-            scene.add(dynamicCurvesGroup);
-            dynamicCurvesGroup.visible = false; 
-            
-            const matMagnetDriven = new THREE.LineBasicMaterial({ color: 0x00aaff, linewidth: 2 }); 
-            const matCoilDriven = new THREE.LineBasicMaterial({ color: 0xff00ff, linewidth: 2 }); 
-            
-            function addCurveBuffer(material) {
-                const geometry = new THREE.BufferGeometry();
-                const positions = new Float32Array(CURVE_POINTS * 3);
-                geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-                const line = new THREE.Line(geometry, material);
-                dynamicCurvesGroup.add(line);
-                curveGeometries.push(geometry);
-            }
-
-            for(let i=0; i<18; i++) addCurveBuffer(matMagnetDriven); // 左右各9條
-            for(let i=0; i<10; i++) addCurveBuffer(matCoilDriven);   // 線圈產生10條
-        }
-
-        // --- 建立場磁鐵專屬磁場 (支援邊緣彎曲、排斥與動態箭頭) ---
+        // --- 建立場磁鐵專屬平行陣列磁場 (參數化完美貝茲曲線) ---
         function buildMagneticFields() {
             magnetBFieldGroup = new THREE.Group();
             scene.add(magnetBFieldGroup);
             
             const matMagnetStatic = new THREE.LineBasicMaterial({ color: 0x22bb22, linewidth: 2 });
 
+            // 準備 18 條線 (排斥時左 9 條、右 9 條)
             for(let i=0; i<18; i++) {
                 const geometry = new THREE.BufferGeometry();
                 const positions = new Float32Array(STATIC_CURVE_POINTS * 3);
                 geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-                geometry.userData = { validPoints: STATIC_CURVE_POINTS }; 
+                geometry.userData = { valid: false }; 
                 const line = new THREE.Line(geometry, matMagnetStatic);
                 magnetBFieldGroup.add(line);
                 staticCurveGeometries.push(geometry);
             }
 
+            // 動態箭頭
             const matArrow = new THREE.MeshBasicMaterial({ color: 0x22bb22 });
             const arrowGeo = new THREE.ConeGeometry(0.15, 0.4, 16);
+            // 每條線分配 3 個均勻箭頭
             for(let i=0; i<18; i++) {
-                for(let j=0; j<4; j++) { // 增加箭頭密度
+                for(let j=0; j<3; j++) { 
                     const arrow = new THREE.Mesh(arrowGeo, matArrow);
-                    arrow.userData = { lineIndex: i, t: j / 4.0 };
+                    arrow.userData = { lineIndex: i, t: j / 3.0 };
                     magnetBParticles.push(arrow);
                     magnetBFieldGroup.add(arrow);
                 }
             }
 
+            // 電樞中心磁場與環繞磁力線
             coilBFieldGroup = new THREE.Group();
             coilBFieldGroup.position.set(0, 0, -2.0); 
             armatureGroup.add(coilBFieldGroup); 
@@ -387,9 +331,6 @@
             head.rotation.x = Math.PI; 
             coilBFieldGroup.add(body);
             coilBFieldGroup.add(head);
-            const sprite = createTextSprite('B(線圈)', '#9932cc', 70);
-            sprite.position.set(0, -3.2, 0);
-            coilBFieldGroup.add(sprite);
 
             coilLinesGroup = new THREE.Group();
             coilBFieldGroup.add(coilLinesGroup); 
@@ -521,7 +462,6 @@
             armatureGroup = new THREE.Group();
             scene.add(armatureGroup);
 
-            // 新增一層群組，專門用來控制實體模型的顯示與隱藏
             armatureMeshGroup = new THREE.Group();
             armatureGroup.add(armatureMeshGroup);
 
@@ -840,6 +780,147 @@
             renderer.setSize(window.innerWidth, window.innerHeight);
         }
 
+        // --- 教科書等級參數化磁場曲線更新邏輯 (去除所有重疊，保證絕對不相交) ---
+        function updateMagnetFieldCurves(leftPole, rightPole) {
+            // 3x3 網格發射點
+            const yVals = [-1.2, 0, 1.2];
+            const zVals = [-3.2, -2.0, -0.8];
+            let lineIdx = 0;
+
+            if (leftPole !== rightPole) {
+                // 【異名極相吸 (N-S 或 S-N)】: 產生 9 條完全不重疊的純淨曲線，跨越電樞
+                let startX = leftPole === 1 ? -4.5 : 4.5;
+                let endX = leftPole === 1 ? 4.5 : -4.5;
+
+                for (let y of yVals) {
+                    for (let z of zVals) {
+                        const positions = staticCurveGeometries[lineIdx].attributes.position.array;
+                        
+                        let p0 = new THREE.Vector3(startX, y, z);
+                        let p2 = new THREE.Vector3(endX, y, z);
+                        let p1;
+                        
+                        let radY = y; 
+                        let radZ = z - (-2.0);
+                        
+                        // 中間留完美的平行直線，最外圈畫出去產生立體微彎 (Fringing)
+                        if (Math.abs(radY) < 0.1 && Math.abs(radZ) < 0.1) {
+                            p1 = new THREE.Vector3(0, y, z); // 直線
+                        } else {
+                            let bulge = 1.2; // 外圈膨脹幅度
+                            p1 = new THREE.Vector3(0, y + radY * bulge, z + radZ * bulge);
+                        }
+
+                        for (let step = 0; step < STATIC_CURVE_POINTS; step++) {
+                            let t = step / (STATIC_CURVE_POINTS - 1);
+                            let mt = 1 - t;
+                            positions[step * 3] = mt*mt*p0.x + 2*mt*t*p1.x + t*t*p2.x;
+                            positions[step * 3 + 1] = mt*mt*p0.y + 2*mt*t*p1.y + t*t*p2.y;
+                            positions[step * 3 + 2] = mt*mt*p0.z + 2*mt*t*p1.z + t*t*p2.z;
+                        }
+                        staticCurveGeometries[lineIdx].userData.valid = true;
+                        staticCurveGeometries[lineIdx].attributes.position.needsUpdate = true;
+                        magnetBFieldGroup.children[lineIdx].visible = true;
+                        lineIdx++;
+                    }
+                }
+                
+                // 相吸時，不需要另外 9 條線，直接隱藏
+                for (; lineIdx < 18; lineIdx++) {
+                    staticCurveGeometries[lineIdx].userData.valid = false;
+                    magnetBFieldGroup.children[lineIdx].visible = false;
+                }
+            } else {
+                // 【同名極相斥 (N-N 或 S-S)】: 產生 18 條完美向外彎曲的平滑排斥線，絕不接觸！
+                
+                // 左側 9 條 (絕不超過 x = -0.5)
+                for (let y of yVals) {
+                    for (let z of zVals) {
+                        const positions = staticCurveGeometries[lineIdx].attributes.position.array;
+                        let p0, p1, p2;
+                        
+                        let radY = y; 
+                        let radZ = z - (-2.0);
+                        let bendY, bendZ;
+                        
+                        // 中間那條強迫向上排開
+                        if (Math.abs(radY) < 0.1 && Math.abs(radZ) < 0.1) {
+                            bendY = 4.0;
+                            bendZ = -2.0;
+                        } else {
+                            bendY = y + radY * 3.0;
+                            bendZ = z + radZ * 3.0;
+                        }
+
+                        if (leftPole === 1) { // N-N: 從面(-4.5)出發彎向外部(-0.5)
+                            p0 = new THREE.Vector3(-4.5, y, z);
+                            p1 = new THREE.Vector3(-1.0, y, z);
+                            p2 = new THREE.Vector3(-0.5, bendY, bendZ);
+                        } else {              // S-S: 從外部(-0.5)彎向面(-4.5)
+                            p0 = new THREE.Vector3(-0.5, bendY, bendZ);
+                            p1 = new THREE.Vector3(-1.0, y, z);
+                            p2 = new THREE.Vector3(-4.5, y, z);
+                        }
+
+                        for (let step = 0; step < STATIC_CURVE_POINTS; step++) {
+                            let t = step / (STATIC_CURVE_POINTS - 1);
+                            let mt = 1 - t;
+                            positions[step * 3] = mt*mt*p0.x + 2*mt*t*p1.x + t*t*p2.x;
+                            positions[step * 3 + 1] = mt*mt*p0.y + 2*mt*t*p1.y + t*t*p2.y;
+                            positions[step * 3 + 2] = mt*mt*p0.z + 2*mt*t*p1.z + t*t*p2.z;
+                        }
+                        staticCurveGeometries[lineIdx].userData.valid = true;
+                        staticCurveGeometries[lineIdx].attributes.position.needsUpdate = true;
+                        magnetBFieldGroup.children[lineIdx].visible = true;
+                        lineIdx++;
+                    }
+                }
+                
+                // 右側 9 條 (絕不超過 x = 0.5)
+                for (let y of yVals) {
+                    for (let z of zVals) {
+                        const positions = staticCurveGeometries[lineIdx].attributes.position.array;
+                        let p0, p1, p2;
+                        
+                        let radY = y; 
+                        let radZ = z - (-2.0);
+                        let bendY, bendZ;
+                        
+                        // 中間那條強迫向上排開 (與左側對稱)
+                        if (Math.abs(radY) < 0.1 && Math.abs(radZ) < 0.1) {
+                            bendY = 4.0;
+                            bendZ = -2.0;
+                        } else {
+                            bendY = y + radY * 3.0;
+                            bendZ = z + radZ * 3.0;
+                        }
+
+                        if (rightPole === 1) { // N-N: 從面(4.5)出發彎向外部(0.5)
+                            p0 = new THREE.Vector3(4.5, y, z);
+                            p1 = new THREE.Vector3(1.0, y, z);
+                            p2 = new THREE.Vector3(0.5, bendY, bendZ);
+                        } else {               // S-S: 從外部(0.5)彎向面(4.5)
+                            p0 = new THREE.Vector3(0.5, bendY, bendZ);
+                            p1 = new THREE.Vector3(1.0, y, z);
+                            p2 = new THREE.Vector3(4.5, y, z);
+                        }
+
+                        for (let step = 0; step < STATIC_CURVE_POINTS; step++) {
+                            let t = step / (STATIC_CURVE_POINTS - 1);
+                            let mt = 1 - t;
+                            positions[step * 3] = mt*mt*p0.x + 2*mt*t*p1.x + t*t*p2.x;
+                            positions[step * 3 + 1] = mt*mt*p0.y + 2*mt*t*p1.y + t*t*p2.y;
+                            positions[step * 3 + 2] = mt*mt*p0.z + 2*mt*t*p1.z + t*t*p2.z;
+                        }
+                        staticCurveGeometries[lineIdx].userData.valid = true;
+                        staticCurveGeometries[lineIdx].attributes.position.needsUpdate = true;
+                        magnetBFieldGroup.children[lineIdx].visible = true;
+                        lineIdx++;
+                    }
+                }
+            }
+        }
+
         // --- 動畫核心迴圈 ---
         function animate() {
             requestAnimationFrame(animate);
@@ -850,8 +931,8 @@
             let polarDir = batteryReversed ? -1 : 1;
             let hasVoltage = voltageMultiplier > 0;
 
-            let centerB = getExternalB(new THREE.Vector3(0, 0, -2.0), leftPole, rightPole);
-            let bFieldMultiplier = centerB.x / 1.5; 
+            // 判斷是否為抵消狀態 (N-N或S-S)
+            let bFieldMultiplier = (leftPole !== rightPole) ? leftPole : 0; 
 
             if (isRunning) {
                 armatureAngle += motorSpeed * voltageMultiplier * polarDir * bFieldMultiplier;
@@ -867,86 +948,38 @@
             }
             let actualCoilDir = commutatorDir * polarDir;
 
-            // 2. 更新靜態磁鐵磁場網格與其動態箭頭
+            // 2. 更新教科書級平滑磁場網格與動態箭頭
             if (magnetBFieldGroup && magnetBFieldGroup.visible) {
-                let lineIdx = 0;
-                const stepSize = 0.2;
-                // 從左右兩側出發追蹤 18 條磁力線
-                for(let side of [-1, 1]) {
-                    for(let y of [-1.2, 0, 1.2]) { 
-                        for(let z of [-3.2, -2.0, -0.8]) {
-                            if (lineIdx >= 18) break;
-                            let startX = side < 0 ? -4.5 : 4.5;
-                            // 根據極性決定追蹤方向：N極往外畫，S極往內畫（透過 dirMultiplier=-1反著算回來）
-                            let facePole = side < 0 ? leftPole : rightPole;
-                            let dirMultiplier = facePole === 1 ? 1 : -1; 
-
-                            let pos = new THREE.Vector3(startX, y, z);
-                            const positions = staticCurveGeometries[lineIdx].attributes.position.array;
-                            let validPts = STATIC_CURVE_POINTS;
-
-                            for(let step=0; step<STATIC_CURVE_POINTS; step++) {
-                                positions[step*3] = pos.x;
-                                positions[step*3+1] = pos.y;
-                                positions[step*3+2] = pos.z;
-
-                                const B = getExternalB(pos, leftPole, rightPole);
-                                if (B.lengthSq() < 0.001) {
-                                    validPts = step + 1;
-                                    break;
-                                }
-                                pos.add(B.normalize().multiplyScalar(stepSize * dirMultiplier));
-                            }
-                            
-                            staticCurveGeometries[lineIdx].userData.validPoints = validPts;
-                            
-                            for (let step = validPts; step < STATIC_CURVE_POINTS; step++) {
-                                positions[step*3] = positions[(validPts-1)*3];
-                                positions[step*3+1] = positions[(validPts-1)*3+1];
-                                positions[step*3+2] = positions[(validPts-1)*3+2];
-                            }
-
-                            staticCurveGeometries[lineIdx].attributes.position.needsUpdate = true;
-                            lineIdx++;
-                        }
-                    }
-                }
+                // 即時更新 3D 曲線形狀
+                updateMagnetFieldCurves(leftPole, rightPole);
 
                 const bFlowSpeed = currentSpeed * 1.5;
                 magnetBParticles.forEach(p => {
                     const lIdx = p.userData.lineIndex;
-                    const side = lIdx < 9 ? -1 : 1;
-                    const facePole = side < 0 ? leftPole : rightPole;
-                    const dirMultiplier = facePole === 1 ? 1 : -1;
-
-                    if (dirMultiplier === 1) {
-                        p.userData.t += bFlowSpeed;
-                        if (p.userData.t > 1) p.userData.t -= 1;
-                    } else {
-                        p.userData.t -= bFlowSpeed;
-                        if (p.userData.t < 0) p.userData.t += 1;
-                    }
-
                     const geo = staticCurveGeometries[lIdx];
-                    const validPts = geo.userData.validPoints;
-                    const positions = geo.attributes.position.array;
-
-                    if (validPts < 2) {
+                    
+                    if (!geo.userData.valid) {
                         p.visible = false;
                         return;
                     }
                     p.visible = true;
 
-                    const floatIdx = p.userData.t * (validPts - 1);
+                    // 箭頭永遠順著我們建構的曲線從 t=0 均勻流向 t=1
+                    // 因為我們已經將 S-S 相斥線改為「從外向內」繪製，N-N 及 N-S 為「從內向外」繪製，完全符合真實磁場物理方向！
+                    p.userData.t += bFlowSpeed;
+                    if (p.userData.t > 1) p.userData.t -= 1;
+
+                    const positions = geo.attributes.position.array;
+                    const floatIdx = p.userData.t * (STATIC_CURVE_POINTS - 1);
                     const idx = Math.floor(floatIdx);
                     const frac = floatIdx - idx;
 
                     let p1 = new THREE.Vector3();
                     let p2 = new THREE.Vector3();
 
-                    if (idx >= validPts - 1) {
-                        p1.set(positions[(validPts-2)*3], positions[(validPts-2)*3+1], positions[(validPts-2)*3+2]);
-                        p2.set(positions[(validPts-1)*3], positions[(validPts-1)*3+1], positions[(validPts-1)*3+2]);
+                    if (idx >= STATIC_CURVE_POINTS - 1) {
+                        p1.set(positions[(STATIC_CURVE_POINTS-2)*3], positions[(STATIC_CURVE_POINTS-2)*3+1], positions[(STATIC_CURVE_POINTS-2)*3+2]);
+                        p2.set(positions[(STATIC_CURVE_POINTS-1)*3], positions[(STATIC_CURVE_POINTS-1)*3+1], positions[(STATIC_CURVE_POINTS-1)*3+2]);
                         p.position.copy(p2);
                     } else {
                         p1.set(positions[idx*3], positions[idx*3+1], positions[idx*3+2]);
@@ -956,7 +989,6 @@
 
                     const tangent = new THREE.Vector3().subVectors(p2, p1).normalize();
                     if (tangent.lengthSq() > 0.001) {
-                        if (dirMultiplier === -1) tangent.negate();
                         p.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), tangent);
                     }
                 });
@@ -981,7 +1013,7 @@
                 });
 
                 let armFlowSpeed = currentSpeed * voltageMultiplier * actualCoilDir;
-                if(Math.abs(bFieldMultiplier) < 0.01) armFlowSpeed = currentSpeed * voltageMultiplier * actualCoilDir;
+                if(bFieldMultiplier === 0) armFlowSpeed = currentSpeed * voltageMultiplier * actualCoilDir; // 抵消時線圈仍有電流
 
                 armatureParticles.forEach(p => {
                     p.userData.t += armFlowSpeed;
@@ -1019,19 +1051,31 @@
                     let bLeftVec = getExternalB(leftWorldPos, leftPole, rightPole);
                     let bRightVec = getExternalB(rightWorldPos, leftPole, rightPole);
 
-                    let bLeftLen = bLeftVec.length();
-                    let bRightLen = bRightVec.length();
+                    // 根據導線的 x 位置計算有效磁場強度：
+                    // 導線在間隙中央 (x≈0) 時最強，靠近或超出磁鐵面 (|x|→4.5) 時衰減
+                    // 完全轉到垂直 (|x|≈0 但 y 大) 時幾乎離開有效磁場區
+                    function effectiveBScale(worldPos) {
+                        // 用導線到間隙中心線的距離衰減
+                        // x 方向：在 [-4.5, 4.5] 範圍內才有有效磁場
+                        const xFrac = Math.max(0, 1.0 - Math.abs(worldPos.x) / 4.5);
+                        // y 方向：導線越高（旋轉越多）磁場越弱（超出磁鐵高度範圍）
+                        const yFrac = Math.max(0, 1.0 - Math.abs(worldPos.y) / 2.5);
+                        return xFrac * yFrac;
+                    }
 
-                    let bDisplayScale = (Math.abs(bFieldMultiplier) < 0.01) ? 1.8 : 1.0; 
+                    const scaleL = effectiveBScale(leftWorldPos);
+                    const scaleR = effectiveBScale(rightWorldPos);
 
-                    if (bLeftLen > 0.05) {
+                    const bDisplayBase = 3.0;  // 原 2.0 × 1.5
+
+                    if (scaleL > 0.02) {
                         leftB.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), bLeftVec.clone().normalize());
-                        leftB.setLength(bLeftLen * bDisplayScale);
+                        leftB.setLength(bDisplayBase * scaleL);
                     } else leftB.setLength(0);
 
-                    if (bRightLen > 0.05) {
+                    if (scaleR > 0.02) {
                         rightB.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), bRightVec.clone().normalize());
-                        rightB.setLength(bRightLen * bDisplayScale);
+                        rightB.setLength(bDisplayBase * scaleR);
                     } else rightB.setLength(0);
 
                     let I_left_local = new THREE.Vector3(0, 0, -actualCoilDir);
@@ -1042,8 +1086,8 @@
                     let F_left = new THREE.Vector3().crossVectors(I_left_world, bLeftVec);
                     let F_right = new THREE.Vector3().crossVectors(I_right_world, bRightVec);
 
-                    let fLeftLen = F_left.length() * voltageMultiplier * 1.5;
-                    let fRightLen = F_right.length() * voltageMultiplier * 1.5;
+                    let fLeftLen  = F_left.length()  * voltageMultiplier * scaleL * 2.4;
+                    let fRightLen = F_right.length() * voltageMultiplier * scaleR * 2.4;
 
                     if (fLeftLen > 0.05) {
                         leftF.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), F_left.clone().normalize());
@@ -1063,122 +1107,6 @@
                     coilBFieldGroup.rotation.x = 0; 
                 } else {
                     coilBFieldGroup.rotation.x = Math.PI; 
-                }
-            }
-
-            // 6. 運算動態磁場互動立體曲線
-            if (dynamicCurvesGroup && dynamicCurvesGroup.visible) {
-                const coilWorldPos = new THREE.Vector3(0, 0, -2.0).applyMatrix4(armatureGroup.matrixWorld);
-                
-                let mLocal = new THREE.Vector3(0, -1, 0); 
-                if (actualCoilDir < 0) mLocal.set(0, 1, 0); 
-                let mWorld = mLocal.transformDirection(armatureGroup.matrixWorld).normalize();
-                
-                const k_coil = 7.0 * voltageMultiplier; 
-                
-                function getCombinedB(pos) {
-                    const B_mag = getExternalB(pos, leftPole, rightPole);
-                    
-                    if (voltageMultiplier === 0) return B_mag;
-
-                    const rVec = new THREE.Vector3().subVectors(pos, coilWorldPos);
-                    let r = rVec.length();
-                    if (r < 0.6) r = 0.6; 
-                    
-                    const rHat = rVec.clone().normalize();
-                    const mDotR = mWorld.dot(rHat);
-                    const B_coil = rHat.clone().multiplyScalar(3 * mDotR).sub(mWorld).multiplyScalar(k_coil / (r*r*r));
-                    return new THREE.Vector3().addVectors(B_mag, B_coil);
-                }
-
-                const stepSize = 0.15;
-                let lineIdx = 0;
-
-                for(let side of [-1, 1]) {
-                    for(let y of [-1.2, 0, 1.2]) {
-                        for(let z of [-3.2, -2.0, -0.8]) {
-                            if (lineIdx >= 18) break; 
-                            let startX = side < 0 ? -4.5 : 4.5;
-                            let facePole = side < 0 ? leftPole : rightPole;
-                            let dirMultiplier = facePole === 1 ? 1 : -1;
-
-                            let pos = new THREE.Vector3(startX, y, z);
-                            const positions = curveGeometries[lineIdx].attributes.position.array;
-
-                            let validPts = CURVE_POINTS;
-                            for(let step=0; step<CURVE_POINTS; step++) {
-                                positions[step*3] = pos.x;
-                                positions[step*3+1] = pos.y;
-                                positions[step*3+2] = pos.z;
-                                
-                                const B = getCombinedB(pos);
-                                if(B.lengthSq() < 0.001) {
-                                    validPts = step + 1;
-                                    break;
-                                }
-                                pos.add(B.normalize().multiplyScalar(stepSize * dirMultiplier));
-                            }
-                            
-                            for (let step = validPts; step < CURVE_POINTS; step++) {
-                                positions[step*3] = positions[(validPts-1)*3];
-                                positions[step*3+1] = positions[(validPts-1)*3+1];
-                                positions[step*3+2] = positions[(validPts-1)*3+2];
-                            }
-
-                            curveGeometries[lineIdx].attributes.position.needsUpdate = true;
-                            lineIdx++;
-                        }
-                    }
-                }
-
-                const coilSeeds = [
-                    new THREE.Vector3(0, 1.2, -2.0),
-                    new THREE.Vector3(0, -1.2, -2.0),
-                    new THREE.Vector3(0, 0, -0.8),
-                    new THREE.Vector3(0, 0, -3.2),
-                    new THREE.Vector3(-1.0, 0.8, -2.0),
-                    new THREE.Vector3(1.0, -0.8, -2.0),
-                    new THREE.Vector3(1.0, 0.8, -2.0),
-                    new THREE.Vector3(-1.0, -0.8, -2.0),
-                    new THREE.Vector3(0, 0, -2.0),
-                    new THREE.Vector3(0, 0, -1.4)
-                ];
-
-                for(let i=0; i<10; i++) {
-                    if (lineIdx >= 28) break;
-                    let startPos = coilSeeds[i].clone().applyMatrix4(armatureGroup.matrixWorld);
-                    
-                    let posB = startPos.clone();
-                    let backPts = [];
-                    for(let step=0; step<CURVE_POINTS/2; step++) {
-                        backPts.push(posB.clone());
-                        const B = getCombinedB(posB);
-                        if(B.lengthSq() < 0.001) break;
-                        posB.sub(B.normalize().multiplyScalar(stepSize));
-                    }
-                    backPts.reverse(); 
-
-                    let posF = startPos.clone();
-                    let fwdPts = [];
-                    for(let step=0; step<CURVE_POINTS/2; step++) {
-                        const B = getCombinedB(posF);
-                        if(B.lengthSq() < 0.001) break;
-                        posF.add(B.normalize().multiplyScalar(stepSize)); 
-                        fwdPts.push(posF.clone());
-                    }
-
-                    let allPts = backPts.concat(fwdPts);
-                    while(allPts.length < CURVE_POINTS) allPts.push(allPts[allPts.length-1].clone());
-                    if(allPts.length > CURVE_POINTS) allPts = allPts.slice(0, CURVE_POINTS);
-
-                    const positions = curveGeometries[lineIdx].attributes.position.array;
-                    for(let step=0; step<CURVE_POINTS; step++) {
-                        positions[step*3] = allPts[step].x;
-                        positions[step*3+1] = allPts[step].y;
-                        positions[step*3+2] = allPts[step].z;
-                    }
-                    curveGeometries[lineIdx].attributes.position.needsUpdate = true;
-                    lineIdx++;
                 }
             }
 
