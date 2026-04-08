@@ -93,11 +93,10 @@
         <h1 id="info-toggle">直流馬達 (DC Motor) 模擬 <span id="info-icon">▼</span></h1>
         <div id="info-content" style="display: none;">
             <p>✅ 獨立翻轉磁鐵：測試 N-N 或 S-S 磁場抵消現象<br>
+               ✅ <b>真實 3D 磁場運算：N-S完美跨越間隙、N-N同極排斥</b><br>
                ✅ 電壓與極性：可動態調整電壓、反轉電池<br>
-               ✅ <b>磁鐵專屬磁場(綠)加入動態方向箭頭</b><br>
-               ✅ 物理疊加：雙磁場相吸與相斥的動態立體曲線<br>
-               ✅ 開掌定則：F(紅)與B(綠)長度隨物理狀態變化<br>
-               💡 <i>試著將兩側磁鐵都調成 N，觀察磁力線如何互相排斥！</i></p>
+               ✅ 開掌定則：F(紅)與B(綠)的 3D 傾斜與動態縮放<br>
+               💡 <i>試著切換為 N-N，觀察綠色磁力線如何互相排斥而讓馬達停止！</i></p>
         </div>
     </div>
 
@@ -121,7 +120,7 @@
             <input type="checkbox" id="chk-magnets" checked> 顯示磁鐵
         </label>
         <label class="control-group" style="color: #22bb22;">
-            <input type="checkbox" id="chk-bfield-magnet"> 磁鐵磁場
+            <input type="checkbox" id="chk-bfield-magnet" checked> 磁鐵磁場
         </label>
         <label class="control-group" style="color: #8a2be2;">
             <input type="checkbox" id="chk-bfield-coil-lines"> 電樞磁力線
@@ -158,7 +157,7 @@
         const armatureParticles = [];
         const redParticles = [];
         const blueParticles = [];
-        const magnetBParticles = []; // 新增：磁鐵磁場的動態箭頭陣列
+        const magnetBParticles = []; 
         const currentSpeed = 0.005;
         
         let armaturePathData, redWirePathData, blueWirePathData;
@@ -172,7 +171,7 @@
         let curveGeometries = [];
         let staticCurveGeometries = [];
         const CURVE_POINTS = 80;
-        const STATIC_CURVE_POINTS = 60;
+        const STATIC_CURVE_POINTS = 80;
 
         // 動畫狀態
         let isRunning = true;
@@ -207,7 +206,6 @@
             dirLight.position.set(5, 10, 8);
             scene.add(dirLight);
 
-            // 初始化與構建模型
             initPaths();
             buildMagnets(); 
             buildArmature(); 
@@ -218,7 +216,7 @@
             buildMagneticFields(); 
             buildDynamicCurves(); 
 
-            // --- UI 互動事件綁定 ---
+            // UI 互動事件綁定
             document.getElementById('slider-voltage').addEventListener('input', (e) => {
                 voltageMultiplier = parseFloat(e.target.value);
                 document.getElementById('voltage-val').innerText = voltageMultiplier.toFixed(1);
@@ -259,7 +257,6 @@
             document.getElementById('chk-bfield-dynamic').addEventListener('change', (e) => dynamicCurvesGroup.visible = e.target.checked);
             document.getElementById('chk-run').addEventListener('change', (e) => isRunning = e.target.checked);
 
-            // 說明面板收折控制
             document.getElementById('info-toggle').addEventListener('click', () => {
                 const content = document.getElementById('info-content');
                 const icon = document.getElementById('info-icon');
@@ -275,22 +272,41 @@
             window.addEventListener('resize', onWindowResize);
         }
 
-        // --- 核心物理運算：取得空間中由場磁鐵產生的外部磁場 ---
+        // --- 核心物理運算：取得場磁鐵產生的外部真實現實磁場 ---
         function getExternalB(pos, lPole, rPole) {
-            // lPole/rPole: 1 為 N極朝內, -1 為 S極朝內
+            // lPole: 1(左邊向內為N), -1(左邊向內為S)
+            // rPole: -1(右邊向內為S), 1(右邊向內為N)
+            
+            let B = new THREE.Vector3();
+            
             if (lPole !== rPole) {
-                // 異名極相對 (N-S 或 S-N)，視為均勻磁場
-                return new THREE.Vector3(lPole * 1.5, 0, 0);
-            } else {
-                // 同名極相對 (N-N 或 S-S)，計算兩點磁荷的排斥場
+                // 【異名極相吸 (N-S)】：建立穩定跨越間隙的均勻主磁場 + 邊緣微弱的發散偶極效應
+                let baseField = lPole * 1.5; 
+                B.set(baseField, 0, 0);
+
                 let pL = new THREE.Vector3(-4.5, 0, -2.0);
                 let pR = new THREE.Vector3(4.5, 0, -2.0);
                 let rL = new THREE.Vector3().subVectors(pos, pL);
                 let rR = new THREE.Vector3().subVectors(pos, pR);
-                let dL = rL.length();
-                let dR = rR.length();
-                if(dL < 0.5) dL = 0.5;
-                if(dR < 0.5) dR = 0.5;
+                let dL = rL.length(); let dR = rR.length();
+                if (dL < 0.5) dL = 0.5; if (dR < 0.5) dR = 0.5;
+
+                // 邊緣效應：靠近極面時有微微的發散感，但不影響跨越
+                const fringeStr = 1.0;
+                B.add(rL.normalize().multiplyScalar(lPole * fringeStr / (dL * dL)));
+                B.add(rR.normalize().multiplyScalar(rPole * fringeStr / (dR * dR)));
+                
+                // 正規化維持強度一致
+                return B.normalize().multiplyScalar(1.5);
+
+            } else {
+                // 【同名極相斥 (N-N, S-S)】：真實點磁荷排斥公式
+                let pL = new THREE.Vector3(-4.5, 0, -2.0);
+                let pR = new THREE.Vector3(4.5, 0, -2.0);
+                let rL = new THREE.Vector3().subVectors(pos, pL);
+                let rR = new THREE.Vector3().subVectors(pos, pR);
+                let dL = rL.length(); let dR = rR.length();
+                if (dL < 0.5) dL = 0.5; if (dR < 0.5) dR = 0.5;
 
                 // k * q / r^2 
                 let bL = rL.normalize().multiplyScalar(lPole * 8.0 / (dL * dL));
@@ -322,36 +338,34 @@
             for(let i=0; i<10; i++) addCurveBuffer(matCoilDriven);   // 線圈產生10條
         }
 
-        // --- 建立場磁鐵專屬磁場 (支援排斥彎曲與動態箭頭) ---
+        // --- 建立場磁鐵專屬磁場 (支援邊緣彎曲、排斥與動態箭頭) ---
         function buildMagneticFields() {
             magnetBFieldGroup = new THREE.Group();
             scene.add(magnetBFieldGroup);
-            magnetBFieldGroup.visible = false; 
+            
             const matMagnetStatic = new THREE.LineBasicMaterial({ color: 0x22bb22, linewidth: 2 });
 
             for(let i=0; i<18; i++) {
                 const geometry = new THREE.BufferGeometry();
                 const positions = new Float32Array(STATIC_CURVE_POINTS * 3);
                 geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-                geometry.userData = { validPoints: STATIC_CURVE_POINTS }; // 初始化有效點數
+                geometry.userData = { validPoints: STATIC_CURVE_POINTS }; 
                 const line = new THREE.Line(geometry, matMagnetStatic);
                 magnetBFieldGroup.add(line);
                 staticCurveGeometries.push(geometry);
             }
 
-            // 新增：磁鐵磁場線上的動態綠色箭頭
             const matArrow = new THREE.MeshBasicMaterial({ color: 0x22bb22 });
             const arrowGeo = new THREE.ConeGeometry(0.15, 0.4, 16);
             for(let i=0; i<18; i++) {
-                for(let j=0; j<3; j++) { // 每一條線上分配 3 個箭頭
+                for(let j=0; j<4; j++) { // 增加箭頭密度
                     const arrow = new THREE.Mesh(arrowGeo, matArrow);
-                    arrow.userData = { lineIndex: i, t: j / 3.0 };
+                    arrow.userData = { lineIndex: i, t: j / 4.0 };
                     magnetBParticles.push(arrow);
                     magnetBFieldGroup.add(arrow);
                 }
             }
 
-            // 電樞中心磁場
             coilBFieldGroup = new THREE.Group();
             coilBFieldGroup.position.set(0, 0, -2.0); 
             armatureGroup.add(coilBFieldGroup); 
@@ -370,7 +384,6 @@
             sprite.position.set(0, -3.2, 0);
             coilBFieldGroup.add(sprite);
 
-            // 電樞環繞磁力線
             coilLinesGroup = new THREE.Group();
             coilBFieldGroup.add(coilLinesGroup); 
             coilLinesGroup.visible = false;
@@ -453,19 +466,18 @@
             const width = 2.5;     
             const zCenter = -2.0;  
             const gapOffset = 4.5; 
-            const magCenterOffset = gapOffset + width; // 4.5 + 2.5 = 7.0
+            const magCenterOffset = gapOffset + width; 
 
             const matBlue = new THREE.MeshLambertMaterial({ color: 0x0000ff }); 
             const matRed = new THREE.MeshLambertMaterial({ color: 0xff0000 });  
             const boxGeo = new THREE.BoxGeometry(width, height, depth);
 
-            // 左磁鐵群組
             leftMagnet = new THREE.Group();
             leftMagnet.position.set(-magCenterOffset, 0, zCenter);
             magnetGroup.add(leftMagnet);
 
             const leftRed = new THREE.Mesh(boxGeo, matRed);
-            leftRed.position.set(width/2, 0, 0); // 內側預設為 N
+            leftRed.position.set(width/2, 0, 0); 
             leftMagnet.add(leftRed);
             const leftBlue = new THREE.Mesh(boxGeo, matBlue);
             leftBlue.position.set(-width/2, 0, 0); 
@@ -478,13 +490,12 @@
             textS_L.position.set(-width/2, 0, depth/2 + 0.1);
             leftMagnet.add(textS_L);
 
-            // 右磁鐵群組
             rightMagnet = new THREE.Group();
             rightMagnet.position.set(magCenterOffset, 0, zCenter);
             magnetGroup.add(rightMagnet);
 
             const rightBlue = new THREE.Mesh(boxGeo, matBlue);
-            rightBlue.position.set(-width/2, 0, 0); // 內側預設為 S
+            rightBlue.position.set(-width/2, 0, 0); 
             rightMagnet.add(rightBlue);
             const rightRed = new THREE.Mesh(boxGeo, matRed);
             rightRed.position.set(width/2, 0, 0); 
@@ -822,17 +833,15 @@
         function animate() {
             requestAnimationFrame(animate);
 
-            // 讀取 UI 控制狀態與磁鐵極性
-            let leftPole = leftMagRev ? -1 : 1;   // 1 為 N, -1 為 S
+            let leftPole = leftMagRev ? -1 : 1;   
             let rightPole = rightMagRev ? 1 : -1; 
             
-            // 計算場磁鐵在中心的淨磁場係數 (1: N-S, -1: S-N, 0: N-N或S-S)
-            let bFieldMultiplier = (leftPole - rightPole) / 2;
-
             let polarDir = batteryReversed ? -1 : 1;
             let hasVoltage = voltageMultiplier > 0;
 
-            // 1. 旋轉物理狀態更新 (若無淨磁場，馬達即停止)
+            let centerB = getExternalB(new THREE.Vector3(0, 0, -2.0), leftPole, rightPole);
+            let bFieldMultiplier = centerB.x / 1.5; 
+
             if (isRunning) {
                 armatureAngle += motorSpeed * voltageMultiplier * polarDir * bFieldMultiplier;
                 armatureGroup.rotation.z = armatureAngle;
@@ -853,11 +862,11 @@
                 const stepSize = 0.2;
                 // 從左右兩側出發追蹤 18 條磁力線
                 for(let side of [-1, 1]) {
-                    for(let y of [-1.0, 0, 1.0]) {
-                        for(let z of [-3.5, -2.0, -0.5]) {
+                    for(let y of [-1.2, 0, 1.2]) { 
+                        for(let z of [-3.2, -2.0, -0.8]) {
                             if (lineIdx >= 18) break;
                             let startX = side < 0 ? -4.5 : 4.5;
-                            // 若出發面為 N 極則順著 B 畫，若為 S 極則逆著 B 畫
+                            // 根據極性決定追蹤方向：N極往外畫，S極往內畫（透過 dirMultiplier=-1反著算回來）
                             let facePole = side < 0 ? leftPole : rightPole;
                             let dirMultiplier = facePole === 1 ? 1 : -1; 
 
@@ -880,7 +889,6 @@
                             
                             staticCurveGeometries[lineIdx].userData.validPoints = validPts;
                             
-                            // 填補剩餘的點，避免繪製出亂線
                             for (let step = validPts; step < STATIC_CURVE_POINTS; step++) {
                                 positions[step*3] = positions[(validPts-1)*3];
                                 positions[step*3+1] = positions[(validPts-1)*3+1];
@@ -893,17 +901,13 @@
                     }
                 }
 
-                // 更新磁鐵專屬磁場上的綠色動態箭頭
                 const bFlowSpeed = currentSpeed * 1.5;
                 magnetBParticles.forEach(p => {
                     const lIdx = p.userData.lineIndex;
                     const side = lIdx < 9 ? -1 : 1;
                     const facePole = side < 0 ? leftPole : rightPole;
-                    // Raymarching 時的繪製方向
                     const dirMultiplier = facePole === 1 ? 1 : -1;
 
-                    // 若由 N 極表面出發，箭頭順向移動 (t 從 0 到 1)
-                    // 若由 S 極表面出發，真實磁場應是向著 S 極，所以箭頭逆向移動 (t 從 1 到 0)
                     if (dirMultiplier === 1) {
                         p.userData.t += bFlowSpeed;
                         if (p.userData.t > 1) p.userData.t -= 1;
@@ -916,7 +920,6 @@
                     const validPts = geo.userData.validPoints;
                     const positions = geo.attributes.position.array;
 
-                    // 若磁場太弱無法形成線，隱藏箭頭
                     if (validPts < 2) {
                         p.visible = false;
                         return;
@@ -942,7 +945,6 @@
 
                     const tangent = new THREE.Vector3().subVectors(p2, p1).normalize();
                     if (tangent.lengthSq() > 0.001) {
-                        // 若是在 S 極附近產生，因為追蹤點是從表面向外，所以切線需反轉指向內部
                         if (dirMultiplier === -1) tangent.negate();
                         p.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), tangent);
                     }
@@ -968,8 +970,7 @@
                 });
 
                 let armFlowSpeed = currentSpeed * voltageMultiplier * actualCoilDir;
-                // 若馬達因 N-N 停止，但有電壓，線圈內還是要有電流流動
-                if(bFieldMultiplier === 0) armFlowSpeed = currentSpeed * voltageMultiplier * actualCoilDir;
+                if(Math.abs(bFieldMultiplier) < 0.01) armFlowSpeed = currentSpeed * voltageMultiplier * actualCoilDir;
 
                 armatureParticles.forEach(p => {
                     p.userData.t += armFlowSpeed;
@@ -1004,15 +1005,13 @@
                     leftB.setLength(0); rightB.setLength(0);
                     leftF.setLength(0); rightF.setLength(0);
                 } else {
-                    // 精確計算左右兩側導線所在位置的「真實局部磁場向量 (B)」
                     let bLeftVec = getExternalB(leftWorldPos, leftPole, rightPole);
                     let bRightVec = getExternalB(rightWorldPos, leftPole, rightPole);
 
                     let bLeftLen = bLeftVec.length();
                     let bRightLen = bRightVec.length();
 
-                    // N-N 或 S-S 抵消時，中央磁場較弱，稍微放大箭頭以利觀察排斥現象
-                    let bDisplayScale = (bFieldMultiplier === 0) ? 1.8 : 1.0; 
+                    let bDisplayScale = (Math.abs(bFieldMultiplier) < 0.01) ? 1.8 : 1.0; 
 
                     if (bLeftLen > 0.05) {
                         leftB.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), bLeftVec.clone().normalize());
@@ -1024,13 +1023,11 @@
                         rightB.setLength(bRightLen * bDisplayScale);
                     } else rightB.setLength(0);
 
-                    // 精確計算導線的「電流向量 (I)」(跟隨線圈旋轉)
                     let I_left_local = new THREE.Vector3(0, 0, -actualCoilDir);
                     let I_right_local = new THREE.Vector3(0, 0, actualCoilDir);
                     let I_left_world = I_left_local.transformDirection(armatureGroup.matrixWorld).normalize();
                     let I_right_world = I_right_local.transformDirection(armatureGroup.matrixWorld).normalize();
 
-                    // 依據真實 3D 空間公式計算勞侖茲力：F = I x B
                     let F_left = new THREE.Vector3().crossVectors(I_left_world, bLeftVec);
                     let F_right = new THREE.Vector3().crossVectors(I_right_world, bRightVec);
 
@@ -1086,31 +1083,43 @@
                 const stepSize = 0.15;
                 let lineIdx = 0;
 
-                // (A) 追蹤由左場磁鐵出發的磁力線 (青藍色)
-                for(let y of [-1.5, -0.5, 0.5, 1.5]) {
-                    for(let z of [-3.5, -2.0, -0.5]) {
-                        if (lineIdx >= 18) break; // 左右各9條，此處簡化從左發出18條的配置 (排斥時會很有趣)
-                        let pos = new THREE.Vector3(-4.5, y, z);
-                        const positions = curveGeometries[lineIdx].attributes.position.array;
+                for(let side of [-1, 1]) {
+                    for(let y of [-1.2, 0, 1.2]) {
+                        for(let z of [-3.2, -2.0, -0.8]) {
+                            if (lineIdx >= 18) break; 
+                            let startX = side < 0 ? -4.5 : 4.5;
+                            let facePole = side < 0 ? leftPole : rightPole;
+                            let dirMultiplier = facePole === 1 ? 1 : -1;
 
-                        // 判斷左磁鐵極性決定追蹤方向
-                        let dirMultiplier = leftPole === 1 ? 1 : -1;
+                            let pos = new THREE.Vector3(startX, y, z);
+                            const positions = curveGeometries[lineIdx].attributes.position.array;
 
-                        for(let step=0; step<CURVE_POINTS; step++) {
-                            positions[step*3] = pos.x;
-                            positions[step*3+1] = pos.y;
-                            positions[step*3+2] = pos.z;
+                            let validPts = CURVE_POINTS;
+                            for(let step=0; step<CURVE_POINTS; step++) {
+                                positions[step*3] = pos.x;
+                                positions[step*3+1] = pos.y;
+                                positions[step*3+2] = pos.z;
+                                
+                                const B = getCombinedB(pos);
+                                if(B.lengthSq() < 0.001) {
+                                    validPts = step + 1;
+                                    break;
+                                }
+                                pos.add(B.normalize().multiplyScalar(stepSize * dirMultiplier));
+                            }
                             
-                            const B = getCombinedB(pos);
-                            if(B.lengthSq() < 0.001) break;
-                            pos.add(B.normalize().multiplyScalar(stepSize * dirMultiplier));
+                            for (let step = validPts; step < CURVE_POINTS; step++) {
+                                positions[step*3] = positions[(validPts-1)*3];
+                                positions[step*3+1] = positions[(validPts-1)*3+1];
+                                positions[step*3+2] = positions[(validPts-1)*3+2];
+                            }
+
+                            curveGeometries[lineIdx].attributes.position.needsUpdate = true;
+                            lineIdx++;
                         }
-                        curveGeometries[lineIdx].attributes.position.needsUpdate = true;
-                        lineIdx++;
                     }
                 }
 
-                // (B) 追蹤圍繞電樞出發的磁力線 (洋紅色)
                 const coilSeeds = [
                     new THREE.Vector3(0, 1.2, -2.0),
                     new THREE.Vector3(0, -1.2, -2.0),
@@ -1147,7 +1156,6 @@
                         fwdPts.push(posF.clone());
                     }
 
-                    // 確保長度符合陣列
                     let allPts = backPts.concat(fwdPts);
                     while(allPts.length < CURVE_POINTS) allPts.push(allPts[allPts.length-1].clone());
                     if(allPts.length > CURVE_POINTS) allPts = allPts.slice(0, CURVE_POINTS);
