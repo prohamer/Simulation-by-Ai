@@ -123,7 +123,7 @@
             <input type="checkbox" id="chk-armature" checked> 顯示電樞
         </label>
         <label class="control-group" style="color: #22bb22;">
-            <input type="checkbox" id="chk-bfield-magnet" checked> 場磁力線
+            <input type="checkbox" id="chk-bfield-magnet"> 場磁力線
         </label>
         <label class="control-group" style="color: #8a2be2;">
             <input type="checkbox" id="chk-bfield-coil-lines"> 電樞磁力線
@@ -132,10 +132,10 @@
             <input type="checkbox" id="chk-bfield-dynamic"> <b>磁場互動曲線</b>
         </label>
         <label class="control-group" style="color: #b8860b;">
-            <input type="checkbox" id="chk-current" checked> 電流
+            <input type="checkbox" id="chk-current"> 電流
         </label>
         <label class="control-group" style="color: #cc0000;">
-            <input type="checkbox" id="chk-rhr" checked> 開掌定則
+            <input type="checkbox" id="chk-rhr"> 開掌定則
         </label>
         <label class="control-group" style="color: #333333; background: #e0e0e0;">
             <input type="checkbox" id="chk-run" checked> 運轉
@@ -222,6 +222,13 @@
             buildMagneticFields(); 
             buildDynamicCurves();
 
+            // 初始顯示狀態：只顯示磁鐵與電樞，其餘預設關閉
+            magnetBFieldGroup.visible = false;
+            currentGroup.visible = false;
+            redWireCurrentGroup.visible = false;
+            blueWireCurrentGroup.visible = false;
+            rhrGroup.visible = false;
+
             // UI 互動事件綁定
             document.getElementById('slider-voltage').addEventListener('input', (e) => {
                 voltageMultiplier = parseFloat(e.target.value);
@@ -286,12 +293,18 @@
                 // 異名極相吸：完美均勻的平行直線磁場
                 return new THREE.Vector3(lPole * 1.5, 0, 0);
             } else {
-                // 同名極相斥：中央抵消、兩側向外排斥的發散磁場模型
-                // 這樣可以讓 F(紅) 向量在同極時正確指向正上或正下，解釋馬達卡死的原因
-                let Bx = lPole * pos.x * 0.4; 
-                let By = lPole * pos.y * 0.4;
-                let Bz = lPole * (pos.z + 2.0) * 0.4;
-                return new THREE.Vector3(Bx, By, Bz);
+                // 同名極相斥：兩N極各自往外推，B 方向以 x 為主軸
+                // 左導線 (x<0) 靠近左N → B 朝 +x；右導線 (x>0) 靠近右N → B 朝 -x
+                // 用點磁荷公式（與磁力線貝茲曲線的物理一致）
+                const pL = new THREE.Vector3(-4.5, 0, -2.0);
+                const pR = new THREE.Vector3( 4.5, 0, -2.0);
+                const rL = new THREE.Vector3().subVectors(pos, pL);
+                const rR = new THREE.Vector3().subVectors(pos, pR);
+                let dL = Math.max(rL.length(), 0.5);
+                let dR = Math.max(rR.length(), 0.5);
+                const bL = rL.normalize().multiplyScalar(lPole * 2.0 / (dL * dL));
+                const bR = rR.normalize().multiplyScalar(rPole * 2.0 / (dR * dR));
+                return new THREE.Vector3().addVectors(bL, bR);
             }
         }
 
@@ -1068,13 +1081,14 @@
 
             // 4. 更新右手開掌定則向量 (F, B)
             if (rhrGroup && rhrGroup.visible) {
-                const leftWorldPos = new THREE.Vector3(-2.6, 0, -2.0).applyMatrix4(armatureGroup.matrixWorld);
-                const rightWorldPos = new THREE.Vector3(2.6, 0, -2.0).applyMatrix4(armatureGroup.matrixWorld);
-                
-                leftF.position.copy(leftWorldPos);
+                // 與 I 箭頭完全同一局部座標轉世界座標，確保起點一致
+                const leftWorldPos  = new THREE.Vector3(-2.6, 0, -2.0).applyMatrix4(armatureGroup.matrixWorld);
+                const rightWorldPos = new THREE.Vector3( 2.6, 0, -2.0).applyMatrix4(armatureGroup.matrixWorld);
+
                 leftB.position.copy(leftWorldPos);
-                rightF.position.copy(rightWorldPos);
+                leftF.position.copy(leftWorldPos);
                 rightB.position.copy(rightWorldPos);
+                rightF.position.copy(rightWorldPos);
 
                 if (!hasVoltage) {
                     leftB.setLength(0); rightB.setLength(0);
