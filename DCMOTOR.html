@@ -138,8 +138,10 @@
             <input type="checkbox" id="chk-rhr"> 開掌定則
         </label>
         <label class="control-group" style="color: #333333; background: #e0e0e0;">
-            <input type="checkbox" id="chk-run" checked> 運轉
+            <input type="checkbox" id="chk-run"> 運轉
         </label>
+        <button id="btn-step-back" class="btn-action" style="font-size:14px;">◀ 15°</button>
+        <button id="btn-step-fwd"  class="btn-action" style="font-size:14px;">15° ▶</button>
     </div>
 
     <script>
@@ -177,8 +179,8 @@
         const STATIC_CURVE_POINTS = 50;
 
         // 動畫狀態
-        let isRunning = true;
-        let armatureAngle = 0;
+        let isRunning = false;
+        let armatureAngle = Math.PI; // 初始 180°，電樞平面垂直
         const motorSpeed = 0.02;
         const currentSpeed = 0.005;
 
@@ -229,6 +231,9 @@
             blueWireCurrentGroup.visible = false;
             rhrGroup.visible = false;
 
+            // 初始電樞角度（水平）
+            armatureGroup.rotation.z = armatureAngle;
+
             // UI 互動事件綁定
             document.getElementById('slider-voltage').addEventListener('input', (e) => {
                 voltageMultiplier = parseFloat(e.target.value);
@@ -263,7 +268,19 @@
             document.getElementById('chk-armature').addEventListener('change', (e) => {
                 if (armatureMeshGroup) armatureMeshGroup.visible = e.target.checked;
             });
-            document.getElementById('chk-rhr').addEventListener('change', (e) => rhrGroup.visible = e.target.checked);
+            document.getElementById('chk-rhr').addEventListener('change', (e) => {
+                rhrGroup.visible = e.target.checked;
+                // 開掌定則需要電流指標輔助，連動顯示/隱藏
+                if (e.target.checked) {
+                    currentGroup.visible = true;
+                    redWireCurrentGroup.visible = true;
+                    blueWireCurrentGroup.visible = true;
+                } else if (!document.getElementById('chk-current').checked) {
+                    currentGroup.visible = false;
+                    redWireCurrentGroup.visible = false;
+                    blueWireCurrentGroup.visible = false;
+                }
+            });
             document.getElementById('chk-bfield-magnet').addEventListener('change', (e) => magnetBFieldGroup.visible = e.target.checked);
             document.getElementById('chk-bfield-coil-lines').addEventListener('change', (e) => {
                 coilLinesGroup.visible = e.target.checked;
@@ -271,6 +288,16 @@
             });
             document.getElementById('chk-bfield-dynamic').addEventListener('change', (e) => dynamicCurvesGroup.visible = e.target.checked);
             document.getElementById('chk-run').addEventListener('change', (e) => isRunning = e.target.checked);
+
+            const STEP_RAD = Math.PI / 12; // 15°
+            document.getElementById('btn-step-back').addEventListener('click', () => {
+                armatureAngle -= STEP_RAD;
+                armatureGroup.rotation.z = armatureAngle;
+            });
+            document.getElementById('btn-step-fwd').addEventListener('click', () => {
+                armatureAngle += STEP_RAD;
+                armatureGroup.rotation.z = armatureAngle;
+            });
 
             document.getElementById('info-toggle').addEventListener('click', () => {
                 const content = document.getElementById('info-content');
@@ -388,7 +415,8 @@
 
             function createPhysicsVector(colorHex, text, textColor) {
                 const group = new THREE.Group();
-                const mat = new THREE.MeshLambertMaterial({ color: colorHex });
+                // 半透明材質，讓電樞線圈透出來
+                const mat = new THREE.MeshLambertMaterial({ color: colorHex, transparent: true, opacity: 0.55 });
                 
                 const body = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 1.0, 16), mat);
                 body.position.y = 0.5; 
