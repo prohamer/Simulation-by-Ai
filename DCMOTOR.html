@@ -137,6 +137,7 @@
         <label class="control-group" style="color: #cc0000;">
             <input type="checkbox" id="chk-rhr"> 開掌定則
         </label>
+        <button id="btn-bfield-mode" class="btn-action" style="color:#555; font-size:11px;">B：簡化場</button>
         <label class="control-group" style="color: #333333; background: #e0e0e0;">
             <input type="checkbox" id="chk-run"> 運轉
         </label>
@@ -183,6 +184,7 @@
         let armatureAngle = Math.PI + (3 * Math.PI / 180); // 180° + 3° 偏移，避免換向死點
         const motorSpeed = 0.02;
         const currentSpeed = 0.005;
+        let realisticBField = false; // false=簡化均勻場（預設），true=完整邊緣磁場
 
         let armaturePathData, redWirePathData, blueWirePathData;
 
@@ -289,6 +291,12 @@
             document.getElementById('chk-bfield-dynamic').addEventListener('change', (e) => dynamicCurvesGroup.visible = e.target.checked);
             document.getElementById('chk-run').addEventListener('change', (e) => isRunning = e.target.checked);
 
+            document.getElementById('btn-bfield-mode').addEventListener('click', (e) => {
+                realisticBField = !realisticBField;
+                e.target.innerText = realisticBField ? 'B：完整場' : 'B：簡化場';
+                e.target.style.color = realisticBField ? '#cc6600' : '#555';
+            });
+
             const STEP_RAD = Math.PI / 12; // 15°
             document.getElementById('btn-step-back').addEventListener('click', () => {
                 armatureAngle -= STEP_RAD;
@@ -317,8 +325,23 @@
         // --- 核心物理運算：取得理想的分析磁場，用於受力 F 的精確計算 ---
         function getExternalB(pos, lPole, rPole) {
             if (lPole !== rPole) {
-                // 異名極相吸：完美均勻的平行直線磁場
-                return new THREE.Vector3(lPole * 1.5, 0, 0);
+                if (!realisticBField) {
+                    // 【簡化模式】均勻水平場，教學清晰
+                    return new THREE.Vector3(lPole * 1.5, 0, 0);
+                } else {
+                    // 【完整模式】含邊緣效應的偶極疊加場
+                    const pL = new THREE.Vector3(-4.5, 0, -2.0);
+                    const pR = new THREE.Vector3( 4.5, 0, -2.0);
+                    const rL = new THREE.Vector3().subVectors(pos, pL);
+                    const rR = new THREE.Vector3().subVectors(pos, pR);
+                    let dL = Math.max(rL.length(), 0.5);
+                    let dR = Math.max(rR.length(), 0.5);
+                    // 均勻場為主 + 偶極邊緣修正
+                    let B = new THREE.Vector3(lPole * 1.5, 0, 0);
+                    B.add(rL.normalize().multiplyScalar(lPole  * 1.0 / (dL * dL)));
+                    B.add(rR.normalize().multiplyScalar(rPole * 1.0 / (dR * dR)));
+                    return B.normalize().multiplyScalar(1.5);
+                }
             } else {
                 // 同名極相斥：兩N極各自往外推，B 方向以 x 為主軸
                 // 左導線 (x<0) 靠近左N → B 朝 +x；右導線 (x>0) 靠近右N → B 朝 -x
@@ -1127,11 +1150,11 @@
                     // 導線在間隙中央 (x≈0) 時最強，靠近或超出磁鐵面 (|x|→4.5) 時衰減
                     // 完全轉到垂直 (|x|≈0 但 y 大) 時幾乎離開有效磁場區
                     function effectiveBScale(worldPos) {
-                        // 用導線到間隙中心線的距離衰減
-                        // x 方向：在 [-4.5, 4.5] 範圍內才有有效磁場
+                        // x 方向：超出磁鐵面線性衰減到0
                         const xFrac = Math.max(0, 1.0 - Math.abs(worldPos.x) / 4.5);
-                        // y 方向：導線越高（旋轉越多）磁場越弱（超出磁鐵高度範圍）
-                        const yFrac = Math.max(0, 1.0 - Math.abs(worldPos.y) / 2.5);
+                        // y 方向：指數衰減，永不歸零，在磁鐵高度邊界(y≈±2.0)約衰減50%
+                        // e^(-k*y²)，k = ln(2)/4 ≈ 0.173 使得 y=2 時 scale≈0.5
+                        const yFrac = Math.exp(-0.173 * worldPos.y * worldPos.y);
                         return xFrac * yFrac;
                     }
 
