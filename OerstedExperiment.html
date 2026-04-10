@@ -7,14 +7,17 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
     <style>
-        /* 預設根字體大小為 16px，A+/A- 按鈕會改變這個值 */
         html { font-size: 16px; }
-        body { margin: 0; overflow: hidden; font-family: 'Noto Sans TC', sans-serif; background-color: #f0f4f8; }
+        body { margin: 0; overflow: hidden; font-family: 'Noto Sans TC', sans-serif; background-color: #f0f4f8; touch-action: none; }
         #canvas-container { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; z-index: 1; }
         #ui-container { position: absolute; z-index: 10; pointer-events: none; }
         .pointer-events-auto { pointer-events: auto; }
         
         button:active { transform: scale(0.95); }
+        
+        /* 隱藏捲軸但保留捲動功能 */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
     </style>
     <!-- Import maps for Three.js -->
     <script type="importmap">
@@ -35,36 +38,36 @@
     <div id="ui-container" class="w-full h-full absolute top-0 left-0 flex flex-col justify-between p-2 md:p-3 pointer-events-none z-10">
         
         <!-- 上方區塊：左側佈局選單與字體控制 + 右側說明選單 -->
-        <div class="flex justify-between items-start w-full">
+        <div class="flex justify-between items-start w-full gap-2">
             
-            <!-- 左上角工具列 -->
-            <div class="flex flex-col sm:flex-row gap-2 items-start sm:items-center">
+            <!-- 左上角工具列 (自適應折行) -->
+            <div class="flex flex-wrap gap-2 items-start pointer-events-auto max-w-[65%] sm:max-w-none">
                 <!-- 實驗布局選擇 -->
-                <div class="pointer-events-auto bg-white/90 backdrop-blur shadow-md rounded-lg p-2 border border-gray-200 flex items-center gap-2">
-                    <span class="text-[0.9rem] font-bold text-blue-800">📐 實驗佈局</span>
-                    <select id="layout-select" class="bg-blue-50 border border-blue-200 text-blue-800 text-[0.85rem] font-bold rounded focus:ring-blue-500 focus:border-blue-500 block p-1 outline-none cursor-pointer">
+                <div class="bg-white/90 backdrop-blur shadow-md rounded-lg p-1.5 border border-gray-200 flex items-center gap-1.5">
+                    <span class="text-[0.8rem] font-bold text-blue-800 hidden sm:inline">📐</span>
+                    <select id="layout-select" class="bg-blue-50 border border-blue-200 text-blue-800 text-[0.75rem] sm:text-[0.85rem] font-bold rounded focus:ring-blue-500 focus:border-blue-500 block p-1 outline-none cursor-pointer">
                         <option value="horizontal">水平 (安培/厄斯特)</option>
                         <option value="vertical">垂直 (穿透紙板)</option>
                     </select>
                 </div>
                 
                 <!-- 字體縮放按鈕 -->
-                <div class="pointer-events-auto bg-white/90 backdrop-blur shadow-md rounded-lg px-2 py-[0.4rem] border border-gray-200 flex items-center gap-1.5">
-                    <button id="btn-font-minus" class="text-gray-600 hover:text-blue-600 font-bold text-[0.85rem] px-2 rounded hover:bg-blue-50 transition-colors" title="縮小字體">A-</button>
+                <div class="bg-white/90 backdrop-blur shadow-md rounded-lg px-2 py-[0.35rem] border border-gray-200 flex items-center gap-1.5">
+                    <button id="btn-font-minus" class="text-gray-600 hover:text-blue-600 font-bold text-[0.85rem] px-1.5 rounded hover:bg-blue-50 transition-colors" title="縮小字體">A-</button>
                     <div class="w-px h-3 bg-gray-300"></div>
-                    <button id="btn-font-plus" class="text-gray-600 hover:text-blue-600 font-bold text-[1rem] px-2 rounded hover:bg-blue-50 transition-colors" title="放大字體">A+</button>
+                    <button id="btn-font-plus" class="text-gray-600 hover:text-blue-600 font-bold text-[1rem] px-1.5 rounded hover:bg-blue-50 transition-colors" title="放大字體">A+</button>
                 </div>
             </div>
 
             <!-- 可收闔的使用說明 -->
             <div class="pointer-events-auto flex flex-col items-end">
-                <button id="btn-info-toggle" class="bg-white/90 backdrop-blur shadow-md rounded-lg px-3 py-1.5 border border-gray-200 flex items-center gap-1.5 text-gray-700 hover:bg-gray-50 transition-colors font-bold text-xs cursor-pointer">
-                    <span>📖 操作與說明</span>
-                    <span id="info-arrow" class="text-[0.7rem] transition-transform duration-200">▼</span>
+                <button id="btn-info-toggle" class="bg-white/90 backdrop-blur shadow-md rounded-lg px-2 sm:px-3 py-1.5 border border-gray-200 flex items-center gap-1.5 text-gray-700 hover:bg-gray-50 transition-colors font-bold text-[0.7rem] sm:text-xs cursor-pointer">
+                    <span>📖 說明</span>
+                    <span id="info-arrow" class="text-[0.6rem] sm:text-[0.7rem] transition-transform duration-200">▼</span>
                 </button>
-                <div id="info-panel" class="hidden mt-1.5 bg-white/95 backdrop-blur-sm shadow-xl rounded-xl p-4 border border-gray-100 w-[18rem] text-gray-700 select-none transform origin-top-right transition-all max-h-[80vh] overflow-y-auto">
-                    <h3 class="font-bold text-gray-800 mb-2 border-b pb-1 text-sm">羅盤與向量圖例</h3>
-                    <div class="flex flex-col gap-1.5 text-[0.8rem] mb-3">
+                <div id="info-panel" class="hidden mt-1.5 bg-white/95 backdrop-blur-sm shadow-xl rounded-xl p-3 sm:p-4 border border-gray-100 w-[16rem] sm:w-[18rem] text-gray-700 select-none transform origin-top-right transition-all max-h-[70vh] overflow-y-auto no-scrollbar">
+                    <h3 class="font-bold text-gray-800 mb-1.5 border-b pb-1 text-sm">羅盤與向量圖例</h3>
+                    <div class="flex flex-col gap-1.5 text-[0.75rem] mb-3">
                         <div class="flex items-center gap-2">
                             <div class="w-3 h-3 bg-red-500 rounded-sm shadow-inner"></div> <span>指北 (N極) / 預設向內 (-Z)</span>
                         </div>
@@ -72,156 +75,171 @@
                             <div class="w-3 h-3 bg-white border border-gray-300 rounded-sm shadow-inner"></div> <span>指南 (S極)</span>
                         </div>
                         <div class="flex items-center gap-2 mt-1">
-                            <div class="w-3 h-1 bg-blue-500 rounded-sm"></div> <span>藍色箭頭：地磁向量</span>
+                            <div class="w-3 h-1 bg-blue-500 rounded-sm"></div> <span>藍箭頭：地磁向量</span>
                         </div>
                         <div class="flex items-center gap-2">
-                            <div class="w-3 h-1 bg-green-500 rounded-sm"></div> <span>綠色箭頭：電磁向量 (導線產生)</span>
+                            <div class="w-3 h-1 bg-green-500 rounded-sm"></div> <span>綠箭頭：電磁向量 (導線)</span>
                         </div>
                         <div class="flex items-center gap-2">
-                            <div class="w-3 h-1 bg-red-500 rounded-sm"></div> <span>紅色箭頭：總合力向量</span>
+                            <div class="w-3 h-1 bg-red-500 rounded-sm"></div> <span>紅箭頭：總合力向量</span>
                         </div>
                     </div>
-                    <h3 class="font-bold text-gray-800 mb-2 border-b pb-1 text-sm">操作說明</h3>
-                    <ul class="list-disc pl-4 flex flex-col gap-1 text-[0.8rem] mb-3">
+                    <h3 class="font-bold text-gray-800 mb-1.5 border-b pb-1 text-sm">操作說明</h3>
+                    <ul class="list-disc pl-4 flex flex-col gap-1 text-[0.75rem] mb-3">
                         <li><span class="font-bold">視角：</span>拖曳背景可旋轉，滾輪縮放。</li>
                         <li><span class="font-bold">切換平面：</span>點擊自由羅盤，可切換平躺/直立。</li>
-                        <li><span class="font-bold">空間探索：</span>上下/左右拖曳儀器，探索各處磁場。</li>
+                        <li><span class="font-bold">空間探索：</span>拖曳羅盤儀器，探索各處磁場。</li>
                         <li><span class="font-bold">移除羅盤：</span>勾選移除模式後，點擊羅盤刪除。</li>
                     </ul>
-                    <div class="bg-orange-50 text-orange-700 p-2 rounded border border-orange-100 text-[0.75rem] leading-tight">
+                    <div class="bg-orange-50 text-orange-700 p-2 rounded border border-orange-100 text-[0.7rem] leading-tight">
                         <span class="font-bold">⚠️ 物理引擎提示：</span><br>指針為 3D 萬向自由旋轉，忠實呈現地磁(含磁傾角)與全線段電流之疊加合力。<br>
-                        <span class="text-orange-600/80 text-[0.65rem] block mt-1">(註：為避免 3D 透視錯覺影響切線觀察，磁傾角之視覺幅度有適度縮小)</span>
+                        <span class="text-orange-600/80 text-[0.6rem] block mt-1">(註：為避免 3D 透視錯覺影響教學，磁傾角之視覺幅度有適度縮小)</span>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- Bottom Control Panel (響應式 rem 單位置換版) -->
-        <div class="bg-white/95 backdrop-blur-sm shadow-xl rounded-xl p-3 md:px-4 md:py-3 w-full max-w-6xl mx-auto pointer-events-auto border border-gray-100 flex flex-col md:flex-row gap-3 md:gap-5 justify-between items-stretch">
+        <!-- Bottom Control Panel Wrapper (可收闔設計) -->
+        <div class="w-full max-w-6xl mx-auto pointer-events-auto bg-white/95 backdrop-blur-sm shadow-[0_-5px_30px_rgba(0,0,0,0.1)] rounded-t-2xl md:rounded-xl border border-gray-100 flex flex-col transition-all">
             
-            <!-- Col 1: 電路電源控制 -->
-            <div class="flex-[1.2] flex flex-col gap-[0.35rem] justify-between relative">
-                <div>
-                    <div class="flex justify-between items-center mb-[0.1rem]">
-                        <h1 class="text-sm md:text-[1rem] font-bold text-gray-800">電路電源控制</h1>
-                        <span id="circuit-status" class="text-[0.75rem] font-bold text-red-500">斷路</span>
-                    </div>
-                    <div class="flex items-center gap-[0.35rem] mt-1">
-                        <div class="flex-1 bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200 flex justify-between items-center">
-                            <span class="text-[0.65rem] font-medium text-gray-500">電壓</span>
-                            <span id="voltage-display" class="text-xs font-bold text-yellow-600">3.0V</span>
-                        </div>
-                        <div class="flex-1 bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200 flex justify-between items-center">
-                            <span class="text-[0.65rem] font-medium text-gray-500">電流</span>
-                            <span id="current-display" class="text-xs font-bold text-blue-600">0.0A</span>
-                        </div>
-                    </div>
+            <!-- 收闔開關按鈕 (類似抽屜把手) -->
+            <button id="btn-panel-toggle" class="w-full py-1.5 md:py-1 bg-gray-50/50 hover:bg-gray-100 border-b border-gray-200 flex flex-col items-center justify-center cursor-pointer transition-colors rounded-t-2xl md:rounded-t-xl group">
+                <div class="w-8 h-1 bg-gray-300 rounded-full mb-1 md:hidden group-hover:bg-gray-400 transition-colors"></div>
+                <div class="flex items-center gap-1.5 text-gray-500 group-hover:text-gray-700">
+                    <span class="text-[0.65rem] font-bold tracking-widest hidden md:inline-block uppercase">控制面板</span>
+                    <span id="panel-toggle-arrow" class="text-[0.55rem] transition-transform duration-300 transform rotate-0">▼</span>
                 </div>
+            </button>
+
+            <!-- 面板內容區塊 (手機版內部滑動) -->
+            <div id="panel-content" class="p-3 md:px-4 md:py-3 flex flex-col md:flex-row gap-3 md:gap-5 justify-between items-stretch max-h-[50vh] md:max-h-none overflow-y-auto no-scrollbar">
                 
-                <div class="flex items-center justify-between mt-0.5">
-                    <span class="text-[0.75rem] font-medium text-gray-700">電池數量 (1.5V)</span>
-                    <div class="flex items-center gap-1 bg-gray-100 rounded-md p-0.5 border border-gray-200">
-                        <button id="btn-bat-minus" class="w-6 h-6 flex items-center justify-center bg-white rounded shadow-sm text-gray-700 hover:bg-gray-50 transition-colors font-bold text-sm cursor-pointer">-</button>
-                        <span id="bat-count-display" class="w-3 text-center text-xs font-bold text-gray-800">2</span>
-                        <button id="btn-bat-plus" class="w-6 h-6 flex items-center justify-center bg-white rounded shadow-sm text-gray-700 hover:bg-gray-50 transition-colors font-bold text-sm cursor-pointer">+</button>
+                <!-- Col 1: 電路電源控制 -->
+                <div class="flex-[1.2] flex flex-col gap-[0.35rem] justify-between relative shrink-0">
+                    <div>
+                        <div class="flex justify-between items-center mb-[0.1rem]">
+                            <h1 class="text-sm md:text-[1rem] font-bold text-gray-800">電路電源控制</h1>
+                            <span id="circuit-status" class="text-[0.75rem] font-bold text-red-500">斷路</span>
+                        </div>
+                        <div class="flex items-center gap-[0.35rem] mt-1">
+                            <div class="flex-1 bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200 flex justify-between items-center">
+                                <span class="text-[0.65rem] font-medium text-gray-500">電壓</span>
+                                <span id="voltage-display" class="text-xs font-bold text-yellow-600">3.0V</span>
+                            </div>
+                            <div class="flex-1 bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200 flex justify-between items-center">
+                                <span class="text-[0.65rem] font-medium text-gray-500">電流</span>
+                                <span id="current-display" class="text-xs font-bold text-blue-600">0.0A</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="flex items-center justify-between mt-0.5">
+                        <span class="text-[0.75rem] font-medium text-gray-700">電池數量 (1.5V)</span>
+                        <div class="flex items-center gap-1 bg-gray-100 rounded-md p-0.5 border border-gray-200">
+                            <button id="btn-bat-minus" class="w-6 h-6 flex items-center justify-center bg-white rounded shadow-sm text-gray-700 hover:bg-gray-50 transition-colors font-bold text-sm cursor-pointer">-</button>
+                            <span id="bat-count-display" class="w-3 text-center text-xs font-bold text-gray-800">2</span>
+                            <button id="btn-bat-plus" class="w-6 h-6 flex items-center justify-center bg-white rounded shadow-sm text-gray-700 hover:bg-gray-50 transition-colors font-bold text-sm cursor-pointer">+</button>
+                        </div>
+                    </div>
+                    
+                    <div class="flex gap-[0.35rem] mt-1">
+                        <button id="btn-flip" class="flex-1 py-1.5 md:py-1 bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100 rounded text-[0.75rem] font-bold transition-colors cursor-pointer">
+                            🔄 翻轉電池
+                        </button>
+                        <button id="btn-switch" class="flex-1 py-1.5 md:py-1 bg-green-500 text-white shadow-sm hover:bg-green-600 rounded text-[0.75rem] font-bold transition-colors cursor-pointer">
+                            ⏻ 閉合開關
+                        </button>
                     </div>
                 </div>
-                
-                <div class="flex gap-[0.35rem] mt-auto pt-1">
-                    <button id="btn-flip" class="flex-1 py-1 bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100 rounded text-[0.75rem] font-bold transition-colors cursor-pointer">
-                        🔄 翻轉電池
-                    </button>
-                    <button id="btn-switch" class="flex-1 py-1 bg-green-500 text-white shadow-sm hover:bg-green-600 rounded text-[0.75rem] font-bold transition-colors cursor-pointer">
-                        ⏻ 閉合開關
-                    </button>
+
+                <!-- Divider (Desktop only) -->
+                <div class="hidden md:block w-px bg-gray-200"></div>
+                <hr class="md:hidden border-gray-100 my-1">
+
+                <!-- Col 2: 環境與粒子 -->
+                <div class="flex-[1.1] flex flex-col justify-between gap-2 shrink-0">
+                    <div>
+                        <div class="text-[0.75rem] font-bold text-gray-700 mb-1">粒子流動顯示</div>
+                        <div class="flex gap-2.5 bg-gray-50 p-1.5 rounded border border-gray-100">
+                            <label class="flex items-center gap-1 cursor-pointer">
+                                <input type="radio" name="flow-type" value="conventional" checked class="w-3.5 h-3.5 text-blue-600 cursor-pointer">
+                                <span class="text-[0.75rem] font-bold text-red-600">電流</span>
+                            </label>
+                            <label class="flex items-center gap-1 cursor-pointer">
+                                <input type="radio" name="flow-type" value="electron" class="w-3.5 h-3.5 text-blue-600 cursor-pointer">
+                                <span class="text-[0.75rem] font-bold text-blue-600">電子</span>
+                            </label>
+                            <label class="flex items-center gap-1 cursor-pointer">
+                                <input type="radio" name="flow-type" value="none" class="w-3.5 h-3.5 text-blue-600 cursor-pointer">
+                                <span class="text-[0.75rem] font-medium text-gray-500">隱藏</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- 緯度滑桿 -->
+                    <div class="bg-indigo-50/50 p-1.5 rounded border border-indigo-100 mt-auto">
+                        <div class="flex justify-between items-center mb-1">
+                            <label class="text-[0.7rem] font-bold text-indigo-800">地磁傾角(緯度)</label>
+                            <span id="lat-display" class="text-[0.65rem] font-bold text-indigo-600 bg-white px-1 py-0.5 rounded shadow-sm">北緯 23.5°</span>
+                        </div>
+                        <input type="range" id="lat-slider" min="-85" max="85" value="23.5" step="0.5" class="w-full cursor-pointer h-1 mb-1">
+                        <div class="flex justify-between text-[0.6rem] text-indigo-400 font-medium px-1">
+                            <span>南</span><span>赤道</span><span>北</span>
+                        </div>
+                    </div>
                 </div>
-            </div>
 
-            <!-- Divider -->
-            <div class="hidden md:block w-px bg-gray-200"></div>
-            <hr class="md:hidden border-gray-100 my-0">
+                <!-- Divider (Desktop only) -->
+                <div class="hidden md:block w-px bg-gray-200"></div>
+                <hr class="md:hidden border-gray-100 my-1">
 
-            <!-- Col 2: 環境與粒子 -->
-            <div class="flex-[1.1] flex flex-col justify-between gap-2">
-                <div>
-                    <div class="text-[0.75rem] font-bold text-gray-700 mb-1">粒子流動顯示</div>
-                    <div class="flex gap-2.5">
-                        <label class="flex items-center gap-1 cursor-pointer">
-                            <input type="radio" name="flow-type" value="conventional" checked class="w-3.5 h-3.5 text-blue-600 cursor-pointer">
-                            <span class="text-[0.75rem] font-bold text-red-600">電流</span>
+                <!-- Col 3: 視覺輔助 -->
+                <div class="flex-[1] flex flex-col justify-center gap-1.5 shrink-0">
+                    <span class="text-[0.75rem] font-bold text-gray-700 mb-0.5">視覺輔助顯示</span>
+                    <div class="grid grid-cols-2 md:grid-cols-1 gap-2 md:gap-1.5 pl-1">
+                        <label class="flex items-center gap-1.5 cursor-pointer">
+                            <input type="checkbox" id="toggle-field" class="w-3.5 h-3.5 text-blue-600 rounded cursor-pointer">
+                            <span class="text-[0.75rem] font-medium text-gray-800">磁力線 (綠色)</span>
                         </label>
-                        <label class="flex items-center gap-1 cursor-pointer">
-                            <input type="radio" name="flow-type" value="electron" class="w-3.5 h-3.5 text-blue-600 cursor-pointer">
-                            <span class="text-[0.75rem] font-bold text-blue-600">電子</span>
+                        <label class="flex items-center gap-1.5 cursor-pointer">
+                            <input type="checkbox" id="toggle-hand" class="w-3.5 h-3.5 text-blue-600 rounded cursor-pointer">
+                            <span class="text-[0.75rem] font-medium text-gray-800">右手定則輔助</span>
                         </label>
-                        <label class="flex items-center gap-1 cursor-pointer">
-                            <input type="radio" name="flow-type" value="none" class="w-3.5 h-3.5 text-blue-600 cursor-pointer">
-                            <span class="text-[0.75rem] font-medium text-gray-500">隱藏</span>
+                        <label class="flex items-center gap-1.5 cursor-pointer">
+                            <input type="checkbox" id="toggle-tangents" class="w-3.5 h-3.5 text-orange-500 rounded cursor-pointer">
+                            <span class="text-[0.75rem] font-medium text-gray-800">切線箭頭 (橘色)</span>
+                        </label>
+                        <label class="flex items-center gap-1.5 cursor-pointer">
+                            <input type="checkbox" id="toggle-vectors" class="w-3.5 h-3.5 text-purple-500 rounded cursor-pointer">
+                            <span class="text-[0.75rem] font-medium text-gray-800">空間磁場向量</span>
                         </label>
                     </div>
                 </div>
 
-                <!-- 緯度滑桿 -->
-                <div class="bg-indigo-50/50 p-1.5 rounded-md border border-indigo-100 mt-auto">
-                    <div class="flex justify-between items-center mb-1">
-                        <label class="text-[0.7rem] font-bold text-indigo-800">地磁傾角(緯度)</label>
-                        <span id="lat-display" class="text-[0.65rem] font-bold text-indigo-600 bg-white px-1 py-0.5 rounded shadow-sm">北緯 23.5°</span>
-                    </div>
-                    <input type="range" id="lat-slider" min="-85" max="85" value="23.5" step="0.5" class="w-full cursor-pointer h-1 mb-1">
-                    <div class="flex justify-between text-[0.6rem] text-indigo-400 font-medium">
-                        <span>南</span><span>赤道</span><span>北</span>
+                <!-- Divider (Desktop only) -->
+                <div class="hidden md:block w-px bg-gray-200"></div>
+                <hr class="md:hidden border-gray-100 my-1">
+
+                <!-- Col 4: 工具與操作 -->
+                <div class="flex-[0.8] flex flex-col justify-center gap-2 shrink-0">
+                    <span class="text-[0.75rem] font-bold text-gray-700 hidden md:block">操作工具</span>
+                    <button id="btn-add-compass" class="w-full py-2 md:py-1 bg-purple-50 text-purple-600 border border-purple-200 hover:bg-purple-100 text-[0.75rem] font-bold rounded transition-colors cursor-pointer">
+                        ➕ 新增自由羅盤
+                    </button>
+                    <label class="w-full flex items-center justify-center gap-1 py-2 md:py-1 bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 text-[0.75rem] font-bold rounded cursor-pointer transition-colors">
+                        <input type="checkbox" id="toggle-remove-mode" class="accent-red-600 w-3.5 h-3.5 cursor-pointer"> 🗑️ 點擊移除模式
+                    </label>
+                    <div class="flex gap-1.5 mt-0.5">
+                        <button id="btn-pause" class="flex-1 py-1.5 md:py-1 bg-indigo-50 text-indigo-600 border border-indigo-200 hover:bg-indigo-100 text-[0.75rem] font-bold rounded transition-colors cursor-pointer">
+                            ⏸ 暫停
+                        </button>
+                        <button id="reset-cam-btn" class="flex-1 py-1.5 md:py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-[0.75rem] font-medium rounded transition-colors cursor-pointer">
+                            重置視角
+                        </button>
                     </div>
                 </div>
+
             </div>
-
-            <!-- Divider -->
-            <div class="hidden md:block w-px bg-gray-200"></div>
-            <hr class="md:hidden border-gray-100 my-0">
-
-            <!-- Col 3: 視覺輔助 -->
-            <div class="flex-[1] flex flex-col justify-center gap-[0.35rem]">
-                <span class="text-[0.75rem] font-bold text-gray-700 mb-0.5">視覺輔助顯示</span>
-                <label class="flex items-center gap-1.5 cursor-pointer">
-                    <input type="checkbox" id="toggle-field" class="w-3.5 h-3.5 text-blue-600 rounded cursor-pointer">
-                    <span class="text-[0.75rem] font-medium text-gray-800">磁力線 (綠色)</span>
-                </label>
-                <label class="flex items-center gap-1.5 cursor-pointer">
-                    <input type="checkbox" id="toggle-hand" class="w-3.5 h-3.5 text-blue-600 rounded cursor-pointer">
-                    <span class="text-[0.75rem] font-medium text-gray-800">右手定則輔助</span>
-                </label>
-                <label class="flex items-center gap-1.5 cursor-pointer">
-                    <input type="checkbox" id="toggle-tangents" class="w-3.5 h-3.5 text-orange-500 rounded cursor-pointer">
-                    <span class="text-[0.75rem] font-medium text-gray-800">切線箭頭 (橘色)</span>
-                </label>
-                <label class="flex items-center gap-1.5 cursor-pointer">
-                    <input type="checkbox" id="toggle-vectors" class="w-3.5 h-3.5 text-purple-500 rounded cursor-pointer">
-                    <span class="text-[0.75rem] font-medium text-gray-800">空間磁場向量</span>
-                </label>
-            </div>
-
-            <!-- Divider -->
-            <div class="hidden md:block w-px bg-gray-200"></div>
-            <hr class="md:hidden border-gray-100 my-0">
-
-            <!-- Col 4: 工具與操作 -->
-            <div class="flex-[0.8] flex flex-col justify-center gap-[0.35rem]">
-                <span class="text-[0.75rem] font-bold text-gray-700 mb-0.5">操作工具</span>
-                <button id="btn-add-compass" class="w-full py-1 bg-purple-50 text-purple-600 border border-purple-200 hover:bg-purple-100 text-[0.75rem] font-bold rounded transition-colors cursor-pointer">
-                    ➕ 新增羅盤
-                </button>
-                <label class="w-full flex items-center justify-center gap-1 py-1 bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 text-[0.75rem] font-bold rounded cursor-pointer transition-colors">
-                    <input type="checkbox" id="toggle-remove-mode" class="accent-red-600 w-3 h-3 cursor-pointer"> 🗑️ 移除模式
-                </label>
-                <div class="flex gap-1.5 mt-0.5">
-                    <button id="btn-pause" class="flex-1 py-1 bg-indigo-50 text-indigo-600 border border-indigo-200 hover:bg-indigo-100 text-[0.75rem] font-bold rounded transition-colors cursor-pointer">
-                        ⏸ 暫停
-                    </button>
-                    <button id="reset-cam-btn" class="flex-1 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-[0.75rem] font-medium rounded transition-colors cursor-pointer">
-                        重置視角
-                    </button>
-                </div>
-            </div>
-
         </div>
     </div>
 
@@ -230,7 +248,7 @@
         import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
         // ==========================================
-        //  字體縮放邏輯 (A+ / A-)
+        //  字體與面板縮放、收闔邏輯
         // ==========================================
         let rootFontSize = 16; 
         const btnFontMinus = document.getElementById('btn-font-minus');
@@ -250,12 +268,40 @@
             }
         });
 
+        // 控制面板收闔邏輯
+        const btnPanelToggle = document.getElementById('btn-panel-toggle');
+        const panelContent = document.getElementById('panel-content');
+        const panelToggleArrow = document.getElementById('panel-toggle-arrow');
+        let isPanelOpen = true;
+
+        btnPanelToggle.addEventListener('click', () => {
+            isPanelOpen = !isPanelOpen;
+            if (isPanelOpen) {
+                panelContent.style.display = '';
+                panelToggleArrow.style.transform = 'rotate(0deg)';
+            } else {
+                panelContent.style.display = 'none';
+                panelToggleArrow.style.transform = 'rotate(180deg)';
+            }
+        });
+
+        // 說明視窗收闔邏輯
+        const btnInfoToggle = document.getElementById('btn-info-toggle');
+        const infoPanel = document.getElementById('info-panel');
+        const infoArrow = document.getElementById('info-arrow');
+        
+        btnInfoToggle.addEventListener('click', () => {
+            infoPanel.classList.toggle('hidden');
+            infoArrow.style.transform = infoPanel.classList.contains('hidden') ? 'rotate(0deg)' : 'rotate(180deg)';
+        });
+
+
         // --- 1. 場景基礎設定 ---
         const container = document.getElementById('canvas-container');
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0xf0f4f8);
 
-        // 將整體畫面往上抬升 10% (Y 從 20 -> 23，目標中心往下看)
+        // 將整體畫面往上抬升 (Y=23)
         const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
         camera.position.set(24, 23, 32);
 
@@ -269,7 +315,8 @@
         controls.enableDamping = true;
         controls.dampingFactor = 0.05;
         controls.maxDistance = 70;
-        controls.target.set(8, -3, 0); // 稍微往下看讓物體在螢幕上往上移
+        // 為了支援手機觸控旋轉，不要將 touch-action: none 加在 body 影響 UI 滑動，而是讓 OrbitControls 自己處理 Canvas
+        controls.target.set(8, -3, 0); 
 
         // --- 2. 燈光設定 ---
         const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
@@ -427,7 +474,7 @@
         const gridHelper = new THREE.GridHelper(24, 24, 0xcbd5e1, 0xf1f5f9);
         paperGroup.add(paperPlane);
         paperGroup.add(gridHelper);
-        paperGroup.position.set(4, 0, 0);
+        paperGroup.position.set(4, 0, 0); 
         paperGroup.visible = false;
         probeGroup.add(paperGroup);
 
@@ -462,7 +509,7 @@
             arrowEarth.visible = false; arrowWire.visible = false; arrowTotal.visible = false;
             group.add(arrowEarth); group.add(arrowWire); group.add(arrowTotal);
 
-            // 獨立的感應框
+            // 獨立的感應框 (限制只在羅盤附近才能拖曳)
             const hitBox = new THREE.Mesh(new THREE.BoxGeometry(4.5, 4.5, 4.5), new THREE.MeshBasicMaterial({visible: false}));
             group.add(hitBox);
 
@@ -654,10 +701,14 @@
 
         renderer.domElement.addEventListener('pointerdown', (event) => {
             const rect = renderer.domElement.getBoundingClientRect();
-            pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-            pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-            dragStartX = event.clientX;
-            dragStartY = event.clientY;
+            // 處理觸控或滑鼠事件
+            const clientX = event.clientX !== undefined ? event.clientX : event.touches?.[0]?.clientX;
+            const clientY = event.clientY !== undefined ? event.clientY : event.touches?.[0]?.clientY;
+            
+            pointer.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+            pointer.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+            dragStartX = clientX;
+            dragStartY = clientY;
             
             raycaster.setFromCamera(pointer, camera);
 
@@ -691,8 +742,12 @@
 
         renderer.domElement.addEventListener('pointermove', (event) => {
             const rect = renderer.domElement.getBoundingClientRect();
-            pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-            pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+            const clientX = event.clientX !== undefined ? event.clientX : event.touches?.[0]?.clientX;
+            const clientY = event.clientY !== undefined ? event.clientY : event.touches?.[0]?.clientY;
+            if(!clientX || !clientY) return;
+
+            pointer.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+            pointer.y = -((clientY - rect.top) / rect.height) * 2 + 1;
 
             if (draggingCompass) {
                 const normal = draggingCompass.userData.orientation === 'flat' ? new THREE.Vector3(0,1,0) : new THREE.Vector3(0,0,1);
@@ -741,19 +796,24 @@
             }
         });
 
-        window.addEventListener('pointerup', (event) => {
+        const handlePointerUp = (event) => {
             if (draggingCompass) {
-                const dx = event.clientX - dragStartX;
-                const dy = event.clientY - dragStartY;
-                const dist = Math.sqrt(dx*dx + dy*dy);
+                const clientX = event.clientX !== undefined ? event.clientX : event.changedTouches?.[0]?.clientX;
+                const clientY = event.clientY !== undefined ? event.clientY : event.changedTouches?.[0]?.clientY;
                 
-                if (dist < 5) {
-                    if (draggingCompass.userData.orientation === 'flat') {
-                        draggingCompass.userData.orientation = 'standing';
-                        draggingCompass.rotation.x = Math.PI / 2;
-                    } else {
-                        draggingCompass.userData.orientation = 'flat';
-                        draggingCompass.rotation.x = 0; 
+                if (clientX !== undefined && clientY !== undefined) {
+                    const dx = clientX - dragStartX;
+                    const dy = clientY - dragStartY;
+                    const dist = Math.sqrt(dx*dx + dy*dy);
+                    
+                    if (dist < 5) {
+                        if (draggingCompass.userData.orientation === 'flat') {
+                            draggingCompass.userData.orientation = 'standing';
+                            draggingCompass.rotation.x = Math.PI / 2;
+                        } else {
+                            draggingCompass.userData.orientation = 'flat';
+                            draggingCompass.rotation.x = 0; 
+                        }
                     }
                 }
                 
@@ -765,7 +825,10 @@
                 controls.enabled = true;
                 renderer.domElement.style.cursor = 'default';
             }
-        });
+        };
+
+        renderer.domElement.addEventListener('pointerup', handlePointerUp);
+        renderer.domElement.addEventListener('touchend', handlePointerUp);
 
         // ==========================================
         //  UI 狀態與邏輯
@@ -840,17 +903,17 @@
                 currentStatus = currentMagnitude * polarityMult;
                 
                 domCircuitStatus.textContent = "通路 (流動中)";
-                domCircuitStatus.className = "text-[0.7rem] font-bold text-green-600 mr-1";
+                domCircuitStatus.className = "text-[0.7rem] font-bold text-green-600";
                 btnSwitch.textContent = "⏼ 斷開開關";
-                btnSwitch.className = "px-3 py-1 bg-red-500 text-white shadow-sm hover:bg-red-600 rounded text-[0.75rem] font-bold transition-colors cursor-pointer";
+                btnSwitch.className = "flex-1 py-1 md:py-1.5 bg-red-500 text-white shadow-sm hover:bg-red-600 rounded text-[0.75rem] font-bold transition-colors cursor-pointer";
             } else {
                 currentMagnitude = 0;
                 currentStatus = 0;
                 
                 domCircuitStatus.textContent = "斷路";
-                domCircuitStatus.className = "text-[0.7rem] font-bold text-red-500 mr-1";
+                domCircuitStatus.className = "text-[0.7rem] font-bold text-red-500";
                 btnSwitch.textContent = "⏻ 閉合開關";
-                btnSwitch.className = "px-3 py-1 bg-green-500 text-white shadow-sm hover:bg-green-600 rounded text-[0.75rem] font-bold transition-colors cursor-pointer";
+                btnSwitch.className = "flex-1 py-1 md:py-1.5 bg-green-500 text-white shadow-sm hover:bg-green-600 rounded text-[0.75rem] font-bold transition-colors cursor-pointer";
             }
             
             domCurrent.textContent = Math.abs(currentMagnitude).toFixed(1) + 'A';
@@ -866,16 +929,6 @@
         btnSwitch.addEventListener('click', () => { switchClosed = !switchClosed; updateLogic(); });
         
         document.getElementById('btn-add-compass').addEventListener('click', () => { addFreeCompass(); });
-
-        // 綁定說明收闔
-        const btnInfoToggle = document.getElementById('btn-info-toggle');
-        const infoPanel = document.getElementById('info-panel');
-        const infoArrow = document.getElementById('info-arrow');
-        
-        btnInfoToggle.addEventListener('click', () => {
-            infoPanel.classList.toggle('hidden');
-            infoArrow.style.transform = infoPanel.classList.contains('hidden') ? 'rotate(0deg)' : 'rotate(180deg)';
-        });
 
         sliderLat.addEventListener('input', (e) => {
             currentLatitude = parseFloat(e.target.value);
@@ -897,10 +950,10 @@
             isPaused = !isPaused;
             if (isPaused) {
                 btnPause.textContent = "▶ 播放";
-                btnPause.className = "px-2 py-1 flex-1 bg-indigo-500 text-white shadow-md hover:bg-indigo-600 text-[0.75rem] font-bold rounded transition-colors cursor-pointer";
+                btnPause.className = "flex-1 py-1.5 md:py-1 bg-indigo-500 text-white shadow-md hover:bg-indigo-600 text-[0.75rem] font-bold rounded transition-colors cursor-pointer";
             } else {
                 btnPause.textContent = "⏸ 暫停";
-                btnPause.className = "px-2 py-1 flex-1 bg-indigo-50 text-indigo-600 border border-indigo-200 hover:bg-indigo-100 text-[0.75rem] font-bold rounded transition-colors cursor-pointer";
+                btnPause.className = "flex-1 py-1.5 md:py-1 bg-indigo-50 text-indigo-600 border border-indigo-200 hover:bg-indigo-100 text-[0.75rem] font-bold rounded transition-colors cursor-pointer";
             }
         });
 
