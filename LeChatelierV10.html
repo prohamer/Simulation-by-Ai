@@ -1,0 +1,1021 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>高精度：動態平衡雙系統 (專業解說版)</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        /* --- 全局版面重構：最大化可視區域 --- */
+        html, body { height: 100%; margin: 0; padding: 0; background-color: #f5f7fa; color: #2c3e50; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; overflow: hidden; display: flex; flex-direction: column; }
+        
+        /* 極簡頂部標題列 */
+        .top-header { display: flex; justify-content: space-between; align-items: center; padding: 8px 20px; background: white; box-shadow: 0 2px 5px rgba(0,0,0,0.05); z-index: 10; }
+        h2 { margin: 0; font-size: 1.3em; color: #2c3e50; font-weight: bold; }
+        .system-switch { padding: 5px 12px; font-size: 1em; border-radius: 6px; border: 2px solid #3498db; background: #ecf0f1; cursor: pointer; font-weight: bold; color: #2980b9; outline: none; }
+
+        /* 主展演區：左動畫、右圖表 */
+        .main-stage { flex: 1; display: flex; overflow: hidden; padding: 15px; gap: 15px; }
+        
+        /* 動畫區 */
+        .canvas-section { flex: 1; background: white; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 10px; min-width: 0; position: relative; }
+        canvas#particleCanvas { width: 100%; max-width: 600px; aspect-ratio: 6 / 5; height: auto; display: block; border: 2px solid #7f8c8d; background-color: #fff; border-radius: 6px; box-shadow: inset 0 0 12px rgba(0,0,0,0.1); }
+        
+        /* 懸浮按鈕樣式 */
+        .floating-btn { position: absolute; padding: 8px 16px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 1.1em; color: white; box-shadow: 0 4px 6px rgba(0,0,0,0.15); transition: 0.2s; z-index: 10; }
+        .floating-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 12px rgba(0,0,0,0.2); }
+        .floating-btn:active { transform: translateY(1px); }
+
+        /* 圖表區 */
+        .charts-section { flex: 1.2; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; padding-right: 5px; min-width: 0; position: relative; }
+        .chart-wrapper { flex: 1; background: white; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); padding: 10px; position: relative; min-height: 160px; }
+        
+        /* 圖表左上角自訂緊湊標題 (向右微調) */
+        .chart-custom-title { position: absolute; top: 12px; left: 32px; font-weight: bold; font-size: 0.95em; color: #34495e; pointer-events: none; z-index: 2; }
+        
+        /* 獨立出來的圖表回溯面板 */
+        .scrubber-panel { display: none; background: #fff9e6; padding: 12px 15px; border-radius: 10px; border: 1px solid #fdebd0; flex-direction: column; box-shadow: 0 2px 8px rgba(0,0,0,0.05); flex-shrink: 0; margin-bottom: 5px; }
+        
+        /* --- 底部可收合控制面板 (加入卷軸與最大高度限制) --- */
+        .bottom-drawer { background: white; box-shadow: 0 -4px 15px rgba(0,0,0,0.08); display: flex; flex-direction: column; z-index: 10; transition: height 0.3s ease; max-height: 45vh; flex-shrink: 0; }
+        .drawer-header { padding: 3px 20px; background: #34495e; color: white; cursor: pointer; display: flex; justify-content: space-between; align-items: center; user-select: none; min-height: 26px; }
+        .drawer-header:hover { background: #2c3e50; }
+        .drawer-header h3 { margin: 0; font-size: 0.95em; color: white; border: none; padding: 0; }
+        .drawer-header span { font-size: 0.85em; }
+        .drawer-content { display: flex; flex-wrap: wrap; gap: 15px; padding: 15px 20px; overflow-y: auto; min-height: 0; align-content: flex-start; }
+        .drawer-collapsed .drawer-content { display: none; }
+        
+        /* 自訂控制面板內的捲軸樣式 (提升質感與明確度) */
+        .drawer-content::-webkit-scrollbar { width: 8px; }
+        .drawer-content::-webkit-scrollbar-track { background: #f1f2f6; border-radius: 4px; }
+        .drawer-content::-webkit-scrollbar-thumb { background: #bdc3c7; border-radius: 4px; }
+        .drawer-content::-webkit-scrollbar-thumb:hover { background: #95a5a6; }
+
+        /* 控制項樣式 */
+        .control-block { flex: 1; min-width: 250px; background: #f8f9fa; padding: 15px; border-radius: 8px; border: 1px solid #e9ecef; }
+        .control-block h4 { margin: 0 0 10px 0; font-size: 1em; color: #2980b9; border-bottom: 2px solid #d4e6f1; padding-bottom: 5px; }
+        .control-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        .control-row label { font-weight: 600; font-size: 0.9em; }
+        .drawer-content input[type=range] { flex: 1; margin-left: 10px; accent-color: #3498db; }
+        
+        .action-btns { display: flex; gap: 8px; margin-top: 5px; }
+        button { padding: 6px 12px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; transition: 0.2s; color: white; }
+        button:hover:not(:disabled) { opacity: 0.85; transform: translateY(-1px); }
+        .btn-add { background: #27ae60; } .btn-remove { background: #e74c3c; } 
+        .btn-pause { background: #e67e22; width: 100%; font-size: 1.1em; padding: 10px; margin-top: 10px; }
+        
+        .jump-btn { padding: 4px 8px; background: #e67e22; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 1.1em; width: auto; margin: 0; }
+        .jump-btn:hover { background: #d35400; }
+
+        /* 自動播放按鈕專屬樣式 */
+        .play-btn { padding: 6px 12px; background: #34495e; color: white; border-radius: 4px; border: none; font-size: 0.9em; transition: 0.2s; cursor: pointer; white-space: nowrap; }
+        .play-btn:hover:not(:disabled) { background: #2c3e50; transform: translateY(-1px); }
+        .play-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; background: #95a5a6; }
+        .play-btn.active-play { background: #2ecc71; box-shadow: 0 0 10px rgba(46,204,113,0.6); transform: scale(1.05); }
+
+        .charts-section.is-paused { cursor: grab; }
+        .charts-section.is-paused:active { cursor: grabbing; }
+
+        /* 針對手機直立螢幕的優化 */
+        @media (max-width: 800px) {
+            .main-stage { flex-direction: column; }
+            .canvas-section { flex: none; height: 35vh; min-height: 220px; } /* 微調動畫高度留空間給圖表 */
+            canvas#particleCanvas { max-height: 100%; }
+            .bottom-drawer { max-height: 50vh; } /* 手機上允許控制面板展開佔據一半螢幕，內部自動捲動 */
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 頂部標題列 -->
+    <div class="top-header">
+        <h2 id="equationTitle">2NO<sub>2(g)</sub> &rightleftharpoons; N<sub>2</sub>O<sub>4(g)</sub> + 熱</h2>
+        <select id="systemSwitch" class="system-switch" onchange="switchSystem(this.value)">
+            <option value="NO2">系統一：二氧化氮聚合 (NO₂ ⇌ N₂O₄)</option>
+            <option value="HABER">系統二：哈伯法製氨 (N₂ + 3H₂ ⇌ 2NH₃)</option>
+        </select>
+    </div>
+    
+    <!-- 主展演區 -->
+    <div class="main-stage">
+        <!-- 動畫區 -->
+        <div class="canvas-section">
+            <!-- 溫控板按鈕 -->
+            <div style="position: absolute; top: 15px; left: 15px; display: flex; gap: 10px; z-index: 10;">
+                <button id="btnCool" class="floating-btn" style="position: relative; background-color: #3498db; opacity: 0.9; padding: 8px 12px;" onclick="toggleTempChange(-1)">❄️ 降溫</button>
+                <button id="btnHeat" class="floating-btn" style="position: relative; background-color: #e74c3c; opacity: 0.9; padding: 8px 12px;" onclick="toggleTempChange(1)">🔥 加溫</button>
+            </div>
+
+            <!-- 自動播放控制區 -->
+            <div id="autoPlayControls" style="position: absolute; top: 15px; left: 50%; transform: translateX(-50%); display: none; gap: 8px; z-index: 10; background: rgba(255,255,255,0.9); padding: 6px 12px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.15); align-items: center;">
+                <span style="font-size: 0.85em; font-weight: bold; color: #2c3e50; margin-right: 5px;">自動圖表:</span>
+                <button id="btnAutoPlayBack" class="play-btn" onclick="startAutoPlay(-1)">◀ 倒轉播放</button>
+                <button id="btnAutoPlayStop" class="play-btn" onclick="stopAutoPlay()" disabled>⏹ 停止</button>
+                <button id="btnAutoPlayForward" class="play-btn" onclick="startAutoPlay(1)">推進播放 ▶</button>
+            </div>
+
+            <!-- 暫停按鈕 -->
+            <button id="mainPauseBtn" class="floating-btn" style="top: 15px; right: 15px; background-color: #e67e22;" onclick="togglePause()">⏸️ 暫停 / 回溯</button>
+            
+            <canvas id="particleCanvas" width="600" height="500"></canvas>
+        </div>
+
+        <!-- 圖表區 -->
+        <div class="charts-section">
+            <div class="chart-wrapper">
+                <div class="chart-custom-title">巨觀莫耳數變化</div>
+                <canvas id="molesChart"></canvas>
+            </div>
+            <div class="chart-wrapper">
+                <div class="chart-custom-title">瞬時反應速率</div>
+                <canvas id="rateChart"></canvas>
+            </div>
+            <div class="chart-wrapper">
+                <div class="chart-custom-title">系統總壓力</div>
+                <canvas id="pressureChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- 底部可收合控制面板 -->
+    <div id="bottomDrawer" class="bottom-drawer drawer-collapsed">
+        <div class="drawer-header" onclick="toggleDrawer()">
+            <h3>⚙️ 巨觀變因控制面板</h3>
+            <span id="drawerIcon">▲ 展開</span>
+        </div>
+        <!-- 這個 drawer-content 現在會根據內容長度自動產生垂直捲軸 -->
+        <div class="drawer-content">
+            
+            <!-- 區塊 1: 巨觀控制 -->
+            <div class="control-block">
+                <h4>🌡️ 環境變因 (滑桿調整)</h4>
+                <div class="control-row">
+                    <label>溫度: <span id="tempVal" style="color:#e74c3c;">300</span> K</label>
+                    <input type="range" id="tempSlider" min="250" max="400" value="300">
+                </div>
+                <div class="control-row">
+                    <label>容積: <span id="volVal" style="color:#2980b9;">10.0</span> L</label>
+                    <input type="range" id="volSlider" min="5" max="20" value="10" step="0.5">
+                </div>
+                <p style="font-size: 0.8em; color: #7f8c8d; margin: 0;">💡 您也可直接拖曳畫面上的金屬活塞，或使用上方溫控板。</p>
+            </div>
+
+            <!-- 區塊 2: 物質干擾 -->
+            <div class="control-block">
+                <h4>🧪 物質干擾 (勒沙特列)</h4>
+                <div class="control-row" style="margin-bottom: 5px;">
+                    <select id="substanceSelect" style="flex:1; padding: 6px; border-radius: 4px; border: 1px solid #bdc3c7;">
+                        <option value="NO2">NO₂ (紅棕色)</option>
+                        <option value="N2O4">N₂O₄ (無色)</option>
+                    </select>
+                </div>
+                <div class="control-row" style="justify-content: flex-start; gap: 10px;">
+                    <input type="number" id="addAmount" value="20" min="1" max="50" style="width: 70px; padding: 6px; border-radius: 4px; border: 1px solid #bdc3c7; text-align: center; margin:0;"> 
+                    <span style="font-size: 0.9em; font-weight: bold;">莫耳</span>
+                </div>
+                <div class="action-btns">
+                    <button class="btn-add" style="flex:1;" onclick="addCustomSubstance()">+ 加入</button>
+                    <button class="btn-remove" style="flex:1;" onclick="removeCustomSubstance()">- 移除</button>
+                </div>
+            </div>
+
+            <!-- 區塊 3: 底部暫停紐與完整回溯面板 -->
+            <div class="control-block" style="flex: 1.5; display: flex; flex-direction: column;">
+                <h4 style="text-align: left;">⏳ 時間控制與歷史回溯</h4>
+                <button id="pauseBtn" class="btn-pause" onclick="togglePause()" style="margin-top: 0; margin-bottom: 5px;">⏸️ 暫停 / 啟用回溯</button>
+                
+                <!-- 回溯與鎖定面板 (點擊暫停後才會顯示) -->
+                <div id="scrubberBlock" style="display: none; flex-direction: column; background: #fff9e6; padding: 12px; border-radius: 8px; border: 1px solid #fdebd0; margin-top: 10px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <label style="font-size: 0.9em; color: #c0392b; cursor: pointer; font-weight: bold; display: flex; align-items: center; margin: 0;">
+                            <input type="checkbox" id="lockChartCb" style="margin-right: 5px; width: 16px; height: 16px;"> 🔒 鎖定圖表 (查看數據)
+                        </label>
+                        <span id="eventDisplay" style="font-weight: bold; color: #d35400; font-size: 0.85em; text-align: center; background: white; padding: 2px 6px; border-radius: 4px; border: 1px solid #f8c471;"></span>
+                    </div>
+                    
+                    <div style="display: flex; width: 100%; align-items: center;">
+                        <button class="jump-btn" onclick="jumpToAction(-1)" title="上一個事件">⏮</button>
+                        <div style="position: relative; flex: 1; display: flex; align-items: center; height: 30px; margin: 0 10px;">
+                            <input type="range" id="timeScrubber" min="0" max="100" value="100" style="width: 100%; margin: 0;">
+                            <div id="markerTrack" style="position: absolute; width: 100%; height: 100%; pointer-events: none; z-index: 1;"></div>
+                        </div>
+                        <button class="jump-btn" onclick="jumpToAction(1)" title="下一個事件">⏭</button>
+                    </div>
+
+                    <span style="font-size: 0.8em; color: #7f8c8d; margin-top: 8px; text-align: center;">💡 提示：未鎖定時，也可直接在上方圖表左右拖曳滑動時間。</span>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+<script>
+    // --- UI 介面控制 ---
+    function toggleDrawer() {
+        const drawer = document.getElementById('bottomDrawer');
+        const icon = document.getElementById('drawerIcon');
+        drawer.classList.toggle('drawer-collapsed');
+        icon.innerText = drawer.classList.contains('drawer-collapsed') ? '▲ 展開' : '▼ 收合';
+        setTimeout(() => { if(molesChart) {molesChart.resize(); rateChart.resize(); pressureChart.resize();} }, 310);
+    }
+
+    // --- 系統核心參數 ---
+    let activeSystem = 'NO2'; 
+    let V = 10.0; 
+    let T = 300; 
+    const R = 0.082; 
+    const MAX_PARTICLES = 150; 
+    
+    let time = 0;
+    const dt_chart = 0.1; 
+    let isPaused = false;
+    let jumpFlags = { NO2: false, N2O4: false, N2: false, H2: false, NH3: false, Rf: false, Rb: false };
+    
+    let accumF = 0, accumB = 0;
+    let pendingActions = {}; 
+
+    let history = { time: [], NO2: [], N2O4: [], N2: [], H2: [], NH3: [], RateF: [], RateB: [], Pressure: [], Actions: [] };
+    let disp = { NO2: 0, N2O4: 0, N2: 0, H2: 0, NH3: 0, Rf: 0.0, Rb: 0.0 };
+    
+    const maxMemoryPoints = 3000; 
+    const visualDataPoints = 150; 
+
+    // --- 圖表連動邏輯 ---
+    let isChartLocked = false; 
+    function syncTooltips(sourceChart, activeElements) {
+        if (!isChartLocked) return;
+        let charts = [molesChart, rateChart, pressureChart];
+        if (!activeElements || activeElements.length === 0) {
+            charts.forEach(c => {
+                if (c !== sourceChart && c) {
+                    c.setActiveElements([]);
+                    if (c.tooltip) c.tooltip.setActiveElements([], {x: 0, y: 0});
+                    c.update();
+                }
+            });
+            return;
+        }
+        let dataIndex = activeElements[0].index;
+        charts.forEach(c => {
+            if (c !== sourceChart && c) {
+                let meta = c.getDatasetMeta(0);
+                if (meta.data[dataIndex]) {
+                    let targetElements = c.data.datasets.map((_, idx) => ({ datasetIndex: idx, index: dataIndex }));
+                    c.setActiveElements(targetElements);
+                    let x = meta.data[dataIndex].x;
+                    let y = meta.data[dataIndex].y;
+                    if (c.tooltip) c.tooltip.setActiveElements(targetElements, { x: x, y: y });
+                    c.update();
+                }
+            }
+        });
+    }
+
+    Chart.defaults.font.family = "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif";
+    const commonOptions = { 
+        responsive: true, maintainAspectRatio: false, animation: false, 
+        interaction: { mode: 'index', intersect: false },
+        scales: { x: { display: false }, y: { beginAtZero: true } }, 
+        elements: { point: { radius: 0 }, line: { borderWidth: 2.5 } },
+        plugins: { legend: { position: 'top', align: 'end', labels: { boxWidth: 10, padding: 5 } }, tooltip: { padding: 10, titleFont: {size: 14}, bodyFont: {size: 13} } },
+        onHover: function(e, activeElements, chart) { syncTooltips(chart, activeElements); }
+    };
+
+    let molesChart = new Chart(document.getElementById('molesChart').getContext('2d'), {
+        type: 'line', data: { labels: history.time, datasets: [] },
+        options: { ...commonOptions }
+    });
+    let rateChart = new Chart(document.getElementById('rateChart').getContext('2d'), {
+        type: 'line', data: { labels: history.time, datasets: [] },
+        options: { ...commonOptions }
+    });
+    let pressureChart = new Chart(document.getElementById('pressureChart').getContext('2d'), {
+        type: 'line', data: { labels: history.time, datasets: [ { label: '總壓力 (atm)', borderColor: '#16a085', data: history.Pressure, fill: true, backgroundColor: 'rgba(22, 160, 133, 0.15)', tension: 0.3 } ] },
+        options: { ...commonOptions }
+    });
+
+    function updateChartWindows(startIdx, endIdx) {
+        if (history.time.length === 0) return;
+        let startLabel = history.time[startIdx];
+        let endLabel = history.time[endIdx];
+        [molesChart, rateChart, pressureChart].forEach(c => {
+            c.options.scales.x.min = startLabel; c.options.scales.x.max = endLabel; c.update('none'); 
+        });
+    }
+
+    // --- 自動播放邏輯 (Auto Play) ---
+    let autoPlayTimer = null;
+    window.startAutoPlay = function(direction) {
+        if (!isPaused) return; 
+        
+        let lockCb = document.getElementById('lockChartCb');
+        if (lockCb.checked) {
+            lockCb.checked = false;
+            lockCb.dispatchEvent(new Event('change'));
+        }
+
+        document.getElementById('btnAutoPlayBack').classList.remove('active-play');
+        document.getElementById('btnAutoPlayForward').classList.remove('active-play');
+        if (direction === -1) document.getElementById('btnAutoPlayBack').classList.add('active-play');
+        if (direction === 1) document.getElementById('btnAutoPlayForward').classList.add('active-play');
+        
+        let stopBtn = document.getElementById('btnAutoPlayStop');
+        stopBtn.disabled = false;
+        stopBtn.style.background = '#e74c3c'; 
+
+        if (autoPlayTimer) clearInterval(autoPlayTimer);
+        autoPlayTimer = setInterval(() => {
+            let scrubber = document.getElementById('timeScrubber');
+            let currentVal = parseInt(scrubber.value);
+            let maxVal = parseInt(scrubber.max);
+            
+            let newVal = currentVal + direction;
+            if (newVal <= 0) {
+                newVal = 0; stopAutoPlay();
+            } else if (newVal >= maxVal) {
+                newVal = maxVal; stopAutoPlay();
+            }
+            
+            if (newVal !== currentVal) {
+                scrubber.value = newVal;
+                scrubber.dispatchEvent(new Event('input')); 
+            }
+        }, 50); 
+    };
+
+    window.stopAutoPlay = function() {
+        if (autoPlayTimer) {
+            clearInterval(autoPlayTimer);
+            autoPlayTimer = null;
+        }
+        let btnBack = document.getElementById('btnAutoPlayBack');
+        let btnForward = document.getElementById('btnAutoPlayForward');
+        let btnStop = document.getElementById('btnAutoPlayStop');
+        
+        if(btnBack) btnBack.classList.remove('active-play');
+        if(btnForward) btnForward.classList.remove('active-play');
+        if(btnStop) {
+            btnStop.disabled = true;
+            btnStop.style.background = '#95a5a6';
+        }
+    };
+
+    // --- 系統切換 ---
+    window.switchSystem = function(sys) {
+        activeSystem = sys;
+        particles = []; flashes = [];
+        time = 0; accumF = 0; accumB = 0; pendingActions = {};
+        for(let key in jumpFlags) jumpFlags[key] = false;
+        
+        history = { time: [], NO2: [], N2O4: [], N2: [], H2: [], NH3: [], RateF: [], RateB: [], Pressure: [], Actions: [] };
+        disp = { NO2: 0, N2O4: 0, N2: 0, H2: 0, NH3: 0, Rf: 0.0, Rb: 0.0 };
+
+        molesChart.data.labels = history.time; rateChart.data.labels = history.time;
+        pressureChart.data.labels = history.time; pressureChart.data.datasets[0].data = history.Pressure;
+
+        const select = document.getElementById('substanceSelect');
+        const eqTitle = document.getElementById('equationTitle');
+        
+        if (sys === 'NO2') {
+            eqTitle.innerHTML = `2NO<sub>2(g)</sub> &rightleftharpoons; N<sub>2</sub>O<sub>4(g)</sub> + 熱`;
+            select.innerHTML = `<option value="NO2">NO₂ (紅棕色)</option><option value="N2O4">N₂O₄ (無色)</option>`;
+            molesChart.data.datasets = [
+                { label: 'NO₂', borderColor: '#d35400', data: history.NO2, tension: 0.3 },
+                { label: 'N₂O₄', borderColor: '#7f8c8d', data: history.N2O4, tension: 0.3 }
+            ];
+            rateChart.data.datasets = [
+                { label: 'Rf (合成)', borderColor: '#2980b9', data: history.RateF, tension: 0.3 },
+                { label: 'Rb (分解)', borderColor: '#8e44ad', data: history.RateB, tension: 0.3 }
+            ];
+            document.getElementById('addAmount').value = 20;
+            
+        } else if (sys === 'HABER') {
+            eqTitle.innerHTML = `N<sub>2(g)</sub> + 3H<sub>2(g)</sub> &rightleftharpoons; 2NH<sub>3(g)</sub> + 熱`;
+            select.innerHTML = `<option value="N2">N₂ (氮氣)</option><option value="H2">H₂ (氫氣)</option><option value="NH3">NH₃ (氨氣)</option>`;
+            molesChart.data.datasets = [
+                { label: 'N₂', borderColor: '#2980b9', data: history.N2, tension: 0.3 },
+                { label: 'H₂', borderColor: '#bdc3c7', data: history.H2, tension: 0.3 },
+                { label: 'NH₃', borderColor: '#27ae60', data: history.NH3, tension: 0.3 }
+            ];
+            rateChart.data.datasets = [
+                { label: 'Rf (製氨)', borderColor: '#e67e22', data: history.RateF, tension: 0.3 },
+                { label: 'Rb (分解)', borderColor: '#8e44ad', data: history.RateB, tension: 0.3 }
+            ];
+            document.getElementById('addAmount').value = 10; 
+        }
+        molesChart.update(); rateChart.update(); pressureChart.update();
+        if(isPaused) togglePause(); 
+    };
+
+    // --- 微觀粒子系統 ---
+    const canvas = document.getElementById('particleCanvas');
+    const ctx = canvas.getContext('2d');
+
+    class Particle {
+        constructor(type, x, y, rotation = Math.random() * Math.PI * 2) {
+            this.id = Math.random(); this.type = type; 
+            this.x = x; this.y = y; this.rotation = rotation; 
+            this.toBeRemoved = false;
+            
+            if (type === 'NO2') this.radius = 4;
+            else if (type === 'N2O4') this.radius = 6.5;
+            else if (type === 'H2') this.radius = 3;
+            else if (type === 'N2') this.radius = 4.5;
+            else if (type === 'NH3') this.radius = 5.5;
+            
+            let speed = (Math.random() + 0.5) * 4.0 * Math.sqrt(T/300);
+            if (type === 'N2O4' || type === 'N2') speed *= 0.7; 
+            else if (type === 'NH3') speed *= 0.8;
+            else if (type === 'H2') speed *= 1.5;
+            
+            let moveAngle = Math.random() * Math.PI * 2;
+            this.vx = Math.cos(moveAngle) * speed; this.vy = Math.sin(moveAngle) * speed;
+            this.rotSpeed = (Math.random() - 0.5) * 0.2;
+        }
+
+        update(tempFactor, bounds) {
+            this.x += this.vx * tempFactor; this.y += this.vy * tempFactor;
+            this.rotation += this.rotSpeed * tempFactor;
+            if (this.x < bounds.minX + this.radius) { this.x = bounds.minX + this.radius; this.vx *= -1; }
+            if (this.x > bounds.maxX - this.radius) { this.x = bounds.maxX - this.radius; this.vx *= -1; }
+            if (this.y < bounds.minY + this.radius) { this.y = bounds.minY + this.radius; this.vy *= -1; } 
+            if (this.y > bounds.maxY - this.radius) { this.y = bounds.maxY - this.radius; this.vy *= -1; } 
+        }
+
+        draw(ctx) {
+            ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(this.rotation);
+            if (this.type === 'NO2') {
+                ctx.fillStyle = '#2980b9'; ctx.beginPath(); ctx.arc(0, 0, 3, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#e74c3c'; ctx.beginPath(); ctx.arc(-2.5, -3.5, 2.5, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(-2.5, 3.5, 2.5, 0, Math.PI*2); ctx.fill();
+            } else if (this.type === 'N2O4') {
+                ctx.fillStyle = '#bdc3c7'; ctx.beginPath(); ctx.arc(-2.5, 0, 3, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(2.5, 0, 3, 0, Math.PI*2); ctx.fill();
+                ctx.strokeStyle = '#7f8c8d'; ctx.lineWidth = 1; ctx.stroke();
+                ctx.fillStyle = '#e74c3c'; ctx.beginPath(); ctx.arc(-5, -3.5, 2.5, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(-5, 3.5, 2.5, 0, Math.PI*2); ctx.fill();
+                ctx.beginPath(); ctx.arc(5, -3.5, 2.5, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(5, 3.5, 2.5, 0, Math.PI*2); ctx.fill();
+            } else if (this.type === 'N2') {
+                ctx.fillStyle = '#2980b9'; ctx.beginPath(); ctx.arc(-2, 0, 3, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(2, 0, 3, 0, Math.PI*2); ctx.fill();
+            } else if (this.type === 'H2') {
+                ctx.fillStyle = '#ecf0f1'; ctx.strokeStyle = '#7f8c8d'; ctx.lineWidth = 1;
+                ctx.beginPath(); ctx.arc(-1.5, 0, 2, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+                ctx.beginPath(); ctx.arc(1.5, 0, 2, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+            } else if (this.type === 'NH3') {
+                ctx.fillStyle = '#2980b9'; ctx.beginPath(); ctx.arc(0, 0, 3.5, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#ecf0f1'; ctx.strokeStyle = '#7f8c8d'; ctx.lineWidth = 1;
+                ctx.beginPath(); ctx.arc(-3.5, -3, 2, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+                ctx.beginPath(); ctx.arc(-3.5, 3, 2, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+                ctx.beginPath(); ctx.arc(4, 0, 2, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+            }
+            ctx.restore();
+        }
+    }
+
+    function getBounds() {
+        let minX = 20; let maxX = canvas.width - 20; let maxY = canvas.height - 25; 
+        let maxAvailableHeight = canvas.height - 55; 
+        let currentHeight = maxAvailableHeight * (V / 20); 
+        let minY = maxY - currentHeight; 
+        return { minX, maxX, minY, maxY };
+    }
+
+    function addRandomParticle(type, bounds) {
+        if(!bounds) bounds = getBounds();
+        let x = bounds.minX + 15 + Math.random() * (bounds.maxX - bounds.minX - 30);
+        let y = bounds.minY + 15 + Math.random() * (bounds.maxY - bounds.minY - 30);
+        particles.push(new Particle(type, x, y));
+    }
+
+    function processEvents(rF, rB) {
+        accumF += rF * dt_chart * V; accumB += rB * dt_chart * V;
+        let executeSynth = Math.floor(accumF); let executeDecomp = Math.floor(accumB);
+        accumF -= executeSynth; accumB -= executeDecomp;
+
+        if (activeSystem === 'NO2') {
+            for (let i = 0; i < executeSynth; i++) {
+                let no2s = particles.filter(p => p.type === 'NO2' && !p.toBeRemoved);
+                if (no2s.length >= 2) {
+                    let p1 = no2s[Math.floor(Math.random() * no2s.length)];
+                    let p2 = no2s.find(p => p !== p1);
+                    if (p1 && p2) {
+                        p1.toBeRemoved = true; p2.toBeRemoved = true;
+                        let mx = (p1.x + p2.x)/2, my = (p1.y + p2.y)/2;
+                        particles.push(new Particle('N2O4', mx, my, Math.atan2(p2.y - p1.y, p2.x - p1.x)));
+                        flashes.push({x: mx, y: my, type: 'synth', color: '241, 196, 15', life: 1.0}); 
+                    }
+                }
+            }
+            for (let i = 0; i < executeDecomp; i++) {
+                let n2o4s = particles.filter(p => p.type === 'N2O4' && !p.toBeRemoved);
+                if (n2o4s.length > 0) {
+                    let p = n2o4s[Math.floor(Math.random() * n2o4s.length)];
+                    p.toBeRemoved = true;
+                    let p1 = new Particle('NO2', p.x-4, p.y), p2 = new Particle('NO2', p.x+4, p.y);
+                    p1.vx = p.vx-3; p2.vx = p.vx+3; particles.push(p1, p2);
+                    flashes.push({x: p.x, y: p.y, type: 'decomp', color: '255, 255, 255', life: 1.0}); 
+                }
+            }
+        } else if (activeSystem === 'HABER') {
+            for (let i = 0; i < executeSynth; i++) {
+                let n2s = particles.filter(p => p.type === 'N2' && !p.toBeRemoved);
+                let h2s = particles.filter(p => p.type === 'H2' && !p.toBeRemoved);
+                if (n2s.length >= 1 && h2s.length >= 3) {
+                    let pN = n2s[Math.floor(Math.random() * n2s.length)];
+                    h2s.sort((a,b) => Math.hypot(a.x-pN.x, a.y-pN.y) - Math.hypot(b.x-pN.x, b.y-pN.y));
+                    let pA = h2s[0], pB = h2s[1], pC = h2s[2];
+                    pN.toBeRemoved = true; pA.toBeRemoved = true; pB.toBeRemoved = true; pC.toBeRemoved = true;
+                    let mx = (pN.x + pA.x + pB.x + pC.x)/4, my = (pN.y + pA.y + pB.y + pC.y)/4;
+                    particles.push(new Particle('NH3', mx-4, my), new Particle('NH3', mx+4, my));
+                    flashes.push({x: mx, y: my, type: 'synth', color: '26, 188, 156', life: 1.0}); 
+                }
+            }
+            for (let i = 0; i < executeDecomp; i++) {
+                let nh3s = particles.filter(p => p.type === 'NH3' && !p.toBeRemoved);
+                if (nh3s.length >= 2) {
+                    let p1 = nh3s[Math.floor(Math.random() * nh3s.length)];
+                    nh3s.sort((a,b) => Math.hypot(a.x-p1.x, a.y-p1.y) - Math.hypot(b.x-p1.x, b.y-p1.y));
+                    let p2 = nh3s[1]; 
+                    p1.toBeRemoved = true; p2.toBeRemoved = true;
+                    let mx = (p1.x + p2.x)/2, my = (p1.y + p2.y)/2;
+                    particles.push(new Particle('N2', mx, my));
+                    particles.push(new Particle('H2', mx-6, my-6), new Particle('H2', mx+6, my-6), new Particle('H2', mx, my+6));
+                    flashes.push({x: mx, y: my, type: 'decomp', color: '255, 255, 255', life: 1.0}); 
+                }
+            }
+        }
+        particles = particles.filter(p => !p.toBeRemoved);
+    }
+
+    function handleCollisions() {
+        for (let i = 0; i < particles.length; i++) {
+            for (let j = i + 1; j < particles.length; j++) {
+                let p1 = particles[i]; let p2 = particles[j];
+                let dx = p2.x - p1.x; let dy = p2.y - p1.y;
+                let dist = Math.hypot(dx, dy);
+                let minDist = p1.radius + p2.radius;
+
+                if (dist < minDist) {
+                    if (dist === 0) { dx = 1; dy = 0; dist = 1; }
+                    let overlap = minDist - dist; let nx = dx / dist; let ny = dy / dist;
+                    p1.x -= nx * overlap / 2; p1.y -= ny * overlap / 2;
+                    p2.x += nx * overlap / 2; p2.y += ny * overlap / 2;
+                    
+                    p1.vx -= nx*2; p1.vy -= ny*2;
+                    p2.vx += nx*2; p2.vy += ny*2;
+                }
+            }
+        }
+    }
+
+    let tempChangeMode = 0; 
+    
+    window.toggleTempChange = function(mode) {
+        if (tempChangeMode === mode) tempChangeMode = 0; 
+        else tempChangeMode = mode;
+        updateTempButtons();
+    }
+
+    function updateTempButtons() {
+        const btnCool = document.getElementById('btnCool');
+        const btnHeat = document.getElementById('btnHeat');
+        
+        if (tempChangeMode === -1) {
+            btnCool.style.boxShadow = '0 0 15px #3498db'; btnCool.innerText = '❄️ 降溫中'; btnCool.style.transform = 'scale(1.05)';
+        } else {
+            btnCool.style.boxShadow = '0 4px 6px rgba(0,0,0,0.15)'; btnCool.innerText = '❄️ 降溫'; btnCool.style.transform = 'scale(1)';
+        }
+        
+        if (tempChangeMode === 1) {
+            btnHeat.style.boxShadow = '0 0 15px #e74c3c'; btnHeat.innerText = '🔥 加溫中'; btnHeat.style.transform = 'scale(1.05)';
+        } else {
+            btnHeat.style.boxShadow = '0 4px 6px rgba(0,0,0,0.15)'; btnHeat.innerText = '🔥 加溫'; btnHeat.style.transform = 'scale(1)';
+        }
+    }
+
+    function drawSystem() {
+        let bounds = getBounds();
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // 容器內部背景
+        if (activeSystem === 'NO2') {
+            let concNO2 = particles.filter(p => p.type === 'NO2').length / V;
+            let colorIntensity = Math.min(255, Math.floor(concNO2 * 25)); 
+            ctx.fillStyle = `rgba(${colorIntensity + 30}, 40, 20, 0.15)`;
+        } else {
+            ctx.fillStyle = `rgba(41, 128, 185, 0.05)`;
+        }
+        ctx.fillRect(bounds.minX, bounds.minY, bounds.maxX - bounds.minX, bounds.maxY - bounds.minY);
+        
+        // 繪製容器外框 (U型槽)
+        ctx.strokeStyle = '#2c3e50'; ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(bounds.minX, 0); 
+        ctx.lineTo(bounds.minX, bounds.maxY);
+        ctx.lineTo(bounds.maxX, bounds.maxY);
+        ctx.lineTo(bounds.maxX, 0); 
+        ctx.stroke();
+
+        // 溫控加熱/冷卻板 (底部繪製)
+        let plateColor = '#7f8c8d';
+        if (tempChangeMode === 1) plateColor = '#e74c3c';
+        else if (tempChangeMode === -1) plateColor = '#3498db';
+
+        ctx.save();
+        if (tempChangeMode === 1) { ctx.shadowColor = '#e74c3c'; ctx.shadowBlur = 15; }
+        else if (tempChangeMode === -1) { ctx.shadowColor = '#3498db'; ctx.shadowBlur = 15; }
+        ctx.fillStyle = plateColor;
+        ctx.fillRect(bounds.minX - 5, bounds.maxY + 2, (bounds.maxX - bounds.minX) + 10, 15);
+        ctx.restore();
+
+        // 繪製頂部金屬活塞
+        ctx.fillStyle = '#7f8c8d'; 
+        ctx.fillRect(bounds.minX, bounds.minY - 15, bounds.maxX - bounds.minX, 15); 
+        ctx.fillStyle = '#95a5a6';
+        ctx.fillRect(canvas.width / 2 - 10, 0, 20, bounds.minY - 15); 
+        ctx.fillStyle = '#fff'; ctx.font = 'bold 12px "Segoe UI"'; ctx.textAlign = 'center';
+        ctx.fillText('⇕ 拖拉活塞', canvas.width / 2, bounds.minY - 4);
+
+        // 閃光與粒子繪製
+        for (let i = flashes.length - 1; i >= 0; i--) {
+            let f = flashes[i];
+            ctx.beginPath(); ctx.arc(f.x, f.y, (1 - f.life) * 15 + 3, 0, Math.PI * 2);
+            if (f.type === 'synth') {
+                ctx.fillStyle = `rgba(${f.color}, ${f.life * 0.8})`; ctx.fill();
+            } else {
+                ctx.strokeStyle = `rgba(${f.color}, ${f.life * 0.8})`; ctx.lineWidth = 3; ctx.stroke();
+            }
+            if (!isPaused) f.life -= 0.08; 
+            if (f.life <= 0) flashes.splice(i, 1);
+        }
+        for (let p of particles) p.draw(ctx);
+
+        // 暫停狀態提示
+        if (isPaused) {
+            let actionStrs = Object.values(pendingActions);
+            if (actionStrs.length > 0) {
+                ctx.fillStyle = '#e74c3c'; ctx.font = 'bold 18px "Segoe UI"'; ctx.textAlign = 'center';
+                ctx.fillText(`已預約: ${actionStrs.join(', ')}`, canvas.width / 2, bounds.minY + (bounds.maxY - bounds.minY) / 2 + 10);
+            }
+        }
+    }
+
+    // --- 主邏輯迴圈 ---
+    function updateSimulation() {
+        // 處理漸進式加溫降溫
+        if (tempChangeMode !== 0) {
+            T += tempChangeMode * 0.8; 
+            if (T >= 400) { T = 400; tempChangeMode = 0; updateTempButtons(); }
+            if (T <= 250) { T = 250; tempChangeMode = 0; updateTempButtons(); }
+            
+            document.getElementById('tempSlider').value = T;
+            document.getElementById('tempVal').innerText = T.toFixed(1);
+            snapToPresent();
+            if (isPaused) drawSystem();
+        }
+
+        if (!isPaused) {
+            let cNO2 = particles.filter(p => p.type === 'NO2').length / V;
+            let cN2O4 = particles.filter(p => p.type === 'N2O4').length / V;
+            let cN2 = particles.filter(p => p.type === 'N2').length / V;
+            let cH2 = particles.filter(p => p.type === 'H2').length / V;
+            let cNH3 = particles.filter(p => p.type === 'NH3').length / V;
+
+            let current_rF = 0, current_rB = 0, P_total = 0;
+
+            if (activeSystem === 'NO2') {
+                let kf = 0.05 * Math.exp(2000 * (1/300 - 1/T)); 
+                let kb = 0.20 * Math.exp(4000 * (1/300 - 1/T)); 
+                current_rF = kf * (cNO2 * cNO2); current_rB = kb * cN2O4;
+                disp.NO2 = jumpFlags.NO2 ? cNO2*V : disp.NO2 * 0.92 + cNO2*V * 0.08;
+                disp.N2O4 = jumpFlags.N2O4 ? cN2O4*V : disp.N2O4 * 0.92 + cN2O4*V * 0.08;
+                P_total = ((disp.NO2 + disp.N2O4) * R * T) / V;
+            } else if (activeSystem === 'HABER') {
+                let kf = 0.0005 * Math.exp(2000 * (1/300 - 1/T)); 
+                let kb = 0.0135 * Math.exp(4000 * (1/300 - 1/T)); 
+                current_rF = kf * cN2 * Math.pow(cH2, 3); current_rB = kb * (cNH3 * cNH3);
+                disp.N2 = jumpFlags.N2 ? cN2*V : disp.N2 * 0.92 + cN2*V * 0.08;
+                disp.H2 = jumpFlags.H2 ? cH2*V : disp.H2 * 0.92 + cH2*V * 0.08;
+                disp.NH3 = jumpFlags.NH3 ? cNH3*V : disp.NH3 * 0.92 + cNH3*V * 0.08;
+                P_total = ((disp.N2 + disp.H2 + disp.NH3) * R * T) / V;
+            }
+
+            processEvents(current_rF, current_rB);
+
+            let tempFactor = Math.sqrt(T / 300);
+            let bounds = getBounds();
+            for (let p of particles) p.update(tempFactor, bounds);
+            handleCollisions();
+
+            disp.Rf = jumpFlags.Rf ? current_rF : disp.Rf * 0.90 + current_rF * 0.10;
+            disp.Rb = jumpFlags.Rb ? current_rB : disp.Rb * 0.90 + current_rB * 0.10;
+            for(let key in jumpFlags) jumpFlags[key] = false;
+            
+            time += dt_chart; history.time.push(time.toFixed(1));
+            history.NO2.push(disp.NO2); history.N2O4.push(disp.N2O4);
+            history.N2.push(disp.N2); history.H2.push(disp.H2); history.NH3.push(disp.NH3);
+            history.RateF.push(disp.Rf); history.RateB.push(disp.Rb); history.Pressure.push(P_total);
+            
+            let actionStrs = Object.values(pendingActions);
+            history.Actions.push(actionStrs.length > 0 ? actionStrs.join(' & ') : null); 
+            pendingActions = {}; 
+
+            if (history.time.length > maxMemoryPoints) { for (let key in history) history[key].shift(); }
+
+            let endIdx = history.time.length - 1;
+            let startIdx = Math.max(0, endIdx - visualDataPoints + 1);
+            updateChartWindows(startIdx, endIdx);
+        }
+        drawSystem();
+        setTimeout(() => { requestAnimationFrame(updateSimulation); }, 30); 
+    }
+
+    // --- UI 事件綁定 ---
+    function snapToPresent() {
+        if (isPaused) {
+            let scrubber = document.getElementById('timeScrubber');
+            let maxIdx = history.time.length - 1;
+            if (parseInt(scrubber.value) !== maxIdx && maxIdx >= 0) {
+                scrubber.value = maxIdx; scrubber.dispatchEvent(new Event('input'));
+            }
+        }
+    }
+
+    document.getElementById('tempSlider').addEventListener('input', (e) => {
+        T = parseFloat(e.target.value); document.getElementById('tempVal').innerText = T;
+        tempChangeMode = 0; updateTempButtons(); 
+        jumpFlags.Rf = true; jumpFlags.Rb = true; snapToPresent(); pendingActions['temp'] = `溫度: ${T}K`; 
+        if(isPaused) drawSystem();
+    });
+
+    document.getElementById('volSlider').addEventListener('input', (e) => {
+        V = parseFloat(e.target.value); document.getElementById('volVal').innerText = V.toFixed(1);
+        let bounds = getBounds();
+        for(let p of particles) { if(p.y < bounds.minY + p.radius) p.y = bounds.minY + p.radius; }
+        jumpFlags.Rf = true; jumpFlags.Rb = true; snapToPresent(); pendingActions['vol'] = `容積: ${V}L`; 
+        if(isPaused) drawSystem();
+    });
+
+    window.addCustomSubstance = function() {
+        let type = document.getElementById('substanceSelect').value;
+        let amount = parseInt(document.getElementById('addAmount').value);
+        if (isNaN(amount) || amount <= 0) return;
+        let currentTotal = particles.length;
+        if (currentTotal + amount > MAX_PARTICLES) {
+            amount = MAX_PARTICLES - currentTotal;
+            if (amount <= 0) { alert('⚠️ 已達安全容量 (150莫耳)！'); return; } 
+        }
+        snapToPresent();
+        let bounds = getBounds();
+        for(let i=0; i<amount; i++) addRandomParticle(type, bounds);
+        
+        jumpFlags[type] = true; 
+        if (activeSystem === 'NO2') { jumpFlags.Rf = type==='NO2'; jumpFlags.Rb = type==='N2O4'; }
+        else { jumpFlags.Rf = (type==='N2' || type==='H2'); jumpFlags.Rb = (type==='NH3'); }
+        
+        let currentAdd = pendingActions['add'] || '';
+        pendingActions['add'] = currentAdd ? currentAdd + ` +${amount} ${type}` : `+${amount} ${type}`;
+        if(isPaused) drawSystem();
+    };
+
+    window.removeCustomSubstance = function() {
+        let type = document.getElementById('substanceSelect').value;
+        let amount = parseInt(document.getElementById('addAmount').value);
+        if (isNaN(amount) || amount <= 0) return;
+        snapToPresent();
+        
+        let targetParticles = particles.filter(p => p.type === type && !p.toBeRemoved);
+        let actualRemove = Math.min(amount, targetParticles.length);
+        if (actualRemove === 0) { alert(`⚠️ 沒有 ${type} 可以移除了！`); return; }
+
+        targetParticles.sort(() => Math.random() - 0.5);
+        for(let i = 0; i < actualRemove; i++) targetParticles[i].toBeRemoved = true;
+        particles = particles.filter(p => !p.toBeRemoved);
+        
+        jumpFlags[type] = true; 
+        if (activeSystem === 'NO2') { jumpFlags.Rf = type==='NO2'; jumpFlags.Rb = type==='N2O4'; }
+        else { jumpFlags.Rf = (type==='N2' || type==='H2'); jumpFlags.Rb = (type==='NH3'); }
+        
+        let currentAction = pendingActions['remove'] || '';
+        pendingActions['remove'] = currentAction ? currentAction + ` -${actualRemove} ${type}` : `-${actualRemove} ${type}`;
+        if(isPaused) drawSystem();
+    };
+
+    window.renderMarkers = function() {
+        const track = document.getElementById('markerTrack'); track.innerHTML = '';
+        const maxIdx = history.time.length - 1;
+        if (maxIdx <= 0) return;
+        history.Actions.forEach((action, idx) => {
+            if (action) {
+                let marker = document.createElement('div');
+                marker.style.position = 'absolute'; marker.style.left = `${(idx / maxIdx) * 100}%`;
+                marker.style.transform = 'translateX(-50%)'; marker.style.top = 'calc(50% - 8px)';
+                marker.style.height = '16px'; marker.style.width = '4px'; marker.style.backgroundColor = '#e74c3c';
+                track.appendChild(marker);
+            }
+        });
+    };
+
+    window.jumpToAction = function(direction) {
+        if (!isPaused) return;
+        let currentIdx = parseInt(document.getElementById('timeScrubber').value);
+        let targetIdx = -1;
+        if (direction === -1) {
+            for (let i = currentIdx - 1; i >= 0; i--) { if (history.Actions[i]) { targetIdx = i; break; } }
+        } else {
+            for (let i = currentIdx + 1; i < history.time.length; i++) { if (history.Actions[i]) { targetIdx = i; break; } }
+        }
+        if (targetIdx !== -1) { document.getElementById('timeScrubber').value = targetIdx; document.getElementById('timeScrubber').dispatchEvent(new Event('input')); }
+    };
+
+    window.togglePause = function(e) {
+        if(e) e.stopPropagation();
+        isPaused = !isPaused;
+        const mainBtn = document.getElementById('mainPauseBtn');
+        const bottomBtn = document.getElementById('pauseBtn');
+        const scrubberBlock = document.getElementById('scrubberBlock');
+        const autoPlayControls = document.getElementById('autoPlayControls');
+        const slider = document.getElementById('timeScrubber');
+        const chartsPanel = document.querySelector('.charts-section');
+        const drawer = document.getElementById('bottomDrawer');
+        
+        // 恢復運作時，強制關閉圖表自動播放
+        if (!isPaused) stopAutoPlay(); 
+
+        if (isPaused) {
+            mainBtn.innerHTML = '▶️ 繼續模擬'; mainBtn.style.backgroundColor = '#2ecc71';
+            bottomBtn.innerHTML = '▶️ 繼續模擬'; bottomBtn.style.backgroundColor = '#2ecc71';
+            
+            // 將回溯面板展開在第三個區塊內，並顯示上方自動播放列
+            scrubberBlock.style.display = 'flex';
+            autoPlayControls.style.display = 'flex';
+            if (!isChartLocked) chartsPanel.classList.add('is-paused'); 
+            slider.max = history.time.length - 1; slider.value = history.time.length - 1;
+            
+            // 當暫停時，為了讓老師看到回溯時間軸，自動展開控制抽屜
+            if (drawer.classList.contains('drawer-collapsed')) toggleDrawer();
+
+            renderMarkers(); slider.dispatchEvent(new Event('input')); drawSystem(); 
+        } else {
+            mainBtn.innerHTML = '⏸️ 暫停 / 回溯'; mainBtn.style.backgroundColor = '#e67e22';
+            bottomBtn.innerHTML = '⏸️ 暫停 / 啟用回溯'; bottomBtn.style.backgroundColor = '#e67e22';
+            
+            scrubberBlock.style.display = 'none'; 
+            autoPlayControls.style.display = 'none';
+            chartsPanel.classList.remove('is-paused'); 
+            let endIdx = history.time.length - 1;
+            updateChartWindows(Math.max(0, endIdx - visualDataPoints + 1), endIdx);
+        }
+    };
+
+    // 自動打斷播放邏輯綁定至拖曳事件
+    document.getElementById('timeScrubber').addEventListener('mousedown', stopAutoPlay);
+    document.getElementById('timeScrubber').addEventListener('touchstart', stopAutoPlay, {passive: true});
+    
+    document.getElementById('timeScrubber').addEventListener('input', (e) => {
+        if (!isPaused) return;
+        let targetIdx = parseInt(e.target.value); let maxIdx = history.time.length - 1;
+        let startIdx = targetIdx - Math.floor(visualDataPoints * 0.25);
+        let endIdx = startIdx + visualDataPoints - 1;
+
+        if (endIdx > maxIdx) { endIdx = maxIdx; startIdx = Math.max(0, endIdx - visualDataPoints + 1); }
+        if (startIdx < 0) { startIdx = 0; endIdx = Math.min(maxIdx, startIdx + visualDataPoints - 1); }
+
+        updateChartWindows(startIdx, endIdx);
+        
+        let closestEvent = ""; let minDiff = Infinity;
+        for (let i = Math.max(0, targetIdx - 15); i <= Math.min(maxIdx, targetIdx + 15); i++) {
+            if (history.Actions[i]) {
+                let diff = Math.abs(i - targetIdx);
+                if (diff < minDiff) { minDiff = diff; closestEvent = history.Actions[i]; }
+            }
+        }
+        document.getElementById('eventDisplay').innerText = closestEvent;
+    });
+
+    const chartsPanel = document.querySelector('.charts-section');
+    let isDraggingChart = false; let lastChartX = 0;
+
+    document.getElementById('lockChartCb').addEventListener('change', (e) => {
+        isChartLocked = e.target.checked;
+        if (isChartLocked) {
+            chartsPanel.classList.remove('is-paused'); 
+            stopAutoPlay(); // 鎖定時停止自動播放
+        } else {
+            if (isPaused) chartsPanel.classList.add('is-paused'); 
+            [molesChart, rateChart, pressureChart].forEach(c => { if (c) { c.setActiveElements([]); if (c.tooltip) c.tooltip.setActiveElements([], {x: 0, y: 0}); c.update(); } });
+        }
+    });
+
+    const startChartDrag = (e) => {
+        if (!isPaused || isChartLocked) return; 
+        isDraggingChart = true; lastChartX = e.clientX || (e.touches && e.touches[0].clientX);
+        stopAutoPlay(); // 使用者主動拖拉時打斷播放
+    };
+
+    const doChartDrag = (e) => {
+        if (!isDraggingChart || !isPaused || isChartLocked) return; 
+        let currentX = e.clientX || (e.touches && e.touches[0].clientX);
+        if (currentX === undefined) return;
+        let deltaX = currentX - lastChartX;
+        
+        if (Math.abs(deltaX) >= 2) {
+            let scrubber = document.getElementById('timeScrubber');
+            let newVal = Math.max(0, Math.min(parseInt(scrubber.max), parseInt(scrubber.value) - Math.round(deltaX / 2)));
+            if (newVal !== parseInt(scrubber.value)) { scrubber.value = newVal; scrubber.dispatchEvent(new Event('input')); lastChartX = currentX; }
+        }
+    };
+
+    const stopChartDrag = () => { isDraggingChart = false; };
+
+    chartsPanel.addEventListener('mousedown', startChartDrag); window.addEventListener('mousemove', doChartDrag); window.addEventListener('mouseup', stopChartDrag);
+    chartsPanel.addEventListener('touchstart', startChartDrag, {passive: true}); window.addEventListener('touchmove', doChartDrag, {passive: true}); window.addEventListener('touchend', stopChartDrag);
+
+    // --- 活塞手動拖拉邏輯 ---
+    let isDraggingPiston = false;
+
+    canvas.addEventListener('mousedown', (e) => {
+        let rect = canvas.getBoundingClientRect();
+        let scaleX = canvas.width / rect.width; let scaleY = canvas.height / rect.height;
+        let mouseX = (e.clientX - rect.left) * scaleX; let mouseY = (e.clientY - rect.top) * scaleY;
+        let bounds = getBounds();
+        if (mouseX >= bounds.minX && mouseX <= bounds.maxX && mouseY >= bounds.minY - 30 && mouseY <= bounds.minY + 10) {
+            isDraggingPiston = true;
+        }
+    });
+
+    window.addEventListener('mousemove', (e) => {
+        let rect = canvas.getBoundingClientRect();
+        let scaleY = canvas.height / rect.height; let scaleX = canvas.width / rect.width;
+        let mouseY = (e.clientY - rect.top) * scaleY; let mouseX = (e.clientX - rect.left) * scaleX;
+        let bounds = getBounds();
+
+        if (!isDraggingPiston) {
+            if (mouseX >= bounds.minX && mouseX <= bounds.maxX && mouseY >= bounds.minY - 30 && mouseY <= bounds.minY + 10) canvas.style.cursor = 'ns-resize';
+            else canvas.style.cursor = 'default';
+        }
+
+        if (isDraggingPiston) {
+            canvas.style.cursor = 'ns-resize';
+            let maxAvailableHeight = canvas.height - 55;
+            let currentHeight = canvas.height - 25 - mouseY;
+            let newV = (currentHeight / maxAvailableHeight) * 20;
+            newV = Math.max(5, Math.min(20, newV));
+            
+            if (Math.abs(newV - V) > 0.1) {
+                V = newV;
+                document.getElementById('volSlider').value = V;
+                document.getElementById('volVal').innerText = V.toFixed(1);
+                
+                let newBounds = getBounds();
+                for(let p of particles) { if(p.y < newBounds.minY + p.radius) p.y = newBounds.minY + p.radius; }
+                jumpFlags.Rf = true; jumpFlags.Rb = true;
+                snapToPresent();
+                pendingActions['vol'] = `容積: ${V.toFixed(1)}L`; 
+                if(isPaused) drawSystem();
+            }
+        }
+    });
+
+    window.addEventListener('mouseup', () => { isDraggingPiston = false; });
+
+    canvas.addEventListener('touchstart', (e) => {
+        let rect = canvas.getBoundingClientRect();
+        let scaleX = canvas.width / rect.width; let scaleY = canvas.height / rect.height;
+        let touch = e.touches[0];
+        let mouseX = (touch.clientX - rect.left) * scaleX; let mouseY = (touch.clientY - rect.top) * scaleY;
+        let bounds = getBounds();
+        if (mouseX >= bounds.minX && mouseX <= bounds.maxX && mouseY >= bounds.minY - 40 && mouseY <= bounds.minY + 20) {
+            isDraggingPiston = true; e.preventDefault();
+        }
+    }, {passive: false});
+
+    window.addEventListener('touchmove', (e) => {
+        if (isDraggingPiston) {
+            e.preventDefault();
+            let rect = canvas.getBoundingClientRect();
+            let scaleY = canvas.height / rect.height;
+            let mouseY = (e.touches[0].clientY - rect.top) * scaleY;
+            let maxAvailableHeight = canvas.height - 55;
+            let currentHeight = canvas.height - 25 - mouseY;
+            let newV = (currentHeight / maxAvailableHeight) * 20;
+            newV = Math.max(5, Math.min(20, newV));
+            
+            if (Math.abs(newV - V) > 0.1) {
+                V = newV;
+                document.getElementById('volSlider').value = V; document.getElementById('volVal').innerText = V.toFixed(1);
+                let newBounds = getBounds();
+                for(let p of particles) { if(p.y < newBounds.minY + p.radius) p.y = newBounds.minY + p.radius; }
+                jumpFlags.Rf = true; jumpFlags.Rb = true;
+                snapToPresent(); pendingActions['vol'] = `容積: ${V.toFixed(1)}L`; 
+                if(isPaused) drawSystem();
+            }
+        }
+    }, {passive: false});
+
+    window.addEventListener('touchend', () => { isDraggingPiston = false; });
+
+    window.onload = function() {
+        switchSystem('NO2'); 
+        updateSimulation();
+    };
+</script>
+</body>
+</html>
