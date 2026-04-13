@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>相態與溶解度動態平衡V12</title>
+    <title>相態與溶解度動態平衡V13</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         html, body { height: 100%; margin: 0; padding: 0; background-color: #f5f7fa; color: #2c3e50; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; overflow: hidden; display: flex; flex-direction: column; }
@@ -390,7 +390,8 @@
                     this.toBeRemoved = true;
                 } else if (!isOpenSystem && this.y < bounds.pistonY + this.radius) { 
                     this.y = bounds.pistonY + this.radius; this.vy *= -1; 
-                    if (this.markedForCondensation && Math.random() < 0.1) {
+                    // 【修正 1】加上 this.type === 'H2O' 條件，確保 CO2 絕對不會凝結在活塞或玻璃上！
+                    if (this.type === 'H2O' && this.markedForCondensation && Math.random() < 0.1) {
                         this.state = 'drop_top'; this.vy = 0; this.vx = 0;
                         this.markedForCondensation = false;
                     }
@@ -550,11 +551,11 @@
             removedAmt = Math.min(requestAmt, n_mobile); 
             n_mobile -= removedAmt; 
             let targets = particles.filter(p => p.type === 'H2O' && p.state === 'gas');
-            let count = Math.min(targets.length, removedAmt * 50);
-            for(let i=0; i<count; i++) targets[i].toBeRemoved = true;
+            // 【修復】當莫耳數歸零時，強制清除所有對應的視覺粒子
+            let count = (n_mobile < 0.01) ? targets.length : Math.ceil(removedAmt * 100);
+            for(let i=0; i<Math.min(targets.length, count); i++) targets[i].toBeRemoved = true;
         }
         else if(val === 'CO2_g') { 
-            // 汽水系統：移除氣體時，如果氣相不夠，從溶解態中抽出
             removedAmt = Math.min(requestAmt, n_mobile + n_bulk); 
             let fromGas = Math.min(removedAmt, n_mobile);
             let fromLiq = removedAmt - fromGas;
@@ -562,16 +563,22 @@
             n_bulk -= fromLiq;
             
             let targets = particles.filter(p => p.type === 'CO2' && p.state === 'gas');
-            let count = Math.min(targets.length, fromGas * 20);
-            for(let i=0; i<count; i++) targets[i].toBeRemoved = true;
+            let count = (n_mobile < 0.01) ? targets.length : Math.ceil(fromGas * 60);
+            for(let i=0; i<Math.min(targets.length, count); i++) targets[i].toBeRemoved = true;
         }
         else if(val === 'SUGAR_s') { 
-            // 糖系統：移除固體時，如果固體不夠，從溶解態中抽出
             removedAmt = Math.min(requestAmt, n_bulk + n_mobile); 
             let fromSolid = Math.min(removedAmt, n_bulk);
             let fromAq = removedAmt - fromSolid;
             n_bulk -= fromSolid;
             n_mobile -= fromAq;
+            
+            // 【修正 2】手動移除物質時，精確計算並移除水中對應的「溶解糖」方塊粒子
+            if (fromAq > 0) {
+                let targets = particles.filter(p => p.type === 'SUGAR' && p.state === 'aq');
+                let count = (n_mobile < 0.01) ? targets.length : Math.ceil(fromAq * 15);
+                for(let i=0; i<Math.min(targets.length, count); i++) targets[i].toBeRemoved = true;
+            }
         }
         
         if (removedAmt > 0) {
