@@ -1,0 +1,975 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>相態與溶解度動態平衡</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        html, body { height: 100%; margin: 0; padding: 0; background-color: #f5f7fa; color: #2c3e50; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; overflow: hidden; display: flex; flex-direction: column; }
+        
+        .top-header { display: flex; justify-content: space-between; align-items: center; padding: 8px 20px; background: white; box-shadow: 0 2px 5px rgba(0,0,0,0.05); z-index: 10; }
+        h2 { margin: 0; font-size: 1.3em; color: #2c3e50; font-weight: bold; }
+        .system-switch { padding: 5px 12px; font-size: 1em; border-radius: 6px; border: 2px solid #3498db; background: #ecf0f1; cursor: pointer; font-weight: bold; color: #2980b9; outline: none; }
+
+        .main-stage { flex: 1; display: flex; overflow: hidden; padding: 15px; gap: 15px; }
+        
+        .canvas-section { flex: 1; background: white; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 10px; position: relative; }
+        canvas#particleCanvas { width: 100%; max-width: 600px; aspect-ratio: 6 / 5; height: auto; display: block; border: 2px solid #7f8c8d; background-color: #fff; border-radius: 6px; box-shadow: inset 0 0 12px rgba(0,0,0,0.1); }
+        
+        .floating-btn { position: absolute; padding: 5px 10px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 0.9em; color: white; box-shadow: 0 4px 6px rgba(0,0,0,0.15); transition: 0.2s; z-index: 10; }
+        .floating-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 12px rgba(0,0,0,0.2); }
+        
+        .charts-section { flex: 1.2; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; padding-right: 5px; position: relative; }
+        .chart-wrapper { flex: 1; background: white; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); padding: 10px; position: relative; min-height: 160px; }
+        .chart-custom-title { position: absolute; top: 12px; left: 32px; font-weight: bold; font-size: 0.95em; color: #34495e; pointer-events: none; z-index: 2; }
+        
+        .scrubber-panel { display: none; background: #fff9e6; padding: 12px 15px; border-radius: 10px; border: 1px solid #fdebd0; flex-direction: column; box-shadow: 0 2px 8px rgba(0,0,0,0.05); flex-shrink: 0; margin-bottom: 5px; }
+        .jump-btn { padding: 4px 8px; background: #e67e22; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 1.1em; width: auto; margin: 0; }
+        .jump-btn:hover { background: #d35400; }
+        
+        .play-btn { padding: 4px 8px; background: #34495e; color: white; border-radius: 4px; border: none; font-size: 0.85em; transition: 0.2s; cursor: pointer; white-space: nowrap; }
+        .play-btn:hover:not(:disabled) { background: #2c3e50; transform: translateY(-1px); }
+        .play-btn:disabled { opacity: 0.5; cursor: not-allowed; background: #95a5a6; }
+        .play-btn.active-play { background: #2ecc71; box-shadow: 0 0 10px rgba(46,204,113,0.6); transform: scale(1.05); }
+        
+        .charts-section.is-paused { cursor: grab; }
+        .charts-section.is-paused:active { cursor: grabbing; }
+
+        .help-btn { background: #f39c12; color: white; border: none; border-radius: 50%; width: 28px; height: 28px; font-weight: bold; font-size: 1em; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 5px rgba(0,0,0,0.1); transition: 0.2s; padding: 0; }
+        .help-btn:hover { background: #e67e22; transform: scale(1.1); }
+        .help-panel { max-height: 0; overflow-y: auto; background: #fff; padding: 0 20px; transition: max-height 0.3s ease, padding 0.3s ease; box-shadow: 0 2px 8px rgba(0,0,0,0.05); z-index: 9; flex-shrink: 0; }
+        .help-panel.open { max-height: 40vh; padding: 15px 20px; border-bottom: 1px solid #ecf0f1; }
+        .help-panel h3 { margin-top: 0; color: #2980b9; margin-bottom: 8px; font-size: 1.05em; }
+        .help-panel ul { margin: 0; padding-left: 20px; line-height: 1.5; color: #34495e; font-size: 0.95em; }
+        .help-panel li { margin-bottom: 6px; }
+
+        .bottom-drawer { background: white; box-shadow: 0 -4px 15px rgba(0,0,0,0.08); display: flex; flex-direction: column; z-index: 10; transition: height 0.3s ease; max-height: 45vh; flex-shrink: 0; }
+        .drawer-header { padding: 3px 20px; background: #34495e; color: white; cursor: pointer; display: flex; justify-content: space-between; align-items: center; user-select: none; min-height: 26px; }
+        .drawer-header h3 { margin: 0; font-size: 0.95em; }
+        .drawer-content { display: flex; flex-wrap: wrap; gap: 15px; padding: 15px 20px; overflow-y: auto; min-height: 0; align-content: flex-start; }
+        .drawer-collapsed .drawer-content { display: none; }
+        .drawer-content::-webkit-scrollbar { width: 8px; }
+        .drawer-content::-webkit-scrollbar-thumb { background: #bdc3c7; border-radius: 4px; }
+        
+        .control-block { flex: 1; min-width: 250px; background: #f8f9fa; padding: 15px; border-radius: 8px; border: 1px solid #e9ecef; }
+        .control-block h4 { margin: 0 0 10px 0; font-size: 1em; color: #2980b9; border-bottom: 2px solid #d4e6f1; padding-bottom: 5px; }
+        .control-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        .control-row label { font-weight: 600; font-size: 0.9em; width: 35%; }
+        .drawer-content input[type=range] { flex: 1; accent-color: #3498db; }
+        
+        button.action { padding: 6px 12px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; color: white; flex: 1; }
+        .btn-add { background: #27ae60; } .btn-remove { background: #e74c3c; }
+
+        @media (max-width: 800px) {
+            .main-stage { flex-direction: column; }
+            .canvas-section { flex: none; height: 35vh; min-height: 220px; }
+            canvas#particleCanvas { max-height: 100%; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="top-header">
+        <h2 id="equationTitle">H<sub>2</sub>O<sub>(l)</sub> &rightleftharpoons; H<sub>2</sub>O<sub>(g)</sub></h2>
+        <div style="display: flex; align-items: center; gap: 12px;">
+            <button class="help-btn" onclick="toggleHelp()" title="操作與教學說明">?</button>
+            <select id="systemSwitch" class="system-switch" onchange="switchSystem(this.value)">
+                <option value="WATER">1. 水的蒸發與凝結</option>
+                <option value="CO2">2. CO₂ 溶解與汽水冒泡</option>
+                <option value="SUGAR">3. 糖的溶解與結晶析出</option>
+            </select>
+        </div>
+    </div>
+    
+    <div id="helpPanel" class="help-panel">
+        <h3>📖 模擬器操作與教學說明</h3>
+        <ul>
+            <li><b>開局與開放容器：</b>水系統開局為真空，汽水與糖水則備有純水作為溶劑，請由下方加入物質。點擊「切換為開放系統」可展示氣體逸散，打破平衡導致反應單向進行。</li>
+            <li><b>純物理演算引擎：</b>圖表採用真實動力學公式。15L空間100度C僅需 0.5 莫耳水蒸氣，故液態水會穩如泰山，完全符合真實現象！</li>
+            <li><b>圖表 1 (總物質量)：</b>展現巨觀下反應物與產物平衡時的「定值」現象。當您點擊「+加入」時，會看見瞬間垂直飆高的干擾曲線，並迅速達到新的平衡。</li>
+            <li><b>圖表 2 (瞬間轉換量/速率)：</b>展現微觀下 $R_f = R_b$ 的動態平衡。當兩線完美重合交叉，即代表系統達平衡。</li>
+        </ul>
+    </div>
+    
+    <div class="main-stage">
+        <div class="canvas-section">
+            <div style="position: absolute; top: 10px; left: 10px; display: flex; align-items: center; gap: 6px; z-index: 10; background: rgba(255,255,255,0.9); padding: 4px 8px; border-radius: 6px; box-shadow: 0 4px 10px rgba(0,0,0,0.15);">
+                <button id="btnCool" class="floating-btn" style="position: relative; background-color: #3498db;" onclick="toggleTempChange(-1)">❄️ 降溫</button>
+                <div style="font-weight: bold; color: #2c3e50; font-size: 0.9em; text-align: center; min-width: 45px;"><span id="canvasTempVal">300</span>K</div>
+                <button id="btnHeat" class="floating-btn" style="position: relative; background-color: #e74c3c;" onclick="toggleTempChange(1)">🔥 加溫</button>
+            </div>
+
+            <div id="autoPlayControls" style="position: absolute; top: 10px; left: 50%; transform: translateX(-50%); display: none; gap: 6px; z-index: 10; background: rgba(255,255,255,0.9); padding: 4px 10px; border-radius: 6px; align-items: center; box-shadow: 0 4px 10px rgba(0,0,0,0.15);">
+                <span style="font-size: 0.85em; font-weight: bold; color: #2c3e50; margin-right: 3px;">自動:</span>
+                <button id="btnAutoPlayBack" class="play-btn" onclick="startAutoPlay(-1)">◀ 倒轉</button>
+                <button id="btnAutoPlayStop" class="play-btn" onclick="stopAutoPlay()" disabled>⏹ 停止</button>
+                <button id="btnAutoPlayForward" class="play-btn" onclick="startAutoPlay(1)">推進 ▶</button>
+            </div>
+
+            <button id="mainPauseBtn" class="floating-btn" style="top: 10px; right: 10px; background-color: #e67e22;" onclick="togglePause()">⏸️ 暫停 / 回溯</button>
+            
+            <canvas id="particleCanvas" width="600" height="500"></canvas>
+        </div>
+
+        <div class="charts-section">
+            <div id="scrubberBlock" class="scrubber-panel">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <h4 style="margin: 0; color: #d35400;">⏪ 圖表回溯與分析</h4>
+                    <label style="font-size: 0.9em; color: #c0392b; cursor: pointer; font-weight: bold; display: flex; align-items: center;">
+                        <input type="checkbox" id="lockChartCb" style="margin-right: 5px; width: 16px; height: 16px;"> 🔒 鎖定圖表看數據
+                    </label>
+                </div>
+                <div style="display: flex; align-items: center;">
+                    <button class="jump-btn" onclick="jumpToAction(-1)">⏮</button>
+                    <div style="position: relative; flex: 1; display: flex; align-items: center; height: 30px; margin: 0 10px;">
+                        <input type="range" id="timeScrubber" min="0" max="100" value="100" style="width: 100%; margin: 0;">
+                        <div id="markerTrack" style="position: absolute; width: 100%; height: 100%; pointer-events: none; z-index: 1;"></div>
+                    </div>
+                    <button class="jump-btn" onclick="jumpToAction(1)">⏭</button>
+                </div>
+                <span style="font-size: 0.8em; color: #7f8c8d; margin-top: 5px;">💡 提示：未鎖定時，也可直接在下方圖表左右拖曳滑動時間。</span>
+            </div>
+
+            <div class="chart-wrapper"><div class="chart-custom-title">1. 系統總物質量 (平衡時呈水平線)</div><canvas id="molesChart"></canvas></div>
+            <div class="chart-wrapper"><div class="chart-custom-title">2. 瞬間轉換量/速率 (平衡時必重合)</div><canvas id="rateChart"></canvas></div>
+            <div class="chart-wrapper"><div class="chart-custom-title">3. 氣體總壓力 (atm)</div><canvas id="pressureChart"></canvas></div>
+        </div>
+    </div>
+
+    <div id="bottomDrawer" class="bottom-drawer drawer-collapsed">
+        <div class="drawer-header" onclick="toggleDrawer()">
+            <h3>⚙️ 巨觀變因控制面板</h3><span id="drawerIcon">▲ 展開</span>
+        </div>
+        <div class="drawer-content">
+            <div class="control-block">
+                <h4>🌡️ 環境設定與狀態</h4>
+                <div class="control-row">
+                    <label style="color:#e74c3c;">容器狀態:</label>
+                    <button id="btnToggleSystem" onclick="toggleOpenSystem()" style="flex:1; background: #7f8c8d; color: white; padding: 6px; border-radius: 4px; border: none; cursor: pointer; font-weight: bold;">🔒 密閉容器 (點擊打開)</button>
+                </div>
+                <div class="control-row">
+                    <label>溫度: <span id="tempVal" style="color:#e74c3c;">300</span> K</label>
+                    <input type="range" id="tempSlider" min="273" max="373" value="300">
+                </div>
+                <div class="control-row">
+                    <label>上方空間: <span id="volVal" style="color:#7f8c8d;">5.0</span> L</label>
+                    <input type="range" id="volSlider" min="2" max="15" value="5" step="0.5">
+                </div>
+                <div class="control-row">
+                    <label>液體水量: <span id="liqVal" style="color:#2980b9;">0.0</span> L</label>
+                    <input type="range" id="liqSlider" min="0" max="10" value="0" step="0.1">
+                </div>
+            </div>
+
+            <div class="control-block">
+                <h4>🧪 物質干擾 (點擊加入開始)</h4>
+                <div class="control-row">
+                    <select id="substanceSelect" style="flex:1; padding: 6px; border-radius: 4px;">
+                        <option value="H2O_l">加入液態水</option>
+                        <option value="H2O_g">注入水蒸氣</option>
+                    </select>
+                </div>
+                <div class="control-row" style="gap: 10px;">
+                    <input type="number" id="addAmount" value="10" min="1" max="50" style="width: 60px; padding: 6px; text-align: center;"> 莫耳
+                </div>
+                <div style="display: flex; gap: 8px;">
+                    <button class="action btn-add" onclick="addCustomSubstance()">+ 加入</button>
+                    <button class="action btn-remove" onclick="removeCustomSubstance()">- 移除</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+<script>
+    function toggleDrawer() {
+        const drawer = document.getElementById('bottomDrawer');
+        drawer.classList.toggle('drawer-collapsed');
+        document.getElementById('drawerIcon').innerText = drawer.classList.contains('drawer-collapsed') ? '▲ 展開' : '▼ 收合';
+        setTimeout(() => { if(molesChart) {molesChart.resize(); rateChart.resize(); pressureChart.resize();} }, 300);
+    }
+    function toggleHelp() { document.getElementById('helpPanel').classList.toggle('open'); }
+
+    // --- 全新核心架構：嚴謹動力學與視覺完全脫鉤 ---
+    let activeSystem = 'WATER'; 
+    let isOpenSystem = false; 
+    let V_gas = 5.0;  
+    let V_liq = 0.0;  
+    let T = 300; 
+    const R = 0.082; 
+    
+    let n_bulk = 0.0; 
+    let n_mobile = 0.0; 
+    let Rf = 0; let Rb = 0; let P_tot = 0;
+    
+    // 【物理與圖表解綁】設定時間、物理步長與影格計數器
+    let time = 0; 
+    const physical_dt = 0.05; 
+    let frameCounter = 0;
+    let isPaused = false;
+    
+    window.accum_evap_particles = 0;
+    window.accum_cond_particles = 0;
+
+    const maxMemoryPoints = 3000; 
+    // 【黃金視窗比例】 240個點，每2幀推進一次（約一秒30點），圖表總寬涵蓋真實世界 8 秒鐘
+    const visualDataPoints = 240; 
+    let history = { time: [], n1: [], n2: [], RateF: [], RateB: [], Pressure: [], Actions: [] };
+    let disp = { n1: 0, n2: 0, Rf: 0, Rb: 0, Pressure: 0 }; 
+    let pendingActions = {};
+    
+    // --- 系統開關控制 ---
+    window.toggleOpenSystem = function() {
+        isOpenSystem = !isOpenSystem;
+        const btn = document.getElementById('btnToggleSystem');
+        const volSlider = document.getElementById('volSlider');
+
+        if (isOpenSystem) {
+            btn.innerText = "🔓 開放容器 (點擊關閉)"; btn.style.background = "#e74c3c";
+            volSlider.disabled = true;
+            pendingActions['sys'] = '容器已打開';
+        } else {
+            btn.innerText = "🔒 密閉容器 (點擊打開)"; btn.style.background = "#7f8c8d";
+            volSlider.disabled = (activeSystem === 'SUGAR');
+            pendingActions['sys'] = '容器已密閉';
+        }
+        snapToPresent(); if(isPaused) drawSystem();
+    }
+
+    // --- 圖表設定 ---
+    let isChartLocked = false;
+    function syncTooltips(sourceChart, activeElements) {
+        if (!isChartLocked) return;
+        let charts = [molesChart, rateChart, pressureChart];
+        if (!activeElements || activeElements.length === 0) {
+            charts.forEach(c => { if (c !== sourceChart && c) { c.setActiveElements([]); if (c.tooltip) c.tooltip.setActiveElements([], {x: 0, y: 0}); c.update(); } });
+            return;
+        }
+        let dataIndex = activeElements[0].index;
+        charts.forEach(c => {
+            if (c !== sourceChart && c) {
+                let meta = c.getDatasetMeta(0);
+                if (meta.data[dataIndex]) {
+                    let targetElements = c.data.datasets.map((_, idx) => ({ datasetIndex: idx, index: dataIndex }));
+                    c.setActiveElements(targetElements);
+                    if (c.tooltip) c.tooltip.setActiveElements(targetElements, { x: meta.data[dataIndex].x, y: meta.data[dataIndex].y });
+                    c.update();
+                }
+            }
+        });
+    }
+
+    Chart.defaults.font.family = "'Segoe UI', Tahoma, sans-serif";
+    
+    const getCommonOpts = (isPressure = false) => ({ 
+        responsive: true, maintainAspectRatio: false, animation: false, 
+        interaction: { mode: 'index', intersect: false },
+        scales: { 
+            x: { display: false }, 
+            y: { 
+                beginAtZero: true,
+                afterFit: function(scaleInstance) {
+                    scaleInstance.width = 55;
+                }
+            } 
+        },
+        elements: { point: { radius: 0 }, line: { borderWidth: 2.5, fill: isPressure, tension: 0 } }, 
+        plugins: { legend: { position: 'top', align: 'end' }, tooltip: { padding: 10 } },
+        onHover: function(e, activeElements, chart) { syncTooltips(chart, activeElements); }
+    });
+
+    let molesChart = new Chart(document.getElementById('molesChart'), { type: 'line', data: { labels: history.time, datasets: [] }, options: getCommonOpts(false) });
+    let rateChart = new Chart(document.getElementById('rateChart'), { type: 'line', data: { labels: history.time, datasets: [] }, options: getCommonOpts(false) });
+    
+    let pressureChart = new Chart(document.getElementById('pressureChart'), { 
+        type: 'line', 
+        data: { labels: history.time, datasets: [{ label: '壓力 (atm)', borderColor: '#16a085', data: history.Pressure, backgroundColor: 'rgba(22, 160, 133, 0.15)', tension: 0, fill: true }] }, 
+        options: getCommonOpts(true) 
+    });
+
+    function updateChartWindows(startIdx, endIdx) {
+        if (history.time.length === 0) return;
+        let startLabel = history.time[startIdx]; let endLabel = history.time[endIdx];
+        if (startLabel !== undefined && endLabel !== undefined) {
+            [molesChart, rateChart, pressureChart].forEach(c => {
+                c.options.scales.x.min = startLabel; c.options.scales.x.max = endLabel; c.update('none'); 
+            });
+        }
+    }
+
+    // --- 自動播放邏輯 ---
+    let autoPlayTimer = null;
+    window.startAutoPlay = function(direction) {
+        if (!isPaused) return; 
+        let lockCb = document.getElementById('lockChartCb');
+        if (lockCb.checked) { lockCb.checked = false; lockCb.dispatchEvent(new Event('change')); }
+        document.getElementById('btnAutoPlayBack').classList.remove('active-play');
+        document.getElementById('btnAutoPlayForward').classList.remove('active-play');
+        if (direction === -1) document.getElementById('btnAutoPlayBack').classList.add('active-play');
+        if (direction === 1) document.getElementById('btnAutoPlayForward').classList.add('active-play');
+        let stopBtn = document.getElementById('btnAutoPlayStop'); stopBtn.disabled = false; stopBtn.style.background = '#e74c3c'; 
+
+        if (autoPlayTimer) clearInterval(autoPlayTimer);
+        autoPlayTimer = setInterval(() => {
+            let scrubber = document.getElementById('timeScrubber');
+            let currentVal = parseInt(scrubber.value); let maxVal = parseInt(scrubber.max);
+            let newVal = currentVal + direction * 2; // 稍微加快回放拖曳速度
+            if (newVal <= 0) { newVal = 0; stopAutoPlay(); } else if (newVal >= maxVal) { newVal = maxVal; stopAutoPlay(); }
+            if (newVal !== currentVal) { scrubber.value = newVal; scrubber.dispatchEvent(new Event('input')); }
+        }, 50); 
+    };
+
+    window.stopAutoPlay = function() {
+        if (autoPlayTimer) { clearInterval(autoPlayTimer); autoPlayTimer = null; }
+        document.getElementById('btnAutoPlayBack').classList.remove('active-play');
+        document.getElementById('btnAutoPlayForward').classList.remove('active-play');
+        let btnStop = document.getElementById('btnAutoPlayStop'); btnStop.disabled = true; btnStop.style.background = '#95a5a6';
+    };
+
+    // --- 脫鉤後的純淨粒子系統 ---
+    const canvas = document.getElementById('particleCanvas'); const ctx = canvas.getContext('2d');
+    let particles = []; let flashes = []; 
+
+    class Particle {
+        constructor(type, state, x, y) {
+            this.id = Math.random(); this.type = type; this.state = state; 
+            this.x = x; this.y = y; this.toBeRemoved = false;
+            this.radius = (type==='SUGAR') ? 4 : 3;
+            
+            let speed = (Math.random() + 0.5);
+            if(state === 'gas') speed *= 4.0;
+            else if(state === 'aq') speed *= 1.0; 
+            else speed = 0; 
+            
+            let angle = Math.random() * Math.PI * 2;
+            this.vx = Math.cos(angle) * speed; this.vy = Math.sin(angle) * speed;
+        }
+
+        update(tempFactor, bounds) {
+            if (this.state === 'solid') return; 
+            if (this.state === 'bubble') {
+                this.y -= 2.5; this.x += (Math.random()-0.5) * 1.5; 
+                if (this.y <= bounds.liquidY + this.radius) {
+                    this.state = 'gas'; this.y = bounds.liquidY - 5; 
+                    this.vy = -(3.0 + Math.random()*3.0); this.vx = (Math.random()-0.5)*4;
+                    flashes.push({x: this.x, y: bounds.liquidY, c:'#fff', life:0.8});
+                }
+                return;
+            }
+            
+            if (this.state === 'drop_top') {
+                this.y = bounds.pistonY + this.radius; 
+                if (Math.random() < 0.02 * tempFactor) { this.state = 'falling_drop'; this.vy = 2.0; this.vx = 0; }
+                return;
+            } else if (this.state === 'drop_wall') {
+                this.y += 1.0 * tempFactor; 
+                if (this.y >= bounds.liquidY) { this.toBeRemoved = true; flashes.push({x: this.x, y: bounds.liquidY, c:'#3498db', life:0.5}); }
+                if (this.y < bounds.pistonY + this.radius) this.y = bounds.pistonY + this.radius;
+                return;
+            } else if (this.state === 'falling_drop') {
+                this.y += 4.0 * tempFactor; 
+                if (this.y >= bounds.liquidY) { this.toBeRemoved = true; flashes.push({x: this.x, y: bounds.liquidY, c:'#3498db', life:0.5}); }
+                return;
+            }
+
+            if (this.state === 'aq') {
+                this.vx += (Math.random()-0.5) * 0.5; this.vy += (Math.random()-0.5) * 0.5;
+                let v = Math.hypot(this.vx, this.vy); if(v > 2) { this.vx = (this.vx/v)*2; this.vy = (this.vy/v)*2; }
+            }
+
+            this.x += this.vx * tempFactor; this.y += this.vy * tempFactor;
+            
+            if (this.x < bounds.minX + this.radius) { this.x = bounds.minX + this.radius; this.vx *= -1; }
+            if (this.x > bounds.maxX - this.radius) { this.x = bounds.maxX - this.radius; this.vx *= -1; }
+            
+            if (this.state === 'gas') {
+                if (isOpenSystem && this.y < 0) {
+                    this.toBeRemoved = true;
+                } else if (!isOpenSystem && this.y < bounds.pistonY + this.radius) { 
+                    this.y = bounds.pistonY + this.radius; this.vy *= -1; 
+                    if (this.markedForCondensation && Math.random() < 0.1) {
+                        this.state = 'drop_top'; this.vy = 0; this.vx = 0;
+                        this.markedForCondensation = false;
+                    }
+                } 
+                
+                if (this.y > bounds.liquidY - this.radius) { 
+                    if (this.markedForCondensation) {
+                        this.toBeRemoved = true; this.markedForCondensation = false;
+                        flashes.push({x: this.x, y: bounds.liquidY, c:'#fff', life:0.5}); 
+                    } else {
+                        this.y = bounds.liquidY - this.radius; this.vy *= -1; 
+                    }
+                } 
+            } else if (this.state === 'aq') {
+                if (this.type === 'SUGAR' && this.markedForCondensation) {
+                    if (this.y > bounds.maxY - 20 && Math.abs(this.x - canvas.width/2) < 40) {
+                        this.toBeRemoved = true; this.markedForCondensation = false;
+                    }
+                }
+                if (this.y < bounds.liquidY + this.radius) { this.y = bounds.liquidY + this.radius; this.vy *= -1; } 
+                if (this.y > bounds.maxY - this.radius) { this.y = bounds.maxY - this.radius; this.vy *= -1; } 
+            }
+        }
+
+        draw(ctx) {
+            if (this.type === 'SUGAR') {
+                ctx.fillStyle = '#f39c12'; ctx.fillRect(this.x - 3, this.y - 3, 6, 6);
+                ctx.strokeStyle = '#d35400'; ctx.lineWidth = 1; ctx.strokeRect(this.x - 3, this.y - 3, 6, 6);
+                return;
+            }
+            ctx.beginPath();
+            if (this.type === 'H2O') {
+                ctx.fillStyle = this.state === 'gas' ? '#bdc3c7' : '#3498db'; 
+                ctx.arc(this.x, this.y, 3, 0, Math.PI*2); ctx.fill();
+            } else if (this.type === 'CO2') {
+                if (this.state === 'bubble') {
+                    ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.arc(this.x, this.y, 4, 0, Math.PI*2); ctx.stroke();
+                } else {
+                    ctx.fillStyle = this.state === 'gas' ? '#7f8c8d' : 'rgba(41, 128, 185, 0.8)';
+                    ctx.arc(this.x, this.y, 3, 0, Math.PI*2); ctx.fill();
+                }
+            }
+        }
+    }
+
+    function getBounds() {
+        let minX = 20, maxX = canvas.width - 20, maxY = canvas.height - 20; 
+        let totalHeight = canvas.height - 50; let maxV = 25; 
+        let h_liq = totalHeight * (V_liq / maxV); let h_gas = totalHeight * (V_gas / maxV);
+        let liquidY = maxY - h_liq; let pistonY = liquidY - h_gas;
+        return { minX, maxX, pistonY, liquidY, maxY, totalHeight, maxV };
+    }
+
+    // --- 系統切換與初始化 (從零開始) ---
+    window.switchSystem = function(sys) {
+        activeSystem = sys; particles = []; flashes = []; time = 0; frameCounter = 0;
+        
+        history.time.length = 0; history.n1.length = 0; history.n2.length = 0; 
+        history.RateF.length = 0; history.RateB.length = 0; history.Pressure.length = 0; history.Actions.length = 0;
+        disp = { n1: 0, n2: 0, Rf: 0, Rb: 0, Pressure: 0 };
+        pendingActions = {}; 
+        
+        isOpenSystem = false;
+        document.getElementById('btnToggleSystem').innerText = "🔒 密閉容器 (點擊打開)";
+        document.getElementById('btnToggleSystem').style.background = "#7f8c8d";
+        
+        const eqTitle = document.getElementById('equationTitle');
+        const sel = document.getElementById('substanceSelect');
+        
+        if(sys === 'WATER') {
+            eqTitle.innerHTML = `H<sub>2</sub>O<sub>(l)</sub> &rightleftharpoons; H<sub>2</sub>O<sub>(g)</sub>`;
+            sel.innerHTML = `<option value="H2O_l">加入液態水 (mol)</option><option value="H2O_g">注入水蒸氣 (mol)</option>`;
+            molesChart.data.datasets = [ 
+                { label: '液態水 (mol)', borderColor: '#3498db', backgroundColor: 'transparent', fill: false, data: history.n1, tension: 0 }, 
+                { label: '水蒸氣 (mol)', borderColor: '#95a5a6', backgroundColor: 'transparent', fill: false, data: history.n2, tension: 0 } 
+            ];
+            rateChart.data.datasets = [ 
+                { label: '蒸發速率 (l → g)', borderColor: '#e74c3c', backgroundColor: 'transparent', fill: false, data: history.RateF, tension: 0 }, 
+                { label: '凝結速率 (g → l)', borderColor: '#2980b9', backgroundColor: 'transparent', fill: false, data: history.RateB, tension: 0 } 
+            ];
+            V_gas = 5.0; V_liq = 0.0; T = 300; 
+            n_bulk = 0.0; n_mobile = 0.0; 
+            document.getElementById('volSlider').disabled = false;
+        } else if(sys === 'CO2') {
+            eqTitle.innerHTML = `CO<sub>2(g)</sub> + H<sub>2</sub>O<sub>(l)</sub> &rightleftharpoons; CO<sub>2(aq)</sub>`;
+            sel.innerHTML = `<option value="CO2_g">注入 CO₂ 氣體 (mol)</option>`;
+            molesChart.data.datasets = [ 
+                { label: '溶解態 CO₂ (mol)', borderColor: '#2980b9', backgroundColor: 'transparent', fill: false, data: history.n1, tension: 0 }, 
+                { label: '氣態 CO₂ (mol)', borderColor: '#7f8c8d', backgroundColor: 'transparent', fill: false, data: history.n2, tension: 0 } 
+            ];
+            rateChart.data.datasets = [ 
+                { label: '逸散速率 (aq → g)', borderColor: '#e74c3c', backgroundColor: 'transparent', fill: false, data: history.RateF, tension: 0 }, 
+                { label: '溶解速率 (g → aq)', borderColor: '#27ae60', backgroundColor: 'transparent', fill: false, data: history.RateB, tension: 0 } 
+            ];
+            V_gas = 5.0; V_liq = 5.0; T = 298; 
+            n_bulk = 0.0; n_mobile = 0.0; 
+            document.getElementById('volSlider').disabled = false;
+        } else if(sys === 'SUGAR') {
+            eqTitle.innerHTML = `糖<sub>(s)</sub> &rightleftharpoons; 糖<sub>(aq)</sub>`;
+            sel.innerHTML = `<option value="SUGAR_s">加入固體糖 (mol)</option>`;
+            molesChart.data.datasets = [ 
+                { label: '固體糖 (mol)', borderColor: '#f39c12', backgroundColor: 'transparent', fill: false, data: history.n1, tension: 0 }, 
+                { label: '溶解糖 (mol)', borderColor: '#3498db', backgroundColor: 'transparent', fill: false, data: history.n2, tension: 0 } 
+            ];
+            rateChart.data.datasets = [ 
+                { label: '溶解速率 (s → aq)', borderColor: '#e74c3c', backgroundColor: 'transparent', fill: false, data: history.RateF, tension: 0 }, 
+                { label: '結晶速率 (aq → s)', borderColor: '#9b59b6', backgroundColor: 'transparent', fill: false, data: history.RateB, tension: 0 } 
+            ];
+            V_gas = 5.0; V_liq = 5.0; T = 300; 
+            n_bulk = 0.0; n_mobile = 0.0;
+            document.getElementById('volSlider').disabled = true; 
+        }
+        
+        document.getElementById('volSlider').value = V_gas; document.getElementById('volVal').innerText = V_gas.toFixed(1);
+        document.getElementById('liqSlider').value = V_liq; document.getElementById('liqVal').innerText = V_liq.toFixed(1);
+        document.getElementById('tempSlider').value = T; document.getElementById('tempVal').innerText = T; document.getElementById('canvasTempVal').innerText = T.toFixed(1);
+        
+        molesChart.update(); rateChart.update(); pressureChart.update();
+        if (isPaused) togglePause();
+    };
+
+    window.addCustomSubstance = function() {
+        let val = document.getElementById('substanceSelect').value;
+        let amt = parseInt(document.getElementById('addAmount').value) || 0;
+        let b = getBounds();
+        
+        if(val === 'H2O_l') { 
+            n_bulk += amt; 
+            V_liq = Math.max(0.1, n_bulk * 0.5); 
+            document.getElementById('liqSlider').value = V_liq; document.getElementById('liqVal').innerText = V_liq.toFixed(1); 
+        }
+        if(val === 'H2O_g') { 
+            n_mobile += amt; 
+            for(let i=0; i<Math.min(amt*50, 200); i++) particles.push(new Particle('H2O', 'gas', b.minX + Math.random()*(b.maxX - b.minX), b.pistonY + 10 + Math.random()*(b.liquidY - b.pistonY - 20)));
+        }
+        if(val === 'CO2_g') { 
+            n_mobile += amt; 
+            for(let i=0; i<Math.min(amt*20, 200); i++) particles.push(new Particle('CO2', 'gas', b.minX + Math.random()*(b.maxX - b.minX), b.pistonY + 10 + Math.random()*(b.liquidY - b.pistonY - 20)));
+        }
+        if(val === 'SUGAR_s') { n_bulk += amt; }
+        
+        snapToPresent(); pendingActions['add'] = `+${amt} 物質`; if (isPaused) drawSystem();
+    };
+
+    window.removeCustomSubstance = function() {
+        let val = document.getElementById('substanceSelect').value;
+        let amt = parseInt(document.getElementById('addAmount').value) || 0;
+        
+        if(val === 'H2O_l') { 
+            amt = Math.min(amt, n_bulk); n_bulk -= amt; 
+            V_liq = Math.max(0.1, n_bulk * 0.5); if (n_bulk <= 0) V_liq = 0;
+            document.getElementById('liqSlider').value = V_liq; document.getElementById('liqVal').innerText = V_liq.toFixed(1); 
+        }
+        if(val === 'H2O_g' || val === 'CO2_g') { 
+            amt = Math.min(amt, n_mobile); n_mobile -= amt; 
+            let typeToRemove = val === 'H2O_g' ? 'H2O' : 'CO2';
+            let targets = particles.filter(p => p.type === typeToRemove && p.state === 'gas');
+            let count = Math.min(targets.length, amt * (typeToRemove==='H2O'?50:20));
+            for(let i=0; i<count; i++) targets[i].toBeRemoved = true;
+        }
+        if(val === 'SUGAR_s') { amt = Math.min(amt, n_bulk); n_bulk -= amt; }
+        
+        snapToPresent(); pendingActions['remove'] = `-${amt} 物質`; if (isPaused) drawSystem();
+    }
+
+    let tempChangeMode = 0; 
+    window.toggleTempChange = function(mode) {
+        if (tempChangeMode === mode) tempChangeMode = 0; else tempChangeMode = mode;
+        updateTempButtons();
+    }
+    function updateTempButtons() {
+        const btnCool = document.getElementById('btnCool'); const btnHeat = document.getElementById('btnHeat');
+        if (tempChangeMode === -1) { btnCool.style.boxShadow = '0 0 15px #3498db'; btnCool.innerText = '❄️ 降溫中'; btnCool.style.transform = 'scale(1.05)'; } 
+        else { btnCool.style.boxShadow = '0 4px 6px rgba(0,0,0,0.15)'; btnCool.innerText = '❄️ 降溫'; btnCool.style.transform = 'scale(1)'; }
+        if (tempChangeMode === 1) { btnHeat.style.boxShadow = '0 0 15px #e74c3c'; btnHeat.innerText = '🔥 加溫中'; btnHeat.style.transform = 'scale(1.05)'; } 
+        else { btnHeat.style.boxShadow = '0 4px 6px rgba(0,0,0,0.15)'; btnHeat.innerText = '🔥 加溫'; btnHeat.style.transform = 'scale(1)'; }
+    }
+
+    function drawSystem() {
+        let b = getBounds(); ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        if (V_liq > 0) {
+            ctx.fillStyle = activeSystem === 'SUGAR' ? 'rgba(52, 152, 219, 0.15)' : 'rgba(52, 152, 219, 0.3)';
+            ctx.fillRect(b.minX, b.liquidY, b.maxX - b.minX, b.maxY - b.liquidY);
+            
+            ctx.strokeStyle = '#2980b9'; ctx.lineWidth = 3;
+            ctx.beginPath(); ctx.moveTo(b.minX, b.liquidY); ctx.lineTo(b.maxX, b.liquidY); ctx.stroke(); 
+            
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)'; ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            for(let i=0; i<4; i++) {
+                let rx = b.minX + 15 + Math.random()*(b.maxX - b.minX - 30);
+                ctx.moveTo(rx, b.liquidY); ctx.lineTo(rx + 10 + Math.random()*20, b.liquidY);
+            }
+            ctx.stroke();
+        }
+        
+        if (activeSystem === 'SUGAR' && n_bulk > 0) {
+            let baseSize = 8;
+            let scaleH = 3.5; 
+            let scaleW = 5.0; 
+            let h = Math.min(baseSize + n_bulk * scaleH, b.maxY - b.liquidY - 5);
+            let w = Math.min(baseSize * 2 + n_bulk * scaleW, b.maxX - b.minX - 20);
+            
+            ctx.fillStyle = '#f1c40f'; ctx.fillRect((canvas.width-w)/2, b.maxY - h, w, h);
+            ctx.strokeStyle = '#d35400'; ctx.lineWidth = 2; ctx.strokeRect((canvas.width-w)/2, b.maxY - h, w, h);
+            
+            if (h > 18) {
+                ctx.fillStyle = '#fff'; ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center'; 
+                ctx.fillText('固體糖塊', canvas.width/2, b.maxY - h/2 + 4);
+            }
+        }
+
+        let plateColor = '#7f8c8d';
+        if (tempChangeMode === 1) plateColor = '#e74c3c'; else if (tempChangeMode === -1) plateColor = '#3498db';
+        ctx.save();
+        if (tempChangeMode === 1) { ctx.shadowColor = '#e74c3c'; ctx.shadowBlur = 15; }
+        else if (tempChangeMode === -1) { ctx.shadowColor = '#3498db'; ctx.shadowBlur = 15; }
+        ctx.fillStyle = plateColor; ctx.fillRect(b.minX - 5, b.maxY + 2, (b.maxX - b.minX) + 10, 15);
+        ctx.restore();
+
+        ctx.strokeStyle = '#2c3e50'; ctx.lineWidth = 4;
+        ctx.beginPath(); ctx.moveTo(b.minX, 0); ctx.lineTo(b.minX, b.maxY); ctx.lineTo(b.maxX, b.maxY); ctx.lineTo(b.maxX, 0); ctx.stroke();
+        
+        if (!isOpenSystem) {
+            if (activeSystem !== 'SUGAR') {
+                ctx.fillStyle = '#7f8c8d'; ctx.fillRect(b.minX, b.pistonY - 15, b.maxX - b.minX, 15); 
+                ctx.fillStyle = '#95a5a6'; ctx.fillRect(canvas.width/2 - 10, 0, 20, b.pistonY - 15); 
+                ctx.fillStyle = '#fff'; ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('⇕ 拖拉活塞', canvas.width/2, b.pistonY - 3);
+            }
+        } else {
+            ctx.fillStyle = 'rgba(231, 76, 60, 0.08)';
+            ctx.fillRect(b.minX, 0, b.maxX - b.minX, b.liquidY);
+            ctx.fillStyle = '#e74c3c'; ctx.font = 'bold 18px sans-serif'; ctx.textAlign = 'center';
+            ctx.fillText('⬆️ 容器已開放 (氣體持續散逸)', canvas.width/2, 40);
+        }
+
+        particles = particles.filter(p => !p.toBeRemoved);
+        for (let p of particles) p.draw(ctx);
+        for (let i = flashes.length-1; i>=0; i--) {
+            let f = flashes[i]; ctx.fillStyle = f.c; ctx.globalAlpha = f.life;
+            ctx.beginPath(); ctx.arc(f.x, f.y, 10, 0, Math.PI*2); ctx.fill(); ctx.globalAlpha = 1.0;
+            if(!isPaused) f.life -= 0.1; if(f.life<=0) flashes.splice(i,1);
+        }
+        if (isPaused) {
+            let actStr = Object.values(pendingActions).join(', ');
+            if (actStr) { ctx.fillStyle = '#e74c3c'; ctx.font = 'bold 18px sans-serif'; ctx.textAlign = 'center'; ctx.fillText(`已預約: ${actStr}`, canvas.width / 2, b.liquidY > 100 ? b.liquidY - 20 : b.maxY - 20); }
+        }
+    }
+
+    // --- 嚴謹動力學引擎：解開動畫封印，實現黃金 8 秒圖表視窗 ---
+    function updateSimulation() {
+        if (tempChangeMode !== 0) {
+            T += tempChangeMode * 0.5; 
+            if (T >= 373 && activeSystem==='WATER') { T = 373; tempChangeMode = 0; updateTempButtons(); }
+            if (T >= 400) { T = 400; tempChangeMode = 0; updateTempButtons(); }
+            if (T <= 273) { T = 273; tempChangeMode = 0; updateTempButtons(); }
+            document.getElementById('tempSlider').value = T; document.getElementById('tempVal').innerText = T.toFixed(1); document.getElementById('canvasTempVal').innerText = T.toFixed(1);
+            snapToPresent(); if(isPaused) drawSystem();
+        }
+
+        if (!isPaused) {
+            frameCounter++;
+            let b = getBounds();
+            let sub_steps = 10;
+            let sub_dt = physical_dt / sub_steps;
+            let sum_evap = 0, sum_cond = 0;
+
+            for (let s = 0; s < sub_steps; s++) {
+                if (activeSystem === 'WATER') {
+                    let P_sat = Math.exp(10.0 * (1 - 373/T)); 
+                    P_tot = isOpenSystem ? 0 : (n_mobile * R * T) / Math.max(0.1, V_gas);
+                    // 調整常數，使達成平衡需要約 4 物理秒鐘（恰好佔圖表 1/2 寬度）
+                    Rf = (n_bulk > 0) ? 0.25 * P_sat : 0; 
+                    Rb = isOpenSystem ? 0 : 0.25 * P_tot; 
+                    let R_escape = isOpenSystem ? (n_mobile * 1.5) : 0;
+
+                    let dn_evap = Rf * sub_dt;
+                    let dn_cond = Rb * sub_dt;
+                    let dn_escape = R_escape * sub_dt;
+
+                    if (n_bulk - dn_evap < 0) { dn_evap = n_bulk; Rf = dn_evap / sub_dt; }
+                    if (n_mobile + dn_evap - dn_cond - dn_escape < 0) {
+                        let available = n_mobile + dn_evap;
+                        let sum = dn_cond + dn_escape || 1;
+                        dn_cond = available * (dn_cond / sum);
+                        dn_escape = available * (dn_escape / sum);
+                        Rb = dn_cond / sub_dt;
+                    }
+
+                    n_bulk = n_bulk - dn_evap + dn_cond;
+                    n_mobile = n_mobile + dn_evap - dn_cond - dn_escape;
+                    sum_evap += dn_evap; sum_cond += dn_cond;
+                    
+                    V_liq = Math.max(0, n_bulk * 0.5);
+                    if (document.activeElement !== document.getElementById('liqSlider')) {
+                        document.getElementById('liqSlider').value = V_liq; document.getElementById('liqVal').innerText = V_liq.toFixed(1);
+                    }
+
+                } else if (activeSystem === 'CO2') {
+                    P_tot = isOpenSystem ? 0 : (n_mobile * R * T) / Math.max(0.1, V_gas);
+                    let k_H = 1.5 * Math.exp(2400 * (1/T - 1/298));
+                    Rf = (n_bulk > 0 && V_liq > 0) ? 0.25 * k_H * (n_bulk / V_liq) : 0; 
+                    Rb = (isOpenSystem || V_liq <= 0) ? 0 : 0.25 * P_tot; 
+                    let R_escape = isOpenSystem ? (n_mobile * 1.5) : 0;
+
+                    let dn_evap = Rf * sub_dt;
+                    let dn_cond = Rb * sub_dt;
+                    let dn_escape = R_escape * sub_dt;
+
+                    if (n_bulk - dn_evap < 0) { dn_evap = n_bulk; Rf = dn_evap / sub_dt; }
+                    if (n_mobile + dn_evap - dn_cond - dn_escape < 0) {
+                        let available = n_mobile + dn_evap;
+                        let sum = dn_cond + dn_escape || 1;
+                        dn_cond = available * (dn_cond / sum);
+                        dn_escape = available * (dn_escape / sum);
+                        Rb = dn_cond / sub_dt;
+                    }
+
+                    n_bulk = n_bulk - dn_evap + dn_cond;
+                    n_mobile = n_mobile + dn_evap - dn_cond - dn_escape;
+                    sum_evap += dn_evap; sum_cond += dn_cond;
+
+                } else if (activeSystem === 'SUGAR') {
+                    if (isOpenSystem && V_liq > 0) {
+                        V_liq -= 0.5 * sub_dt; if (V_liq < 0) V_liq = 0;
+                        if (document.activeElement !== document.getElementById('liqSlider')) {
+                            document.getElementById('liqSlider').value = V_liq; document.getElementById('liqVal').innerText = V_liq.toFixed(1);
+                        }
+                    }
+
+                    let S_T = 2.0 * Math.exp(3 * (1 - 298/T)); 
+                    if (V_liq > 0) {
+                        // 固體溶解稍慢一些，展現層次感
+                        Rf = (n_bulk > 0) ? 0.10 * Math.pow(n_bulk, 0.6) * S_T : 0; 
+                        Rb = 0.10 * Math.pow(Math.max(n_bulk, 0.1), 0.6) * (n_mobile / V_liq); 
+                    } else {
+                        Rf = 0; Rb = n_mobile / sub_dt; 
+                    }
+                    P_tot = 0;
+
+                    let dn_evap = Rf * sub_dt;
+                    let dn_cond = Rb * sub_dt;
+
+                    if (n_bulk - dn_evap < 0) { dn_evap = n_bulk; Rf = dn_evap / sub_dt; }
+                    if (n_mobile + dn_evap - dn_cond < 0) { dn_cond = n_mobile + dn_evap; Rb = dn_cond / sub_dt; }
+
+                    n_bulk = n_bulk - dn_evap + dn_cond;
+                    n_mobile = n_mobile + dn_evap - dn_cond;
+                    sum_evap += dn_evap; sum_cond += dn_cond;
+                }
+            }
+
+            disp.Rf = sum_evap / physical_dt;
+            disp.Rb = sum_cond / physical_dt;
+            
+            if (activeSystem === 'WATER' || activeSystem === 'CO2') {
+                disp.Pressure = isOpenSystem ? 0 : (n_mobile * R * T) / Math.max(0.1, V_gas);
+            } else {
+                disp.Pressure = 0;
+            }
+
+            // 微調視覺粒子乘數以補償較小的物理步長，保持畫面豐富度
+            let visual_mult = (activeSystem === 'WATER') ? 100 : (activeSystem === 'CO2' ? 60 : 15);
+            window.accum_evap_particles += sum_evap * visual_mult;
+            window.accum_cond_particles += sum_cond * visual_mult;
+
+            let emitCount = Math.floor(window.accum_evap_particles);
+            window.accum_evap_particles -= emitCount;
+            emitCount = Math.min(emitCount, 20); // 確保單幀發射上限，維持流暢度
+            
+            for(let i=0; i<emitCount; i++) {
+                if (activeSystem === 'WATER') {
+                    let p = new Particle('H2O', 'gas', b.minX + Math.random()*(b.maxX - b.minX), b.liquidY - 5);
+                    p.vy = -(4.0 + Math.random()*4.0); p.vx = (Math.random()-0.5)*6;
+                    particles.push(p);
+                } else if (activeSystem === 'CO2') {
+                    let isBubbling = (disp.Rf > disp.Rb * 1.5) || isOpenSystem;
+                    if (isBubbling) {
+                        let p = new Particle('CO2', 'bubble', b.minX + 10 + Math.random()*(b.maxX - b.minX - 20), b.maxY - Math.random()*(b.maxY - b.liquidY));
+                        particles.push(p);
+                    } else {
+                        let p = new Particle('CO2', 'gas', b.minX + Math.random()*(b.maxX - b.minX), b.liquidY - 5);
+                        p.vy = -(2.0 + Math.random()*3.0); p.vx = (Math.random()-0.5)*4;
+                        particles.push(p);
+                    }
+                } else if (activeSystem === 'SUGAR') {
+                    let p = new Particle('SUGAR', 'aq', canvas.width/2 + (Math.random()-0.5)*30, b.maxY - 10);
+                    particles.push(p);
+                }
+            }
+            
+            let condCount = Math.floor(window.accum_cond_particles);
+            window.accum_cond_particles -= condCount;
+            for(let i=0; i<condCount; i++) {
+                let searchState = (activeSystem === 'SUGAR') ? 'aq' : 'gas';
+                let target = particles.find(p => p.state === searchState && !p.markedForCondensation);
+                if (target) target.markedForCondensation = true;
+                else { window.accum_cond_particles = 0; break; }
+            }
+
+            for (let p of particles) p.update(Math.sqrt(T/300), b);
+
+            time += physical_dt;
+            
+            // 【解開圖表暴衝封印】每 2 個影格（約 33ms）才紀錄並推動一次圖表
+            // 配合 240 點的視窗，橫軸精準呈現真實世界的 8 秒鐘！
+            if (frameCounter % 2 === 0) {
+                history.time.push(time.toFixed(1));
+                history.n1.push(n_bulk); history.n2.push(n_mobile);
+                history.RateF.push(disp.Rf); history.RateB.push(disp.Rb); history.Pressure.push(disp.Pressure);
+                
+                let actStr = Object.values(pendingActions).join(', '); history.Actions.push(actStr ? actStr : null); pendingActions = {};
+                
+                if (history.time.length > maxMemoryPoints) { 
+                    history.time.shift(); history.n1.shift(); history.n2.shift(); 
+                    history.RateF.shift(); history.RateB.shift(); history.Pressure.shift(); history.Actions.shift(); 
+                }
+                
+                let endIdx = history.time.length - 1; let startIdx = Math.max(0, endIdx - visualDataPoints + 1); updateChartWindows(startIdx, endIdx);
+            }
+        }
+        drawSystem(); 
+        requestAnimationFrame(updateSimulation); // 釋放 60fps 動畫流暢度
+    }
+
+    function snapToPresent() {
+        if (isPaused) {
+            let scrubber = document.getElementById('timeScrubber'); let maxIdx = history.time.length - 1;
+            if (parseInt(scrubber.value) !== maxIdx && maxIdx >= 0) { scrubber.value = maxIdx; scrubber.dispatchEvent(new Event('input')); }
+        }
+    }
+
+    document.getElementById('volSlider').addEventListener('input', (e) => { 
+        V_gas = parseFloat(e.target.value); document.getElementById('volVal').innerText = V_gas.toFixed(1); 
+        let b = getBounds();
+        for(let p of particles) { if(p.state==='gas' && p.y < b.pistonY + p.radius) p.y = b.pistonY + p.radius; }
+        snapToPresent(); pendingActions['vol'] = `空間: ${V_gas}L`; if(isPaused) drawSystem();
+    });
+    
+    document.getElementById('liqSlider').addEventListener('input', (e) => { 
+        V_liq = parseFloat(e.target.value); document.getElementById('liqVal').innerText = V_liq.toFixed(1); 
+        if (activeSystem === 'WATER') n_bulk = V_liq * 2.0; 
+        else if (activeSystem === 'CO2') n_bulk = V_liq * (1.5 / 8.0);
+        snapToPresent(); pendingActions['liq'] = `水量: ${V_liq}L`; if(isPaused) drawSystem();
+    });
+    
+    document.getElementById('tempSlider').addEventListener('input', (e) => { 
+        T = parseFloat(e.target.value); document.getElementById('tempVal').innerText = T; document.getElementById('canvasTempVal').innerText = T.toFixed(1);
+        tempChangeMode = 0; updateTempButtons(); 
+        snapToPresent(); pendingActions['temp'] = `溫度: ${T}K`; if(isPaused) drawSystem();
+    });
+    
+    let isDraggingPiston = false;
+    canvas.addEventListener('mousedown', (e) => {
+        if(activeSystem === 'SUGAR' || isOpenSystem) return;
+        let rect = canvas.getBoundingClientRect(); let scaleX = canvas.width / rect.width; let scaleY = canvas.height / rect.height;
+        let mouseX = (e.clientX - rect.left) * scaleX; let mouseY = (e.clientY - rect.top) * scaleY;
+        let b = getBounds();
+        if (mouseX >= b.minX && mouseX <= b.maxX && mouseY >= b.pistonY - 30 && mouseY <= b.pistonY + 10) isDraggingPiston = true;
+    });
+
+    window.addEventListener('mousemove', (e) => {
+        let rect = canvas.getBoundingClientRect(); let scaleY = canvas.height / rect.height; let scaleX = canvas.width / rect.width;
+        let mouseY = (e.clientY - rect.top) * scaleY; let mouseX = (e.clientX - rect.left) * scaleX; let b = getBounds();
+        if (!isDraggingPiston && activeSystem !== 'SUGAR' && !isOpenSystem) {
+            if (mouseX >= b.minX && mouseX <= b.maxX && mouseY >= b.pistonY - 30 && mouseY <= b.pistonY + 10) canvas.style.cursor = 'ns-resize'; else canvas.style.cursor = 'default';
+        }
+        if (isDraggingPiston) {
+            canvas.style.cursor = 'ns-resize';
+            let new_h_gas = b.liquidY - mouseY; let newV = (new_h_gas / b.totalHeight) * b.maxV;
+            newV = Math.max(2, Math.min(15, newV));
+            if (Math.abs(newV - V_gas) > 0.1) {
+                V_gas = newV; document.getElementById('volSlider').value = V_gas; document.getElementById('volVal').innerText = V_gas.toFixed(1);
+                let nb = getBounds(); for(let p of particles) { if(p.state==='gas' && p.y < nb.pistonY + p.radius) p.y = nb.pistonY + p.radius; }
+                snapToPresent(); pendingActions['vol'] = `空間: ${V_gas.toFixed(1)}L`; if(isPaused) drawSystem();
+            }
+        }
+    });
+
+    window.addEventListener('mouseup', () => { isDraggingPiston = false; });
+    canvas.addEventListener('touchstart', (e) => {
+        if(activeSystem === 'SUGAR' || isOpenSystem) return;
+        let rect = canvas.getBoundingClientRect(); let scaleY = canvas.height / rect.height;
+        let mouseY = (e.touches[0].clientY - rect.top) * scaleY; let b = getBounds();
+        if (mouseY >= b.pistonY - 40 && mouseY <= b.pistonY + 20) { isDraggingPiston = true; e.preventDefault(); }
+    }, {passive: false});
+    window.addEventListener('touchmove', (e) => {
+        if (isDraggingPiston) {
+            e.preventDefault();
+            let rect = canvas.getBoundingClientRect(); let scaleY = canvas.height / rect.height;
+            let mouseY = (e.touches[0].clientY - rect.top) * scaleY; let b = getBounds();
+            let newV = ((b.liquidY - mouseY) / b.totalHeight) * b.maxV; newV = Math.max(2, Math.min(15, newV));
+            if (Math.abs(newV - V_gas) > 0.1) {
+                V_gas = newV; document.getElementById('volSlider').value = V_gas; document.getElementById('volVal').innerText = V_gas.toFixed(1);
+                let nb = getBounds(); for(let p of particles) { if(p.state==='gas' && p.y < nb.pistonY + p.radius) p.y = nb.pistonY + p.radius; }
+                snapToPresent(); pendingActions['vol'] = `空間: ${V_gas.toFixed(1)}L`; if(isPaused) drawSystem();
+            }
+        }
+    }, {passive: false});
+    window.addEventListener('touchend', () => { isDraggingPiston = false; });
+
+    window.togglePause = function(e) {
+        if(e) e.stopPropagation(); isPaused = !isPaused;
+        const mainBtn = document.getElementById('mainPauseBtn'); const scrubberBlock = document.getElementById('scrubberBlock');
+        const autoPlayControls = document.getElementById('autoPlayControls'); const slider = document.getElementById('timeScrubber');
+        const chartsPanel = document.querySelector('.charts-section');
+        
+        if (!isPaused) stopAutoPlay(); 
+
+        if (isPaused) {
+            mainBtn.innerHTML = '▶️ 繼續'; mainBtn.style.backgroundColor = '#2ecc71';
+            scrubberBlock.style.display = 'flex'; autoPlayControls.style.display = 'flex';
+            if (!isChartLocked) chartsPanel.classList.add('is-paused'); 
+            slider.max = history.time.length - 1; slider.value = history.time.length - 1;
+            renderMarkers(); slider.dispatchEvent(new Event('input')); drawSystem(); 
+        } else {
+            mainBtn.innerHTML = '⏸️ 暫停 / 回溯'; mainBtn.style.backgroundColor = '#e67e22';
+            scrubberBlock.style.display = 'none'; autoPlayControls.style.display = 'none';
+            chartsPanel.classList.remove('is-paused'); 
+            let endIdx = history.time.length - 1; updateChartWindows(Math.max(0, endIdx - visualDataPoints + 1), endIdx);
+        }
+    };
+
+    window.renderMarkers = function() {
+        const track = document.getElementById('markerTrack'); track.innerHTML = '';
+        const maxIdx = history.time.length - 1; if (maxIdx <= 0) return;
+        history.Actions.forEach((action, idx) => {
+            if (action) {
+                let marker = document.createElement('div'); marker.style.position = 'absolute'; marker.style.left = `${(idx / maxIdx) * 100}%`;
+                marker.style.transform = 'translateX(-50%)'; marker.style.top = 'calc(50% - 8px)';
+                marker.style.height = '16px'; marker.style.width = '4px'; marker.style.backgroundColor = '#e74c3c';
+                track.appendChild(marker);
+            }
+        });
+    };
+
+    window.jumpToAction = function(direction) {
+        if (!isPaused) return;
+        let currentIdx = parseInt(document.getElementById('timeScrubber').value); let targetIdx = -1;
+        if (direction === -1) { for (let i = currentIdx - 1; i >= 0; i--) { if (history.Actions[i]) { targetIdx = i; break; } } } 
+        else { for (let i = currentIdx + 1; i < history.time.length; i++) { if (history.Actions[i]) { targetIdx = i; break; } } }
+        if (targetIdx !== -1) { document.getElementById('timeScrubber').value = targetIdx; document.getElementById('timeScrubber').dispatchEvent(new Event('input')); }
+    };
+
+    document.getElementById('timeScrubber').addEventListener('mousedown', stopAutoPlay);
+    document.getElementById('timeScrubber').addEventListener('touchstart', stopAutoPlay, {passive: true});
+    document.getElementById('timeScrubber').addEventListener('input', (e) => {
+        if (!isPaused) return;
+        let targetIdx = parseInt(e.target.value); let maxIdx = history.time.length - 1;
+        let startIdx = targetIdx - Math.floor(visualDataPoints * 0.25); let endIdx = startIdx + visualDataPoints - 1;
+        if (endIdx > maxIdx) { endIdx = maxIdx; startIdx = Math.max(0, endIdx - visualDataPoints + 1); }
+        if (startIdx < 0) { startIdx = 0; endIdx = Math.min(maxIdx, startIdx + visualDataPoints - 1); }
+        updateChartWindows(startIdx, endIdx);
+    });
+
+    const chartsPanel = document.querySelector('.charts-section');
+    let isDraggingChart = false; let lastChartX = 0;
+
+    document.getElementById('lockChartCb').addEventListener('change', (e) => {
+        isChartLocked = e.target.checked;
+        if (isChartLocked) { chartsPanel.classList.remove('is-paused'); stopAutoPlay(); } 
+        else { if (isPaused) chartsPanel.classList.add('is-paused'); [molesChart, rateChart, pressureChart].forEach(c => { if (c) { c.setActiveElements([]); if (c.tooltip) c.tooltip.setActiveElements([], {x: 0, y: 0}); c.update(); } }); }
+    });
+
+    const startChartDrag = (e) => { if (!isPaused || isChartLocked) return; isDraggingChart = true; lastChartX = e.clientX || (e.touches && e.touches[0].clientX); stopAutoPlay(); };
+    const doChartDrag = (e) => {
+        if (!isDraggingChart || !isPaused || isChartLocked) return; 
+        let currentX = e.clientX || (e.touches && e.touches[0].clientX); if (currentX === undefined) return;
+        let deltaX = currentX - lastChartX;
+        if (Math.abs(deltaX) >= 2) {
+            let scrubber = document.getElementById('timeScrubber');
+            let newVal = Math.max(0, Math.min(parseInt(scrubber.max), parseInt(scrubber.value) - Math.round(deltaX / 2)));
+            if (newVal !== parseInt(scrubber.value)) { scrubber.value = newVal; scrubber.dispatchEvent(new Event('input')); lastChartX = currentX; }
+        }
+    };
+    const stopChartDrag = () => { isDraggingChart = false; };
+
+    chartsPanel.addEventListener('mousedown', startChartDrag); window.addEventListener('mousemove', doChartDrag); window.addEventListener('mouseup', stopChartDrag);
+    chartsPanel.addEventListener('touchstart', startChartDrag, {passive: true}); window.addEventListener('touchmove', doChartDrag, {passive: false}); window.addEventListener('touchend', stopChartDrag);
+
+    window.onload = () => { switchSystem('WATER'); updateSimulation(); };
+</script>
+</body>
+</html>
