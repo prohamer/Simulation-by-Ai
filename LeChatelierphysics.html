@@ -116,9 +116,12 @@
             <div id="scrubberBlock" class="scrubber-panel">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                     <h4 style="margin: 0; color: #d35400;">⏪ 圖表回溯與分析</h4>
-                    <label style="font-size: 0.9em; color: #c0392b; cursor: pointer; font-weight: bold; display: flex; align-items: center;">
-                        <input type="checkbox" id="lockChartCb" style="margin-right: 5px; width: 16px; height: 16px;"> 🔒 鎖定圖表看數據
-                    </label>
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <span id="eventDisplay" style="font-weight: bold; color: #d35400; font-size: 0.85em; text-align: center; background: white; padding: 2px 6px; border-radius: 4px; border: 1px solid #f8c471; display: none;"></span>
+                        <label style="font-size: 0.9em; color: #c0392b; cursor: pointer; font-weight: bold; display: flex; align-items: center;">
+                            <input type="checkbox" id="lockChartCb" style="margin-right: 5px; width: 16px; height: 16px;"> 🔒 鎖定圖表看數據
+                        </label>
+                    </div>
                 </div>
                 <div style="display: flex; align-items: center;">
                     <button class="jump-btn" onclick="jumpToAction(-1)">⏮</button>
@@ -534,23 +537,50 @@
 
     window.removeCustomSubstance = function() {
         let val = document.getElementById('substanceSelect').value;
-        let amt = parseInt(document.getElementById('addAmount').value) || 0;
+        let requestAmt = parseInt(document.getElementById('addAmount').value) || 0;
+        let removedAmt = 0;
         
         if(val === 'H2O_l') { 
-            amt = Math.min(amt, n_bulk); n_bulk -= amt; 
-            V_liq = Math.max(0.1, n_bulk * 0.5); if (n_bulk <= 0) V_liq = 0;
+            removedAmt = Math.min(requestAmt, n_bulk); 
+            n_bulk -= removedAmt; 
+            V_liq = Math.max(0, n_bulk * 0.5); 
             document.getElementById('liqSlider').value = V_liq; document.getElementById('liqVal').innerText = V_liq.toFixed(1); 
         }
-        if(val === 'H2O_g' || val === 'CO2_g') { 
-            amt = Math.min(amt, n_mobile); n_mobile -= amt; 
-            let typeToRemove = val === 'H2O_g' ? 'H2O' : 'CO2';
-            let targets = particles.filter(p => p.type === typeToRemove && p.state === 'gas');
-            let count = Math.min(targets.length, amt * (typeToRemove==='H2O'?50:20));
+        else if(val === 'H2O_g') { 
+            removedAmt = Math.min(requestAmt, n_mobile); 
+            n_mobile -= removedAmt; 
+            let targets = particles.filter(p => p.type === 'H2O' && p.state === 'gas');
+            let count = Math.min(targets.length, removedAmt * 50);
             for(let i=0; i<count; i++) targets[i].toBeRemoved = true;
         }
-        if(val === 'SUGAR_s') { amt = Math.min(amt, n_bulk); n_bulk -= amt; }
+        else if(val === 'CO2_g') { 
+            // 汽水系統：移除氣體時，如果氣相不夠，從溶解態中抽出
+            removedAmt = Math.min(requestAmt, n_mobile + n_bulk); 
+            let fromGas = Math.min(removedAmt, n_mobile);
+            let fromLiq = removedAmt - fromGas;
+            n_mobile -= fromGas;
+            n_bulk -= fromLiq;
+            
+            let targets = particles.filter(p => p.type === 'CO2' && p.state === 'gas');
+            let count = Math.min(targets.length, fromGas * 20);
+            for(let i=0; i<count; i++) targets[i].toBeRemoved = true;
+        }
+        else if(val === 'SUGAR_s') { 
+            // 糖系統：移除固體時，如果固體不夠，從溶解態中抽出
+            removedAmt = Math.min(requestAmt, n_bulk + n_mobile); 
+            let fromSolid = Math.min(removedAmt, n_bulk);
+            let fromAq = removedAmt - fromSolid;
+            n_bulk -= fromSolid;
+            n_mobile -= fromAq;
+        }
         
-        snapToPresent(); pendingActions['remove'] = `-${amt} 物質`; if (isPaused) drawSystem();
+        if (removedAmt > 0) {
+            snapToPresent(); 
+            pendingActions['remove'] = `-${removedAmt.toFixed(1)} 物質`; 
+            if (isPaused) drawSystem();
+        } else {
+            alert('⚠️ 容器內已無足夠的物質可供移除！');
+        }
     }
 
     let tempChangeMode = 0; 
@@ -942,6 +972,20 @@
         if (endIdx > maxIdx) { endIdx = maxIdx; startIdx = Math.max(0, endIdx - visualDataPoints + 1); }
         if (startIdx < 0) { startIdx = 0; endIdx = Math.min(maxIdx, startIdx + visualDataPoints - 1); }
         updateChartWindows(startIdx, endIdx);
+        
+        // 尋找最近的歷史事件並顯示標示
+        let closestEvent = ""; let minDiff = Infinity;
+        for (let i = Math.max(0, targetIdx - 15); i <= Math.min(maxIdx, targetIdx + 15); i++) {
+            if (history.Actions[i]) {
+                let diff = Math.abs(i - targetIdx);
+                if (diff < minDiff) { minDiff = diff; closestEvent = history.Actions[i]; }
+            }
+        }
+        let eventDisplay = document.getElementById('eventDisplay');
+        if (eventDisplay) {
+            eventDisplay.innerText = closestEvent;
+            eventDisplay.style.display = closestEvent ? 'inline-block' : 'none';
+        }
     });
 
     const chartsPanel = document.querySelector('.charts-section');
