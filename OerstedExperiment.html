@@ -3,10 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>安培右手定則 - 方形迴路與實體實驗模擬</title>
+    <title>安培右手定則實驗模擬</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
     <style>
+        /* 預設根字體大小為 16px，A+/A- 按鈕會改變這個值 */
         html { font-size: 16px; }
         body { margin: 0; overflow: hidden; font-family: 'Noto Sans TC', sans-serif; background-color: #f0f4f8; touch-action: none; }
         #canvas-container { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; z-index: 1; }
@@ -153,7 +154,7 @@
                     </div>
                 </div>
 
-                <!-- Divider (Desktop only) -->
+                <!-- Divider -->
                 <div class="hidden md:block w-px bg-gray-200"></div>
                 <hr class="md:hidden border-gray-100 my-1">
 
@@ -190,7 +191,7 @@
                     </div>
                 </div>
 
-                <!-- Divider (Desktop only) -->
+                <!-- Divider -->
                 <div class="hidden md:block w-px bg-gray-200"></div>
                 <hr class="md:hidden border-gray-100 my-1">
 
@@ -217,7 +218,7 @@
                     </div>
                 </div>
 
-                <!-- Divider (Desktop only) -->
+                <!-- Divider -->
                 <div class="hidden md:block w-px bg-gray-200"></div>
                 <hr class="md:hidden border-gray-100 my-1">
 
@@ -302,7 +303,6 @@
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0xf0f4f8);
 
-        // 將整體畫面往上抬升 (Y=23)
         const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
         camera.position.set(24, 23, 32);
 
@@ -316,7 +316,6 @@
         controls.enableDamping = true;
         controls.dampingFactor = 0.05;
         controls.maxDistance = 70;
-        // 為了支援手機觸控旋轉，不要將 touch-action: none 加在 body 影響 UI 滑動，而是讓 OrbitControls 自己處理 Canvas
         controls.target.set(8, -3, 0); 
 
         // --- 2. 燈光設定 ---
@@ -370,12 +369,12 @@
             circuitGroup.add(mesh);
         }
 
-        // 方形迴路骨架
-        createWireSegment(WIRE_Z * 2, 0, 0, 0); // 左側長直導線
-        createWireSegment(6.8, 3.4, -WIRE_Z, Math.PI / 2); // 上側左段 (連到安培計左端)
-        createWireSegment(6.8, 12.6, -WIRE_Z, Math.PI / 2); // 上側右段 (安培計右端連到右側)
-        createWireSegment(6.5, 3.25, WIRE_Z, Math.PI / 2); // 下側左段 (連到開關左端)
-        createWireSegment(6.5, 12.75, WIRE_Z, Math.PI / 2); // 下側右段 (開關右端連到右側)
+        // 方形迴路骨架 (修正導線與接點間隙)
+        createWireSegment(WIRE_Z * 2, 0, 0, 0); 
+        createWireSegment(6.8, 3.4, -WIRE_Z, Math.PI / 2); // 上側左段
+        createWireSegment(6.8, 12.6, -WIRE_Z, Math.PI / 2); // 上側右段
+        createWireSegment(6.5, 3.25, WIRE_Z, Math.PI / 2); // 下側左段
+        createWireSegment(6.5, 12.75, WIRE_Z, Math.PI / 2); // 下側右段
         
         createCorner(0, WIRE_Z); createCorner(0, -WIRE_Z); 
         createCorner(WIRE_X, -WIRE_Z); createCorner(WIRE_X, WIRE_Z);
@@ -423,19 +422,42 @@
         const sTerm2 = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.25, 0.3), termMat);
         sTerm2.position.set(WIRE_X / 2 - 1.5, 0.1, WIRE_Z); worldCircuitGroup.add(sTerm2);
 
-        // --- 建立動態電池與接線區 ---
+        // --- 建立動態電池與接線區 (加上正負極標示) ---
         const rightSideGroup = new THREE.Group();
         worldCircuitGroup.add(rightSideGroup);
 
         function createBatteryModel() {
             const group = new THREE.Group();
+            // 主體黑色部分
             const body = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 1.8, 32), new THREE.MeshStandardMaterial({ color: 0x222222 }));
             body.rotation.x = Math.PI / 2;
-            const wrapper = new THREE.Mesh(new THREE.CylinderGeometry(0.51, 0.51, 1.2, 32), new THREE.MeshStandardMaterial({ color: 0xfacc15 }));
-            wrapper.rotation.x = Math.PI / 2; wrapper.position.z = -0.2;
+            // 黃色包裝
+            const wrapper = new THREE.Mesh(new THREE.CylinderGeometry(0.51, 0.51, 1.4, 32), new THREE.MeshStandardMaterial({ color: 0xfacc15 }));
+            wrapper.rotation.x = Math.PI / 2; 
+            wrapper.position.z = 0;
+            // 金屬正極凸起 (+Z)
             const nub = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 0.2, 16), new THREE.MeshStandardMaterial({ color: 0xcccccc, metalness: 0.8 }));
-            nub.rotation.x = Math.PI / 2; nub.position.z = 1.0;
-            group.add(body); group.add(wrapper); group.add(nub);
+            nub.rotation.x = Math.PI / 2; 
+            nub.position.z = 1.0;
+            
+            // 正極 (+) 符號，放在黃色包裝靠近凸起端
+            const signMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
+            const plusGroup = new THREE.Group();
+            const plusH = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.02, 0.06), signMat);
+            const plusV = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.02, 0.2), signMat);
+            plusGroup.add(plusH); plusGroup.add(plusV);
+            plusGroup.position.set(0, 0.515, 0.45); // 貼在圓柱表面
+            
+            // 負極 (-) 符號，放在另一端
+            const minusH = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.02, 0.06), signMat);
+            minusH.position.set(0, 0.515, -0.45);
+
+            group.add(body); 
+            group.add(wrapper); 
+            group.add(nub);
+            group.add(plusGroup);
+            group.add(minusH);
+            
             return group;
         }
 
@@ -465,7 +487,7 @@
         const wireAttachmentGroup = new THREE.Group();
         probeGroup.add(wireAttachmentGroup);
 
-        // 建立垂直布局時的紙板 (Acrylic Board)
+        // 建立垂直布局時的紙板
         const paperGroup = new THREE.Group();
         const paperPlane = new THREE.Mesh(
             new THREE.PlaneGeometry(24, 24),
@@ -702,7 +724,6 @@
 
         renderer.domElement.addEventListener('pointerdown', (event) => {
             const rect = renderer.domElement.getBoundingClientRect();
-            // 處理觸控或滑鼠事件
             const clientX = event.clientX !== undefined ? event.clientX : event.touches?.[0]?.clientX;
             const clientY = event.clientY !== undefined ? event.clientY : event.touches?.[0]?.clientY;
             
@@ -904,7 +925,7 @@
                 currentStatus = currentMagnitude * polarityMult;
                 
                 domCircuitStatus.textContent = "通路 (流動中)";
-                domCircuitStatus.className = "text-[0.7rem] font-bold text-green-600";
+                domCircuitStatus.className = "text-[0.7rem] font-bold text-green-600 mr-1";
                 btnSwitch.textContent = "⏼ 斷開開關";
                 btnSwitch.className = "flex-1 py-1 md:py-1.5 bg-red-500 text-white shadow-sm hover:bg-red-600 rounded text-[0.75rem] font-bold transition-colors cursor-pointer";
             } else {
@@ -912,7 +933,7 @@
                 currentStatus = 0;
                 
                 domCircuitStatus.textContent = "斷路";
-                domCircuitStatus.className = "text-[0.7rem] font-bold text-red-500";
+                domCircuitStatus.className = "text-[0.7rem] font-bold text-red-500 mr-1";
                 btnSwitch.textContent = "⏻ 閉合開關";
                 btnSwitch.className = "flex-1 py-1 md:py-1.5 bg-green-500 text-white shadow-sm hover:bg-green-600 rounded text-[0.75rem] font-bold transition-colors cursor-pointer";
             }
@@ -1032,8 +1053,8 @@
             const targetSwitchAngle = switchClosed ? 0 : -0.6;
             switchPivot.rotation.z += (targetSwitchAngle - switchPivot.rotation.z) * 10 * delta;
 
-            // B. 安培計偏轉
-            const targetNeedleAngle = - (currentStatus / 16.0) * (Math.PI / 4);
+            // B. 安培計偏轉 (偏向正極，移除負號)
+            const targetNeedleAngle = (currentStatus / 16.0) * (Math.PI / 4);
             needlePivot.rotation.z += (targetNeedleAngle - needlePivot.rotation.z) * 0.15;
 
             // C. 空間磁場與向量運算
