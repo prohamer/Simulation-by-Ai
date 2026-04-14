@@ -1,0 +1,1352 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>動態平衡與勒沙特列原理V1</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        html, body { height: 100%; margin: 0; padding: 0; background-color: #f5f7fa; color: #2c3e50; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; overflow: hidden; display: flex; flex-direction: column; }
+        
+        .top-header { display: flex; justify-content: space-between; align-items: center; padding: 8px 20px; background: white; box-shadow: 0 2px 5px rgba(0,0,0,0.05); z-index: 10; }
+        h2 { margin: 0; font-size: 1.3em; color: #2c3e50; font-weight: bold; }
+        .system-switch { padding: 5px 12px; font-size: 1em; border-radius: 6px; border: 2px solid #3498db; background: #ecf0f1; cursor: pointer; font-weight: bold; color: #2980b9; outline: none; }
+
+        .main-stage { flex: 1; display: flex; overflow: hidden; padding: 15px; gap: 15px; }
+        
+        .canvas-section { flex: 1; background: white; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 10px; position: relative; }
+        canvas#particleCanvas { width: 100%; max-width: 600px; aspect-ratio: 6 / 5; height: auto; display: block; border: 2px solid #7f8c8d; background-color: #fff; border-radius: 6px; box-shadow: inset 0 0 12px rgba(0,0,0,0.1); }
+        
+        .floating-btn { position: absolute; padding: 5px 10px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 0.9em; color: white; box-shadow: 0 4px 6px rgba(0,0,0,0.15); transition: 0.2s; z-index: 10; }
+        .floating-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 12px rgba(0,0,0,0.2); }
+        
+        .charts-section { flex: 1.2; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; padding-right: 5px; position: relative; }
+        .chart-wrapper { flex: 1; background: white; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); padding: 10px; position: relative; min-height: 160px; }
+        .chart-custom-title { position: absolute; top: 12px; left: 32px; font-weight: bold; font-size: 0.95em; color: #34495e; pointer-events: none; z-index: 2; }
+        
+        .scrubber-panel { display: none; background: #fff9e6; padding: 12px 15px; border-radius: 10px; border: 1px solid #fdebd0; flex-direction: column; box-shadow: 0 2px 8px rgba(0,0,0,0.05); flex-shrink: 0; margin-bottom: 5px; }
+        .jump-btn { padding: 4px 8px; background: #e67e22; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 1.1em; width: auto; margin: 0; }
+        .jump-btn:hover { background: #d35400; }
+        
+        .play-btn { padding: 4px 8px; background: #34495e; color: white; border-radius: 4px; border: none; font-size: 0.85em; transition: 0.2s; cursor: pointer; white-space: nowrap; }
+        .play-btn:hover:not(:disabled) { background: #2c3e50; transform: translateY(-1px); }
+        .play-btn:disabled { opacity: 0.5; cursor: not-allowed; background: #95a5a6; }
+        .play-btn.active-play { background: #2ecc71; box-shadow: 0 0 10px rgba(46,204,113,0.6); transform: scale(1.05); }
+        
+        .charts-section.is-paused { cursor: grab; }
+        .charts-section.is-paused:active { cursor: grabbing; }
+
+        .help-btn { background: #f39c12; color: white; border: none; border-radius: 50%; width: 28px; height: 28px; font-weight: bold; font-size: 1em; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 5px rgba(0,0,0,0.1); transition: 0.2s; padding: 0; }
+        .help-btn:hover { background: #e67e22; transform: scale(1.1); }
+        .help-panel { max-height: 0; overflow-y: auto; background: #fff; padding: 0 20px; transition: max-height 0.3s ease, padding 0.3s ease; box-shadow: 0 2px 8px rgba(0,0,0,0.05); z-index: 9; flex-shrink: 0; }
+        .help-panel.open { max-height: 40vh; padding: 15px 20px; border-bottom: 1px solid #ecf0f1; }
+        .help-panel h3 { margin-top: 0; color: #2980b9; margin-bottom: 8px; font-size: 1.05em; }
+        .help-panel ul { margin: 0; padding-left: 20px; line-height: 1.5; color: #34495e; font-size: 0.95em; }
+        .help-panel li { margin-bottom: 6px; }
+
+        .bottom-drawer { background: white; box-shadow: 0 -4px 15px rgba(0,0,0,0.08); display: flex; flex-direction: column; z-index: 10; transition: height 0.3s ease; max-height: 45vh; flex-shrink: 0; }
+        .drawer-header { padding: 3px 20px; background: #34495e; color: white; cursor: pointer; display: flex; justify-content: space-between; align-items: center; user-select: none; min-height: 26px; }
+        .drawer-header h3 { margin: 0; font-size: 0.95em; }
+        .drawer-content { display: flex; flex-wrap: wrap; gap: 15px; padding: 15px 20px; overflow-y: auto; min-height: 0; align-content: flex-start; }
+        .drawer-collapsed .drawer-content { display: none; }
+        .drawer-content::-webkit-scrollbar { width: 8px; }
+        .drawer-content::-webkit-scrollbar-thumb { background: #bdc3c7; border-radius: 4px; }
+        
+        .control-block { flex: 1; min-width: 250px; background: #f8f9fa; padding: 15px; border-radius: 8px; border: 1px solid #e9ecef; }
+        .control-block h4 { margin: 0 0 10px 0; font-size: 1em; color: #2980b9; border-bottom: 2px solid #d4e6f1; padding-bottom: 5px; }
+        .control-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        .control-row label { font-weight: 600; font-size: 0.9em; width: 35%; }
+        .drawer-content input[type=range] { flex: 1; accent-color: #3498db; }
+        
+        button.action { padding: 6px 12px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; color: white; flex: 1; }
+        .btn-add { background: #27ae60; } .btn-remove { background: #e74c3c; }
+
+        @media (max-width: 800px) {
+            .main-stage { flex-direction: column; }
+            .canvas-section { flex: none; height: 35vh; min-height: 220px; }
+            canvas#particleCanvas { max-height: 100%; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="top-header">
+        <h2 id="equationTitle">H<sub>2</sub>O<sub>(l)</sub> &rightleftharpoons; H<sub>2</sub>O<sub>(g)</sub></h2>
+        <div style="display: flex; align-items: center; gap: 12px;">
+            <button class="help-btn" onclick="toggleHelp()" title="操作與教學說明">?</button>
+            <select id="systemSwitch" class="system-switch" onchange="switchSystem(this.value)">
+                <option value="WATER">1. 水的相態平衡 (物理變化)</option>
+                <option value="CO2">2. 汽水與二氧化碳 (氣液異相)</option>
+                <option value="SUGAR">3. 固體糖溶解結晶 (固液異相)</option>
+                <option value="CHROMATE">4. 鉻酸根酸鹼變色 (液態均相)</option>
+                <option value="CACO3">5. 碳酸鈣加酸反應 (固液氣三相)</option>
+                <option value="NO2">6. 二氧化氮聚合 (氣相變色)</option>
+                <option value="HABER">7. 哈伯法製氨 (氣相合成)</option>
+            </select>
+        </div>
+    </div>
+    
+    <div id="helpPanel" class="help-panel">
+        <h3>📖 大一統引擎：操作與教學說明</h3>
+        <ul>
+            <li><b>七大系統整合：</b>包含相態、溶解度、離子反應、氣相氣壓等多種平衡，展現一致的微觀動態與巨觀圖表。</li>
+            <li><b>開放容器與勒沙特列：</b>水、汽水、碳酸鈣系統可切換為「開放系統」，展示氣體逸散打破平衡導致單向反應。氣體均相(NO₂, 哈伯法)預設密閉以展現體積壓力效應。</li>
+            <li><b>微觀碰撞：</b>鉻酸根、NO₂、哈伯法完整實裝粒子碰撞學說！粒子必須極度靠近才會觸發結合；且平衡時會優先選擇「剛合成」的粒子裂解，完美詮釋微觀可逆性。</li>
+            <li><b>圖表完美連動：</b>點擊右上角「暫停」，勾選「鎖定圖表看數據」，游標會在三張圖上絕對同步對齊。</li>
+        </ul>
+    </div>
+    
+    <div class="main-stage">
+        <div class="canvas-section">
+            <div style="position: absolute; top: 10px; left: 10px; display: flex; align-items: center; gap: 6px; z-index: 10; background: rgba(255,255,255,0.9); padding: 4px 8px; border-radius: 6px; box-shadow: 0 4px 10px rgba(0,0,0,0.15);">
+                <button id="btnCool" class="floating-btn" style="position: relative; background-color: #3498db;" onclick="toggleTempChange(-1)">❄️ 降溫</button>
+                <div style="font-weight: bold; color: #2c3e50; font-size: 0.9em; text-align: center; min-width: 45px;"><span id="canvasTempVal">300</span>K</div>
+                <button id="btnHeat" class="floating-btn" style="position: relative; background-color: #e74c3c;" onclick="toggleTempChange(1)">🔥 加溫</button>
+            </div>
+
+            <div id="autoPlayControls" style="position: absolute; top: 10px; left: 50%; transform: translateX(-50%); display: none; gap: 6px; z-index: 10; background: rgba(255,255,255,0.9); padding: 4px 10px; border-radius: 6px; align-items: center; box-shadow: 0 4px 10px rgba(0,0,0,0.15);">
+                <span style="font-size: 0.85em; font-weight: bold; color: #2c3e50; margin-right: 3px;">自動:</span>
+                <button id="btnAutoPlayBack" class="play-btn" onclick="startAutoPlay(-1)">◀ 倒轉</button>
+                <button id="btnAutoPlayStop" class="play-btn" onclick="stopAutoPlay()" disabled>⏹ 停止</button>
+                <button id="btnAutoPlayForward" class="play-btn" onclick="startAutoPlay(1)">推進 ▶</button>
+            </div>
+
+            <button id="mainPauseBtn" class="floating-btn" style="top: 10px; right: 10px; background-color: #e67e22;" onclick="togglePause()">⏸️ 暫停 / 回溯</button>
+            
+            <canvas id="particleCanvas" width="600" height="500"></canvas>
+        </div>
+
+        <div class="charts-section">
+            <div id="scrubberBlock" class="scrubber-panel">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <h4 style="margin: 0; color: #d35400;">⏪ 圖表回溯與分析</h4>
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <span id="eventDisplay" style="font-weight: bold; color: #d35400; font-size: 0.85em; text-align: center; background: white; padding: 2px 6px; border-radius: 4px; border: 1px solid #f8c471; display: none;"></span>
+                        <label style="font-size: 0.9em; color: #c0392b; cursor: pointer; font-weight: bold; display: flex; align-items: center;">
+                            <input type="checkbox" id="lockChartCb" style="margin-right: 5px; width: 16px; height: 16px;"> 🔒 鎖定圖表看數據
+                        </label>
+                    </div>
+                </div>
+                <div style="display: flex; align-items: center;">
+                    <button class="jump-btn" onclick="jumpToAction(-1)">⏮</button>
+                    <div style="position: relative; flex: 1; display: flex; align-items: center; height: 30px; margin: 0 10px;">
+                        <input type="range" id="timeScrubber" min="0" max="100" value="100" style="width: 100%; margin: 0;">
+                        <div id="markerTrack" style="position: absolute; width: 100%; height: 100%; pointer-events: none; z-index: 1;"></div>
+                    </div>
+                    <button class="jump-btn" onclick="jumpToAction(1)">⏭</button>
+                </div>
+            </div>
+
+            <div class="chart-wrapper"><div class="chart-custom-title">1. 系統物質量 (莫耳)</div><canvas id="molesChart"></canvas></div>
+            <div class="chart-wrapper"><div class="chart-custom-title">2. 瞬間轉換量/速率</div><canvas id="rateChart"></canvas></div>
+            <div class="chart-wrapper"><div class="chart-custom-title">3. 氣體總壓力 (atm)</div><canvas id="pressureChart"></canvas></div>
+        </div>
+    </div>
+
+    <div id="bottomDrawer" class="bottom-drawer drawer-collapsed">
+        <div class="drawer-header" onclick="toggleDrawer()">
+            <h3>⚙️ 巨觀變因控制面板</h3><span id="drawerIcon">▲ 展開</span>
+        </div>
+        <div class="drawer-content">
+            <div class="control-block">
+                <h4>🌡️ 環境設定與狀態</h4>
+                <div class="control-row">
+                    <label style="color:#e74c3c;">容器狀態:</label>
+                    <button id="btnToggleSystem" onclick="toggleOpenSystem()" style="flex:1; background: #7f8c8d; color: white; padding: 6px; border-radius: 4px; border: none; cursor: pointer; font-weight: bold;">🔒 密閉容器 (點擊打開)</button>
+                </div>
+                <div class="control-row">
+                    <label>溫度: <span id="tempVal" style="color:#e74c3c;">300</span> K</label>
+                    <input type="range" id="tempSlider" min="250" max="400" value="300">
+                </div>
+                <div class="control-row">
+                    <label>上方空間: <span id="volVal" style="color:#7f8c8d;">5.0</span> L</label>
+                    <input type="range" id="volSlider" min="2" max="20" value="5" step="0.5">
+                </div>
+                <div class="control-row">
+                    <label>液體水量: <span id="liqVal" style="color:#2980b9;">0.0</span> L</label>
+                    <input type="range" id="liqSlider" min="0" max="10" value="0" step="0.1">
+                </div>
+            </div>
+
+            <div class="control-block">
+                <h4>🧪 物質干擾 (點擊加入/移除)</h4>
+                <div class="control-row">
+                    <select id="substanceSelect" style="flex:1; padding: 6px; border-radius: 4px;">
+                    </select>
+                </div>
+                <div class="control-row" style="gap: 10px; justify-content: flex-end;">
+                    <input type="number" id="addAmount" value="1" min="0.1" max="50" step="0.1" style="width: 70px; padding: 6px; border-radius: 4px; border: 1px solid #bdc3c7; text-align: center; margin: 0;"> 
+                    <span style="font-size: 0.9em; font-weight: bold; color: #34495e;">mol (莫耳)</span>
+                </div>
+                <div style="display: flex; gap: 8px;">
+                    <button class="action btn-add" onclick="addCustomSubstance()">+ 加入</button>
+                    <button class="action btn-remove" onclick="removeCustomSubstance()">- 移除</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+<script>
+    function toggleDrawer() {
+        const drawer = document.getElementById('bottomDrawer');
+        drawer.classList.toggle('drawer-collapsed');
+        document.getElementById('drawerIcon').innerText = drawer.classList.contains('drawer-collapsed') ? '▲ 展開' : '▼ 收合';
+        setTimeout(() => { if(molesChart) {molesChart.resize(); rateChart.resize(); pressureChart.resize();} }, 300);
+    }
+    function toggleHelp() { document.getElementById('helpPanel').classList.toggle('open'); }
+
+    // --- 大一統引擎變數 ---
+    let activeSystem = 'WATER'; 
+    let isOpenSystem = false; 
+    let V_gas = 5.0;  
+    let V_liq = 0.0;  
+    let T = 300; 
+    const R = 0.082; 
+    
+    // 共用莫耳數槽 (多達3種)
+    let n_bulk = 0.0;   // WATER: l, CO2: aq, SUGAR: s, CHROMATE: CrO4, CACO3: CaCO3, NO2: NO2, HABER: N2
+    let n_mobile = 0.0; // WATER: g, CO2: g,  SUGAR: aq, CHROMATE: Cr2O7, CACO3: H+, NO2: N2O4, HABER: H2
+    let n_third = 0.0;  // CHROMATE: H+, CACO3: CO2, HABER: NH3
+    
+    let Rf = 0; let Rb = 0; let P_tot = 0;
+    
+    let time = 0; 
+    const physical_dt = 0.05; 
+    let frameCounter = 0;
+    let isPaused = false;
+    
+    window.accum_evap_particles = 0;
+    window.accum_cond_particles = 0;
+
+    const maxMemoryPoints = 3000; 
+    const visualDataPoints = 240; 
+    let history = { time: [], n1: [], n2: [], n3: [], RateF: [], RateB: [], Pressure: [], Actions: [] };
+    let disp = { n1: 0, n2: 0, n3: 0, Rf: 0, Rb: 0, Pressure: 0 }; 
+    let pendingActions = {};
+    
+    window.toggleOpenSystem = function() {
+        if (activeSystem === 'NO2' || activeSystem === 'HABER') {
+            alert('提示：純氣相反應在開放容器中會全部逸散，為方便觀察壓力效應，本系統鎖定為密閉。');
+            return;
+        }
+        isOpenSystem = !isOpenSystem;
+        const btn = document.getElementById('btnToggleSystem');
+        const volSlider = document.getElementById('volSlider');
+
+        if (isOpenSystem) {
+            btn.innerText = "🔓 開放容器 (點擊關閉)"; btn.style.background = "#e74c3c";
+            volSlider.disabled = true;
+            pendingActions['sys'] = '容器已打開';
+        } else {
+            btn.innerText = "🔒 密閉容器 (點擊打開)"; btn.style.background = "#7f8c8d";
+            volSlider.disabled = (activeSystem === 'SUGAR' || activeSystem === 'CHROMATE');
+            pendingActions['sys'] = '容器已密閉';
+        }
+        snapToPresent(); if(isPaused) drawSystem();
+    }
+
+    // --- 圖表設定 ---
+    let isChartLocked = false;
+    function syncTooltips(sourceChart, activeElements) {
+        if (!isChartLocked) return;
+        let charts = [molesChart, rateChart, pressureChart];
+        if (!activeElements || activeElements.length === 0) {
+            charts.forEach(c => { if (c !== sourceChart && c) { c.setActiveElements([]); if (c.tooltip) c.tooltip.setActiveElements([], {x: 0, y: 0}); c.update(); } });
+            return;
+        }
+        let dataIndex = activeElements[0].index;
+        charts.forEach(c => {
+            if (c !== sourceChart && c) {
+                let meta = c.getDatasetMeta(0);
+                if (meta.data[dataIndex]) {
+                    let targetElements = c.data.datasets.map((_, idx) => ({ datasetIndex: idx, index: dataIndex }));
+                    c.setActiveElements(targetElements);
+                    if (c.tooltip) c.tooltip.setActiveElements(targetElements, { x: meta.data[dataIndex].x, y: meta.data[dataIndex].y });
+                    c.update();
+                }
+            }
+        });
+    }
+
+    Chart.defaults.font.family = "'Segoe UI', Tahoma, sans-serif";
+    
+    const getCommonOpts = (isPressure = false) => ({ 
+        responsive: true, maintainAspectRatio: false, animation: false, 
+        interaction: { mode: 'index', intersect: false },
+        scales: { x: { display: false }, y: { beginAtZero: true, afterFit: function(scaleInstance) { scaleInstance.width = 55; } } },
+        elements: { point: { radius: 0 }, line: { borderWidth: 2.5, fill: isPressure, tension: 0 } }, 
+        plugins: { legend: { position: 'top', align: 'end' }, tooltip: { padding: 10 } },
+        onHover: function(e, activeElements, chart) { syncTooltips(chart, activeElements); }
+    });
+
+    let molesChart = new Chart(document.getElementById('molesChart'), { type: 'line', data: { labels: history.time, datasets: [] }, options: getCommonOpts(false) });
+    let rateChart = new Chart(document.getElementById('rateChart'), { type: 'line', data: { labels: history.time, datasets: [] }, options: getCommonOpts(false) });
+    let pressureChart = new Chart(document.getElementById('pressureChart'), { 
+        type: 'line', 
+        data: { labels: history.time, datasets: [{ label: '壓力 (atm)', borderColor: '#16a085', data: history.Pressure, backgroundColor: 'rgba(22, 160, 133, 0.15)', tension: 0, fill: true }] }, 
+        options: getCommonOpts(true) 
+    });
+
+    function updateChartWindows(startIdx, endIdx) {
+        if (history.time.length === 0) return;
+        let startLabel = history.time[startIdx]; let endLabel = history.time[endIdx];
+        if (startLabel !== undefined && endLabel !== undefined) {
+            [molesChart, rateChart, pressureChart].forEach(c => {
+                c.options.scales.x.min = startLabel; c.options.scales.x.max = endLabel; c.update('none'); 
+            });
+        }
+    }
+
+    let autoPlayTimer = null;
+    window.startAutoPlay = function(direction) {
+        if (!isPaused) return; 
+        let lockCb = document.getElementById('lockChartCb');
+        if (lockCb.checked) { lockCb.checked = false; lockCb.dispatchEvent(new Event('change')); }
+        document.getElementById('btnAutoPlayBack').classList.remove('active-play');
+        document.getElementById('btnAutoPlayForward').classList.remove('active-play');
+        if (direction === -1) document.getElementById('btnAutoPlayBack').classList.add('active-play');
+        if (direction === 1) document.getElementById('btnAutoPlayForward').classList.add('active-play');
+        let stopBtn = document.getElementById('btnAutoPlayStop'); stopBtn.disabled = false; stopBtn.style.background = '#e74c3c'; 
+
+        if (autoPlayTimer) clearInterval(autoPlayTimer);
+        autoPlayTimer = setInterval(() => {
+            let scrubber = document.getElementById('timeScrubber');
+            let currentVal = parseInt(scrubber.value); let maxVal = parseInt(scrubber.max);
+            let newVal = currentVal + direction * 2; 
+            if (newVal <= 0) { newVal = 0; stopAutoPlay(); } else if (newVal >= maxVal) { newVal = maxVal; stopAutoPlay(); }
+            if (newVal !== currentVal) { scrubber.value = newVal; scrubber.dispatchEvent(new Event('input')); }
+        }, 50); 
+    };
+
+    window.stopAutoPlay = function() {
+        if (autoPlayTimer) { clearInterval(autoPlayTimer); autoPlayTimer = null; }
+        document.getElementById('btnAutoPlayBack').classList.remove('active-play');
+        document.getElementById('btnAutoPlayForward').classList.remove('active-play');
+        let btnStop = document.getElementById('btnAutoPlayStop'); btnStop.disabled = true; btnStop.style.background = '#95a5a6';
+    };
+
+    // --- 粒子類別 (支援7大系統) ---
+    const canvas = document.getElementById('particleCanvas'); const ctx = canvas.getContext('2d');
+    let particles = []; let flashes = []; 
+
+    class Particle {
+        constructor(type, state, x, y, rotation = Math.random() * Math.PI * 2) {
+            this.id = Math.random(); this.type = type; this.state = state; 
+            this.x = x; this.y = y; this.toBeRemoved = false;
+            this.rotation = rotation;
+            
+            if (type === 'SUGAR') this.radius = 4;
+            else if (type === 'CrO4') this.radius = 3.5;
+            else if (type === 'Cr2O7') this.radius = 5.5;
+            else if (type === 'H_PLUS') this.radius = 2.5;
+            else if (type === 'NO2') this.radius = 4;
+            else if (type === 'N2O4') this.radius = 6.5;
+            else if (type === 'H2') this.radius = 3;
+            else if (type === 'N2') this.radius = 4.5;
+            else if (type === 'NH3') this.radius = 5.5;
+            else this.radius = 3;
+            
+            let speed = (Math.random() + 0.5);
+            if(state === 'gas' && (type === 'H2O' || type === 'CO2')) speed *= 4.0;
+            else if(state === 'gas') { // 氣相反應物
+                speed *= 4.0;
+                if (type === 'N2O4' || type === 'N2') speed *= 0.7; 
+                else if (type === 'NH3') speed *= 0.8;
+                else if (type === 'H2') speed *= 1.5;
+            }
+            else if(state === 'aq') speed *= (type === 'H_PLUS' ? 2.5 : 1.0); 
+            else speed = 0; 
+            
+            let angle = Math.random() * Math.PI * 2;
+            this.vx = Math.cos(angle) * speed; this.vy = Math.sin(angle) * speed;
+            this.rotSpeed = (Math.random() - 0.5) * 0.2;
+        }
+
+        update(tempFactor, bounds) {
+            if (this.state === 'solid') return; 
+            if (this.state === 'bubble') {
+                this.y -= 2.5; this.x += (Math.random()-0.5) * 1.5; 
+                if (this.y <= bounds.liquidY + this.radius) {
+                    this.state = 'gas'; this.y = bounds.liquidY - 5; 
+                    this.vy = -(3.0 + Math.random()*3.0); this.vx = (Math.random()-0.5)*4;
+                    flashes.push({x: this.x, y: bounds.liquidY, c: '#ffffff', life: 0.8, r: 10});
+                }
+                return;
+            }
+            
+            if (this.state === 'drop_top') {
+                this.y = bounds.pistonY + this.radius; 
+                if (Math.random() < 0.02 * tempFactor) { this.state = 'falling_drop'; this.vy = 2.0; this.vx = 0; }
+                return;
+            } else if (this.state === 'drop_wall') {
+                this.y += 1.0 * tempFactor; 
+                if (this.y >= bounds.liquidY) { this.toBeRemoved = true; flashes.push({x: this.x, y: bounds.liquidY, c: '#3498db', life: 0.5, r: 10}); }
+                if (this.y < bounds.pistonY + this.radius) this.y = bounds.pistonY + this.radius;
+                return;
+            } else if (this.state === 'falling_drop') {
+                this.y += 4.0 * tempFactor; 
+                if (this.y >= bounds.liquidY) { this.toBeRemoved = true; flashes.push({x: this.x, y: bounds.liquidY, c: '#3498db', life: 0.5, r: 10}); }
+                return;
+            }
+
+            if (this.state === 'aq') {
+                this.vx += (Math.random()-0.5) * 0.5; this.vy += (Math.random()-0.5) * 0.5;
+                let maxV = (this.type === 'H_PLUS') ? 3 : 1.5;
+                let v = Math.hypot(this.vx, this.vy); if(v > maxV) { this.vx = (this.vx/v)*maxV; this.vy = (this.vy/v)*maxV; }
+                this.rotation += 0.05;
+            } else if (this.state === 'gas' && activeSystem !== 'WATER' && activeSystem !== 'CO2' && activeSystem !== 'CACO3') {
+                this.rotation += this.rotSpeed * tempFactor;
+            }
+
+            this.x += this.vx * tempFactor; this.y += this.vy * tempFactor;
+            
+            if (this.x < bounds.minX + this.radius) { this.x = bounds.minX + this.radius; this.vx *= -1; }
+            if (this.x > bounds.maxX - this.radius) { this.x = bounds.maxX - this.radius; this.vx *= -1; }
+            
+            if (this.state === 'gas') {
+                if (isOpenSystem && this.y < 0) {
+                    this.toBeRemoved = true;
+                } else if (!isOpenSystem && this.y < bounds.pistonY + this.radius) { 
+                    this.y = bounds.pistonY + this.radius; this.vy *= -1; 
+                    if (this.type === 'H2O' && this.markedForCondensation && Math.random() < 0.1) {
+                        this.state = 'drop_top'; this.vy = 0; this.vx = 0; this.markedForCondensation = false;
+                    }
+                } 
+                
+                // 接觸水面
+                if (this.y > bounds.liquidY - this.radius) { 
+                    // 純氣相反應撞到底部
+                    if (activeSystem === 'NO2' || activeSystem === 'HABER') {
+                        this.y = bounds.liquidY - this.radius; this.vy *= -1;
+                    } else if (this.markedForCondensation) {
+                        this.toBeRemoved = true; this.markedForCondensation = false;
+                        flashes.push({x: this.x, y: bounds.liquidY, c: '#ffffff', life: 0.5, r: 10}); 
+                    } else {
+                        this.y = bounds.liquidY - this.radius; this.vy *= -1; 
+                    }
+                } 
+            } else if (this.state === 'aq') {
+                if (this.type === 'SUGAR' && this.markedForCondensation) {
+                    if (this.y > bounds.maxY - 20 && Math.abs(this.x - canvas.width/2) < 40) {
+                        this.toBeRemoved = true; this.markedForCondensation = false;
+                    }
+                }
+                if (this.y < bounds.liquidY + this.radius) { this.y = bounds.liquidY + this.radius; this.vy *= -1; } 
+                if (this.y > bounds.maxY - this.radius) { this.y = bounds.maxY - this.radius; this.vy *= -1; } 
+            }
+        }
+
+        draw(ctx) {
+            ctx.save();
+            ctx.translate(this.x, this.y);
+            
+            if (this.type === 'SUGAR') {
+                ctx.fillStyle = '#f39c12'; ctx.fillRect(-3, -3, 6, 6);
+                ctx.strokeStyle = '#d35400'; ctx.lineWidth = 1; ctx.strokeRect(-3, -3, 6, 6);
+            } else if (this.type === 'H2O') {
+                ctx.fillStyle = this.state === 'gas' ? '#bdc3c7' : '#3498db'; 
+                ctx.beginPath(); ctx.arc(0, 0, 3, 0, Math.PI*2); ctx.fill();
+            } else if (this.type === 'CO2') {
+                if (this.state === 'bubble') {
+                    ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(0, 0, 4, 0, Math.PI*2); ctx.stroke();
+                } else {
+                    ctx.fillStyle = this.state === 'gas' ? '#7f8c8d' : 'rgba(41, 128, 185, 0.8)';
+                    ctx.beginPath(); ctx.arc(0, 0, 3, 0, Math.PI*2); ctx.fill();
+                }
+            } else if (this.type === 'CrO4') {
+                ctx.fillStyle = '#f1c40f'; ctx.beginPath(); ctx.arc(0, 0, 4, 0, Math.PI*2); ctx.fill();
+                ctx.strokeStyle = '#f39c12'; ctx.lineWidth = 1; ctx.stroke();
+            } else if (this.type === 'Cr2O7') {
+                ctx.rotate(this.rotation); ctx.fillStyle = '#e67e22'; 
+                ctx.beginPath(); ctx.arc(-3, 0, 4, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(3, 0, 4, 0, Math.PI*2); ctx.fill();
+                ctx.strokeStyle = '#d35400'; ctx.lineWidth = 1;
+                ctx.beginPath(); ctx.arc(-3, 0, 4, 0, Math.PI*2); ctx.stroke(); ctx.beginPath(); ctx.arc(3, 0, 4, 0, Math.PI*2); ctx.stroke();
+            } else if (this.type === 'H_PLUS') {
+                ctx.fillStyle = '#e74c3c'; ctx.beginPath(); ctx.arc(0, 0, 2.5, 0, Math.PI*2); ctx.fill();
+            } else if (this.type === 'NO2') {
+                ctx.rotate(this.rotation); ctx.fillStyle = '#2980b9'; ctx.beginPath(); ctx.arc(0, 0, 3, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#e74c3c'; ctx.beginPath(); ctx.arc(-2.5, -3.5, 2.5, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(-2.5, 3.5, 2.5, 0, Math.PI*2); ctx.fill();
+            } else if (this.type === 'N2O4') {
+                ctx.rotate(this.rotation); ctx.fillStyle = '#bdc3c7'; ctx.beginPath(); ctx.arc(-2.5, 0, 3, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(2.5, 0, 3, 0, Math.PI*2); ctx.fill();
+                ctx.strokeStyle = '#7f8c8d'; ctx.lineWidth = 1; ctx.stroke();
+                ctx.fillStyle = '#e74c3c'; ctx.beginPath(); ctx.arc(-5, -3.5, 2.5, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(-5, 3.5, 2.5, 0, Math.PI*2); ctx.fill();
+                ctx.beginPath(); ctx.arc(5, -3.5, 2.5, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(5, 3.5, 2.5, 0, Math.PI*2); ctx.fill();
+            } else if (this.type === 'N2') {
+                ctx.rotate(this.rotation); ctx.fillStyle = '#2980b9'; ctx.beginPath(); ctx.arc(-2, 0, 3, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(2, 0, 3, 0, Math.PI*2); ctx.fill();
+            } else if (this.type === 'H2') {
+                ctx.rotate(this.rotation); ctx.fillStyle = '#ecf0f1'; ctx.strokeStyle = '#7f8c8d'; ctx.lineWidth = 1;
+                ctx.beginPath(); ctx.arc(-1.5, 0, 2, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+                ctx.beginPath(); ctx.arc(1.5, 0, 2, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+            } else if (this.type === 'NH3') {
+                ctx.rotate(this.rotation); ctx.fillStyle = '#2980b9'; ctx.beginPath(); ctx.arc(0, 0, 3.5, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#ecf0f1'; ctx.strokeStyle = '#7f8c8d'; ctx.lineWidth = 1;
+                ctx.beginPath(); ctx.arc(-3.5, -3, 2, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+                ctx.beginPath(); ctx.arc(-3.5, 3, 2, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+                ctx.beginPath(); ctx.arc(4, 0, 2, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+            }
+            
+            ctx.restore();
+        }
+    }
+
+    function handleCollisions() {
+        for (let i = 0; i < particles.length; i++) {
+            for (let j = i + 1; j < particles.length; j++) {
+                let p1 = particles[i]; let p2 = particles[j];
+                let dx = p2.x - p1.x; let dy = p2.y - p1.y;
+                let dist = Math.hypot(dx, dy);
+                let minDist = p1.radius + p2.radius;
+
+                if (dist < minDist) {
+                    if (dist === 0) { dx = 1; dy = 0; dist = 1; }
+                    let overlap = minDist - dist; let nx = dx / dist; let ny = dy / dist;
+                    p1.x -= nx * overlap / 2; p1.y -= ny * overlap / 2;
+                    p2.x += nx * overlap / 2; p2.y += ny * overlap / 2;
+                    p1.vx -= nx*2; p1.vy -= ny*2; p2.vx += nx*2; p2.vy += ny*2;
+                }
+            }
+        }
+    }
+
+    function getBounds() {
+        let minX = 20, maxX = canvas.width - 20, maxY = canvas.height - 20; 
+        let totalHeight = canvas.height - 50; let maxV = 25; 
+        
+        let h_liq = 0, h_gas = 0;
+        if (activeSystem === 'NO2' || activeSystem === 'HABER') {
+            h_gas = totalHeight * (V_gas / maxV);
+            h_liq = 0;
+        } else {
+            h_liq = totalHeight * (V_liq / maxV); 
+            h_gas = totalHeight * (V_gas / maxV);
+        }
+        let liquidY = maxY - h_liq; let pistonY = liquidY - h_gas;
+        return { minX, maxX, pistonY, liquidY, maxY, totalHeight, maxV };
+    }
+
+    window.switchSystem = function(sys) {
+        activeSystem = sys; particles = []; flashes = []; time = 0; frameCounter = 0;
+        
+        history.time.length = 0; history.n1.length = 0; history.n2.length = 0; history.n3.length = 0;
+        history.RateF.length = 0; history.RateB.length = 0; history.Pressure.length = 0; history.Actions.length = 0;
+        disp = { n1: 0, n2: 0, n3: 0, Rf: 0, Rb: 0, Pressure: 0 };
+        pendingActions = {}; 
+        
+        isOpenSystem = false;
+        document.getElementById('btnToggleSystem').innerText = "🔒 密閉容器 (點擊打開)";
+        document.getElementById('btnToggleSystem').style.background = "#7f8c8d";
+        
+        const eqTitle = document.getElementById('equationTitle');
+        const sel = document.getElementById('substanceSelect');
+        const volSlider = document.getElementById('volSlider');
+        const btnToggleSystem = document.getElementById('btnToggleSystem');
+        
+        if(sys === 'WATER') {
+            eqTitle.innerHTML = `H<sub>2</sub>O<sub>(l)</sub> &rightleftharpoons; H<sub>2</sub>O<sub>(g)</sub>`;
+            sel.innerHTML = `<option value="H2O_l">液態水 (H₂O)</option><option value="H2O_g">水蒸氣 (H₂O)</option>`;
+            molesChart.data.datasets = [ 
+                { label: '液態水 (mol)', borderColor: '#3498db', backgroundColor: 'transparent', fill: false, data: history.n1, tension: 0 }, 
+                { label: '水蒸氣 (mol)', borderColor: '#95a5a6', backgroundColor: 'transparent', fill: false, data: history.n2, tension: 0 } 
+            ];
+            rateChart.data.datasets = [ 
+                { label: '蒸發速率 (l → g)', borderColor: '#e74c3c', backgroundColor: 'transparent', fill: false, data: history.RateF, tension: 0 }, 
+                { label: '凝結速率 (g → l)', borderColor: '#2980b9', backgroundColor: 'transparent', fill: false, data: history.RateB, tension: 0 } 
+            ];
+            V_gas = 5.0; V_liq = 0.0; T = 300; n_bulk = 0.0; n_mobile = 0.0; n_third = 0.0;
+            volSlider.disabled = false; btnToggleSystem.disabled = false;
+            
+        } else if(sys === 'CO2') {
+            eqTitle.innerHTML = `CO<sub>2(g)</sub> + H<sub>2</sub>O<sub>(l)</sub> &rightleftharpoons; CO<sub>2(aq)</sub>`;
+            sel.innerHTML = `<option value="CO2_g">CO₂ 氣體</option>`;
+            molesChart.data.datasets = [ 
+                { label: '溶解態 CO₂ (mol)', borderColor: '#2980b9', backgroundColor: 'transparent', fill: false, data: history.n1, tension: 0 }, 
+                { label: '氣態 CO₂ (mol)', borderColor: '#7f8c8d', backgroundColor: 'transparent', fill: false, data: history.n2, tension: 0 } 
+            ];
+            rateChart.data.datasets = [ 
+                { label: '逸散速率 (aq → g)', borderColor: '#e74c3c', backgroundColor: 'transparent', fill: false, data: history.RateF, tension: 0 }, 
+                { label: '溶解速率 (g → aq)', borderColor: '#27ae60', backgroundColor: 'transparent', fill: false, data: history.RateB, tension: 0 } 
+            ];
+            V_gas = 5.0; V_liq = 5.0; T = 298; n_bulk = 0.0; n_mobile = 0.0; n_third = 0.0;
+            volSlider.disabled = false; btnToggleSystem.disabled = false;
+            
+        } else if(sys === 'SUGAR') {
+            eqTitle.innerHTML = `糖<sub>(s)</sub> &rightleftharpoons; 糖<sub>(aq)</sub>`;
+            sel.innerHTML = `<option value="SUGAR_s">固體糖</option>`;
+            molesChart.data.datasets = [ 
+                { label: '固體糖 (mol)', borderColor: '#f39c12', backgroundColor: 'transparent', fill: false, data: history.n1, tension: 0 }, 
+                { label: '溶解糖 (mol)', borderColor: '#3498db', backgroundColor: 'transparent', fill: false, data: history.n2, tension: 0 } 
+            ];
+            rateChart.data.datasets = [ 
+                { label: '溶解速率 (s → aq)', borderColor: '#e74c3c', backgroundColor: 'transparent', fill: false, data: history.RateF, tension: 0 }, 
+                { label: '結晶速率 (aq → s)', borderColor: '#9b59b6', backgroundColor: 'transparent', fill: false, data: history.RateB, tension: 0 } 
+            ];
+            V_gas = 5.0; V_liq = 5.0; T = 300; n_bulk = 0.0; n_mobile = 0.0; n_third = 0.0;
+            volSlider.disabled = true; btnToggleSystem.disabled = false;
+            
+        } else if(sys === 'CHROMATE') {
+            eqTitle.innerHTML = `2CrO<sub>4</sub><sup>2-</sup><sub>(aq)</sub> + 2H<sup>+</sup> &rightleftharpoons; Cr<sub>2</sub>O<sub>7</sub><sup>2-</sup><sub>(aq)</sub> + H<sub>2</sub>O`;
+            sel.innerHTML = `<option value="CrO4">鉻酸鉀 K₂CrO₄ (黃)</option><option value="Cr2O7">二鉻酸鉀 K₂Cr₂O₇ (橘)</option><option value="HCl">鹽酸 HCl (提供 H⁺)</option><option value="NaOH">氫氧化鈉 NaOH (中和 H⁺)</option>`;
+            molesChart.data.datasets = [ 
+                { label: 'CrO₄²⁻ (黃)', borderColor: '#f1c40f', backgroundColor: 'transparent', fill: false, data: history.n1, tension: 0 }, 
+                { label: 'Cr₂O₇²⁻ (橘)', borderColor: '#e67e22', backgroundColor: 'transparent', fill: false, data: history.n2, tension: 0 },
+                { label: 'H⁺ (酸)', borderColor: '#e74c3c', backgroundColor: 'transparent', fill: false, data: history.n3, tension: 0 }
+            ];
+            rateChart.data.datasets = [ 
+                { label: '正反應 (變橘)', borderColor: '#d35400', backgroundColor: 'transparent', fill: false, data: history.RateF, tension: 0 }, 
+                { label: '逆反應 (變黃)', borderColor: '#f39c12', backgroundColor: 'transparent', fill: false, data: history.RateB, tension: 0 } 
+            ];
+            V_gas = 5.0; V_liq = 10.0; T = 300; n_bulk = 0.0; n_mobile = 0.0; n_third = 0.0;
+            volSlider.disabled = true; btnToggleSystem.disabled = false;
+            
+        } else if(sys === 'CACO3') {
+            eqTitle.innerHTML = `CaCO<sub>3(s)</sub> + 2H<sup>+</sup> &rightleftharpoons; Ca<sup>2+</sup> + CO<sub>2(g)</sub> + H<sub>2</sub>O`;
+            sel.innerHTML = `<option value="CaCO3_s">固體碳酸鈣 CaCO₃</option><option value="HCl">鹽酸 HCl (提供 H⁺)</option><option value="NaOH">氫氧化鈉 NaOH (中和 H⁺)</option>`;
+            molesChart.data.datasets = [ 
+                { label: 'CaCO₃ (固體)', borderColor: '#95a5a6', backgroundColor: 'transparent', fill: false, data: history.n1, tension: 0 }, 
+                { label: 'H⁺ (酸)', borderColor: '#e74c3c', backgroundColor: 'transparent', fill: false, data: history.n2, tension: 0 },
+                { label: 'CO₂ (氣體)', borderColor: '#7f8c8d', backgroundColor: 'transparent', fill: false, data: history.n3, tension: 0 }
+            ];
+            rateChart.data.datasets = [ 
+                { label: '溶解生氣 (s → g)', borderColor: '#27ae60', backgroundColor: 'transparent', fill: false, data: history.RateF, tension: 0 }, 
+                { label: '逆向沉澱 (g → s)', borderColor: '#c0392b', backgroundColor: 'transparent', fill: false, data: history.RateB, tension: 0 } 
+            ];
+            V_gas = 5.0; V_liq = 8.0; T = 300; n_bulk = 0.0; n_mobile = 0.0; n_third = 0.0;
+            volSlider.disabled = false; btnToggleSystem.disabled = false;
+        } else if (sys === 'NO2') {
+            eqTitle.innerHTML = `2NO<sub>2(g)</sub> &rightleftharpoons; N<sub>2</sub>O<sub>4(g)</sub> + 熱`;
+            sel.innerHTML = `<option value="NO2">NO₂ (紅棕色)</option><option value="N2O4">N₂O₄ (無色)</option>`;
+            molesChart.data.datasets = [
+                { label: 'NO₂ (mol)', borderColor: '#d35400', backgroundColor: 'transparent', fill: false, data: history.n1, tension: 0 },
+                { label: 'N₂O₄ (mol)', borderColor: '#7f8c8d', backgroundColor: 'transparent', fill: false, data: history.n2, tension: 0 }
+            ];
+            rateChart.data.datasets = [
+                { label: '合成速率 (Rf)', borderColor: '#2980b9', backgroundColor: 'transparent', fill: false, data: history.RateF, tension: 0 },
+                { label: '分解速率 (Rb)', borderColor: '#8e44ad', backgroundColor: 'transparent', fill: false, data: history.RateB, tension: 0 }
+            ];
+            V_gas = 10.0; V_liq = 0; T = 300; n_bulk = 0.0; n_mobile = 0.0; n_third = 0.0;
+            document.getElementById('addAmount').value = 10;
+            volSlider.disabled = false; btnToggleSystem.disabled = true;
+        } else if (sys === 'HABER') {
+            eqTitle.innerHTML = `N<sub>2(g)</sub> + 3H<sub>2(g)</sub> &rightleftharpoons; 2NH<sub>3(g)</sub> + 熱`;
+            sel.innerHTML = `<option value="N2">N₂ (氮氣)</option><option value="H2">H₂ (氫氣)</option><option value="NH3">NH₃ (氨氣)</option>`;
+            molesChart.data.datasets = [
+                { label: 'N₂ (mol)', borderColor: '#2980b9', backgroundColor: 'transparent', fill: false, data: history.n1, tension: 0 },
+                { label: 'H₂ (mol)', borderColor: '#bdc3c7', backgroundColor: 'transparent', fill: false, data: history.n2, tension: 0 },
+                { label: 'NH₃ (mol)', borderColor: '#27ae60', backgroundColor: 'transparent', fill: false, data: history.n3, tension: 0 }
+            ];
+            rateChart.data.datasets = [
+                { label: '製氨速率 (Rf)', borderColor: '#e67e22', backgroundColor: 'transparent', fill: false, data: history.RateF, tension: 0 },
+                { label: '分解速率 (Rb)', borderColor: '#8e44ad', backgroundColor: 'transparent', fill: false, data: history.RateB, tension: 0 }
+            ];
+            V_gas = 10.0; V_liq = 0; T = 300; n_bulk = 0.0; n_mobile = 0.0; n_third = 0.0;
+            document.getElementById('addAmount').value = 5; 
+            volSlider.disabled = false; btnToggleSystem.disabled = true;
+        }
+        
+        document.getElementById('volSlider').value = V_gas; document.getElementById('volVal').innerText = V_gas.toFixed(1);
+        document.getElementById('liqSlider').value = V_liq; document.getElementById('liqVal').innerText = V_liq.toFixed(1);
+        document.getElementById('tempSlider').value = T; document.getElementById('tempVal').innerText = T; document.getElementById('canvasTempVal').innerText = T.toFixed(1);
+        
+        molesChart.update(); rateChart.update(); pressureChart.update();
+        if (isPaused) togglePause();
+    };
+
+    window.addCustomSubstance = function() {
+        let val = document.getElementById('substanceSelect').value;
+        let amt = parseFloat(document.getElementById('addAmount').value) || 0;
+        let b = getBounds();
+        
+        if(val === 'H2O_l') { n_bulk += amt; V_liq = Math.max(0.1, n_bulk * 0.5); document.getElementById('liqSlider').value = V_liq; document.getElementById('liqVal').innerText = V_liq.toFixed(1); }
+        if(val === 'H2O_g') { n_mobile += amt; for(let i=0; i<Math.min(amt*50, 200); i++) particles.push(new Particle('H2O', 'gas', b.minX + Math.random()*(b.maxX - b.minX), b.pistonY + 10 + Math.random()*(b.liquidY - b.pistonY - 20))); }
+        if(val === 'CO2_g') { n_mobile += amt; for(let i=0; i<Math.min(amt*20, 200); i++) particles.push(new Particle('CO2', 'gas', b.minX + Math.random()*(b.maxX - b.minX), b.pistonY + 10 + Math.random()*(b.liquidY - b.pistonY - 20))); }
+        if(val === 'SUGAR_s') { n_bulk += amt; }
+        
+        let visual_Cr = 10; let visual_Ca = 10; 
+
+        if(val === 'CrO4') { n_bulk += amt; for(let i=0; i<Math.min(amt*visual_Cr, 100); i++) particles.push(new Particle('CrO4', 'aq', b.minX+10+Math.random()*(b.maxX-b.minX-20), b.liquidY+10+Math.random()*(b.maxY-b.liquidY-20))); } 
+        if(val === 'Cr2O7') { n_mobile += amt; for(let i=0; i<Math.min(amt*visual_Cr, 100); i++) particles.push(new Particle('Cr2O7', 'aq', b.minX+10+Math.random()*(b.maxX-b.minX-20), b.liquidY+10+Math.random()*(b.maxY-b.liquidY-20))); } 
+        if(val === 'HCl') { 
+            if(activeSystem === 'CHROMATE') { n_third += amt; for(let i=0; i<Math.min(amt*visual_Cr, 100); i++) particles.push(new Particle('H_PLUS', 'aq', b.minX+10+Math.random()*(b.maxX-b.minX-20), b.liquidY+10+Math.random()*(b.maxY-b.liquidY-20))); }
+            if(activeSystem === 'CACO3') { n_mobile += amt; for(let i=0; i<Math.min(amt*visual_Ca, 100); i++) particles.push(new Particle('H_PLUS', 'aq', b.minX+10+Math.random()*(b.maxX-b.minX-20), b.liquidY+10+Math.random()*(b.maxY-b.liquidY-20))); }
+        }
+        if(val === 'NaOH') {
+            let removeTarget = (activeSystem === 'CHROMATE') ? n_third : n_mobile;
+            let actualRemove = Math.min(amt, removeTarget);
+            if(activeSystem === 'CHROMATE') n_third -= actualRemove;
+            if(activeSystem === 'CACO3') n_mobile -= actualRemove;
+            let targets = particles.filter(p => p.type === 'H_PLUS' && p.state === 'aq');
+            let count = Math.min(targets.length, actualRemove * visual_Cr);
+            for(let i=0; i<count; i++) targets[i].toBeRemoved = true;
+            pendingActions['add'] = `+${amt} NaOH (中和 ${actualRemove.toFixed(1)} H⁺)`;
+            snapToPresent(); if(isPaused) drawSystem(); return; 
+        }
+        if(val === 'CaCO3_s') { n_bulk += amt; }
+
+        if(val === 'NO2') { n_bulk += amt; for(let i=0; i<Math.min(amt*5, 100); i++) particles.push(new Particle('NO2', 'gas', b.minX+10+Math.random()*(b.maxX-b.minX-20), b.pistonY+10+Math.random()*(b.maxY-b.pistonY-20))); }
+        if(val === 'N2O4') { n_mobile += amt; for(let i=0; i<Math.min(amt*5, 100); i++) particles.push(new Particle('N2O4', 'gas', b.minX+10+Math.random()*(b.maxX-b.minX-20), b.pistonY+10+Math.random()*(b.maxY-b.pistonY-20))); }
+        
+        if(val === 'N2') { n_bulk += amt; for(let i=0; i<Math.min(amt*5, 100); i++) particles.push(new Particle('N2', 'gas', b.minX+10+Math.random()*(b.maxX-b.minX-20), b.pistonY+10+Math.random()*(b.maxY-b.pistonY-20))); }
+        if(val === 'H2') { n_mobile += amt; for(let i=0; i<Math.min(amt*5, 100); i++) particles.push(new Particle('H2', 'gas', b.minX+10+Math.random()*(b.maxX-b.minX-20), b.pistonY+10+Math.random()*(b.maxY-b.pistonY-20))); }
+        if(val === 'NH3') { n_third += amt; for(let i=0; i<Math.min(amt*5, 100); i++) particles.push(new Particle('NH3', 'gas', b.minX+10+Math.random()*(b.maxX-b.minX-20), b.pistonY+10+Math.random()*(b.maxY-b.pistonY-20))); }
+
+        snapToPresent(); pendingActions['add'] = `+${amt.toFixed(1)} 物質`; if (isPaused) drawSystem();
+    };
+
+    window.removeCustomSubstance = function() {
+        let val = document.getElementById('substanceSelect').value;
+        let requestAmt = parseFloat(document.getElementById('addAmount').value) || 0;
+        let removedAmt = 0;
+        
+        if (val === 'NaOH') { alert('提示：加入 NaOH 即可達到移除 H⁺ 的效果。'); return; }
+
+        if(val === 'H2O_l') { removedAmt = Math.min(requestAmt, n_bulk); n_bulk -= removedAmt; V_liq = Math.max(0, n_bulk * 0.5); document.getElementById('liqSlider').value = V_liq; document.getElementById('liqVal').innerText = V_liq.toFixed(1); }
+        else if(val === 'H2O_g') { removedAmt = Math.min(requestAmt, n_mobile); n_mobile -= removedAmt; let targets = particles.filter(p => p.type === 'H2O' && p.state === 'gas'); let count = (n_mobile < 0.01) ? targets.length : Math.ceil(removedAmt * 50); for(let i=0; i<Math.min(targets.length, count); i++) targets[i].toBeRemoved = true; }
+        else if(val === 'CO2_g') { removedAmt = Math.min(requestAmt, n_mobile + n_bulk); let fromGas = Math.min(removedAmt, n_mobile); let fromLiq = removedAmt - fromGas; n_mobile -= fromGas; n_bulk -= fromLiq; let targets = particles.filter(p => p.type === 'CO2' && p.state === 'gas'); let count = (n_mobile < 0.01) ? targets.length : Math.ceil(fromGas * 20); for(let i=0; i<Math.min(targets.length, count); i++) targets[i].toBeRemoved = true; }
+        else if(val === 'SUGAR_s') { removedAmt = Math.min(requestAmt, n_bulk + n_mobile); let fromSolid = Math.min(removedAmt, n_bulk); let fromAq = removedAmt - fromSolid; n_bulk -= fromSolid; n_mobile -= fromAq; if (fromAq > 0) { let targets = particles.filter(p => p.type === 'SUGAR' && p.state === 'aq'); let count = (n_mobile < 0.01) ? targets.length : Math.ceil(fromAq * 10); for(let i=0; i<Math.min(targets.length, count); i++) targets[i].toBeRemoved = true; } }
+        else if(val === 'CrO4') { removedAmt = Math.min(requestAmt, n_bulk); n_bulk -= removedAmt; let targets = particles.filter(p => p.type === 'CrO4' && p.state === 'aq'); let count = Math.min(targets.length, removedAmt * 10); for(let i=0; i<count; i++) targets[i].toBeRemoved = true; }
+        else if(val === 'Cr2O7') { removedAmt = Math.min(requestAmt, n_mobile); n_mobile -= removedAmt; let targets = particles.filter(p => p.type === 'Cr2O7' && p.state === 'aq'); let count = Math.min(targets.length, removedAmt * 10); for(let i=0; i<count; i++) targets[i].toBeRemoved = true; }
+        else if(val === 'HCl') { 
+            let target = (activeSystem === 'CHROMATE') ? n_third : n_mobile;
+            removedAmt = Math.min(requestAmt, target);
+            if(activeSystem === 'CHROMATE') n_third -= removedAmt;
+            if(activeSystem === 'CACO3') n_mobile -= removedAmt;
+            let targets = particles.filter(p => p.type === 'H_PLUS' && p.state === 'aq');
+            let count = Math.min(targets.length, removedAmt * 10);
+            for(let i=0; i<count; i++) targets[i].toBeRemoved = true;
+        }
+        else if(val === 'CaCO3_s') { removedAmt = Math.min(requestAmt, n_bulk); n_bulk -= removedAmt; }
+        
+        else if(val === 'NO2') { removedAmt = Math.min(requestAmt, n_bulk); n_bulk -= removedAmt; let targets = particles.filter(p => p.type === 'NO2' && !p.toBeRemoved); targets.sort(()=>Math.random()-0.5); for(let i=0; i<Math.min(targets.length, removedAmt*5); i++) targets[i].toBeRemoved=true; }
+        else if(val === 'N2O4') { removedAmt = Math.min(requestAmt, n_mobile); n_mobile -= removedAmt; let targets = particles.filter(p => p.type === 'N2O4' && !p.toBeRemoved); targets.sort(()=>Math.random()-0.5); for(let i=0; i<Math.min(targets.length, removedAmt*5); i++) targets[i].toBeRemoved=true; }
+        else if(val === 'N2') { removedAmt = Math.min(requestAmt, n_bulk); n_bulk -= removedAmt; let targets = particles.filter(p => p.type === 'N2' && !p.toBeRemoved); targets.sort(()=>Math.random()-0.5); for(let i=0; i<Math.min(targets.length, removedAmt*5); i++) targets[i].toBeRemoved=true; }
+        else if(val === 'H2') { removedAmt = Math.min(requestAmt, n_mobile); n_mobile -= removedAmt; let targets = particles.filter(p => p.type === 'H2' && !p.toBeRemoved); targets.sort(()=>Math.random()-0.5); for(let i=0; i<Math.min(targets.length, removedAmt*5); i++) targets[i].toBeRemoved=true; }
+        else if(val === 'NH3') { removedAmt = Math.min(requestAmt, n_third); n_third -= removedAmt; let targets = particles.filter(p => p.type === 'NH3' && !p.toBeRemoved); targets.sort(()=>Math.random()-0.5); for(let i=0; i<Math.min(targets.length, removedAmt*5); i++) targets[i].toBeRemoved=true; }
+
+        if (removedAmt > 0) {
+            snapToPresent(); pendingActions['remove'] = `-${removedAmt.toFixed(1)} 物質`; if (isPaused) drawSystem();
+        } else {
+            alert('⚠️ 容器內已無足夠的物質可供移除！');
+        }
+    }
+
+    let tempChangeMode = 0; 
+    window.toggleTempChange = function(mode) {
+        if (tempChangeMode === mode) tempChangeMode = 0; else tempChangeMode = mode;
+        updateTempButtons();
+    }
+    function updateTempButtons() {
+        const btnCool = document.getElementById('btnCool'); const btnHeat = document.getElementById('btnHeat');
+        if (tempChangeMode === -1) { btnCool.style.boxShadow = '0 0 15px #3498db'; btnCool.innerText = '❄️ 降溫中'; btnCool.style.transform = 'scale(1.05)'; } 
+        else { btnCool.style.boxShadow = '0 4px 6px rgba(0,0,0,0.15)'; btnCool.innerText = '❄️ 降溫'; btnCool.style.transform = 'scale(1)'; }
+        if (tempChangeMode === 1) { btnHeat.style.boxShadow = '0 0 15px #e74c3c'; btnHeat.innerText = '🔥 加溫中'; btnHeat.style.transform = 'scale(1.05)'; } 
+        else { btnHeat.style.boxShadow = '0 4px 6px rgba(0,0,0,0.15)'; btnHeat.innerText = '🔥 加溫'; btnHeat.style.transform = 'scale(1)'; }
+    }
+
+    function drawSystem() {
+        let b = getBounds(); ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        // 氣相反應背景
+        if (activeSystem === 'NO2') {
+            let concNO2 = n_bulk / V_gas;
+            let colorIntensity = Math.min(255, Math.floor(concNO2 * 25)); 
+            ctx.fillStyle = `rgba(${colorIntensity + 30}, 40, 20, 0.15)`;
+            ctx.fillRect(b.minX, b.pistonY, b.maxX - b.minX, b.maxY - b.pistonY);
+        }
+
+        if (V_liq > 0) {
+            if (activeSystem === 'CHROMATE') {
+                let totalCr = n_bulk + n_mobile * 2; 
+                if (totalCr > 0) {
+                    let ratioOrange = (n_mobile * 2) / totalCr;
+                    let r = Math.floor(241 * (1 - ratioOrange) + 230 * ratioOrange);
+                    let g = Math.floor(196 * (1 - ratioOrange) + 126 * ratioOrange);
+                    let b_col = Math.floor(15 * (1 - ratioOrange) + 34 * ratioOrange);
+                    ctx.fillStyle = `rgba(${r}, ${g}, ${b_col}, 0.5)`;
+                } else {
+                    ctx.fillStyle = 'rgba(52, 152, 219, 0.15)'; 
+                }
+            } else {
+                ctx.fillStyle = activeSystem === 'SUGAR' ? 'rgba(52, 152, 219, 0.15)' : 'rgba(52, 152, 219, 0.3)';
+            }
+            
+            ctx.fillRect(b.minX, b.liquidY, b.maxX - b.minX, b.maxY - b.liquidY);
+            
+            ctx.strokeStyle = '#2980b9'; ctx.lineWidth = 3;
+            ctx.beginPath(); ctx.moveTo(b.minX, b.liquidY); ctx.lineTo(b.maxX, b.liquidY); ctx.stroke(); 
+            
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)'; ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            for(let i=0; i<4; i++) {
+                let rx = b.minX + 15 + Math.random()*(b.maxX - b.minX - 30);
+                ctx.moveTo(rx, b.liquidY); ctx.lineTo(rx + 10 + Math.random()*20, b.liquidY);
+            }
+            ctx.stroke();
+        }
+        
+        if (activeSystem === 'SUGAR' && n_bulk > 0) {
+            let baseSize = 8; let scaleH = 3.5; let scaleW = 5.0; 
+            let h = Math.min(baseSize + n_bulk * scaleH, b.maxY - b.liquidY - 5);
+            let w = Math.min(baseSize * 2 + n_bulk * scaleW, b.maxX - b.minX - 20);
+            ctx.fillStyle = '#f1c40f'; ctx.fillRect((canvas.width-w)/2, b.maxY - h, w, h);
+            ctx.strokeStyle = '#d35400'; ctx.lineWidth = 2; ctx.strokeRect((canvas.width-w)/2, b.maxY - h, w, h);
+            if (h > 18) { ctx.fillStyle = '#fff'; ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('固體糖塊', canvas.width/2, b.maxY - h/2 + 4); }
+        }
+        
+        if (activeSystem === 'CACO3' && n_bulk > 0) {
+            let baseSize = 10; let scaleH = 3.0; let scaleW = 6.0; 
+            let h = Math.min(baseSize + n_bulk * scaleH, b.maxY - b.liquidY - 5);
+            let w = Math.min(baseSize * 2 + n_bulk * scaleW, b.maxX - b.minX - 20);
+            ctx.fillStyle = '#ecf0f1'; ctx.fillRect((canvas.width-w)/2, b.maxY - h, w, h);
+            ctx.strokeStyle = '#bdc3c7'; ctx.lineWidth = 2; ctx.strokeRect((canvas.width-w)/2, b.maxY - h, w, h);
+            if (h > 18) { ctx.fillStyle = '#7f8c8d'; ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('CaCO₃(s)', canvas.width/2, b.maxY - h/2 + 4); }
+        }
+
+        let plateColor = '#7f8c8d';
+        if (tempChangeMode === 1) plateColor = '#e74c3c'; else if (tempChangeMode === -1) plateColor = '#3498db';
+        ctx.save();
+        if (tempChangeMode === 1) { ctx.shadowColor = '#e74c3c'; ctx.shadowBlur = 15; }
+        else if (tempChangeMode === -1) { ctx.shadowColor = '#3498db'; ctx.shadowBlur = 15; }
+        ctx.fillStyle = plateColor; ctx.fillRect(b.minX - 5, b.maxY + 2, (b.maxX - b.minX) + 10, 15);
+        ctx.restore();
+
+        ctx.strokeStyle = '#2c3e50'; ctx.lineWidth = 4;
+        ctx.beginPath(); ctx.moveTo(b.minX, 0); ctx.lineTo(b.minX, b.maxY); ctx.lineTo(b.maxX, b.maxY); ctx.lineTo(b.maxX, 0); ctx.stroke();
+        
+        if (!isOpenSystem) {
+            if (activeSystem !== 'SUGAR' && activeSystem !== 'CHROMATE') {
+                ctx.fillStyle = '#7f8c8d'; ctx.fillRect(b.minX, b.pistonY - 15, b.maxX - b.minX, 15); 
+                ctx.fillStyle = '#95a5a6'; ctx.fillRect(canvas.width/2 - 10, 0, 20, b.pistonY - 15); 
+                ctx.fillStyle = '#fff'; ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('⇕ 拖拉活塞', canvas.width/2, b.pistonY - 3);
+            }
+        } else {
+            ctx.fillStyle = 'rgba(231, 76, 60, 0.08)';
+            ctx.fillRect(b.minX, 0, b.maxX - b.minX, b.liquidY);
+            ctx.fillStyle = '#e74c3c'; ctx.font = 'bold 18px sans-serif'; ctx.textAlign = 'center';
+            ctx.fillText('⬆️ 容器已開放 (氣體持續散逸)', canvas.width/2, 40);
+        }
+
+        particles = particles.filter(p => !p.toBeRemoved);
+        for (let p of particles) p.draw(ctx);
+        for (let i = flashes.length-1; i>=0; i--) {
+            let f = flashes[i]; ctx.fillStyle = f.c; ctx.globalAlpha = f.life;
+            ctx.beginPath(); ctx.arc(f.x, f.y, f.r || 10, 0, Math.PI*2); ctx.fill(); ctx.globalAlpha = 1.0;
+            if(!isPaused) f.life -= 0.1; if(f.life<=0) flashes.splice(i,1);
+        }
+        if (isPaused) {
+            let actStr = Object.values(pendingActions).join(', ');
+            if (actStr) { ctx.fillStyle = '#e74c3c'; ctx.font = 'bold 18px sans-serif'; ctx.textAlign = 'center'; ctx.fillText(`已預約: ${actStr}`, canvas.width / 2, b.liquidY > 100 ? b.liquidY - 20 : b.maxY - 20); }
+        }
+    }
+
+    function updateSimulation() {
+        if (tempChangeMode !== 0) {
+            T += tempChangeMode * 0.5; 
+            if (T >= 373 && activeSystem==='WATER') { T = 373; tempChangeMode = 0; updateTempButtons(); }
+            if (T >= 400) { T = 400; tempChangeMode = 0; updateTempButtons(); }
+            if (T <= 273) { T = 273; tempChangeMode = 0; updateTempButtons(); }
+            document.getElementById('tempSlider').value = T; document.getElementById('tempVal').innerText = T.toFixed(1); document.getElementById('canvasTempVal').innerText = T.toFixed(1);
+            snapToPresent(); if(isPaused) drawSystem();
+        }
+
+        if (!isPaused) {
+            frameCounter++;
+            let b = getBounds();
+            let sub_steps = 20;
+            let sub_dt = physical_dt / sub_steps;
+            let sum_evap = 0, sum_cond = 0;
+
+            for (let s = 0; s < sub_steps; s++) {
+                if (activeSystem === 'WATER') {
+                    let P_sat = Math.exp(10.0 * (1 - 373/T)); 
+                    P_tot = isOpenSystem ? 0 : (n_mobile * R * T) / Math.max(0.1, V_gas);
+                    Rf = (n_bulk > 0) ? 0.25 * P_sat : 0; 
+                    Rb = isOpenSystem ? 0 : 0.25 * P_tot; 
+                    let R_escape = isOpenSystem ? (n_mobile * 1.5) : 0;
+
+                    let dn_evap = Rf * sub_dt; let dn_cond = Rb * sub_dt; let dn_escape = R_escape * sub_dt;
+                    if (n_bulk - dn_evap < 0) { dn_evap = n_bulk; Rf = dn_evap / sub_dt; }
+                    if (n_mobile + dn_evap - dn_cond - dn_escape < 0) {
+                        let available = n_mobile + dn_evap; let sum = dn_cond + dn_escape || 1;
+                        dn_cond = available * (dn_cond / sum); dn_escape = available * (dn_escape / sum); Rb = dn_cond / sub_dt;
+                    }
+
+                    n_bulk += -dn_evap + dn_cond; n_mobile += dn_evap - dn_cond - dn_escape;
+                    sum_evap += dn_evap; sum_cond += dn_cond;
+                    
+                    V_liq = Math.max(0, n_bulk * 0.5);
+                    if (document.activeElement !== document.getElementById('liqSlider')) { document.getElementById('liqSlider').value = V_liq; document.getElementById('liqVal').innerText = V_liq.toFixed(1); }
+
+                } else if (activeSystem === 'CO2') {
+                    P_tot = isOpenSystem ? 0 : (n_mobile * R * T) / Math.max(0.1, V_gas);
+                    let k_H = 1.5 * Math.exp(2400 * (1/T - 1/298));
+                    Rf = (n_bulk > 0 && V_liq > 0) ? 0.25 * k_H * (n_bulk / V_liq) : 0; 
+                    Rb = (isOpenSystem || V_liq <= 0) ? 0 : 0.25 * P_tot; 
+                    let R_escape = isOpenSystem ? (n_mobile * 1.5) : 0;
+
+                    let dn_evap = Rf * sub_dt; let dn_cond = Rb * sub_dt; let dn_escape = R_escape * sub_dt;
+                    if (n_bulk - dn_evap < 0) { dn_evap = n_bulk; Rf = dn_evap / sub_dt; }
+                    if (n_mobile + dn_evap - dn_cond - dn_escape < 0) {
+                        let available = n_mobile + dn_evap; let sum = dn_cond + dn_escape || 1;
+                        dn_cond = available * (dn_cond / sum); dn_escape = available * (dn_escape / sum); Rb = dn_cond / sub_dt;
+                    }
+
+                    n_bulk += -dn_evap + dn_cond; n_mobile += dn_evap - dn_cond - dn_escape;
+                    sum_evap += dn_evap; sum_cond += dn_cond;
+
+                } else if (activeSystem === 'SUGAR') {
+                    if (isOpenSystem && V_liq > 0) {
+                        V_liq -= 0.5 * sub_dt; if (V_liq < 0) V_liq = 0;
+                        if (document.activeElement !== document.getElementById('liqSlider')) { document.getElementById('liqSlider').value = V_liq; document.getElementById('liqVal').innerText = V_liq.toFixed(1); }
+                    }
+                    let S_T = 2.0 * Math.exp(3 * (1 - 298/T)); 
+                    if (V_liq > 0) {
+                        Rf = (n_bulk > 0) ? 0.10 * Math.pow(n_bulk, 0.6) * S_T : 0; 
+                        Rb = 0.10 * Math.pow(Math.max(n_bulk, 0.1), 0.6) * (n_mobile / V_liq); 
+                    } else { Rf = 0; Rb = n_mobile / sub_dt; }
+                    P_tot = 0;
+
+                    let dn_evap = Rf * sub_dt; let dn_cond = Rb * sub_dt;
+                    if (n_bulk - dn_evap < 0) { dn_evap = n_bulk; Rf = dn_evap / sub_dt; }
+                    if (n_mobile + dn_evap - dn_cond < 0) { dn_cond = n_mobile + dn_evap; Rb = dn_cond / sub_dt; }
+
+                    n_bulk += -dn_evap + dn_cond; n_mobile += dn_evap - dn_cond;
+                    sum_evap += dn_evap; sum_cond += dn_cond;
+                    
+                } else if (activeSystem === 'CHROMATE') {
+                    if (V_liq <= 0) V_liq = 10;
+                    let c_CrO4 = n_bulk / V_liq; let c_H = n_third / V_liq; let c_Cr2O7 = n_mobile / V_liq;
+                    Rf = 0.05 * Math.pow(c_CrO4, 2) * Math.pow(c_H, 2); Rb = 0.5 * c_Cr2O7; P_tot = 0;
+
+                    let dn_f = Rf * sub_dt; let dn_b = Rb * sub_dt;
+                    if (dn_f > Math.min(n_bulk/2, n_third/2)) { dn_f = Math.min(n_bulk/2, n_third/2); Rf = dn_f / sub_dt; }
+                    if (dn_b > n_mobile) { dn_b = n_mobile; Rb = dn_b / sub_dt; }
+
+                    n_bulk += -2*dn_f + 2*dn_b; n_third += -2*dn_f + 2*dn_b; n_mobile += dn_f - dn_b;     
+                    sum_evap += dn_f; sum_cond += dn_b;
+                    
+                } else if (activeSystem === 'CACO3') {
+                    if (V_liq <= 0) V_liq = 8;
+                    P_tot = isOpenSystem ? 0 : (n_third * R * T) / Math.max(0.1, V_gas);
+                    let c_H = n_mobile / V_liq; let area = Math.pow(Math.max(0, n_bulk), 0.6);
+                    Rf = (n_bulk > 0) ? 0.3 * area * Math.pow(c_H, 2) : 0; Rb = isOpenSystem ? 0 : 0.05 * P_tot;
+                    let R_escape = isOpenSystem ? (n_third * 1.5) : 0;
+
+                    let dn_f = Rf * sub_dt; let dn_b = Rb * sub_dt; let dn_esc = R_escape * sub_dt;
+
+                    if (dn_f > Math.min(n_bulk, n_mobile/2)) { dn_f = Math.min(n_bulk, n_mobile/2); Rf = dn_f / sub_dt; }
+                    if (dn_b + dn_esc > n_third) {
+                        let sum = dn_b + dn_esc || 1;
+                        dn_b = n_third * (dn_b/sum); dn_esc = n_third * (dn_esc/sum); Rb = dn_b / sub_dt;
+                    }
+
+                    n_bulk += -dn_f + dn_b; n_mobile += -2*dn_f + 2*dn_b; n_third += dn_f - dn_b - dn_esc;
+                    sum_evap += dn_f; sum_cond += dn_b;
+                } else if (activeSystem === 'NO2') {
+                    let kf = 0.01 * Math.exp(2000 * (1/300 - 1/T)); 
+                    let kb = 0.05 * Math.exp(4000 * (1/300 - 1/T)); 
+                    let cNO2 = n_bulk / Math.max(0.1, V_gas); let cN2O4 = n_mobile / Math.max(0.1, V_gas);
+                    Rf = kf * cNO2 * cNO2; Rb = kb * cN2O4;
+
+                    let dn_f = Rf * sub_dt; let dn_b = Rb * sub_dt;
+                    if (dn_f > n_bulk/2) { dn_f = n_bulk/2; Rf = dn_f / sub_dt; }
+                    if (dn_b > n_mobile) { dn_b = n_mobile; Rb = dn_b / sub_dt; }
+                    n_bulk += -2*dn_f + 2*dn_b; n_mobile += dn_f - dn_b;
+                    sum_evap += dn_f; sum_cond += dn_b;
+                    P_tot = ((n_bulk + n_mobile) * R * T) / Math.max(0.1, V_gas);
+                } else if (activeSystem === 'HABER') {
+                    let kf = 0.0001 * Math.exp(2000 * (1/300 - 1/T)); 
+                    let kb = 0.002 * Math.exp(4000 * (1/300 - 1/T)); 
+                    let cN2 = n_bulk / Math.max(0.1, V_gas); let cH2 = n_mobile / Math.max(0.1, V_gas); let cNH3 = n_third / Math.max(0.1, V_gas);
+                    Rf = kf * cN2 * Math.pow(cH2, 3); Rb = kb * cNH3 * cNH3;
+
+                    let dn_f = Rf * sub_dt; let dn_b = Rb * sub_dt;
+                    if (dn_f > Math.min(n_bulk, n_mobile/3)) { dn_f = Math.min(n_bulk, n_mobile/3); Rf = dn_f / sub_dt; }
+                    if (dn_b > n_third/2) { dn_b = n_third/2; Rb = dn_b / sub_dt; }
+                    n_bulk += -dn_f + dn_b; n_mobile += -3*dn_f + 3*dn_b; n_third += 2*dn_f - 2*dn_b;
+                    sum_evap += dn_f; sum_cond += dn_b;
+                    P_tot = ((n_bulk + n_mobile + n_third) * R * T) / Math.max(0.1, V_gas);
+                }
+            }
+
+            disp.Rf = sum_evap / physical_dt; disp.Rb = sum_cond / physical_dt;
+            
+            if (activeSystem === 'WATER' || activeSystem === 'CO2') { disp.Pressure = isOpenSystem ? 0 : (n_mobile * R * T) / Math.max(0.1, V_gas); } 
+            else if (activeSystem === 'CACO3') { disp.Pressure = isOpenSystem ? 0 : (n_third * R * T) / Math.max(0.1, V_gas); }
+            else if (activeSystem === 'NO2' || activeSystem === 'HABER') { disp.Pressure = P_tot; } 
+            else { disp.Pressure = 0; }
+
+            // 視覺動畫處理
+            if (activeSystem === 'WATER' || activeSystem === 'CO2' || activeSystem === 'SUGAR') {
+                let visual_mult = (activeSystem === 'WATER') ? 100 : (activeSystem === 'CO2' ? 60 : 15);
+                window.accum_evap_particles += sum_evap * visual_mult; window.accum_cond_particles += sum_cond * visual_mult;
+
+                let emitCount = Math.floor(window.accum_evap_particles); window.accum_evap_particles -= emitCount; emitCount = Math.min(emitCount, 20); 
+                for(let i=0; i<emitCount; i++) {
+                    if (activeSystem === 'WATER') { particles.push(new Particle('H2O', 'gas', b.minX + Math.random()*(b.maxX - b.minX), b.liquidY - 5)); } 
+                    else if (activeSystem === 'CO2') {
+                        let isBubbling = (disp.Rf > disp.Rb * 1.5) || isOpenSystem;
+                        if (isBubbling) { particles.push(new Particle('CO2', 'bubble', b.minX + 10 + Math.random()*(b.maxX - b.minX - 20), b.maxY - Math.random()*(b.maxY - b.liquidY))); } 
+                        else { particles.push(new Particle('CO2', 'gas', b.minX + Math.random()*(b.maxX - b.minX), b.liquidY - 5)); }
+                    } 
+                    else if (activeSystem === 'SUGAR') { particles.push(new Particle('SUGAR', 'aq', canvas.width/2 + (Math.random()-0.5)*30, b.maxY - 10)); }
+                }
+                
+                let condCount = Math.floor(window.accum_cond_particles); window.accum_cond_particles -= condCount;
+                for(let i=0; i<condCount; i++) {
+                    let searchState = (activeSystem === 'SUGAR') ? 'aq' : 'gas';
+                    let target = particles.find(p => p.state === searchState && !p.markedForCondensation);
+                    if (target) target.markedForCondensation = true; else { window.accum_cond_particles = 0; break; }
+                }
+            } 
+            else if (activeSystem === 'CHROMATE') {
+                window.accum_evap_particles += sum_evap * 10; window.accum_cond_particles += sum_cond * 10;
+                let synthCount = Math.floor(window.accum_evap_particles);
+                for(let i=0; i < Math.min(synthCount, 5); i++) {
+                    let cro4s = particles.filter(p => p.type === 'CrO4' && !p.toBeRemoved);
+                    let hs = particles.filter(p => p.type === 'H_PLUS' && !p.toBeRemoved);
+                    let force = window.accum_evap_particles > 5; 
+                    if (cro4s.length >= 2 && hs.length >= 2) {
+                        let bestA = null, bestB = null, minD = Infinity;
+                        for(let a=0; a<cro4s.length; a++){
+                            for(let b=a+1; b<cro4s.length; b++){
+                                let d = Math.hypot(cro4s[a].x - cro4s[b].x, cro4s[a].y - cro4s[b].y);
+                                if(d < minD){ minD = d; bestA = cro4s[a]; bestB = cro4s[b]; }
+                            }
+                        }
+                        let mx = (bestA.x + bestB.x)/2, my = (bestA.y + bestB.y)/2;
+                        let nearbyH = hs.sort((a,b) => Math.hypot(a.x-mx, a.y-my) - Math.hypot(b.x-mx, b.y-my));
+                        
+                        if ((minD < 80 && Math.hypot(nearbyH[1].x-mx, nearbyH[1].y-my) < 80) || force) {
+                            bestA.toBeRemoved = true; bestB.toBeRemoved = true; nearbyH[0].toBeRemoved = true; nearbyH[1].toBeRemoved = true;
+                            particles.push(new Particle('Cr2O7', 'aq', mx, my)); flashes.push({x: mx, y: my, c: 'rgba(230, 126, 34, 1.0)', life: 1.0, r: 15}); window.accum_evap_particles -= 1;
+                        }
+                    } else if (force) {
+                        if (cro4s.length > 0) cro4s[0].toBeRemoved = true; if (cro4s.length > 1) cro4s[1].toBeRemoved = true;
+                        if (hs.length > 0) hs[0].toBeRemoved = true; if (hs.length > 1) hs[1].toBeRemoved = true;
+                        particles.push(new Particle('Cr2O7', 'aq', b.minX + Math.random()*(b.maxX-b.minX), b.liquidY + Math.random()*(b.maxY-b.liquidY))); window.accum_evap_particles -= 1;
+                    }
+                }
+                let decompCount = Math.floor(window.accum_cond_particles);
+                for(let i=0; i < Math.min(decompCount, 5); i++) {
+                    let cr2o7s = particles.filter(p => p.type === 'Cr2O7' && !p.toBeRemoved);
+                    if (cr2o7s.length > 0) {
+                        let p = cr2o7s[cr2o7s.length - 1]; p.toBeRemoved = true;
+                        let p1 = new Particle('CrO4', 'aq', p.x - 6, p.y); p1.vx = -1.5; let p2 = new Particle('CrO4', 'aq', p.x + 6, p.y); p2.vx = 1.5;
+                        let h1 = new Particle('H_PLUS', 'aq', p.x, p.y - 6); h1.vy = -1.5; let h2 = new Particle('H_PLUS', 'aq', p.x, p.y + 6); h2.vy = 1.5;
+                        particles.push(p1, p2, h1, h2); flashes.push({x: p.x, y: p.y, c: 'rgba(241, 196, 15, 1.0)', life: 1.0, r: 15}); window.accum_cond_particles -= 1;
+                    } else if (window.accum_cond_particles > 5) {
+                        let mx = b.minX + Math.random()*(b.maxX-b.minX); let my = b.liquidY + Math.random()*(b.maxY-b.liquidY);
+                        particles.push(new Particle('CrO4', 'aq', mx, my), new Particle('CrO4', 'aq', mx, my));
+                        particles.push(new Particle('H_PLUS', 'aq', mx, my), new Particle('H_PLUS', 'aq', mx, my));
+                        window.accum_cond_particles -= 1;
+                    }
+                }
+            } 
+            else if (activeSystem === 'CACO3') {
+                let t_H = Math.floor(n_mobile * 2); adjustParticles('H_PLUS', 'aq', t_H, b);
+                window.accum_evap_particles += sum_evap * 30; window.accum_cond_particles += sum_cond * 30; 
+                
+                let emitCount = Math.floor(window.accum_evap_particles);
+                for(let i=0; i<Math.min(emitCount, 5); i++) {
+                    let hs = particles.filter(p => p.type === 'H_PLUS' && !p.toBeRemoved);
+                    if (hs.length >= 2 || window.accum_evap_particles > 5) {
+                        let bottomHs = hs.filter(p => p.y > b.maxY - 40).slice(0, 2);
+                        if (bottomHs.length > 0) bottomHs[0].toBeRemoved = true; if (bottomHs.length > 1) bottomHs[1].toBeRemoved = true;
+                        let isBubbling = (disp.Rf > disp.Rb * 1.5) || isOpenSystem;
+                        if (isBubbling) particles.push(new Particle('CO2', 'bubble', canvas.width/2 + (Math.random()-0.5)*50, b.maxY - Math.random()*20));
+                        else particles.push(new Particle('CO2', 'gas', b.minX + Math.random()*(b.maxX - b.minX), b.liquidY - 5));
+                        window.accum_evap_particles -= 1;
+                    }
+                }
+                
+                let condCount = Math.floor(window.accum_cond_particles);
+                for(let i=0; i<Math.min(condCount, 5); i++) {
+                    let target = particles.find(p => p.type === 'CO2' && p.state === 'gas' && !p.markedForCondensation);
+                    if (target || window.accum_cond_particles > 5) {
+                        if (target) target.markedForCondensation = true;
+                        particles.push(new Particle('H_PLUS', 'aq', canvas.width/2 + (Math.random()-0.5)*40, b.maxY - 20));
+                        particles.push(new Particle('H_PLUS', 'aq', canvas.width/2 + (Math.random()-0.5)*40, b.maxY - 20));
+                        window.accum_cond_particles -= 1;
+                    }
+                }
+            } else if (activeSystem === 'NO2') {
+                window.accum_evap_particles += sum_evap * 5; window.accum_cond_particles += sum_cond * 5;
+                let executeSynth = Math.floor(window.accum_evap_particles); let executeDecomp = Math.floor(window.accum_cond_particles);
+                window.accum_evap_particles -= executeSynth; window.accum_cond_particles -= executeDecomp;
+                
+                for (let i = 0; i < Math.min(executeSynth, 5); i++) {
+                    let no2s = particles.filter(p => p.type === 'NO2' && !p.toBeRemoved);
+                    if (no2s.length >= 2) {
+                        let bestP1 = null, bestP2 = null, minD = Infinity;
+                        for(let a=0; a<no2s.length; a++){ for(let b=a+1; b<no2s.length; b++){ let d = Math.hypot(no2s[a].x - no2s[b].x, no2s[a].y - no2s[b].y); if(d < minD){ minD = d; bestP1 = no2s[a]; bestP2 = no2s[b]; } } }
+                        if (bestP1 && bestP2 && minD < 100) { bestP1.toBeRemoved = true; bestP2.toBeRemoved = true; let mx = (bestP1.x + bestP2.x)/2, my = (bestP1.y + bestP2.y)/2; particles.push(new Particle('N2O4', 'gas', mx, my, Math.atan2(bestP2.y - bestP1.y, bestP2.x - bestP1.x))); flashes.push({x: mx, y: my, type: 'synth', c: 'rgba(241, 196, 15, 1)', life: 1.0}); }
+                    }
+                }
+                for (let i = 0; i < Math.min(executeDecomp, 5); i++) {
+                    let n2o4s = particles.filter(p => p.type === 'N2O4' && !p.toBeRemoved);
+                    if (n2o4s.length > 0) {
+                        let p = n2o4s[n2o4s.length-1]; p.toBeRemoved = true;
+                        let p1 = new Particle('NO2', 'gas', p.x-4, p.y); let p2 = new Particle('NO2', 'gas', p.x+4, p.y);
+                        p1.vx = p.vx-3; p2.vx = p.vx+3; particles.push(p1, p2); flashes.push({x: p.x, y: p.y, type: 'decomp', c: 'rgba(255, 255, 255, 1)', life: 1.0}); 
+                    }
+                }
+            } else if (activeSystem === 'HABER') {
+                window.accum_evap_particles += sum_evap * 5; window.accum_cond_particles += sum_cond * 5;
+                let executeSynth = Math.floor(window.accum_evap_particles); let executeDecomp = Math.floor(window.accum_cond_particles);
+                window.accum_evap_particles -= executeSynth; window.accum_cond_particles -= executeDecomp;
+                
+                for (let i = 0; i < Math.min(executeSynth, 5); i++) {
+                    let n2s = particles.filter(p => p.type === 'N2' && !p.toBeRemoved); let h2s = particles.filter(p => p.type === 'H2' && !p.toBeRemoved);
+                    if (n2s.length >= 1 && h2s.length >= 3) {
+                        let bestN = null, bestHs = [], minD = Infinity;
+                        for(let n of n2s) {
+                            let sortedH = [...h2s].sort((a,b) => Math.hypot(a.x-n.x, a.y-n.y) - Math.hypot(b.x-n.x, b.y-n.y));
+                            let dSum = Math.hypot(sortedH[0].x-n.x, sortedH[0].y-n.y) + Math.hypot(sortedH[1].x-n.x, sortedH[1].y-n.y) + Math.hypot(sortedH[2].x-n.x, sortedH[2].y-n.y);
+                            if(dSum < minD) { minD = dSum; bestN = n; bestHs = [sortedH[0], sortedH[1], sortedH[2]]; }
+                        }
+                        if (bestN && minD < 200) {
+                            bestN.toBeRemoved = true; bestHs[0].toBeRemoved = true; bestHs[1].toBeRemoved = true; bestHs[2].toBeRemoved = true;
+                            let mx = (bestN.x + bestHs[0].x + bestHs[1].x + bestHs[2].x)/4, my = (bestN.y + bestHs[0].y + bestHs[1].y + bestHs[2].y)/4;
+                            particles.push(new Particle('NH3', 'gas', mx-4, my), new Particle('NH3', 'gas', mx+4, my)); flashes.push({x: mx, y: my, type: 'synth', c: 'rgba(26, 188, 156, 1)', life: 1.0}); 
+                        }
+                    }
+                }
+                for (let i = 0; i < Math.min(executeDecomp, 5); i++) {
+                    let nh3s = particles.filter(p => p.type === 'NH3' && !p.toBeRemoved);
+                    if (nh3s.length >= 2) {
+                        let bestA = null, bestB = null, minD = Infinity;
+                        for(let a=0; a<nh3s.length; a++){ for(let b=a+1; b<nh3s.length; b++){ let d = Math.hypot(nh3s[a].x - nh3s[b].x, nh3s[a].y - nh3s[b].y); if(d < minD){ minD = d; bestA = nh3s[a]; bestB = nh3s[b]; } } }
+                        if (bestA && bestB) {
+                            bestA.toBeRemoved = true; bestB.toBeRemoved = true;
+                            let mx = (bestA.x + bestB.x)/2, my = (bestA.y + bestB.y)/2;
+                            particles.push(new Particle('N2', 'gas', mx, my), new Particle('H2', 'gas', mx-6, my-6), new Particle('H2', 'gas', mx+6, my-6), new Particle('H2', 'gas', mx, my+6));
+                            flashes.push({x: mx, y: my, type: 'decomp', c: 'rgba(255, 255, 255, 1)', life: 1.0}); 
+                        }
+                    }
+                }
+            }
+
+            for (let p of particles) p.update(Math.sqrt(T/300), b);
+            
+            if (activeSystem === 'NO2' || activeSystem === 'HABER') handleCollisions();
+
+            time += physical_dt;
+            if (frameCounter % 2 === 0) {
+                history.time.push(time.toFixed(1));
+                history.n1.push(n_bulk); history.n2.push(n_mobile); history.n3.push(n_third);
+                history.RateF.push(disp.Rf); history.RateB.push(disp.Rb); history.Pressure.push(disp.Pressure);
+                
+                let actStr = Object.values(pendingActions).join(', '); history.Actions.push(actStr ? actStr : null); pendingActions = {};
+                
+                if (history.time.length > maxMemoryPoints) { 
+                    history.time.shift(); history.n1.shift(); history.n2.shift(); history.n3.shift();
+                    history.RateF.shift(); history.RateB.shift(); history.Pressure.shift(); history.Actions.shift(); 
+                }
+                
+                let endIdx = history.time.length - 1; let startIdx = Math.max(0, endIdx - visualDataPoints + 1); updateChartWindows(startIdx, endIdx);
+            }
+        }
+        drawSystem(); 
+        requestAnimationFrame(updateSimulation); 
+    }
+
+    function adjustParticles(type, state, targetCount, b) {
+        let current = particles.filter(p => p.type === type && p.state === state);
+        if (current.length < targetCount) {
+            for(let i=0; i<Math.min(targetCount - current.length, 5); i++) { particles.push(new Particle(type, state, b.minX + 10 + Math.random()*(b.maxX - b.minX - 20), b.liquidY + 10 + Math.random()*(b.maxY - b.liquidY - 20))); }
+        } else if (current.length > targetCount) {
+            let toRemove = current.slice(0, current.length - targetCount);
+            toRemove.forEach(p => p.toBeRemoved = true);
+        }
+    }
+
+    function handleCollisions() {
+        for (let i = 0; i < particles.length; i++) {
+            for (let j = i + 1; j < particles.length; j++) {
+                let p1 = particles[i]; let p2 = particles[j];
+                let dx = p2.x - p1.x; let dy = p2.y - p1.y;
+                let dist = Math.hypot(dx, dy); let minDist = p1.radius + p2.radius;
+                if (dist < minDist) {
+                    if (dist === 0) { dx = 1; dy = 0; dist = 1; }
+                    let overlap = minDist - dist; let nx = dx / dist; let ny = dy / dist;
+                    p1.x -= nx * overlap / 2; p1.y -= ny * overlap / 2; p2.x += nx * overlap / 2; p2.y += ny * overlap / 2;
+                    p1.vx -= nx*2; p1.vy -= ny*2; p2.vx += nx*2; p2.vy += ny*2;
+                }
+            }
+        }
+    }
+
+    function snapToPresent() {
+        if (isPaused) {
+            let scrubber = document.getElementById('timeScrubber'); let maxIdx = history.time.length - 1;
+            if (parseInt(scrubber.value) !== maxIdx && maxIdx >= 0) { scrubber.value = maxIdx; scrubber.dispatchEvent(new Event('input')); }
+        }
+    }
+
+    document.getElementById('volSlider').addEventListener('input', (e) => { 
+        V_gas = parseFloat(e.target.value); document.getElementById('volVal').innerText = V_gas.toFixed(1); 
+        let b = getBounds();
+        for(let p of particles) { if(p.state==='gas' && p.y < b.pistonY + p.radius) p.y = b.pistonY + p.radius; }
+        snapToPresent(); pendingActions['vol'] = `空間: ${V_gas}L`; if(isPaused) drawSystem();
+    });
+    
+    document.getElementById('liqSlider').addEventListener('input', (e) => { 
+        V_liq = parseFloat(e.target.value); document.getElementById('liqVal').innerText = V_liq.toFixed(1); 
+        if (activeSystem === 'WATER') n_bulk = V_liq * 2.0; 
+        else if (activeSystem === 'CO2') n_bulk = V_liq * (1.5 / 8.0);
+        snapToPresent(); pendingActions['liq'] = `水量: ${V_liq}L`; if(isPaused) drawSystem();
+    });
+    
+    document.getElementById('tempSlider').addEventListener('input', (e) => { 
+        T = parseFloat(e.target.value); document.getElementById('tempVal').innerText = T; document.getElementById('canvasTempVal').innerText = T.toFixed(1);
+        tempChangeMode = 0; updateTempButtons(); 
+        snapToPresent(); pendingActions['temp'] = `溫度: ${T}K`; if(isPaused) drawSystem();
+    });
+    
+    let isDraggingPiston = false;
+    canvas.addEventListener('mousedown', (e) => {
+        if(activeSystem === 'SUGAR' || activeSystem === 'CHROMATE' || isOpenSystem) return;
+        let rect = canvas.getBoundingClientRect(); let scaleX = canvas.width / rect.width; let scaleY = canvas.height / rect.height;
+        let mouseX = (e.clientX - rect.left) * scaleX; let mouseY = (e.clientY - rect.top) * scaleY;
+        let b = getBounds();
+        if (mouseX >= b.minX && mouseX <= b.maxX && mouseY >= b.pistonY - 30 && mouseY <= b.pistonY + 10) isDraggingPiston = true;
+    });
+
+    window.addEventListener('mousemove', (e) => {
+        let rect = canvas.getBoundingClientRect(); let scaleY = canvas.height / rect.height; let scaleX = canvas.width / rect.width;
+        let mouseY = (e.clientY - rect.top) * scaleY; let mouseX = (e.clientX - rect.left) * scaleX; let b = getBounds();
+        if (!isDraggingPiston && activeSystem !== 'SUGAR' && activeSystem !== 'CHROMATE' && !isOpenSystem) {
+            if (mouseX >= b.minX && mouseX <= b.maxX && mouseY >= b.pistonY - 30 && mouseY <= b.pistonY + 10) canvas.style.cursor = 'ns-resize'; else canvas.style.cursor = 'default';
+        }
+        if (isDraggingPiston) {
+            canvas.style.cursor = 'ns-resize';
+            let new_h_gas = (activeSystem === 'NO2' || activeSystem === 'HABER') ? (b.maxY - mouseY) : (b.liquidY - mouseY);
+            let newV = (new_h_gas / b.totalHeight) * b.maxV;
+            newV = Math.max(2, Math.min(20, newV));
+            if (Math.abs(newV - V_gas) > 0.1) {
+                V_gas = newV; document.getElementById('volSlider').value = V_gas; document.getElementById('volVal').innerText = V_gas.toFixed(1);
+                let nb = getBounds(); for(let p of particles) { if(p.state==='gas' && p.y < nb.pistonY + p.radius) p.y = nb.pistonY + p.radius; }
+                snapToPresent(); pendingActions['vol'] = `空間: ${V_gas.toFixed(1)}L`; if(isPaused) drawSystem();
+            }
+        }
+    });
+
+    window.addEventListener('mouseup', () => { isDraggingPiston = false; });
+    canvas.addEventListener('touchstart', (e) => {
+        if(activeSystem === 'SUGAR' || activeSystem === 'CHROMATE' || isOpenSystem) return;
+        let rect = canvas.getBoundingClientRect(); let scaleY = canvas.height / rect.height;
+        let mouseY = (e.touches[0].clientY - rect.top) * scaleY; let b = getBounds();
+        if (mouseY >= b.pistonY - 40 && mouseY <= b.pistonY + 20) { isDraggingPiston = true; e.preventDefault(); }
+    }, {passive: false});
+    window.addEventListener('touchmove', (e) => {
+        if (isDraggingPiston) {
+            e.preventDefault();
+            let rect = canvas.getBoundingClientRect(); let scaleY = canvas.height / rect.height;
+            let mouseY = (e.touches[0].clientY - rect.top) * scaleY; let b = getBounds();
+            let new_h_gas = (activeSystem === 'NO2' || activeSystem === 'HABER') ? (b.maxY - mouseY) : (b.liquidY - mouseY);
+            let newV = (new_h_gas / b.totalHeight) * b.maxV; newV = Math.max(2, Math.min(20, newV));
+            if (Math.abs(newV - V_gas) > 0.1) {
+                V_gas = newV; document.getElementById('volSlider').value = V_gas; document.getElementById('volVal').innerText = V_gas.toFixed(1);
+                let nb = getBounds(); for(let p of particles) { if(p.state==='gas' && p.y < nb.pistonY + p.radius) p.y = nb.pistonY + p.radius; }
+                snapToPresent(); pendingActions['vol'] = `空間: ${V_gas.toFixed(1)}L`; if(isPaused) drawSystem();
+            }
+        }
+    }, {passive: false});
+    window.addEventListener('touchend', () => { isDraggingPiston = false; });
+
+    window.togglePause = function(e) {
+        if(e) e.stopPropagation(); isPaused = !isPaused;
+        const mainBtn = document.getElementById('mainPauseBtn'); const scrubberBlock = document.getElementById('scrubberBlock');
+        const autoPlayControls = document.getElementById('autoPlayControls'); const slider = document.getElementById('timeScrubber');
+        const chartsPanel = document.querySelector('.charts-section');
+        
+        if (!isPaused) stopAutoPlay(); 
+
+        if (isPaused) {
+            mainBtn.innerHTML = '▶️ 繼續'; mainBtn.style.backgroundColor = '#2ecc71';
+            scrubberBlock.style.display = 'flex'; autoPlayControls.style.display = 'flex';
+            if (!isChartLocked) chartsPanel.classList.add('is-paused'); 
+            slider.max = history.time.length - 1; slider.value = history.time.length - 1;
+            renderMarkers(); slider.dispatchEvent(new Event('input')); drawSystem(); 
+        } else {
+            mainBtn.innerHTML = '⏸️ 暫停 / 回溯'; mainBtn.style.backgroundColor = '#e67e22';
+            scrubberBlock.style.display = 'none'; autoPlayControls.style.display = 'none';
+            chartsPanel.classList.remove('is-paused'); 
+            let endIdx = history.time.length - 1; updateChartWindows(Math.max(0, endIdx - visualDataPoints + 1), endIdx);
+        }
+    };
+
+    window.renderMarkers = function() {
+        const track = document.getElementById('markerTrack'); track.innerHTML = '';
+        const maxIdx = history.time.length - 1; if (maxIdx <= 0) return;
+        history.Actions.forEach((action, idx) => {
+            if (action) {
+                let marker = document.createElement('div'); marker.style.position = 'absolute'; marker.style.left = `${(idx / maxIdx) * 100}%`;
+                marker.style.transform = 'translateX(-50%)'; marker.style.top = 'calc(50% - 8px)';
+                marker.style.height = '16px'; marker.style.width = '4px'; marker.style.backgroundColor = '#e74c3c';
+                track.appendChild(marker);
+            }
+        });
+    };
+
+    window.jumpToAction = function(direction) {
+        if (!isPaused) return;
+        let currentIdx = parseInt(document.getElementById('timeScrubber').value); let targetIdx = -1;
+        if (direction === -1) { for (let i = currentIdx - 1; i >= 0; i--) { if (history.Actions[i]) { targetIdx = i; break; } } } 
+        else { for (let i = currentIdx + 1; i < history.time.length; i++) { if (history.Actions[i]) { targetIdx = i; break; } } }
+        if (targetIdx !== -1) { document.getElementById('timeScrubber').value = targetIdx; document.getElementById('timeScrubber').dispatchEvent(new Event('input')); }
+    };
+
+    document.getElementById('timeScrubber').addEventListener('mousedown', stopAutoPlay);
+    document.getElementById('timeScrubber').addEventListener('touchstart', stopAutoPlay, {passive: true});
+    document.getElementById('timeScrubber').addEventListener('input', (e) => {
+        if (!isPaused) return;
+        let targetIdx = parseInt(e.target.value); let maxIdx = history.time.length - 1;
+        let startIdx = targetIdx - Math.floor(visualDataPoints * 0.25); let endIdx = startIdx + visualDataPoints - 1;
+        if (endIdx > maxIdx) { endIdx = maxIdx; startIdx = Math.max(0, endIdx - visualDataPoints + 1); }
+        if (startIdx < 0) { startIdx = 0; endIdx = Math.min(maxIdx, startIdx + visualDataPoints - 1); }
+        updateChartWindows(startIdx, endIdx);
+        
+        let closestEvent = ""; let minDiff = Infinity;
+        for (let i = Math.max(0, targetIdx - 15); i <= Math.min(maxIdx, targetIdx + 15); i++) {
+            if (history.Actions[i]) {
+                let diff = Math.abs(i - targetIdx);
+                if (diff < minDiff) { minDiff = diff; closestEvent = history.Actions[i]; }
+            }
+        }
+        let eventDisplay = document.getElementById('eventDisplay');
+        if (eventDisplay) {
+            eventDisplay.innerText = closestEvent;
+            eventDisplay.style.display = closestEvent ? 'inline-block' : 'none';
+        }
+    });
+
+    const chartsPanel = document.querySelector('.charts-section');
+    let isDraggingChart = false; let lastChartX = 0;
+
+    document.getElementById('lockChartCb').addEventListener('change', (e) => {
+        isChartLocked = e.target.checked;
+        if (isChartLocked) { chartsPanel.classList.remove('is-paused'); stopAutoPlay(); } 
+        else { if (isPaused) chartsPanel.classList.add('is-paused'); [molesChart, rateChart, pressureChart].forEach(c => { if (c) { c.setActiveElements([]); if (c.tooltip) c.tooltip.setActiveElements([], {x: 0, y: 0}); c.update(); } }); }
+    });
+
+    const startChartDrag = (e) => { if (!isPaused || isChartLocked) return; isDraggingChart = true; lastChartX = e.clientX || (e.touches && e.touches[0].clientX); stopAutoPlay(); };
+    const doChartDrag = (e) => {
+        if (!isDraggingChart || !isPaused || isChartLocked) return; 
+        let currentX = e.clientX || (e.touches && e.touches[0].clientX); if (currentX === undefined) return;
+        let deltaX = currentX - lastChartX;
+        if (Math.abs(deltaX) >= 2) {
+            let scrubber = document.getElementById('timeScrubber');
+            let newVal = Math.max(0, Math.min(parseInt(scrubber.max), parseInt(scrubber.value) - Math.round(deltaX / 2)));
+            if (newVal !== parseInt(scrubber.value)) { scrubber.value = newVal; scrubber.dispatchEvent(new Event('input')); lastChartX = currentX; }
+        }
+    };
+    const stopChartDrag = () => { isDraggingChart = false; };
+
+    chartsPanel.addEventListener('mousedown', startChartDrag); window.addEventListener('mousemove', doChartDrag); window.addEventListener('mouseup', stopChartDrag);
+    chartsPanel.addEventListener('touchstart', startChartDrag, {passive: true}); window.addEventListener('touchmove', doChartDrag, {passive: false}); window.addEventListener('touchend', stopChartDrag);
+
+    window.onload = () => { switchSystem('WATER'); updateSimulation(); };
+</script>
+</body>
+</html>
