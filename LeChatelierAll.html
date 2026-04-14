@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>動態平衡與勒沙特列原理V3</title>
+    <title>動態平衡與勒沙特列原理V4</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         html, body { height: 100%; margin: 0; padding: 0; background-color: #f5f7fa; color: #2c3e50; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; overflow: hidden; display: flex; flex-direction: column; }
@@ -663,6 +663,10 @@
         let amt = parseFloat(document.getElementById('addAmount').value) || 0;
         let b = getBounds();
         
+        // 【新增】將內部代號轉換為精確的物質名稱
+        let nameMap = { 'H2O_l':'液態水', 'H2O_g':'水蒸氣', 'CO2_g':'CO₂', 'SUGAR_s':'固體糖', 'CrO4':'鉻酸鉀', 'Cr2O7':'二鉻酸鉀', 'HCl':'鹽酸', 'CaCO3_s':'碳酸鈣', 'NO2':'NO₂', 'N2O4':'N₂O₄', 'N2':'N₂', 'H2':'H₂', 'NH3':'NH₃' };
+        let subName = nameMap[val] || '物質';
+        
         if(val === 'H2O_l') { n_bulk += amt; V_liq = Math.max(0.1, n_bulk * 0.5); document.getElementById('liqSlider').value = V_liq; document.getElementById('liqVal').innerText = V_liq.toFixed(1); }
         if(val === 'H2O_g') { n_mobile += amt; for(let i=0; i<Math.min(amt*50, 200); i++) particles.push(new Particle('H2O', 'gas', b.minX + Math.random()*(b.maxX - b.minX), b.pistonY + 10 + Math.random()*(b.liquidY - b.pistonY - 20))); }
         if(val === 'CO2_g') { n_mobile += amt; for(let i=0; i<Math.min(amt*20, 200); i++) particles.push(new Particle('CO2', 'gas', b.minX + Math.random()*(b.maxX - b.minX), b.pistonY + 10 + Math.random()*(b.liquidY - b.pistonY - 20))); }
@@ -696,13 +700,18 @@
         if(val === 'H2') { n_mobile += amt; for(let i=0; i<Math.min(amt*5, 100); i++) particles.push(new Particle('H2', 'gas', b.minX+10+Math.random()*(b.maxX-b.minX-20), b.pistonY+10+Math.random()*(b.maxY-b.pistonY-20))); }
         if(val === 'NH3') { n_third += amt; for(let i=0; i<Math.min(amt*5, 100); i++) particles.push(new Particle('NH3', 'gas', b.minX+10+Math.random()*(b.maxX-b.minX-20), b.pistonY+10+Math.random()*(b.maxY-b.pistonY-20))); }
 
-        snapToPresent(); pendingActions['add'] = `+${amt.toFixed(1)} 物質`; if (isPaused) drawSystem();
+        // 【更新】使用精確物質名稱儲存歷史紀錄
+        snapToPresent(); pendingActions['add'] = `+${amt.toFixed(1)} ${subName}`; if (isPaused) drawSystem();
     };
 
     window.removeCustomSubstance = function() {
         let val = document.getElementById('substanceSelect').value;
         let requestAmt = parseFloat(document.getElementById('addAmount').value) || 0;
         let removedAmt = 0;
+        
+        // 【新增】將內部代號轉換為精確的物質名稱
+        let nameMap = { 'H2O_l':'液態水', 'H2O_g':'水蒸氣', 'CO2_g':'CO₂', 'SUGAR_s':'固體糖', 'CrO4':'鉻酸鉀', 'Cr2O7':'二鉻酸鉀', 'HCl':'鹽酸', 'CaCO3_s':'碳酸鈣', 'NO2':'NO₂', 'N2O4':'N₂O₄', 'N2':'N₂', 'H2':'H₂', 'NH3':'NH₃' };
+        let subName = nameMap[val] || '物質';
         
         if (val === 'NaOH') { alert('提示：加入 NaOH 即可達到移除 H⁺ 的效果。'); return; }
 
@@ -730,7 +739,8 @@
         else if(val === 'NH3') { removedAmt = Math.min(requestAmt, n_third); n_third -= removedAmt; let targets = particles.filter(p => p.type === 'NH3' && !p.toBeRemoved); targets.sort(()=>Math.random()-0.5); for(let i=0; i<Math.min(targets.length, removedAmt*5); i++) targets[i].toBeRemoved=true; }
 
         if (removedAmt > 0) {
-            snapToPresent(); pendingActions['remove'] = `-${removedAmt.toFixed(1)} 物質`; if (isPaused) drawSystem();
+            // 【更新】使用精確物質名稱儲存歷史紀錄
+            snapToPresent(); pendingActions['remove'] = `-${removedAmt.toFixed(1)} ${subName}`; if (isPaused) drawSystem();
         } else {
             alert('⚠️ 容器內已無足夠的物質可供移除！');
         }
@@ -947,9 +957,9 @@
                     
                     sum_evap += dn_f; sum_cond += dn_b;
                 } else if (activeSystem === 'NO2') {
-                    // 【加速更新】將速率常數放大 4 倍，讓平衡時間從 20 秒縮短至約 4~5 秒
-                    let kf = 0.04 * Math.exp(2000 * (1/300 - 1/T)); 
-                    let kb = 0.20 * Math.exp(4000 * (1/300 - 1/T)); 
+                    // 【再加速】將速率常數再放大 2 倍，讓平衡時間縮短至 2~3 秒鐘
+                    let kf = 0.08 * Math.exp(2000 * (1/300 - 1/T)); 
+                    let kb = 0.40 * Math.exp(4000 * (1/300 - 1/T)); 
                     let cNO2 = n_bulk / Math.max(0.1, V_gas); let cN2O4 = n_mobile / Math.max(0.1, V_gas);
                     Rf = kf * cNO2 * cNO2; Rb = kb * cN2O4;
 
@@ -960,9 +970,9 @@
                     sum_evap += dn_f; sum_cond += dn_b;
                     P_tot = ((n_bulk + n_mobile) * R * T) / Math.max(0.1, V_gas);
                 } else if (activeSystem === 'HABER') {
-                    // 【加速更新】將速率常數放大 5 倍，讓平衡時間縮短至約 4~5 秒
-                    let kf = 0.0005 * Math.exp(2000 * (1/300 - 1/T)); 
-                    let kb = 0.010 * Math.exp(4000 * (1/300 - 1/T)); 
+                    // 【再加速】將速率常數再放大 2 倍，讓平衡時間縮短至 2~3 秒鐘
+                    let kf = 0.0010 * Math.exp(2000 * (1/300 - 1/T)); 
+                    let kb = 0.020 * Math.exp(4000 * (1/300 - 1/T)); 
                     let cN2 = n_bulk / Math.max(0.1, V_gas); let cH2 = n_mobile / Math.max(0.1, V_gas); let cNH3 = n_third / Math.max(0.1, V_gas);
                     Rf = kf * cN2 * Math.pow(cH2, 3); Rb = kb * cNH3 * cNH3;
 
@@ -1077,12 +1087,12 @@
                     }
                 }
             } else if (activeSystem === 'NO2') {
-                // 配合巨觀速率提升，微調粒子乘數以維持穩定的動畫閃爍
+                // 放寬視覺處理上限至 15，以追上大幅提升的巨觀速率，避免粒子閃爍跟不上
                 window.accum_evap_particles += sum_evap * 1.5; window.accum_cond_particles += sum_cond * 1.5;
                 let executeSynth = Math.floor(window.accum_evap_particles); let executeDecomp = Math.floor(window.accum_cond_particles);
                 window.accum_evap_particles -= executeSynth; window.accum_cond_particles -= executeDecomp;
                 
-                for (let i = 0; i < Math.min(executeSynth, 5); i++) {
+                for (let i = 0; i < Math.min(executeSynth, 15); i++) {
                     let no2s = particles.filter(p => p.type === 'NO2' && !p.toBeRemoved);
                     if (no2s.length >= 2) {
                         let bestP1 = null, bestP2 = null, minD = Infinity;
@@ -1090,7 +1100,7 @@
                         if (bestP1 && bestP2 && minD < 100) { bestP1.toBeRemoved = true; bestP2.toBeRemoved = true; let mx = (bestP1.x + bestP2.x)/2, my = (bestP1.y + bestP2.y)/2; particles.push(new Particle('N2O4', 'gas', mx, my, Math.atan2(bestP2.y - bestP1.y, bestP2.x - bestP1.x))); flashes.push({x: mx, y: my, type: 'synth', c: 'rgba(241, 196, 15, 1)', life: 1.0}); }
                     }
                 }
-                for (let i = 0; i < Math.min(executeDecomp, 5); i++) {
+                for (let i = 0; i < Math.min(executeDecomp, 15); i++) {
                     let n2o4s = particles.filter(p => p.type === 'N2O4' && !p.toBeRemoved);
                     if (n2o4s.length > 0) {
                         let p = n2o4s[n2o4s.length-1]; p.toBeRemoved = true;
@@ -1099,12 +1109,12 @@
                     }
                 }
             } else if (activeSystem === 'HABER') {
-                // 配合巨觀速率提升，微調粒子乘數
+                // 放寬視覺處理上限至 15
                 window.accum_evap_particles += sum_evap * 1.5; window.accum_cond_particles += sum_cond * 1.5;
                 let executeSynth = Math.floor(window.accum_evap_particles); let executeDecomp = Math.floor(window.accum_cond_particles);
                 window.accum_evap_particles -= executeSynth; window.accum_cond_particles -= executeDecomp;
                 
-                for (let i = 0; i < Math.min(executeSynth, 5); i++) {
+                for (let i = 0; i < Math.min(executeSynth, 15); i++) {
                     let n2s = particles.filter(p => p.type === 'N2' && !p.toBeRemoved); let h2s = particles.filter(p => p.type === 'H2' && !p.toBeRemoved);
                     if (n2s.length >= 1 && h2s.length >= 3) {
                         let bestN = null, bestHs = [], minD = Infinity;
@@ -1120,7 +1130,7 @@
                         }
                     }
                 }
-                for (let i = 0; i < Math.min(executeDecomp, 5); i++) {
+                for (let i = 0; i < Math.min(executeDecomp, 15); i++) {
                     let nh3s = particles.filter(p => p.type === 'NH3' && !p.toBeRemoved);
                     if (nh3s.length >= 2) {
                         let bestA = null, bestB = null, minD = Infinity;
