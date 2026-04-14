@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>動態平衡與勒沙特列原理V6</title>
+    <title>動態平衡與勒沙特列原理V7</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         html, body { height: 100%; margin: 0; padding: 0; background-color: #f5f7fa; color: #2c3e50; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; overflow: hidden; display: flex; flex-direction: column; }
@@ -127,7 +127,6 @@
                                 <input type="checkbox" id="lockChartCb" style="margin-right: 5px; width: 16px; height: 16px;"> 🔒 鎖定圖表
                             </label>
                         </div>
-                        <!-- 新增：X軸縮放滑桿 -->
                         <div id="zoomContainer" style="display: flex; align-items: center; gap: 5px; opacity: 0.5; pointer-events: none; transition: 0.3s ease;">
                             <label style="font-size: 0.85em; font-weight: bold; color: #34495e; white-space: nowrap;">🔍 X軸縮放:</label>
                             <input type="range" id="zoomSlider" min="40" max="1000" value="240" step="20" style="width: 80px; accent-color: #3498db; margin: 0;" title="縮放圖表時間視窗">
@@ -190,6 +189,18 @@
                     <button class="action btn-remove" onclick="removeCustomSubstance()">- 移除</button>
                 </div>
             </div>
+
+            <div class="control-block" id="haberCatalystBlock" style="display: none;">
+                <h4>🧲 鐵粉催化劑 (表面效應)</h4>
+                <div class="control-row">
+                    <label style="width: auto; color: #7f8c8d;">反應表面:</label>
+                    <div style="display: flex; gap: 15px;">
+                        <label style="cursor: pointer; font-weight: bold; color: #2c3e50;"><input type="checkbox" id="cbCatTop" checked onchange="updateCatalyst()"> 上層鐵粉</label>
+                        <label style="cursor: pointer; font-weight: bold; color: #2c3e50;"><input type="checkbox" id="cbCatBottom" checked onchange="updateCatalyst()"> 下層鐵粉</label>
+                    </div>
+                </div>
+                <p style="font-size: 0.8em; color: #7f8c8d; margin-top: 5px;">💡 催化劑提供反應表面。無表面則反應停滯；雙層加倍速率，但<b>不影響最終平衡產量</b>。</p>
+            </div>
         </div>
     </div>
 
@@ -202,7 +213,6 @@
     }
     function toggleHelp() { document.getElementById('helpPanel').classList.toggle('open'); }
 
-    // --- 大一統引擎變數 ---
     let activeSystem = 'WATER'; 
     let isOpenSystem = false; 
     let V_gas = 5.0;  
@@ -210,10 +220,9 @@
     let T = 300; 
     const R = 0.082; 
     
-    // 共用莫耳數槽 (多達3種)
-    let n_bulk = 0.0;   // WATER: l, CO2: aq, SUGAR: s, CHROMATE: CrO4, CACO3: CaCO3, NO2: NO2, HABER: N2
-    let n_mobile = 0.0; // WATER: g, CO2: g,  SUGAR: aq, CHROMATE: Cr2O7, CACO3: H+, NO2: N2O4, HABER: H2
-    let n_third = 0.0;  // CHROMATE: H+, CACO3: CO2, HABER: NH3
+    let n_bulk = 0.0;   
+    let n_mobile = 0.0; 
+    let n_third = 0.0;  
     
     let Rf = 0; let Rb = 0; let P_tot = 0;
     
@@ -226,7 +235,7 @@
     window.accum_cond_particles = 0;
 
     const maxMemoryPoints = 3000; 
-    let visualDataPoints = 240; // 【修改】改為 let，允許動態調整圖表 X 軸視窗寬度
+    let visualDataPoints = 240; 
     let history = { time: [], n1: [], n2: [], n3: [], RateF: [], RateB: [], Pressure: [], Actions: [] };
     let disp = { n1: 0, n2: 0, n3: 0, Rf: 0, Rb: 0, Pressure: 0 }; 
     let pendingActions = {};
@@ -252,7 +261,18 @@
         snapToPresent(); if(isPaused) drawSystem();
     }
 
-    // --- 圖表設定 ---
+    window.updateCatalyst = function() {
+        snapToPresent();
+        let cTop = document.getElementById('cbCatTop').checked;
+        let cBot = document.getElementById('cbCatBottom').checked;
+        let states = [];
+        if (cTop) states.push('上層');
+        if (cBot) states.push('下層');
+        let stateStr = states.length > 0 ? states.join('+') : '無 (反應停滯)';
+        pendingActions['cat'] = `催化劑: ${stateStr}`;
+        if (isPaused) drawSystem();
+    };
+
     let isChartLocked = false;
     function syncTooltips(sourceChart, activeElements) {
         if (!isChartLocked) return;
@@ -275,7 +295,6 @@
         });
     }
 
-    // 【新增】透過程式強制標註特定資料點與數據框
     window.highlightChartDataPoint = function(dataIndex) {
         let charts = [molesChart, rateChart, pressureChart];
         charts.forEach(c => {
@@ -285,7 +304,7 @@
                     let targetElements = c.data.datasets.map((_, idx) => ({ datasetIndex: idx, index: dataIndex }));
                     c.setActiveElements(targetElements);
                     if (c.tooltip) c.tooltip.setActiveElements(targetElements, { x: meta.data[dataIndex].x, y: meta.data[dataIndex].y });
-                    c.update('none'); // 使用 none 避免拖曳時的動畫延遲
+                    c.update('none'); 
                 }
             }
         });
@@ -348,7 +367,6 @@
         let btnStop = document.getElementById('btnAutoPlayStop'); btnStop.disabled = true; btnStop.style.background = '#95a5a6';
     };
 
-    // --- 粒子類別 (支援7大系統) ---
     const canvas = document.getElementById('particleCanvas'); const ctx = canvas.getContext('2d');
     let particles = []; let flashes = []; 
 
@@ -358,7 +376,8 @@
             this.x = x; this.y = y; this.toBeRemoved = false;
             this.rotation = rotation;
             
-            if (type === 'SUGAR') this.radius = 4;
+            // 【修正】將糖 (SUGAR) 的物理半徑從 4 縮小為 1.5
+            if (type === 'SUGAR') this.radius = 1.5;
             else if (type === 'CrO4') this.radius = 3.5;
             else if (type === 'Cr2O7') this.radius = 5.5;
             else if (type === 'H_PLUS') this.radius = 2.5;
@@ -371,11 +390,11 @@
             
             let speed = (Math.random() + 0.5);
             if(state === 'gas' && (type === 'H2O' || type === 'CO2')) speed *= 4.0;
-            else if(state === 'gas') { // 氣相反應物
+            else if(state === 'gas') { 
                 speed *= 4.0;
                 if (type === 'N2O4' || type === 'N2') speed *= 0.7; 
                 else if (type === 'NH3') speed *= 0.8;
-                else if (type === 'H2') speed *= 1.0; // 【修正】將氫氣速度從 1.5 降為 1.0，解決殘影問題
+                else if (type === 'H2') speed *= 1.0; 
             }
             else if(state === 'aq') speed *= (type === 'H_PLUS' ? 2.5 : 1.0); 
             else speed = 0; 
@@ -436,9 +455,7 @@
                     }
                 } 
                 
-                // 接觸水面
                 if (this.y > bounds.liquidY - this.radius) { 
-                    // 純氣相反應撞到底部
                     if (activeSystem === 'NO2' || activeSystem === 'HABER') {
                         this.y = bounds.liquidY - this.radius; this.vy *= -1;
                     } else if (this.markedForCondensation) {
@@ -464,8 +481,9 @@
             ctx.translate(this.x, this.y);
             
             if (this.type === 'SUGAR') {
-                ctx.fillStyle = '#f39c12'; ctx.fillRect(-3, -3, 6, 6);
-                ctx.strokeStyle = '#d35400'; ctx.lineWidth = 1; ctx.strokeRect(-3, -3, 6, 6);
+                // 【修正】將溶解糖的視覺方塊長寬縮減為 3x3，並把邊框變細
+                ctx.fillStyle = '#f39c12'; ctx.fillRect(-1.5, -1.5, 3, 3);
+                ctx.strokeStyle = '#d35400'; ctx.lineWidth = 0.5; ctx.strokeRect(-1.5, -1.5, 3, 3);
             } else if (this.type === 'H2O') {
                 ctx.fillStyle = this.state === 'gas' ? '#bdc3c7' : '#3498db'; 
                 ctx.beginPath(); ctx.arc(0, 0, 3, 0, Math.PI*2); ctx.fill();
@@ -517,15 +535,18 @@
             for (let j = i + 1; j < particles.length; j++) {
                 let p1 = particles[i]; let p2 = particles[j];
                 let dx = p2.x - p1.x; let dy = p2.y - p1.y;
-                let dist = Math.hypot(dx, dy);
-                let minDist = p1.radius + p2.radius;
-
+                let dist = Math.hypot(dx, dy); let minDist = p1.radius + p2.radius;
                 if (dist < minDist) {
                     if (dist === 0) { dx = 1; dy = 0; dist = 1; }
                     let overlap = minDist - dist; let nx = dx / dist; let ny = dy / dist;
-                    p1.x -= nx * overlap / 2; p1.y -= ny * overlap / 2;
+                    p1.x -= nx * overlap / 2; p1.y -= ny * overlap / 2; 
                     p2.x += nx * overlap / 2; p2.y += ny * overlap / 2;
-                    p1.vx -= nx*2; p1.vy -= ny*2; p2.vx += nx*2; p2.vy += ny*2;
+                    let dvx = p1.vx - p2.vx; let dvy = p1.vy - p2.vy;
+                    let dotProduct = dvx * nx + dvy * ny;
+                    if (dotProduct > 0) { 
+                        p1.vx -= dotProduct * nx; p1.vy -= dotProduct * ny;
+                        p2.vx += dotProduct * nx; p2.vy += dotProduct * ny;
+                    }
                 }
             }
         }
@@ -563,6 +584,8 @@
         const sel = document.getElementById('substanceSelect');
         const volSlider = document.getElementById('volSlider');
         const btnToggleSystem = document.getElementById('btnToggleSystem');
+        
+        document.getElementById('haberCatalystBlock').style.display = (sys === 'HABER') ? 'block' : 'none';
         
         if(sys === 'WATER') {
             eqTitle.innerHTML = `H<sub>2</sub>O<sub>(l)</sub> &rightleftharpoons; H<sub>2</sub>O<sub>(g)</sub>`;
@@ -679,7 +702,6 @@
         let amt = parseFloat(document.getElementById('addAmount').value) || 0;
         let b = getBounds();
         
-        // 【新增】將內部代號轉換為精確的物質名稱
         let nameMap = { 'H2O_l':'液態水', 'H2O_g':'水蒸氣', 'CO2_g':'CO₂', 'SUGAR_s':'固體糖', 'CrO4':'鉻酸鉀', 'Cr2O7':'二鉻酸鉀', 'HCl':'鹽酸', 'CaCO3_s':'碳酸鈣', 'NO2':'NO₂', 'N2O4':'N₂O₄', 'N2':'N₂', 'H2':'H₂', 'NH3':'NH₃' };
         let subName = nameMap[val] || '物質';
         
@@ -716,7 +738,6 @@
         if(val === 'H2') { n_mobile += amt; for(let i=0; i<Math.min(amt*5, 100); i++) particles.push(new Particle('H2', 'gas', b.minX+10+Math.random()*(b.maxX-b.minX-20), b.pistonY+10+Math.random()*(b.maxY-b.pistonY-20))); }
         if(val === 'NH3') { n_third += amt; for(let i=0; i<Math.min(amt*5, 100); i++) particles.push(new Particle('NH3', 'gas', b.minX+10+Math.random()*(b.maxX-b.minX-20), b.pistonY+10+Math.random()*(b.maxY-b.pistonY-20))); }
 
-        // 【更新】使用精確物質名稱儲存歷史紀錄
         snapToPresent(); pendingActions['add'] = `+${amt.toFixed(1)} ${subName}`; if (isPaused) drawSystem();
     };
 
@@ -725,7 +746,6 @@
         let requestAmt = parseFloat(document.getElementById('addAmount').value) || 0;
         let removedAmt = 0;
         
-        // 【新增】將內部代號轉換為精確的物質名稱
         let nameMap = { 'H2O_l':'液態水', 'H2O_g':'水蒸氣', 'CO2_g':'CO₂', 'SUGAR_s':'固體糖', 'CrO4':'鉻酸鉀', 'Cr2O7':'二鉻酸鉀', 'HCl':'鹽酸', 'CaCO3_s':'碳酸鈣', 'NO2':'NO₂', 'N2O4':'N₂O₄', 'N2':'N₂', 'H2':'H₂', 'NH3':'NH₃' };
         let subName = nameMap[val] || '物質';
         
@@ -748,14 +768,14 @@
         }
         else if(val === 'CaCO3_s') { removedAmt = Math.min(requestAmt, n_bulk); n_bulk -= removedAmt; }
         
-        else if(val === 'NO2') { removedAmt = Math.min(requestAmt, n_bulk); n_bulk -= removedAmt; let targets = particles.filter(p => p.type === 'NO2' && !p.toBeRemoved); targets.sort(()=>Math.random()-0.5); for(let i=0; i<Math.min(targets.length, removedAmt*5); i++) targets[i].toBeRemoved=true; }
-        else if(val === 'N2O4') { removedAmt = Math.min(requestAmt, n_mobile); n_mobile -= removedAmt; let targets = particles.filter(p => p.type === 'N2O4' && !p.toBeRemoved); targets.sort(()=>Math.random()-0.5); for(let i=0; i<Math.min(targets.length, removedAmt*5); i++) targets[i].toBeRemoved=true; }
-        else if(val === 'N2') { removedAmt = Math.min(requestAmt, n_bulk); n_bulk -= removedAmt; let targets = particles.filter(p => p.type === 'N2' && !p.toBeRemoved); targets.sort(()=>Math.random()-0.5); for(let i=0; i<Math.min(targets.length, removedAmt*5); i++) targets[i].toBeRemoved=true; }
-        else if(val === 'H2') { removedAmt = Math.min(requestAmt, n_mobile); n_mobile -= removedAmt; let targets = particles.filter(p => p.type === 'H2' && !p.toBeRemoved); targets.sort(()=>Math.random()-0.5); for(let i=0; i<Math.min(targets.length, removedAmt*5); i++) targets[i].toBeRemoved=true; }
-        else if(val === 'NH3') { removedAmt = Math.min(requestAmt, n_third); n_third -= removedAmt; let targets = particles.filter(p => p.type === 'NH3' && !p.toBeRemoved); targets.sort(()=>Math.random()-0.5); for(let i=0; i<Math.min(targets.length, removedAmt*5); i++) targets[i].toBeRemoved=true; }
+        else if(val === 'NO2') { removedAmt = Math.min(requestAmt, n_bulk); n_bulk -= removedAmt; let targets = particles.filter(p => p.type === 'NO2' && !p.toBeRemoved); targets.sort(()=>Math.random()-0.5); let count = (n_bulk < 0.01) ? targets.length : Math.ceil(removedAmt * 5); for(let i=0; i<Math.min(targets.length, count); i++) targets[i].toBeRemoved = true; }
+        else if(val === 'N2O4') { removedAmt = Math.min(requestAmt, n_mobile); n_mobile -= removedAmt; let targets = particles.filter(p => p.type === 'N2O4' && !p.toBeRemoved); targets.sort(()=>Math.random()-0.5); let count = (n_mobile < 0.01) ? targets.length : Math.ceil(removedAmt * 5); for(let i=0; i<Math.min(targets.length, count); i++) targets[i].toBeRemoved = true; }
+        
+        else if(val === 'N2') { removedAmt = Math.min(requestAmt, n_bulk); n_bulk -= removedAmt; let targets = particles.filter(p => p.type === 'N2' && !p.toBeRemoved); targets.sort(()=>Math.random()-0.5); let count = (n_bulk < 0.01) ? targets.length : Math.ceil(removedAmt * 5); for(let i=0; i<Math.min(targets.length, count); i++) targets[i].toBeRemoved = true; }
+        else if(val === 'H2') { removedAmt = Math.min(requestAmt, n_mobile); n_mobile -= removedAmt; let targets = particles.filter(p => p.type === 'H2' && !p.toBeRemoved); targets.sort(()=>Math.random()-0.5); let count = (n_mobile < 0.01) ? targets.length : Math.ceil(removedAmt * 5); for(let i=0; i<Math.min(targets.length, count); i++) targets[i].toBeRemoved = true; }
+        else if(val === 'NH3') { removedAmt = Math.min(requestAmt, n_third); n_third -= removedAmt; let targets = particles.filter(p => p.type === 'NH3' && !p.toBeRemoved); targets.sort(()=>Math.random()-0.5); let count = (n_third < 0.01) ? targets.length : Math.ceil(removedAmt * 5); for(let i=0; i<Math.min(targets.length, count); i++) targets[i].toBeRemoved = true; }
 
         if (removedAmt > 0) {
-            // 【更新】使用精確物質名稱儲存歷史紀錄
             snapToPresent(); pendingActions['remove'] = `-${removedAmt.toFixed(1)} ${subName}`; if (isPaused) drawSystem();
         } else {
             alert('⚠️ 容器內已無足夠的物質可供移除！');
@@ -778,7 +798,6 @@
     function drawSystem() {
         let b = getBounds(); ctx.clearRect(0, 0, canvas.width, canvas.height);
         
-        // 氣相反應背景
         if (activeSystem === 'NO2') {
             let concNO2 = n_bulk / V_gas;
             let colorIntensity = Math.min(255, Math.floor(concNO2 * 25)); 
@@ -841,6 +860,18 @@
         else if (tempChangeMode === -1) { ctx.shadowColor = '#3498db'; ctx.shadowBlur = 15; }
         ctx.fillStyle = plateColor; ctx.fillRect(b.minX - 5, b.maxY + 2, (b.maxX - b.minX) + 10, 15);
         ctx.restore();
+
+        if (activeSystem === 'HABER') {
+            let catTop = document.getElementById('cbCatTop').checked;
+            let catBot = document.getElementById('cbCatBottom').checked;
+            ctx.fillStyle = '#2c3e50'; 
+            if (catTop) {
+                for(let i=b.minX + 8; i<b.maxX - 5; i+=15) { ctx.beginPath(); ctx.arc(i, b.pistonY, 4, 0, Math.PI); ctx.fill(); }
+            }
+            if (catBot) {
+                for(let i=b.minX + 8; i<b.maxX - 5; i+=15) { ctx.beginPath(); ctx.arc(i, b.maxY, 4, Math.PI, Math.PI*2); ctx.fill(); }
+            }
+        }
 
         ctx.strokeStyle = '#2c3e50'; ctx.lineWidth = 4;
         ctx.beginPath(); ctx.moveTo(b.minX, 0); ctx.lineTo(b.minX, b.maxY); ctx.lineTo(b.maxX, b.maxY); ctx.lineTo(b.maxX, 0); ctx.stroke();
@@ -931,10 +962,15 @@
                         V_liq -= 0.5 * sub_dt; if (V_liq < 0) V_liq = 0;
                         if (document.activeElement !== document.getElementById('liqSlider')) { document.getElementById('liqSlider').value = V_liq; document.getElementById('liqVal').innerText = V_liq.toFixed(1); }
                     }
-                    let S_T = 2.0 * Math.exp(3 * (1 - 298/T)); 
+                    
+                    // 【加速更新】將溶解 (kf) 與結晶 (kb) 速率常數皆放大 5 倍
+                    // 讓糖的溶解與沉澱平衡能在 4~5 秒內迅速完成
+                    let kf = 1.0 * Math.exp(3000 * (1/298 - 1/T)); 
+                    let kb = 0.25 * Math.exp(1200 * (1/298 - 1/T)); 
+                    
                     if (V_liq > 0) {
-                        Rf = (n_bulk > 0) ? 0.10 * Math.pow(n_bulk, 0.6) * S_T : 0; 
-                        Rb = 0.10 * Math.pow(Math.max(n_bulk, 0.1), 0.6) * (n_mobile / V_liq); 
+                        Rf = (n_bulk > 0) ? kf * Math.pow(n_bulk, 0.6) : 0; 
+                        Rb = kb * Math.pow(Math.max(n_bulk, 0.1), 0.6) * (n_mobile / V_liq); 
                     } else { Rf = 0; Rb = n_mobile / sub_dt; }
                     P_tot = 0;
 
@@ -967,13 +1003,14 @@
                     let dn_f = Rf * sub_dt; let dn_b = Rb * sub_dt; let dn_esc = R_escape * sub_dt;
 
                     if (dn_f > Math.min(n_bulk, n_mobile/2)) { dn_f = Math.min(n_bulk, n_mobile/2); Rf = dn_f / sub_dt; }
-                    n_bulk += -dn_f + dn_b;         // CaCO3
-                    n_mobile += -2*dn_f + 2*dn_b;   // H+
-                    n_third += dn_f - dn_b - dn_esc;// CO2
-                    
+                    if (dn_b + dn_esc > n_third) {
+                        let sum = dn_b + dn_esc || 1;
+                        dn_b = n_third * (dn_b/sum); dn_esc = n_third * (dn_esc/sum); Rb = dn_b / sub_dt;
+                    }
+
+                    n_bulk += -dn_f + dn_b; n_mobile += -2*dn_f + 2*dn_b; n_third += dn_f - dn_b - dn_esc;
                     sum_evap += dn_f; sum_cond += dn_b;
                 } else if (activeSystem === 'NO2') {
-                    // 【再加速】將速率常數再放大 2 倍，讓平衡時間縮短至 2~3 秒鐘
                     let kf = 0.08 * Math.exp(2000 * (1/300 - 1/T)); 
                     let kb = 0.40 * Math.exp(4000 * (1/300 - 1/T)); 
                     let cNO2 = n_bulk / Math.max(0.1, V_gas); let cN2O4 = n_mobile / Math.max(0.1, V_gas);
@@ -986,11 +1023,18 @@
                     sum_evap += dn_f; sum_cond += dn_b;
                     P_tot = ((n_bulk + n_mobile) * R * T) / Math.max(0.1, V_gas);
                 } else if (activeSystem === 'HABER') {
-                    // 【再加速】將速率常數再放大 2 倍，讓平衡時間縮短至 2~3 秒鐘
-                    let kf = 0.0010 * Math.exp(2000 * (1/300 - 1/T)); 
-                    let kb = 0.020 * Math.exp(4000 * (1/300 - 1/T)); 
+                    let catTop = document.getElementById('cbCatTop').checked;
+                    let catBot = document.getElementById('cbCatBottom').checked;
+                    let catFactor = (catTop ? 1 : 0) + (catBot ? 1 : 0);
+                    let k_multiplier = catFactor / 2.0; 
+
+                    let kf = 0.0010 * Math.exp(2000 * (1/300 - 1/T)) * k_multiplier; 
+                    let kb = 0.020 * Math.exp(4000 * (1/300 - 1/T)) * k_multiplier; 
+                    
                     let cN2 = n_bulk / Math.max(0.1, V_gas); let cH2 = n_mobile / Math.max(0.1, V_gas); let cNH3 = n_third / Math.max(0.1, V_gas);
-                    Rf = kf * cN2 * Math.pow(cH2, 3); Rb = kb * cNH3 * cNH3;
+                    
+                    if (catFactor === 0) { Rf = 0; Rb = 0; }
+                    else { Rf = kf * cN2 * Math.pow(cH2, 3); Rb = kb * cNH3 * cNH3; }
 
                     let dn_f = Rf * sub_dt; let dn_b = Rb * sub_dt;
                     if (dn_f > Math.min(n_bulk, n_mobile/3)) { dn_f = Math.min(n_bulk, n_mobile/3); Rf = dn_f / sub_dt; }
@@ -1008,7 +1052,6 @@
             else if (activeSystem === 'NO2' || activeSystem === 'HABER') { disp.Pressure = P_tot; } 
             else { disp.Pressure = 0; }
 
-            // 視覺動畫處理
             if (activeSystem === 'WATER' || activeSystem === 'CO2' || activeSystem === 'SUGAR') {
                 let visual_mult = (activeSystem === 'WATER') ? 100 : (activeSystem === 'CO2' ? 60 : 15);
                 window.accum_evap_particles += sum_evap * visual_mult; window.accum_cond_particles += sum_cond * visual_mult;
@@ -1103,7 +1146,6 @@
                     }
                 }
             } else if (activeSystem === 'NO2') {
-                // 放寬視覺處理上限至 15，以追上大幅提升的巨觀速率，避免粒子閃爍跟不上
                 window.accum_evap_particles += sum_evap * 1.5; window.accum_cond_particles += sum_cond * 1.5;
                 let executeSynth = Math.floor(window.accum_evap_particles); let executeDecomp = Math.floor(window.accum_cond_particles);
                 window.accum_evap_particles -= executeSynth; window.accum_cond_particles -= executeDecomp;
@@ -1125,32 +1167,53 @@
                     }
                 }
             } else if (activeSystem === 'HABER') {
-                // 放寬視覺處理上限至 15
+                let catTop = document.getElementById('cbCatTop').checked;
+                let catBot = document.getElementById('cbCatBottom').checked;
+
                 window.accum_evap_particles += sum_evap * 1.5; window.accum_cond_particles += sum_cond * 1.5;
                 let executeSynth = Math.floor(window.accum_evap_particles); let executeDecomp = Math.floor(window.accum_cond_particles);
                 window.accum_evap_particles -= executeSynth; window.accum_cond_particles -= executeDecomp;
                 
                 for (let i = 0; i < Math.min(executeSynth, 15); i++) {
-                    let n2s = particles.filter(p => p.type === 'N2' && !p.toBeRemoved); let h2s = particles.filter(p => p.type === 'H2' && !p.toBeRemoved);
-                    if (n2s.length >= 1 && h2s.length >= 3) {
+                    let n2s = particles.filter(p => p.type === 'N2' && !p.toBeRemoved); 
+                    let h2s = particles.filter(p => p.type === 'H2' && !p.toBeRemoved);
+                    
+                    let validN2s = n2s.filter(p => (catTop && Math.abs(p.y - b.pistonY) < 30) || (catBot && Math.abs(p.y - b.maxY) < 30));
+                    
+                    if (validN2s.length === 0 && n2s.length > 0 && window.accum_evap_particles > 5 && (catTop || catBot)) {
+                        let forcedN2 = n2s[0];
+                        forcedN2.y = catBot ? b.maxY - 15 : b.pistonY + 15;
+                        validN2s.push(forcedN2);
+                    }
+
+                    if (validN2s.length >= 1 && h2s.length >= 3) {
                         let bestN = null, bestHs = [], minD = Infinity;
-                        for(let n of n2s) {
+                        for(let n of validN2s) {
                             let sortedH = [...h2s].sort((a,b) => Math.hypot(a.x-n.x, a.y-n.y) - Math.hypot(b.x-n.x, b.y-n.y));
                             let dSum = Math.hypot(sortedH[0].x-n.x, sortedH[0].y-n.y) + Math.hypot(sortedH[1].x-n.x, sortedH[1].y-n.y) + Math.hypot(sortedH[2].x-n.x, sortedH[2].y-n.y);
                             if(dSum < minD) { minD = dSum; bestN = n; bestHs = [sortedH[0], sortedH[1], sortedH[2]]; }
                         }
-                        if (bestN && minD < 200) {
+                        if (bestN && minD < 300) { 
                             bestN.toBeRemoved = true; bestHs[0].toBeRemoved = true; bestHs[1].toBeRemoved = true; bestHs[2].toBeRemoved = true;
-                            let mx = (bestN.x + bestHs[0].x + bestHs[1].x + bestHs[2].x)/4, my = (bestN.y + bestHs[0].y + bestHs[1].y + bestHs[2].y)/4;
+                            let mx = bestN.x, my = bestN.y; 
                             particles.push(new Particle('NH3', 'gas', mx-4, my), new Particle('NH3', 'gas', mx+4, my)); flashes.push({x: mx, y: my, type: 'synth', c: 'rgba(26, 188, 156, 1)', life: 1.0}); 
                         }
                     }
                 }
                 for (let i = 0; i < Math.min(executeDecomp, 15); i++) {
                     let nh3s = particles.filter(p => p.type === 'NH3' && !p.toBeRemoved);
-                    if (nh3s.length >= 2) {
+                    
+                    let validNH3s = nh3s.filter(p => (catTop && Math.abs(p.y - b.pistonY) < 30) || (catBot && Math.abs(p.y - b.maxY) < 30));
+                    
+                    if (validNH3s.length < 2 && nh3s.length >= 2 && window.accum_cond_particles > 5 && (catTop || catBot)) {
+                        validNH3s.push(nh3s[nh3s.length-1], nh3s[nh3s.length-2]);
+                        validNH3s[0].y = catBot ? b.maxY - 15 : b.pistonY + 15;
+                        validNH3s[1].y = validNH3s[0].y;
+                    }
+
+                    if (validNH3s.length >= 2) {
                         let bestA = null, bestB = null, minD = Infinity;
-                        for(let a=0; a<nh3s.length; a++){ for(let b=a+1; b<nh3s.length; b++){ let d = Math.hypot(nh3s[a].x - nh3s[b].x, nh3s[a].y - nh3s[b].y); if(d < minD){ minD = d; bestA = nh3s[a]; bestB = nh3s[b]; } } }
+                        for(let a=0; a<validNH3s.length; a++){ for(let b=a+1; b<validNH3s.length; b++){ let d = Math.hypot(validNH3s[a].x - validNH3s[b].x, validNH3s[a].y - validNH3s[b].y); if(d < minD){ minD = d; bestA = validNH3s[a]; bestB = validNH3s[b]; } } }
                         if (bestA && bestB) {
                             bestA.toBeRemoved = true; bestB.toBeRemoved = true;
                             let mx = (bestA.x + bestB.x)/2, my = (bestA.y + bestB.y)/2;
@@ -1204,8 +1267,14 @@
                 if (dist < minDist) {
                     if (dist === 0) { dx = 1; dy = 0; dist = 1; }
                     let overlap = minDist - dist; let nx = dx / dist; let ny = dy / dist;
-                    p1.x -= nx * overlap / 2; p1.y -= ny * overlap / 2; p2.x += nx * overlap / 2; p2.y += ny * overlap / 2;
-                    p1.vx -= nx*2; p1.vy -= ny*2; p2.vx += nx*2; p2.vy += ny*2;
+                    p1.x -= nx * overlap / 2; p1.y -= ny * overlap / 2; 
+                    p2.x += nx * overlap / 2; p2.y += ny * overlap / 2;
+                    let dvx = p1.vx - p2.vx; let dvy = p1.vy - p2.vy;
+                    let dotProduct = dvx * nx + dvy * ny;
+                    if (dotProduct > 0) { 
+                        p1.vx -= dotProduct * nx; p1.vy -= dotProduct * ny;
+                        p2.vx += dotProduct * nx; p2.vy += dotProduct * ny;
+                    }
                 }
             }
         }
@@ -1308,7 +1377,6 @@
             scrubberBlock.style.display = 'none'; autoPlayControls.style.display = 'none';
             chartsPanel.classList.remove('is-paused'); 
             
-            // 【新增】解除暫停時，清除所有圖表上的高亮標註與數據框
             [molesChart, rateChart, pressureChart].forEach(c => { 
                 if (c) { c.setActiveElements([]); if (c.tooltip) c.tooltip.setActiveElements([], {x: 0, y: 0}); c.update('none'); } 
             });
@@ -1348,7 +1416,6 @@
         if (startIdx < 0) { startIdx = 0; endIdx = Math.min(maxIdx, startIdx + visualDataPoints - 1); }
         updateChartWindows(startIdx, endIdx);
         
-        // 【新增】拖曳滑桿時，同步標註圖表上該時間點的數據
         highlightChartDataPoint(targetIdx);
         
         let closestEvent = ""; let minDiff = Infinity;
@@ -1374,24 +1441,20 @@
         if (isChartLocked) { 
             chartsPanel.classList.remove('is-paused'); 
             stopAutoPlay(); 
-            // 鎖定時解鎖縮放滑桿
             zoomContainer.style.opacity = '1';
             zoomContainer.style.pointerEvents = 'auto';
         } 
         else { 
             if (isPaused) chartsPanel.classList.add('is-paused'); 
             [molesChart, rateChart, pressureChart].forEach(c => { if (c) { c.setActiveElements([]); if (c.tooltip) c.tooltip.setActiveElements([], {x: 0, y: 0}); c.update(); } }); 
-            // 解除鎖定時將滑桿變灰禁用
             zoomContainer.style.opacity = '0.5';
             zoomContainer.style.pointerEvents = 'none';
         }
     });
 
-    // 【新增】監聽縮放滑桿，即時改變視窗寬度並重繪
     document.getElementById('zoomSlider').addEventListener('input', (e) => {
         visualDataPoints = parseInt(e.target.value);
         if (isPaused) {
-            // 觸發 scrubber 的 input 事件來重繪當前視窗，保持當前游標置中
             document.getElementById('timeScrubber').dispatchEvent(new Event('input'));
         }
     });
