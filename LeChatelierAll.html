@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>動態平衡與勒沙特列原理V4</title>
+    <title>動態平衡與勒沙特列原理V5</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         html, body { height: 100%; margin: 0; padding: 0; background-color: #f5f7fa; color: #2c3e50; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; overflow: hidden; display: flex; flex-direction: column; }
@@ -274,6 +274,22 @@
             }
         });
     }
+
+    // 【新增】透過程式強制標註特定資料點與數據框
+    window.highlightChartDataPoint = function(dataIndex) {
+        let charts = [molesChart, rateChart, pressureChart];
+        charts.forEach(c => {
+            if (c) {
+                let meta = c.getDatasetMeta(0);
+                if (meta.data[dataIndex]) {
+                    let targetElements = c.data.datasets.map((_, idx) => ({ datasetIndex: idx, index: dataIndex }));
+                    c.setActiveElements(targetElements);
+                    if (c.tooltip) c.tooltip.setActiveElements(targetElements, { x: meta.data[dataIndex].x, y: meta.data[dataIndex].y });
+                    c.update('none'); // 使用 none 避免拖曳時的動畫延遲
+                }
+            }
+        });
+    };
 
     Chart.defaults.font.family = "'Segoe UI', Tahoma, sans-serif";
     
@@ -1291,6 +1307,12 @@
             mainBtn.innerHTML = '⏸️ 暫停 / 回溯'; mainBtn.style.backgroundColor = '#e67e22';
             scrubberBlock.style.display = 'none'; autoPlayControls.style.display = 'none';
             chartsPanel.classList.remove('is-paused'); 
+            
+            // 【新增】解除暫停時，清除所有圖表上的高亮標註與數據框
+            [molesChart, rateChart, pressureChart].forEach(c => { 
+                if (c) { c.setActiveElements([]); if (c.tooltip) c.tooltip.setActiveElements([], {x: 0, y: 0}); c.update('none'); } 
+            });
+            
             let endIdx = history.time.length - 1; updateChartWindows(Math.max(0, endIdx - visualDataPoints + 1), endIdx);
         }
     };
@@ -1325,6 +1347,9 @@
         if (endIdx > maxIdx) { endIdx = maxIdx; startIdx = Math.max(0, endIdx - visualDataPoints + 1); }
         if (startIdx < 0) { startIdx = 0; endIdx = Math.min(maxIdx, startIdx + visualDataPoints - 1); }
         updateChartWindows(startIdx, endIdx);
+        
+        // 【新增】拖曳滑桿時，同步標註圖表上該時間點的數據
+        highlightChartDataPoint(targetIdx);
         
         let closestEvent = ""; let minDiff = Infinity;
         for (let i = Math.max(0, targetIdx - 15); i <= Math.min(maxIdx, targetIdx + 15); i++) {
