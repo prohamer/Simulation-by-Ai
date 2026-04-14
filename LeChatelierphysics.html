@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>相態與溶解度動態平衡V13</title>
+    <title>相態與溶解度動態平衡V14</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         html, body { height: 100%; margin: 0; padding: 0; background-color: #f5f7fa; color: #2c3e50; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; overflow: hidden; display: flex; flex-direction: column; }
@@ -75,9 +75,11 @@
         <div style="display: flex; align-items: center; gap: 12px;">
             <button class="help-btn" onclick="toggleHelp()" title="操作與教學說明">?</button>
             <select id="systemSwitch" class="system-switch" onchange="switchSystem(this.value)">
-                <option value="WATER">1. 水的蒸發與凝結</option>
-                <option value="CO2">2. CO₂ 溶解與汽水冒泡</option>
-                <option value="SUGAR">3. 糖的溶解與結晶析出</option>
+                <option value="WATER">1. 水的相態平衡 (蒸發/凝結)</option>
+                <option value="CO2">2. 二氧化碳氣體溶解 (汽水)</option>
+                <option value="SUGAR">3. 固體糖溶解與結晶析出</option>
+                <option value="CHROMATE">4. 鉻酸根與酸鹼平衡 (顏色變化)</option>
+                <option value="CACO3">5. 碳酸鈣與酸反應 (異相氣體產生)</option>
             </select>
         </div>
     </div>
@@ -85,10 +87,9 @@
     <div id="helpPanel" class="help-panel">
         <h3>📖 模擬器操作與教學說明</h3>
         <ul>
-            <li><b>開局與開放容器：</b>水系統開局為真空，汽水與糖水則備有純水作為溶劑，請由下方加入物質。點擊「切換為開放系統」可展示氣體逸散，打破平衡導致反應單向進行。</li>
-            <li><b>純物理演算引擎：</b>圖表採用真實動力學公式。15L空間100度C僅需 0.5 莫耳水蒸氣，故液態水會穩如泰山，完全符合真實現象！</li>
-            <li><b>圖表 1 (總物質量)：</b>展現巨觀下反應物與產物平衡時的「定值」現象。當您點擊「+加入」時，會看見瞬間垂直飆高的干擾曲線，並迅速達到新的平衡。</li>
-            <li><b>圖表 2 (瞬間轉換量/速率)：</b>展現微觀下 $R_f = R_b$ 的動態平衡。當兩線完美重合交叉，即代表系統達平衡。</li>
+            <li><b>開放容器與勒沙特列：</b>切換為「開放系統」可展示氣體逸散，打破平衡。在鉻酸根或碳酸鈣系統中加入 NaOH 可中和 H⁺，觀察反應逆向進行。</li>
+            <li><b>微觀碰撞與可逆性：</b>鉻酸根變色時，必須兩黃一紅靠得很近才會發生碰撞合成！平衡時系統會優先挑選「剛合成的二鉻酸根」原地分解，完美展示微觀狂舞。</li>
+            <li><b>圖表完美連動：</b>圖表刻度已最佳化為黃金 8 秒視窗，曲線以 0 張力完美連接。勾選「鎖定圖表看數據」，游標會在三張圖上絕對對齊同步。</li>
         </ul>
     </div>
     
@@ -131,11 +132,10 @@
                     </div>
                     <button class="jump-btn" onclick="jumpToAction(1)">⏭</button>
                 </div>
-                <span style="font-size: 0.8em; color: #7f8c8d; margin-top: 5px;">💡 提示：未鎖定時，也可直接在下方圖表左右拖曳滑動時間。</span>
             </div>
 
-            <div class="chart-wrapper"><div class="chart-custom-title">1. 系統總物質量 (平衡時呈水平線)</div><canvas id="molesChart"></canvas></div>
-            <div class="chart-wrapper"><div class="chart-custom-title">2. 瞬間轉換量/速率 (平衡時必重合)</div><canvas id="rateChart"></canvas></div>
+            <div class="chart-wrapper"><div class="chart-custom-title">1. 系統物質量 (莫耳)</div><canvas id="molesChart"></canvas></div>
+            <div class="chart-wrapper"><div class="chart-custom-title">2. 瞬間轉換量/速率</div><canvas id="rateChart"></canvas></div>
             <div class="chart-wrapper"><div class="chart-custom-title">3. 氣體總壓力 (atm)</div><canvas id="pressureChart"></canvas></div>
         </div>
     </div>
@@ -166,15 +166,15 @@
             </div>
 
             <div class="control-block">
-                <h4>🧪 物質干擾 (點擊加入開始)</h4>
+                <h4>🧪 物質干擾 (點擊加入/移除)</h4>
                 <div class="control-row">
                     <select id="substanceSelect" style="flex:1; padding: 6px; border-radius: 4px;">
-                        <option value="H2O_l">加入液態水</option>
-                        <option value="H2O_g">注入水蒸氣</option>
+                        <!-- 將由 switchSystem 動態填入 -->
                     </select>
                 </div>
-                <div class="control-row" style="gap: 10px;">
-                    <input type="number" id="addAmount" value="10" min="1" max="50" style="width: 60px; padding: 6px; text-align: center;"> 莫耳
+                <div class="control-row" style="gap: 10px; justify-content: flex-end;">
+                    <input type="number" id="addAmount" value="1" min="0.1" max="50" step="0.1" style="width: 70px; padding: 6px; border-radius: 4px; border: 1px solid #bdc3c7; text-align: center; margin: 0;"> 
+                    <span style="font-size: 0.9em; font-weight: bold; color: #34495e;">mol (莫耳)</span>
                 </div>
                 <div style="display: flex; gap: 8px;">
                     <button class="action btn-add" onclick="addCustomSubstance()">+ 加入</button>
@@ -193,7 +193,6 @@
     }
     function toggleHelp() { document.getElementById('helpPanel').classList.toggle('open'); }
 
-    // --- 全新核心架構：嚴謹動力學與視覺完全脫鉤 ---
     let activeSystem = 'WATER'; 
     let isOpenSystem = false; 
     let V_gas = 5.0;  
@@ -201,11 +200,12 @@
     let T = 300; 
     const R = 0.082; 
     
-    let n_bulk = 0.0; 
+    let n_bulk = 0.0;   
     let n_mobile = 0.0; 
+    let n_third = 0.0;  
+    
     let Rf = 0; let Rb = 0; let P_tot = 0;
     
-    // 【物理與圖表解綁】設定時間、物理步長與影格計數器
     let time = 0; 
     const physical_dt = 0.05; 
     let frameCounter = 0;
@@ -215,13 +215,11 @@
     window.accum_cond_particles = 0;
 
     const maxMemoryPoints = 3000; 
-    // 【黃金視窗比例】 240個點，每2幀推進一次（約一秒30點），圖表總寬涵蓋真實世界 8 秒鐘
     const visualDataPoints = 240; 
-    let history = { time: [], n1: [], n2: [], RateF: [], RateB: [], Pressure: [], Actions: [] };
-    let disp = { n1: 0, n2: 0, Rf: 0, Rb: 0, Pressure: 0 }; 
+    let history = { time: [], n1: [], n2: [], n3: [], RateF: [], RateB: [], Pressure: [], Actions: [] };
+    let disp = { n1: 0, n2: 0, n3: 0, Rf: 0, Rb: 0, Pressure: 0 }; 
     let pendingActions = {};
     
-    // --- 系統開關控制 ---
     window.toggleOpenSystem = function() {
         isOpenSystem = !isOpenSystem;
         const btn = document.getElementById('btnToggleSystem');
@@ -233,13 +231,12 @@
             pendingActions['sys'] = '容器已打開';
         } else {
             btn.innerText = "🔒 密閉容器 (點擊打開)"; btn.style.background = "#7f8c8d";
-            volSlider.disabled = (activeSystem === 'SUGAR');
+            volSlider.disabled = (activeSystem === 'SUGAR' || activeSystem === 'CHROMATE');
             pendingActions['sys'] = '容器已密閉';
         }
         snapToPresent(); if(isPaused) drawSystem();
     }
 
-    // --- 圖表設定 ---
     let isChartLocked = false;
     function syncTooltips(sourceChart, activeElements) {
         if (!isChartLocked) return;
@@ -271,9 +268,7 @@
             x: { display: false }, 
             y: { 
                 beginAtZero: true,
-                afterFit: function(scaleInstance) {
-                    scaleInstance.width = 55;
-                }
+                afterFit: function(scaleInstance) { scaleInstance.width = 55; }
             } 
         },
         elements: { point: { radius: 0 }, line: { borderWidth: 2.5, fill: isPressure, tension: 0 } }, 
@@ -283,7 +278,6 @@
 
     let molesChart = new Chart(document.getElementById('molesChart'), { type: 'line', data: { labels: history.time, datasets: [] }, options: getCommonOpts(false) });
     let rateChart = new Chart(document.getElementById('rateChart'), { type: 'line', data: { labels: history.time, datasets: [] }, options: getCommonOpts(false) });
-    
     let pressureChart = new Chart(document.getElementById('pressureChart'), { 
         type: 'line', 
         data: { labels: history.time, datasets: [{ label: '壓力 (atm)', borderColor: '#16a085', data: history.Pressure, backgroundColor: 'rgba(22, 160, 133, 0.15)', tension: 0, fill: true }] }, 
@@ -300,7 +294,6 @@
         }
     }
 
-    // --- 自動播放邏輯 ---
     let autoPlayTimer = null;
     window.startAutoPlay = function(direction) {
         if (!isPaused) return; 
@@ -316,7 +309,7 @@
         autoPlayTimer = setInterval(() => {
             let scrubber = document.getElementById('timeScrubber');
             let currentVal = parseInt(scrubber.value); let maxVal = parseInt(scrubber.max);
-            let newVal = currentVal + direction * 2; // 稍微加快回放拖曳速度
+            let newVal = currentVal + direction * 2; 
             if (newVal <= 0) { newVal = 0; stopAutoPlay(); } else if (newVal >= maxVal) { newVal = maxVal; stopAutoPlay(); }
             if (newVal !== currentVal) { scrubber.value = newVal; scrubber.dispatchEvent(new Event('input')); }
         }, 50); 
@@ -329,7 +322,6 @@
         let btnStop = document.getElementById('btnAutoPlayStop'); btnStop.disabled = true; btnStop.style.background = '#95a5a6';
     };
 
-    // --- 脫鉤後的純淨粒子系統 ---
     const canvas = document.getElementById('particleCanvas'); const ctx = canvas.getContext('2d');
     let particles = []; let flashes = []; 
 
@@ -337,15 +329,21 @@
         constructor(type, state, x, y) {
             this.id = Math.random(); this.type = type; this.state = state; 
             this.x = x; this.y = y; this.toBeRemoved = false;
-            this.radius = (type==='SUGAR') ? 4 : 3;
+            
+            if (type === 'SUGAR') this.radius = 4;
+            else if (type === 'CrO4') this.radius = 3.5;
+            else if (type === 'Cr2O7') this.radius = 5.5;
+            else if (type === 'H_PLUS') this.radius = 2.5;
+            else this.radius = 3;
             
             let speed = (Math.random() + 0.5);
             if(state === 'gas') speed *= 4.0;
-            else if(state === 'aq') speed *= 1.0; 
+            else if(state === 'aq') speed *= (type === 'H_PLUS' ? 2.5 : 1.0); 
             else speed = 0; 
             
             let angle = Math.random() * Math.PI * 2;
             this.vx = Math.cos(angle) * speed; this.vy = Math.sin(angle) * speed;
+            this.rotation = Math.random() * Math.PI;
         }
 
         update(tempFactor, bounds) {
@@ -355,7 +353,7 @@
                 if (this.y <= bounds.liquidY + this.radius) {
                     this.state = 'gas'; this.y = bounds.liquidY - 5; 
                     this.vy = -(3.0 + Math.random()*3.0); this.vx = (Math.random()-0.5)*4;
-                    flashes.push({x: this.x, y: bounds.liquidY, c:'#fff', life:0.8});
+                    flashes.push({x: this.x, y: bounds.liquidY, c: '#ffffff', life: 0.8, r: 10});
                 }
                 return;
             }
@@ -366,18 +364,20 @@
                 return;
             } else if (this.state === 'drop_wall') {
                 this.y += 1.0 * tempFactor; 
-                if (this.y >= bounds.liquidY) { this.toBeRemoved = true; flashes.push({x: this.x, y: bounds.liquidY, c:'#3498db', life:0.5}); }
+                if (this.y >= bounds.liquidY) { this.toBeRemoved = true; flashes.push({x: this.x, y: bounds.liquidY, c: '#3498db', life: 0.5, r: 10}); }
                 if (this.y < bounds.pistonY + this.radius) this.y = bounds.pistonY + this.radius;
                 return;
             } else if (this.state === 'falling_drop') {
                 this.y += 4.0 * tempFactor; 
-                if (this.y >= bounds.liquidY) { this.toBeRemoved = true; flashes.push({x: this.x, y: bounds.liquidY, c:'#3498db', life:0.5}); }
+                if (this.y >= bounds.liquidY) { this.toBeRemoved = true; flashes.push({x: this.x, y: bounds.liquidY, c: '#3498db', life: 0.5, r: 10}); }
                 return;
             }
 
             if (this.state === 'aq') {
                 this.vx += (Math.random()-0.5) * 0.5; this.vy += (Math.random()-0.5) * 0.5;
-                let v = Math.hypot(this.vx, this.vy); if(v > 2) { this.vx = (this.vx/v)*2; this.vy = (this.vy/v)*2; }
+                let maxV = (this.type === 'H_PLUS') ? 3 : 1.5;
+                let v = Math.hypot(this.vx, this.vy); if(v > maxV) { this.vx = (this.vx/v)*maxV; this.vy = (this.vy/v)*maxV; }
+                this.rotation += 0.05;
             }
 
             this.x += this.vx * tempFactor; this.y += this.vy * tempFactor;
@@ -390,7 +390,6 @@
                     this.toBeRemoved = true;
                 } else if (!isOpenSystem && this.y < bounds.pistonY + this.radius) { 
                     this.y = bounds.pistonY + this.radius; this.vy *= -1; 
-                    // 【修正 1】加上 this.type === 'H2O' 條件，確保 CO2 絕對不會凝結在活塞或玻璃上！
                     if (this.type === 'H2O' && this.markedForCondensation && Math.random() < 0.1) {
                         this.state = 'drop_top'; this.vy = 0; this.vx = 0;
                         this.markedForCondensation = false;
@@ -400,7 +399,7 @@
                 if (this.y > bounds.liquidY - this.radius) { 
                     if (this.markedForCondensation) {
                         this.toBeRemoved = true; this.markedForCondensation = false;
-                        flashes.push({x: this.x, y: bounds.liquidY, c:'#fff', life:0.5}); 
+                        flashes.push({x: this.x, y: bounds.liquidY, c: '#ffffff', life: 0.5, r: 10}); 
                     } else {
                         this.y = bounds.liquidY - this.radius; this.vy *= -1; 
                     }
@@ -417,23 +416,38 @@
         }
 
         draw(ctx) {
+            ctx.save();
+            ctx.translate(this.x, this.y);
+            
             if (this.type === 'SUGAR') {
-                ctx.fillStyle = '#f39c12'; ctx.fillRect(this.x - 3, this.y - 3, 6, 6);
-                ctx.strokeStyle = '#d35400'; ctx.lineWidth = 1; ctx.strokeRect(this.x - 3, this.y - 3, 6, 6);
-                return;
-            }
-            ctx.beginPath();
-            if (this.type === 'H2O') {
+                ctx.fillStyle = '#f39c12'; ctx.fillRect(-3, -3, 6, 6);
+                ctx.strokeStyle = '#d35400'; ctx.lineWidth = 1; ctx.strokeRect(-3, -3, 6, 6);
+            } else if (this.type === 'H2O') {
                 ctx.fillStyle = this.state === 'gas' ? '#bdc3c7' : '#3498db'; 
-                ctx.arc(this.x, this.y, 3, 0, Math.PI*2); ctx.fill();
+                ctx.beginPath(); ctx.arc(0, 0, 3, 0, Math.PI*2); ctx.fill();
             } else if (this.type === 'CO2') {
                 if (this.state === 'bubble') {
-                    ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.arc(this.x, this.y, 4, 0, Math.PI*2); ctx.stroke();
+                    ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(0, 0, 4, 0, Math.PI*2); ctx.stroke();
                 } else {
                     ctx.fillStyle = this.state === 'gas' ? '#7f8c8d' : 'rgba(41, 128, 185, 0.8)';
-                    ctx.arc(this.x, this.y, 3, 0, Math.PI*2); ctx.fill();
+                    ctx.beginPath(); ctx.arc(0, 0, 3, 0, Math.PI*2); ctx.fill();
                 }
+            } else if (this.type === 'CrO4') {
+                ctx.fillStyle = '#f1c40f'; ctx.beginPath(); ctx.arc(0, 0, 4, 0, Math.PI*2); ctx.fill();
+                ctx.strokeStyle = '#f39c12'; ctx.lineWidth = 1; ctx.stroke();
+            } else if (this.type === 'Cr2O7') {
+                ctx.rotate(this.rotation);
+                ctx.fillStyle = '#e67e22'; 
+                ctx.beginPath(); ctx.arc(-3, 0, 4, 0, Math.PI*2); ctx.fill();
+                ctx.beginPath(); ctx.arc(3, 0, 4, 0, Math.PI*2); ctx.fill();
+                ctx.strokeStyle = '#d35400'; ctx.lineWidth = 1;
+                ctx.beginPath(); ctx.arc(-3, 0, 4, 0, Math.PI*2); ctx.stroke();
+                ctx.beginPath(); ctx.arc(3, 0, 4, 0, Math.PI*2); ctx.stroke();
+            } else if (this.type === 'H_PLUS') {
+                ctx.fillStyle = '#e74c3c'; ctx.beginPath(); ctx.arc(0, 0, 2.5, 0, Math.PI*2); ctx.fill();
             }
+            
+            ctx.restore();
         }
     }
 
@@ -445,13 +459,12 @@
         return { minX, maxX, pistonY, liquidY, maxY, totalHeight, maxV };
     }
 
-    // --- 系統切換與初始化 (從零開始) ---
     window.switchSystem = function(sys) {
         activeSystem = sys; particles = []; flashes = []; time = 0; frameCounter = 0;
         
-        history.time.length = 0; history.n1.length = 0; history.n2.length = 0; 
+        history.time.length = 0; history.n1.length = 0; history.n2.length = 0; history.n3.length = 0;
         history.RateF.length = 0; history.RateB.length = 0; history.Pressure.length = 0; history.Actions.length = 0;
-        disp = { n1: 0, n2: 0, Rf: 0, Rb: 0, Pressure: 0 };
+        disp = { n1: 0, n2: 0, n3: 0, Rf: 0, Rb: 0, Pressure: 0 };
         pendingActions = {}; 
         
         isOpenSystem = false;
@@ -460,10 +473,11 @@
         
         const eqTitle = document.getElementById('equationTitle');
         const sel = document.getElementById('substanceSelect');
+        const volSlider = document.getElementById('volSlider');
         
         if(sys === 'WATER') {
             eqTitle.innerHTML = `H<sub>2</sub>O<sub>(l)</sub> &rightleftharpoons; H<sub>2</sub>O<sub>(g)</sub>`;
-            sel.innerHTML = `<option value="H2O_l">加入液態水 (mol)</option><option value="H2O_g">注入水蒸氣 (mol)</option>`;
+            sel.innerHTML = `<option value="H2O_l">液態水 (H₂O)</option><option value="H2O_g">水蒸氣 (H₂O)</option>`;
             molesChart.data.datasets = [ 
                 { label: '液態水 (mol)', borderColor: '#3498db', backgroundColor: 'transparent', fill: false, data: history.n1, tension: 0 }, 
                 { label: '水蒸氣 (mol)', borderColor: '#95a5a6', backgroundColor: 'transparent', fill: false, data: history.n2, tension: 0 } 
@@ -473,11 +487,12 @@
                 { label: '凝結速率 (g → l)', borderColor: '#2980b9', backgroundColor: 'transparent', fill: false, data: history.RateB, tension: 0 } 
             ];
             V_gas = 5.0; V_liq = 0.0; T = 300; 
-            n_bulk = 0.0; n_mobile = 0.0; 
-            document.getElementById('volSlider').disabled = false;
+            n_bulk = 0.0; n_mobile = 0.0; n_third = 0.0;
+            volSlider.disabled = false;
+            
         } else if(sys === 'CO2') {
             eqTitle.innerHTML = `CO<sub>2(g)</sub> + H<sub>2</sub>O<sub>(l)</sub> &rightleftharpoons; CO<sub>2(aq)</sub>`;
-            sel.innerHTML = `<option value="CO2_g">注入 CO₂ 氣體 (mol)</option>`;
+            sel.innerHTML = `<option value="CO2_g">CO₂ 氣體</option>`;
             molesChart.data.datasets = [ 
                 { label: '溶解態 CO₂ (mol)', borderColor: '#2980b9', backgroundColor: 'transparent', fill: false, data: history.n1, tension: 0 }, 
                 { label: '氣態 CO₂ (mol)', borderColor: '#7f8c8d', backgroundColor: 'transparent', fill: false, data: history.n2, tension: 0 } 
@@ -487,11 +502,12 @@
                 { label: '溶解速率 (g → aq)', borderColor: '#27ae60', backgroundColor: 'transparent', fill: false, data: history.RateB, tension: 0 } 
             ];
             V_gas = 5.0; V_liq = 5.0; T = 298; 
-            n_bulk = 0.0; n_mobile = 0.0; 
-            document.getElementById('volSlider').disabled = false;
+            n_bulk = 0.0; n_mobile = 0.0; n_third = 0.0;
+            volSlider.disabled = false;
+            
         } else if(sys === 'SUGAR') {
             eqTitle.innerHTML = `糖<sub>(s)</sub> &rightleftharpoons; 糖<sub>(aq)</sub>`;
-            sel.innerHTML = `<option value="SUGAR_s">加入固體糖 (mol)</option>`;
+            sel.innerHTML = `<option value="SUGAR_s">固體糖</option>`;
             molesChart.data.datasets = [ 
                 { label: '固體糖 (mol)', borderColor: '#f39c12', backgroundColor: 'transparent', fill: false, data: history.n1, tension: 0 }, 
                 { label: '溶解糖 (mol)', borderColor: '#3498db', backgroundColor: 'transparent', fill: false, data: history.n2, tension: 0 } 
@@ -501,8 +517,40 @@
                 { label: '結晶速率 (aq → s)', borderColor: '#9b59b6', backgroundColor: 'transparent', fill: false, data: history.RateB, tension: 0 } 
             ];
             V_gas = 5.0; V_liq = 5.0; T = 300; 
-            n_bulk = 0.0; n_mobile = 0.0;
-            document.getElementById('volSlider').disabled = true; 
+            n_bulk = 0.0; n_mobile = 0.0; n_third = 0.0;
+            volSlider.disabled = true; 
+            
+        } else if(sys === 'CHROMATE') {
+            eqTitle.innerHTML = `2CrO<sub>4</sub><sup>2-</sup><sub>(aq)</sub> + 2H<sup>+</sup> &rightleftharpoons; Cr<sub>2</sub>O<sub>7</sub><sup>2-</sup><sub>(aq)</sub> + H<sub>2</sub>O`;
+            sel.innerHTML = `<option value="CrO4">鉻酸鉀 K₂CrO₄ (黃)</option><option value="Cr2O7">二鉻酸鉀 K₂Cr₂O₇ (橘)</option><option value="HCl">鹽酸 HCl (提供 H⁺)</option><option value="NaOH">氫氧化鈉 NaOH (中和 H⁺)</option>`;
+            molesChart.data.datasets = [ 
+                { label: 'CrO₄²⁻ (黃)', borderColor: '#f1c40f', backgroundColor: 'transparent', fill: false, data: history.n1, tension: 0 }, 
+                { label: 'Cr₂O₇²⁻ (橘)', borderColor: '#e67e22', backgroundColor: 'transparent', fill: false, data: history.n2, tension: 0 },
+                { label: 'H⁺ (酸)', borderColor: '#e74c3c', backgroundColor: 'transparent', fill: false, data: history.n3, tension: 0 }
+            ];
+            rateChart.data.datasets = [ 
+                { label: '正反應 (變橘)', borderColor: '#d35400', backgroundColor: 'transparent', fill: false, data: history.RateF, tension: 0 }, 
+                { label: '逆反應 (變黃)', borderColor: '#f39c12', backgroundColor: 'transparent', fill: false, data: history.RateB, tension: 0 } 
+            ];
+            V_gas = 5.0; V_liq = 10.0; T = 300; 
+            n_bulk = 0.0; n_mobile = 0.0; n_third = 0.0;
+            volSlider.disabled = true; 
+            
+        } else if(sys === 'CACO3') {
+            eqTitle.innerHTML = `CaCO<sub>3(s)</sub> + 2H<sup>+</sup> &rightleftharpoons; Ca<sup>2+</sup> + CO<sub>2(g)</sub> + H<sub>2</sub>O`;
+            sel.innerHTML = `<option value="CaCO3_s">固體碳酸鈣 CaCO₃</option><option value="HCl">鹽酸 HCl (提供 H⁺)</option><option value="NaOH">氫氧化鈉 NaOH (中和 H⁺)</option>`;
+            molesChart.data.datasets = [ 
+                { label: 'CaCO₃ (固體)', borderColor: '#95a5a6', backgroundColor: 'transparent', fill: false, data: history.n1, tension: 0 }, 
+                { label: 'H⁺ (酸)', borderColor: '#e74c3c', backgroundColor: 'transparent', fill: false, data: history.n2, tension: 0 },
+                { label: 'CO₂ (氣體)', borderColor: '#7f8c8d', backgroundColor: 'transparent', fill: false, data: history.n3, tension: 0 }
+            ];
+            rateChart.data.datasets = [ 
+                { label: '溶解生氣 (s → g)', borderColor: '#27ae60', backgroundColor: 'transparent', fill: false, data: history.RateF, tension: 0 }, 
+                { label: '逆向沉澱 (g → s)', borderColor: '#c0392b', backgroundColor: 'transparent', fill: false, data: history.RateB, tension: 0 } 
+            ];
+            V_gas = 5.0; V_liq = 8.0; T = 300; 
+            n_bulk = 0.0; n_mobile = 0.0; n_third = 0.0;
+            volSlider.disabled = false; 
         }
         
         document.getElementById('volSlider').value = V_gas; document.getElementById('volVal').innerText = V_gas.toFixed(1);
@@ -515,76 +563,79 @@
 
     window.addCustomSubstance = function() {
         let val = document.getElementById('substanceSelect').value;
-        let amt = parseInt(document.getElementById('addAmount').value) || 0;
+        let amt = parseFloat(document.getElementById('addAmount').value) || 0;
         let b = getBounds();
         
-        if(val === 'H2O_l') { 
-            n_bulk += amt; 
-            V_liq = Math.max(0.1, n_bulk * 0.5); 
-            document.getElementById('liqSlider').value = V_liq; document.getElementById('liqVal').innerText = V_liq.toFixed(1); 
-        }
-        if(val === 'H2O_g') { 
-            n_mobile += amt; 
-            for(let i=0; i<Math.min(amt*50, 200); i++) particles.push(new Particle('H2O', 'gas', b.minX + Math.random()*(b.maxX - b.minX), b.pistonY + 10 + Math.random()*(b.liquidY - b.pistonY - 20)));
-        }
-        if(val === 'CO2_g') { 
-            n_mobile += amt; 
-            for(let i=0; i<Math.min(amt*20, 200); i++) particles.push(new Particle('CO2', 'gas', b.minX + Math.random()*(b.maxX - b.minX), b.pistonY + 10 + Math.random()*(b.liquidY - b.pistonY - 20)));
-        }
+        if(val === 'H2O_l') { n_bulk += amt; V_liq = Math.max(0.1, n_bulk * 0.5); document.getElementById('liqSlider').value = V_liq; document.getElementById('liqVal').innerText = V_liq.toFixed(1); }
+        if(val === 'H2O_g') { n_mobile += amt; for(let i=0; i<Math.min(amt*50, 200); i++) particles.push(new Particle('H2O', 'gas', b.minX + Math.random()*(b.maxX - b.minX), b.pistonY + 10 + Math.random()*(b.liquidY - b.pistonY - 20))); }
+        if(val === 'CO2_g') { n_mobile += amt; for(let i=0; i<Math.min(amt*20, 200); i++) particles.push(new Particle('CO2', 'gas', b.minX + Math.random()*(b.maxX - b.minX), b.pistonY + 10 + Math.random()*(b.liquidY - b.pistonY - 20))); }
         if(val === 'SUGAR_s') { n_bulk += amt; }
         
-        snapToPresent(); pendingActions['add'] = `+${amt} 物質`; if (isPaused) drawSystem();
+        let visual_Cr = 10; 
+        let visual_Ca = 10; 
+
+        if(val === 'CrO4') { 
+            n_bulk += amt; 
+            for(let i=0; i<Math.min(amt*visual_Cr, 100); i++) particles.push(new Particle('CrO4', 'aq', b.minX+10+Math.random()*(b.maxX-b.minX-20), b.liquidY+10+Math.random()*(b.maxY-b.liquidY-20)));
+        } 
+        if(val === 'Cr2O7') { 
+            n_mobile += amt; 
+            for(let i=0; i<Math.min(amt*visual_Cr, 100); i++) particles.push(new Particle('Cr2O7', 'aq', b.minX+10+Math.random()*(b.maxX-b.minX-20), b.liquidY+10+Math.random()*(b.maxY-b.liquidY-20)));
+        } 
+        if(val === 'HCl') { 
+            if(activeSystem === 'CHROMATE') { 
+                n_third += amt; 
+                for(let i=0; i<Math.min(amt*visual_Cr, 100); i++) particles.push(new Particle('H_PLUS', 'aq', b.minX+10+Math.random()*(b.maxX-b.minX-20), b.liquidY+10+Math.random()*(b.maxY-b.liquidY-20)));
+            }
+            if(activeSystem === 'CACO3') { 
+                n_mobile += amt; 
+                for(let i=0; i<Math.min(amt*visual_Ca, 100); i++) particles.push(new Particle('H_PLUS', 'aq', b.minX+10+Math.random()*(b.maxX-b.minX-20), b.liquidY+10+Math.random()*(b.maxY-b.liquidY-20)));
+            }
+        }
+        if(val === 'NaOH') {
+            let removeTarget = (activeSystem === 'CHROMATE') ? n_third : n_mobile;
+            let actualRemove = Math.min(amt, removeTarget);
+            if(activeSystem === 'CHROMATE') n_third -= actualRemove;
+            if(activeSystem === 'CACO3') n_mobile -= actualRemove;
+            
+            let targets = particles.filter(p => p.type === 'H_PLUS' && p.state === 'aq');
+            let count = Math.min(targets.length, actualRemove * visual_Cr);
+            for(let i=0; i<count; i++) targets[i].toBeRemoved = true;
+
+            pendingActions['add'] = `+${amt} NaOH (中和 ${actualRemove.toFixed(1)} H⁺)`;
+            snapToPresent(); if(isPaused) drawSystem(); return; 
+        }
+        if(val === 'CaCO3_s') { n_bulk += amt; }
+
+        snapToPresent(); pendingActions['add'] = `+${amt.toFixed(1)} 物質`; if (isPaused) drawSystem();
     };
 
     window.removeCustomSubstance = function() {
         let val = document.getElementById('substanceSelect').value;
-        let requestAmt = parseInt(document.getElementById('addAmount').value) || 0;
+        let requestAmt = parseFloat(document.getElementById('addAmount').value) || 0;
         let removedAmt = 0;
         
-        if(val === 'H2O_l') { 
-            removedAmt = Math.min(requestAmt, n_bulk); 
-            n_bulk -= removedAmt; 
-            V_liq = Math.max(0, n_bulk * 0.5); 
-            document.getElementById('liqSlider').value = V_liq; document.getElementById('liqVal').innerText = V_liq.toFixed(1); 
+        if (val === 'NaOH') { alert('提示：加入 NaOH 即可達到移除 H⁺ 的效果。'); return; }
+
+        if(val === 'H2O_l') { removedAmt = Math.min(requestAmt, n_bulk); n_bulk -= removedAmt; V_liq = Math.max(0, n_bulk * 0.5); document.getElementById('liqSlider').value = V_liq; document.getElementById('liqVal').innerText = V_liq.toFixed(1); }
+        else if(val === 'H2O_g') { removedAmt = Math.min(requestAmt, n_mobile); n_mobile -= removedAmt; let targets = particles.filter(p => p.type === 'H2O' && p.state === 'gas'); let count = (n_mobile < 0.01) ? targets.length : Math.ceil(removedAmt * 50); for(let i=0; i<Math.min(targets.length, count); i++) targets[i].toBeRemoved = true; }
+        else if(val === 'CO2_g') { removedAmt = Math.min(requestAmt, n_mobile + n_bulk); let fromGas = Math.min(removedAmt, n_mobile); let fromLiq = removedAmt - fromGas; n_mobile -= fromGas; n_bulk -= fromLiq; let targets = particles.filter(p => p.type === 'CO2' && p.state === 'gas'); let count = (n_mobile < 0.01) ? targets.length : Math.ceil(fromGas * 20); for(let i=0; i<Math.min(targets.length, count); i++) targets[i].toBeRemoved = true; }
+        else if(val === 'SUGAR_s') { removedAmt = Math.min(requestAmt, n_bulk + n_mobile); let fromSolid = Math.min(removedAmt, n_bulk); let fromAq = removedAmt - fromSolid; n_bulk -= fromSolid; n_mobile -= fromAq; if (fromAq > 0) { let targets = particles.filter(p => p.type === 'SUGAR' && p.state === 'aq'); let count = (n_mobile < 0.01) ? targets.length : Math.ceil(fromAq * 10); for(let i=0; i<Math.min(targets.length, count); i++) targets[i].toBeRemoved = true; } }
+        else if(val === 'CrO4') { removedAmt = Math.min(requestAmt, n_bulk); n_bulk -= removedAmt; let targets = particles.filter(p => p.type === 'CrO4' && p.state === 'aq'); let count = Math.min(targets.length, removedAmt * 10); for(let i=0; i<count; i++) targets[i].toBeRemoved = true; }
+        else if(val === 'Cr2O7') { removedAmt = Math.min(requestAmt, n_mobile); n_mobile -= removedAmt; let targets = particles.filter(p => p.type === 'Cr2O7' && p.state === 'aq'); let count = Math.min(targets.length, removedAmt * 10); for(let i=0; i<count; i++) targets[i].toBeRemoved = true; }
+        else if(val === 'HCl') { 
+            let target = (activeSystem === 'CHROMATE') ? n_third : n_mobile;
+            removedAmt = Math.min(requestAmt, target);
+            if(activeSystem === 'CHROMATE') n_third -= removedAmt;
+            if(activeSystem === 'CACO3') n_mobile -= removedAmt;
+            let targets = particles.filter(p => p.type === 'H_PLUS' && p.state === 'aq');
+            let count = Math.min(targets.length, removedAmt * 10);
+            for(let i=0; i<count; i++) targets[i].toBeRemoved = true;
         }
-        else if(val === 'H2O_g') { 
-            removedAmt = Math.min(requestAmt, n_mobile); 
-            n_mobile -= removedAmt; 
-            let targets = particles.filter(p => p.type === 'H2O' && p.state === 'gas');
-            // 【修復】當莫耳數歸零時，強制清除所有對應的視覺粒子
-            let count = (n_mobile < 0.01) ? targets.length : Math.ceil(removedAmt * 100);
-            for(let i=0; i<Math.min(targets.length, count); i++) targets[i].toBeRemoved = true;
-        }
-        else if(val === 'CO2_g') { 
-            removedAmt = Math.min(requestAmt, n_mobile + n_bulk); 
-            let fromGas = Math.min(removedAmt, n_mobile);
-            let fromLiq = removedAmt - fromGas;
-            n_mobile -= fromGas;
-            n_bulk -= fromLiq;
-            
-            let targets = particles.filter(p => p.type === 'CO2' && p.state === 'gas');
-            let count = (n_mobile < 0.01) ? targets.length : Math.ceil(fromGas * 60);
-            for(let i=0; i<Math.min(targets.length, count); i++) targets[i].toBeRemoved = true;
-        }
-        else if(val === 'SUGAR_s') { 
-            removedAmt = Math.min(requestAmt, n_bulk + n_mobile); 
-            let fromSolid = Math.min(removedAmt, n_bulk);
-            let fromAq = removedAmt - fromSolid;
-            n_bulk -= fromSolid;
-            n_mobile -= fromAq;
-            
-            // 【修正 2】手動移除物質時，精確計算並移除水中對應的「溶解糖」方塊粒子
-            if (fromAq > 0) {
-                let targets = particles.filter(p => p.type === 'SUGAR' && p.state === 'aq');
-                let count = (n_mobile < 0.01) ? targets.length : Math.ceil(fromAq * 15);
-                for(let i=0; i<Math.min(targets.length, count); i++) targets[i].toBeRemoved = true;
-            }
-        }
+        else if(val === 'CaCO3_s') { removedAmt = Math.min(requestAmt, n_bulk); n_bulk -= removedAmt; }
         
         if (removedAmt > 0) {
-            snapToPresent(); 
-            pendingActions['remove'] = `-${removedAmt.toFixed(1)} 物質`; 
-            if (isPaused) drawSystem();
+            snapToPresent(); pendingActions['remove'] = `-${removedAmt.toFixed(1)} 物質`; if (isPaused) drawSystem();
         } else {
             alert('⚠️ 容器內已無足夠的物質可供移除！');
         }
@@ -607,7 +658,21 @@
         let b = getBounds(); ctx.clearRect(0, 0, canvas.width, canvas.height);
         
         if (V_liq > 0) {
-            ctx.fillStyle = activeSystem === 'SUGAR' ? 'rgba(52, 152, 219, 0.15)' : 'rgba(52, 152, 219, 0.3)';
+            if (activeSystem === 'CHROMATE') {
+                let totalCr = n_bulk + n_mobile * 2; 
+                if (totalCr > 0) {
+                    let ratioOrange = (n_mobile * 2) / totalCr;
+                    let r = Math.floor(241 * (1 - ratioOrange) + 230 * ratioOrange);
+                    let g = Math.floor(196 * (1 - ratioOrange) + 126 * ratioOrange);
+                    let b_col = Math.floor(15 * (1 - ratioOrange) + 34 * ratioOrange);
+                    ctx.fillStyle = `rgba(${r}, ${g}, ${b_col}, 0.5)`;
+                } else {
+                    ctx.fillStyle = 'rgba(52, 152, 219, 0.15)'; 
+                }
+            } else {
+                ctx.fillStyle = activeSystem === 'SUGAR' ? 'rgba(52, 152, 219, 0.15)' : 'rgba(52, 152, 219, 0.3)';
+            }
+            
             ctx.fillRect(b.minX, b.liquidY, b.maxX - b.minX, b.maxY - b.liquidY);
             
             ctx.strokeStyle = '#2980b9'; ctx.lineWidth = 3;
@@ -623,19 +688,21 @@
         }
         
         if (activeSystem === 'SUGAR' && n_bulk > 0) {
-            let baseSize = 8;
-            let scaleH = 3.5; 
-            let scaleW = 5.0; 
+            let baseSize = 8; let scaleH = 3.5; let scaleW = 5.0; 
             let h = Math.min(baseSize + n_bulk * scaleH, b.maxY - b.liquidY - 5);
             let w = Math.min(baseSize * 2 + n_bulk * scaleW, b.maxX - b.minX - 20);
-            
             ctx.fillStyle = '#f1c40f'; ctx.fillRect((canvas.width-w)/2, b.maxY - h, w, h);
             ctx.strokeStyle = '#d35400'; ctx.lineWidth = 2; ctx.strokeRect((canvas.width-w)/2, b.maxY - h, w, h);
-            
-            if (h > 18) {
-                ctx.fillStyle = '#fff'; ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center'; 
-                ctx.fillText('固體糖塊', canvas.width/2, b.maxY - h/2 + 4);
-            }
+            if (h > 18) { ctx.fillStyle = '#fff'; ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('固體糖塊', canvas.width/2, b.maxY - h/2 + 4); }
+        }
+        
+        if (activeSystem === 'CACO3' && n_bulk > 0) {
+            let baseSize = 10; let scaleH = 3.0; let scaleW = 6.0; 
+            let h = Math.min(baseSize + n_bulk * scaleH, b.maxY - b.liquidY - 5);
+            let w = Math.min(baseSize * 2 + n_bulk * scaleW, b.maxX - b.minX - 20);
+            ctx.fillStyle = '#ecf0f1'; ctx.fillRect((canvas.width-w)/2, b.maxY - h, w, h);
+            ctx.strokeStyle = '#bdc3c7'; ctx.lineWidth = 2; ctx.strokeRect((canvas.width-w)/2, b.maxY - h, w, h);
+            if (h > 18) { ctx.fillStyle = '#7f8c8d'; ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('CaCO₃(s)', canvas.width/2, b.maxY - h/2 + 4); }
         }
 
         let plateColor = '#7f8c8d';
@@ -650,7 +717,7 @@
         ctx.beginPath(); ctx.moveTo(b.minX, 0); ctx.lineTo(b.minX, b.maxY); ctx.lineTo(b.maxX, b.maxY); ctx.lineTo(b.maxX, 0); ctx.stroke();
         
         if (!isOpenSystem) {
-            if (activeSystem !== 'SUGAR') {
+            if (activeSystem !== 'SUGAR' && activeSystem !== 'CHROMATE') {
                 ctx.fillStyle = '#7f8c8d'; ctx.fillRect(b.minX, b.pistonY - 15, b.maxX - b.minX, 15); 
                 ctx.fillStyle = '#95a5a6'; ctx.fillRect(canvas.width/2 - 10, 0, 20, b.pistonY - 15); 
                 ctx.fillStyle = '#fff'; ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('⇕ 拖拉活塞', canvas.width/2, b.pistonY - 3);
@@ -666,7 +733,7 @@
         for (let p of particles) p.draw(ctx);
         for (let i = flashes.length-1; i>=0; i--) {
             let f = flashes[i]; ctx.fillStyle = f.c; ctx.globalAlpha = f.life;
-            ctx.beginPath(); ctx.arc(f.x, f.y, 10, 0, Math.PI*2); ctx.fill(); ctx.globalAlpha = 1.0;
+            ctx.beginPath(); ctx.arc(f.x, f.y, f.r || 10, 0, Math.PI*2); ctx.fill(); ctx.globalAlpha = 1.0;
             if(!isPaused) f.life -= 0.1; if(f.life<=0) flashes.splice(i,1);
         }
         if (isPaused) {
@@ -675,7 +742,6 @@
         }
     }
 
-    // --- 嚴謹動力學引擎：解開動畫封印，實現黃金 8 秒圖表視窗 ---
     function updateSimulation() {
         if (tempChangeMode !== 0) {
             T += tempChangeMode * 0.5; 
@@ -689,7 +755,7 @@
         if (!isPaused) {
             frameCounter++;
             let b = getBounds();
-            let sub_steps = 10;
+            let sub_steps = 20;
             let sub_dt = physical_dt / sub_steps;
             let sum_evap = 0, sum_cond = 0;
 
@@ -697,32 +763,22 @@
                 if (activeSystem === 'WATER') {
                     let P_sat = Math.exp(10.0 * (1 - 373/T)); 
                     P_tot = isOpenSystem ? 0 : (n_mobile * R * T) / Math.max(0.1, V_gas);
-                    // 調整常數，使達成平衡需要約 4 物理秒鐘（恰好佔圖表 1/2 寬度）
                     Rf = (n_bulk > 0) ? 0.25 * P_sat : 0; 
                     Rb = isOpenSystem ? 0 : 0.25 * P_tot; 
                     let R_escape = isOpenSystem ? (n_mobile * 1.5) : 0;
 
-                    let dn_evap = Rf * sub_dt;
-                    let dn_cond = Rb * sub_dt;
-                    let dn_escape = R_escape * sub_dt;
-
+                    let dn_evap = Rf * sub_dt; let dn_cond = Rb * sub_dt; let dn_escape = R_escape * sub_dt;
                     if (n_bulk - dn_evap < 0) { dn_evap = n_bulk; Rf = dn_evap / sub_dt; }
                     if (n_mobile + dn_evap - dn_cond - dn_escape < 0) {
-                        let available = n_mobile + dn_evap;
-                        let sum = dn_cond + dn_escape || 1;
-                        dn_cond = available * (dn_cond / sum);
-                        dn_escape = available * (dn_escape / sum);
-                        Rb = dn_cond / sub_dt;
+                        let available = n_mobile + dn_evap; let sum = dn_cond + dn_escape || 1;
+                        dn_cond = available * (dn_cond / sum); dn_escape = available * (dn_escape / sum); Rb = dn_cond / sub_dt;
                     }
 
-                    n_bulk = n_bulk - dn_evap + dn_cond;
-                    n_mobile = n_mobile + dn_evap - dn_cond - dn_escape;
+                    n_bulk += -dn_evap + dn_cond; n_mobile += dn_evap - dn_cond - dn_escape;
                     sum_evap += dn_evap; sum_cond += dn_cond;
                     
                     V_liq = Math.max(0, n_bulk * 0.5);
-                    if (document.activeElement !== document.getElementById('liqSlider')) {
-                        document.getElementById('liqSlider').value = V_liq; document.getElementById('liqVal').innerText = V_liq.toFixed(1);
-                    }
+                    if (document.activeElement !== document.getElementById('liqSlider')) { document.getElementById('liqSlider').value = V_liq; document.getElementById('liqVal').innerText = V_liq.toFixed(1); }
 
                 } else if (activeSystem === 'CO2') {
                     P_tot = isOpenSystem ? 0 : (n_mobile * R * T) / Math.max(0.1, V_gas);
@@ -731,50 +787,76 @@
                     Rb = (isOpenSystem || V_liq <= 0) ? 0 : 0.25 * P_tot; 
                     let R_escape = isOpenSystem ? (n_mobile * 1.5) : 0;
 
-                    let dn_evap = Rf * sub_dt;
-                    let dn_cond = Rb * sub_dt;
-                    let dn_escape = R_escape * sub_dt;
-
+                    let dn_evap = Rf * sub_dt; let dn_cond = Rb * sub_dt; let dn_escape = R_escape * sub_dt;
                     if (n_bulk - dn_evap < 0) { dn_evap = n_bulk; Rf = dn_evap / sub_dt; }
                     if (n_mobile + dn_evap - dn_cond - dn_escape < 0) {
-                        let available = n_mobile + dn_evap;
-                        let sum = dn_cond + dn_escape || 1;
-                        dn_cond = available * (dn_cond / sum);
-                        dn_escape = available * (dn_escape / sum);
-                        Rb = dn_cond / sub_dt;
+                        let available = n_mobile + dn_evap; let sum = dn_cond + dn_escape || 1;
+                        dn_cond = available * (dn_cond / sum); dn_escape = available * (dn_escape / sum); Rb = dn_cond / sub_dt;
                     }
 
-                    n_bulk = n_bulk - dn_evap + dn_cond;
-                    n_mobile = n_mobile + dn_evap - dn_cond - dn_escape;
+                    n_bulk += -dn_evap + dn_cond; n_mobile += dn_evap - dn_cond - dn_escape;
                     sum_evap += dn_evap; sum_cond += dn_cond;
 
                 } else if (activeSystem === 'SUGAR') {
                     if (isOpenSystem && V_liq > 0) {
                         V_liq -= 0.5 * sub_dt; if (V_liq < 0) V_liq = 0;
-                        if (document.activeElement !== document.getElementById('liqSlider')) {
-                            document.getElementById('liqSlider').value = V_liq; document.getElementById('liqVal').innerText = V_liq.toFixed(1);
-                        }
+                        if (document.activeElement !== document.getElementById('liqSlider')) { document.getElementById('liqSlider').value = V_liq; document.getElementById('liqVal').innerText = V_liq.toFixed(1); }
                     }
-
                     let S_T = 2.0 * Math.exp(3 * (1 - 298/T)); 
                     if (V_liq > 0) {
-                        // 固體溶解稍慢一些，展現層次感
                         Rf = (n_bulk > 0) ? 0.10 * Math.pow(n_bulk, 0.6) * S_T : 0; 
                         Rb = 0.10 * Math.pow(Math.max(n_bulk, 0.1), 0.6) * (n_mobile / V_liq); 
-                    } else {
-                        Rf = 0; Rb = n_mobile / sub_dt; 
-                    }
+                    } else { Rf = 0; Rb = n_mobile / sub_dt; }
                     P_tot = 0;
 
-                    let dn_evap = Rf * sub_dt;
-                    let dn_cond = Rb * sub_dt;
-
+                    let dn_evap = Rf * sub_dt; let dn_cond = Rb * sub_dt;
                     if (n_bulk - dn_evap < 0) { dn_evap = n_bulk; Rf = dn_evap / sub_dt; }
                     if (n_mobile + dn_evap - dn_cond < 0) { dn_cond = n_mobile + dn_evap; Rb = dn_cond / sub_dt; }
 
-                    n_bulk = n_bulk - dn_evap + dn_cond;
-                    n_mobile = n_mobile + dn_evap - dn_cond;
+                    n_bulk += -dn_evap + dn_cond; n_mobile += dn_evap - dn_cond;
                     sum_evap += dn_evap; sum_cond += dn_cond;
+                    
+                } else if (activeSystem === 'CHROMATE') {
+                    if (V_liq <= 0) V_liq = 10;
+                    let c_CrO4 = n_bulk / V_liq; let c_H = n_third / V_liq; let c_Cr2O7 = n_mobile / V_liq;
+                    
+                    Rf = 0.05 * Math.pow(c_CrO4, 2) * Math.pow(c_H, 2);
+                    Rb = 0.5 * c_Cr2O7;
+                    P_tot = 0;
+
+                    let dn_f = Rf * sub_dt; let dn_b = Rb * sub_dt;
+                    if (dn_f > Math.min(n_bulk/2, n_third/2)) { dn_f = Math.min(n_bulk/2, n_third/2); Rf = dn_f / sub_dt; }
+                    if (dn_b > n_mobile) { dn_b = n_mobile; Rb = dn_b / sub_dt; }
+
+                    n_bulk += -2*dn_f + 2*dn_b; // CrO4
+                    n_third += -2*dn_f + 2*dn_b; // H+
+                    n_mobile += dn_f - dn_b;     // Cr2O7
+                    
+                    sum_evap += dn_f; sum_cond += dn_b;
+                    
+                } else if (activeSystem === 'CACO3') {
+                    if (V_liq <= 0) V_liq = 8;
+                    P_tot = isOpenSystem ? 0 : (n_third * R * T) / Math.max(0.1, V_gas);
+                    let c_H = n_mobile / V_liq;
+                    let area = Math.pow(Math.max(0, n_bulk), 0.6);
+                    
+                    Rf = (n_bulk > 0) ? 0.3 * area * Math.pow(c_H, 2) : 0;
+                    Rb = isOpenSystem ? 0 : 0.05 * P_tot;
+                    let R_escape = isOpenSystem ? (n_third * 1.5) : 0;
+
+                    let dn_f = Rf * sub_dt; let dn_b = Rb * sub_dt; let dn_esc = R_escape * sub_dt;
+
+                    if (dn_f > Math.min(n_bulk, n_mobile/2)) { dn_f = Math.min(n_bulk, n_mobile/2); Rf = dn_f / sub_dt; }
+                    if (dn_b + dn_esc > n_third) {
+                        let sum = dn_b + dn_esc || 1;
+                        dn_b = n_third * (dn_b/sum); dn_esc = n_third * (dn_esc/sum); Rb = dn_b / sub_dt;
+                    }
+
+                    n_bulk += -dn_f + dn_b;         // CaCO3
+                    n_mobile += -2*dn_f + 2*dn_b;   // H+
+                    n_third += dn_f - dn_b - dn_esc;// CO2
+                    
+                    sum_evap += dn_f; sum_cond += dn_b;
                 }
             }
 
@@ -783,64 +865,145 @@
             
             if (activeSystem === 'WATER' || activeSystem === 'CO2') {
                 disp.Pressure = isOpenSystem ? 0 : (n_mobile * R * T) / Math.max(0.1, V_gas);
-            } else {
-                disp.Pressure = 0;
-            }
+            } else if (activeSystem === 'CACO3') {
+                disp.Pressure = isOpenSystem ? 0 : (n_third * R * T) / Math.max(0.1, V_gas);
+            } else { disp.Pressure = 0; }
 
-            // 微調視覺粒子乘數以補償較小的物理步長，保持畫面豐富度
-            let visual_mult = (activeSystem === 'WATER') ? 100 : (activeSystem === 'CO2' ? 60 : 15);
-            window.accum_evap_particles += sum_evap * visual_mult;
-            window.accum_cond_particles += sum_cond * visual_mult;
+            // 視覺動畫處理：依據真實莫耳變化量增減粒子，不再暴力移除
+            if (activeSystem === 'WATER' || activeSystem === 'CO2' || activeSystem === 'SUGAR') {
+                let visual_mult = (activeSystem === 'WATER') ? 100 : (activeSystem === 'CO2' ? 60 : 15);
+                window.accum_evap_particles += sum_evap * visual_mult;
+                window.accum_cond_particles += sum_cond * visual_mult;
 
-            let emitCount = Math.floor(window.accum_evap_particles);
-            window.accum_evap_particles -= emitCount;
-            emitCount = Math.min(emitCount, 20); // 確保單幀發射上限，維持流暢度
-            
-            for(let i=0; i<emitCount; i++) {
-                if (activeSystem === 'WATER') {
-                    let p = new Particle('H2O', 'gas', b.minX + Math.random()*(b.maxX - b.minX), b.liquidY - 5);
-                    p.vy = -(4.0 + Math.random()*4.0); p.vx = (Math.random()-0.5)*6;
-                    particles.push(p);
-                } else if (activeSystem === 'CO2') {
-                    let isBubbling = (disp.Rf > disp.Rb * 1.5) || isOpenSystem;
-                    if (isBubbling) {
-                        let p = new Particle('CO2', 'bubble', b.minX + 10 + Math.random()*(b.maxX - b.minX - 20), b.maxY - Math.random()*(b.maxY - b.liquidY));
-                        particles.push(p);
-                    } else {
-                        let p = new Particle('CO2', 'gas', b.minX + Math.random()*(b.maxX - b.minX), b.liquidY - 5);
-                        p.vy = -(2.0 + Math.random()*3.0); p.vx = (Math.random()-0.5)*4;
-                        particles.push(p);
-                    }
-                } else if (activeSystem === 'SUGAR') {
-                    let p = new Particle('SUGAR', 'aq', canvas.width/2 + (Math.random()-0.5)*30, b.maxY - 10);
-                    particles.push(p);
+                let emitCount = Math.floor(window.accum_evap_particles);
+                window.accum_evap_particles -= emitCount;
+                emitCount = Math.min(emitCount, 20); 
+                
+                for(let i=0; i<emitCount; i++) {
+                    if (activeSystem === 'WATER') { particles.push(new Particle('H2O', 'gas', b.minX + Math.random()*(b.maxX - b.minX), b.liquidY - 5)); } 
+                    else if (activeSystem === 'CO2') {
+                        let isBubbling = (disp.Rf > disp.Rb * 1.5) || isOpenSystem;
+                        if (isBubbling) { particles.push(new Particle('CO2', 'bubble', b.minX + 10 + Math.random()*(b.maxX - b.minX - 20), b.maxY - Math.random()*(b.maxY - b.liquidY))); } 
+                        else { particles.push(new Particle('CO2', 'gas', b.minX + Math.random()*(b.maxX - b.minX), b.liquidY - 5)); }
+                    } 
+                    else if (activeSystem === 'SUGAR') { particles.push(new Particle('SUGAR', 'aq', canvas.width/2 + (Math.random()-0.5)*30, b.maxY - 10)); }
                 }
-            }
-            
-            let condCount = Math.floor(window.accum_cond_particles);
-            window.accum_cond_particles -= condCount;
-            for(let i=0; i<condCount; i++) {
-                let searchState = (activeSystem === 'SUGAR') ? 'aq' : 'gas';
-                let target = particles.find(p => p.state === searchState && !p.markedForCondensation);
-                if (target) target.markedForCondensation = true;
-                else { window.accum_cond_particles = 0; break; }
+                
+                let condCount = Math.floor(window.accum_cond_particles);
+                window.accum_cond_particles -= condCount;
+                for(let i=0; i<condCount; i++) {
+                    let searchState = (activeSystem === 'SUGAR') ? 'aq' : 'gas';
+                    let target = particles.find(p => p.state === searchState && !p.markedForCondensation);
+                    if (target) target.markedForCondensation = true; else { window.accum_cond_particles = 0; break; }
+                }
+            } 
+            else if (activeSystem === 'CHROMATE') {
+                // 1 mol 產生 = 10 粒子，每次合成消耗 2*CrO4 + 2*H+
+                window.accum_evap_particles += sum_evap * 10; 
+                window.accum_cond_particles += sum_cond * 10;
+
+                let synthCount = Math.floor(window.accum_evap_particles);
+                for(let i=0; i < Math.min(synthCount, 5); i++) {
+                    let cro4s = particles.filter(p => p.type === 'CrO4' && !p.toBeRemoved);
+                    let hs = particles.filter(p => p.type === 'H_PLUS' && !p.toBeRemoved);
+                    
+                    let force = window.accum_evap_particles > 5; // 避免計算殘留，若粒子相遇不及強制合成
+                    if (cro4s.length >= 2 && hs.length >= 2) {
+                        let bestA = null, bestB = null, minD = Infinity;
+                        for(let a=0; a<cro4s.length; a++){
+                            for(let b=a+1; b<cro4s.length; b++){
+                                let d = Math.hypot(cro4s[a].x - cro4s[b].x, cro4s[a].y - cro4s[b].y);
+                                if(d < minD){ minD = d; bestA = cro4s[a]; bestB = cro4s[b]; }
+                            }
+                        }
+                        let mx = (bestA.x + bestB.x)/2, my = (bestA.y + bestB.y)/2;
+                        let nearbyH = hs.sort((a,b) => Math.hypot(a.x-mx, a.y-my) - Math.hypot(b.x-mx, b.y-my));
+                        
+                        if ((minD < 80 && Math.hypot(nearbyH[1].x-mx, nearbyH[1].y-my) < 80) || force) {
+                            bestA.toBeRemoved = true; bestB.toBeRemoved = true;
+                            nearbyH[0].toBeRemoved = true; nearbyH[1].toBeRemoved = true;
+                            
+                            particles.push(new Particle('Cr2O7', 'aq', mx, my));
+                            flashes.push({x: mx, y: my, c: 'rgba(230, 126, 34, 1.0)', life: 1.0, r: 15});
+                            window.accum_evap_particles -= 1;
+                        }
+                    } else if (force) {
+                        if (cro4s.length > 0) cro4s[0].toBeRemoved = true;
+                        if (cro4s.length > 1) cro4s[1].toBeRemoved = true;
+                        if (hs.length > 0) hs[0].toBeRemoved = true;
+                        if (hs.length > 1) hs[1].toBeRemoved = true;
+                        particles.push(new Particle('Cr2O7', 'aq', b.minX + Math.random()*(b.maxX-b.minX), b.liquidY + Math.random()*(b.maxY-b.liquidY)));
+                        window.accum_evap_particles -= 1;
+                    }
+                }
+
+                let decompCount = Math.floor(window.accum_cond_particles);
+                for(let i=0; i < Math.min(decompCount, 5); i++) {
+                    let cr2o7s = particles.filter(p => p.type === 'Cr2O7' && !p.toBeRemoved);
+                    if (cr2o7s.length > 0) {
+                        // 【微觀可逆性】優先挑選最新鮮剛合成的二鉻酸根 (陣列最後一個) 原地分解
+                        let p = cr2o7s[cr2o7s.length - 1]; 
+                        p.toBeRemoved = true;
+                        
+                        let p1 = new Particle('CrO4', 'aq', p.x - 6, p.y); p1.vx = -1.5;
+                        let p2 = new Particle('CrO4', 'aq', p.x + 6, p.y); p2.vx = 1.5;
+                        let h1 = new Particle('H_PLUS', 'aq', p.x, p.y - 6); h1.vy = -1.5;
+                        let h2 = new Particle('H_PLUS', 'aq', p.x, p.y + 6); h2.vy = 1.5;
+                        particles.push(p1, p2, h1, h2);
+                        flashes.push({x: p.x, y: p.y, c: 'rgba(241, 196, 15, 1.0)', life: 1.0, r: 15});
+                        window.accum_cond_particles -= 1;
+                    } else if (window.accum_cond_particles > 5) {
+                        let mx = b.minX + Math.random()*(b.maxX-b.minX); let my = b.liquidY + Math.random()*(b.maxY-b.liquidY);
+                        particles.push(new Particle('CrO4', 'aq', mx, my), new Particle('CrO4', 'aq', mx, my));
+                        particles.push(new Particle('H_PLUS', 'aq', mx, my), new Particle('H_PLUS', 'aq', mx, my));
+                        window.accum_cond_particles -= 1;
+                    }
+                }
+            } 
+            else if (activeSystem === 'CACO3') {
+                window.accum_evap_particles += sum_evap * 10; 
+                window.accum_cond_particles += sum_cond * 10; 
+                
+                let emitCount = Math.floor(window.accum_evap_particles);
+                for(let i=0; i<Math.min(emitCount, 5); i++) {
+                    let hs = particles.filter(p => p.type === 'H_PLUS' && !p.toBeRemoved);
+                    if (hs.length >= 2 || window.accum_evap_particles > 5) {
+                        let bottomHs = hs.filter(p => p.y > b.maxY - 40).slice(0, 2);
+                        if (bottomHs.length > 0) bottomHs[0].toBeRemoved = true;
+                        if (bottomHs.length > 1) bottomHs[1].toBeRemoved = true;
+                        
+                        let isBubbling = (disp.Rf > disp.Rb * 1.5) || isOpenSystem;
+                        if (isBubbling) particles.push(new Particle('CO2', 'bubble', canvas.width/2 + (Math.random()-0.5)*50, b.maxY - Math.random()*20));
+                        else particles.push(new Particle('CO2', 'gas', b.minX + Math.random()*(b.maxX - b.minX), b.liquidY - 5));
+                        
+                        window.accum_evap_particles -= 1;
+                    }
+                }
+                
+                let condCount = Math.floor(window.accum_cond_particles);
+                for(let i=0; i<Math.min(condCount, 5); i++) {
+                    let target = particles.find(p => p.type === 'CO2' && p.state === 'gas' && !p.markedForCondensation);
+                    if (target || window.accum_cond_particles > 5) {
+                        if (target) target.markedForCondensation = true;
+                        particles.push(new Particle('H_PLUS', 'aq', canvas.width/2 + (Math.random()-0.5)*40, b.maxY - 20));
+                        particles.push(new Particle('H_PLUS', 'aq', canvas.width/2 + (Math.random()-0.5)*40, b.maxY - 20));
+                        window.accum_cond_particles -= 1;
+                    }
+                }
             }
 
             for (let p of particles) p.update(Math.sqrt(T/300), b);
 
             time += physical_dt;
-            
-            // 【解開圖表暴衝封印】每 2 個影格（約 33ms）才紀錄並推動一次圖表
-            // 配合 240 點的視窗，橫軸精準呈現真實世界的 8 秒鐘！
             if (frameCounter % 2 === 0) {
                 history.time.push(time.toFixed(1));
-                history.n1.push(n_bulk); history.n2.push(n_mobile);
+                history.n1.push(n_bulk); history.n2.push(n_mobile); history.n3.push(n_third);
                 history.RateF.push(disp.Rf); history.RateB.push(disp.Rb); history.Pressure.push(disp.Pressure);
                 
                 let actStr = Object.values(pendingActions).join(', '); history.Actions.push(actStr ? actStr : null); pendingActions = {};
                 
                 if (history.time.length > maxMemoryPoints) { 
-                    history.time.shift(); history.n1.shift(); history.n2.shift(); 
+                    history.time.shift(); history.n1.shift(); history.n2.shift(); history.n3.shift();
                     history.RateF.shift(); history.RateB.shift(); history.Pressure.shift(); history.Actions.shift(); 
                 }
                 
@@ -848,7 +1011,7 @@
             }
         }
         drawSystem(); 
-        requestAnimationFrame(updateSimulation); // 釋放 60fps 動畫流暢度
+        requestAnimationFrame(updateSimulation); 
     }
 
     function snapToPresent() {
@@ -880,7 +1043,7 @@
     
     let isDraggingPiston = false;
     canvas.addEventListener('mousedown', (e) => {
-        if(activeSystem === 'SUGAR' || isOpenSystem) return;
+        if(activeSystem === 'SUGAR' || activeSystem === 'CHROMATE' || isOpenSystem) return;
         let rect = canvas.getBoundingClientRect(); let scaleX = canvas.width / rect.width; let scaleY = canvas.height / rect.height;
         let mouseX = (e.clientX - rect.left) * scaleX; let mouseY = (e.clientY - rect.top) * scaleY;
         let b = getBounds();
@@ -890,7 +1053,7 @@
     window.addEventListener('mousemove', (e) => {
         let rect = canvas.getBoundingClientRect(); let scaleY = canvas.height / rect.height; let scaleX = canvas.width / rect.width;
         let mouseY = (e.clientY - rect.top) * scaleY; let mouseX = (e.clientX - rect.left) * scaleX; let b = getBounds();
-        if (!isDraggingPiston && activeSystem !== 'SUGAR' && !isOpenSystem) {
+        if (!isDraggingPiston && activeSystem !== 'SUGAR' && activeSystem !== 'CHROMATE' && !isOpenSystem) {
             if (mouseX >= b.minX && mouseX <= b.maxX && mouseY >= b.pistonY - 30 && mouseY <= b.pistonY + 10) canvas.style.cursor = 'ns-resize'; else canvas.style.cursor = 'default';
         }
         if (isDraggingPiston) {
@@ -907,7 +1070,7 @@
 
     window.addEventListener('mouseup', () => { isDraggingPiston = false; });
     canvas.addEventListener('touchstart', (e) => {
-        if(activeSystem === 'SUGAR' || isOpenSystem) return;
+        if(activeSystem === 'SUGAR' || activeSystem === 'CHROMATE' || isOpenSystem) return;
         let rect = canvas.getBoundingClientRect(); let scaleY = canvas.height / rect.height;
         let mouseY = (e.touches[0].clientY - rect.top) * scaleY; let b = getBounds();
         if (mouseY >= b.pistonY - 40 && mouseY <= b.pistonY + 20) { isDraggingPiston = true; e.preventDefault(); }
@@ -980,7 +1143,6 @@
         if (startIdx < 0) { startIdx = 0; endIdx = Math.min(maxIdx, startIdx + visualDataPoints - 1); }
         updateChartWindows(startIdx, endIdx);
         
-        // 尋找最近的歷史事件並顯示標示
         let closestEvent = ""; let minDiff = Infinity;
         for (let i = Math.max(0, targetIdx - 15); i <= Math.min(maxIdx, targetIdx + 15); i++) {
             if (history.Actions[i]) {
