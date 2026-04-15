@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>右手開掌定則與平行導線安培力模擬V15</title>
+    <title>右手開掌定則與平行導線安培力模擬V16</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
     <style>
@@ -943,17 +943,15 @@
             }
             return handGroup;
         }
-        const rightHandModel = createRightHandOpen();
-        scene.add(rightHandModel);
+        
+        const rightHandModelTop = createRightHandOpen();
+        scene.add(rightHandModelTop);
+        const rightHandModelBot = createRightHandOpen();
+        scene.add(rightHandModelBot);
 
         // ==========================================
         //  建立綜合向量箭頭與標籤 (I, B, F)
         // ==========================================
-        const vectorGroup = new THREE.Group();
-        const arrowI = new THREE.ArrowHelper(new THREE.Vector3(1,0,0), new THREE.Vector3(0,0,0), 4, 0x10b981, 0.8, 0.6); 
-        const arrowB = new THREE.ArrowHelper(new THREE.Vector3(0,1,0), new THREE.Vector3(0,0,0), 4, 0x3b82f6, 0.8, 0.6); 
-        const arrowF = new THREE.ArrowHelper(new THREE.Vector3(0,0,1), new THREE.Vector3(0,0,0), 4, 0xef4444, 0.8, 0.6); 
-        
         function createVectorLabelSprite(text, color) {
             const canvas = document.createElement('canvas');
             canvas.width = 128; canvas.height = 128;
@@ -973,13 +971,23 @@
             return sprite;
         }
 
-        const labelI = createVectorLabelSprite('I', '#10b981'); 
-        const labelB = createVectorLabelSprite('B', '#3b82f6'); 
-        const labelF = createVectorLabelSprite('F', '#ef4444'); 
+        function createVectorHelpers() {
+            const group = new THREE.Group();
+            const arrowI = new THREE.ArrowHelper(new THREE.Vector3(1,0,0), new THREE.Vector3(0,0,0), 4, 0x10b981, 0.8, 0.6); 
+            const arrowB = new THREE.ArrowHelper(new THREE.Vector3(0,1,0), new THREE.Vector3(0,0,0), 4, 0x3b82f6, 0.8, 0.6); 
+            const arrowF = new THREE.ArrowHelper(new THREE.Vector3(0,0,1), new THREE.Vector3(0,0,0), 4, 0xef4444, 0.8, 0.6); 
+            const labelI = createVectorLabelSprite('I', '#10b981'); 
+            const labelB = createVectorLabelSprite('B', '#3b82f6'); 
+            const labelF = createVectorLabelSprite('F', '#ef4444'); 
+            group.add(arrowI); group.add(arrowB); group.add(arrowF);
+            group.add(labelI); group.add(labelB); group.add(labelF);
+            return { group, arrowI, arrowB, arrowF, labelI, labelB, labelF };
+        }
 
-        vectorGroup.add(arrowI); vectorGroup.add(arrowB); vectorGroup.add(arrowF);
-        vectorGroup.add(labelI); vectorGroup.add(labelB); vectorGroup.add(labelF);
-        scene.add(vectorGroup);
+        const vectorsTop = createVectorHelpers();
+        scene.add(vectorsTop.group);
+        const vectorsBot = createVectorHelpers();
+        scene.add(vectorsBot.group);
 
         // ==========================================
         //  流動粒子系統 (雙陣列，適應場景二的雙迴路)
@@ -1561,7 +1569,6 @@
                         if (Math.abs(currentAmp2) > 0) {
                             let rodZ2 = ampereRodBot.position.z;
                             let lenA2 = Math.abs(posRailX_A2 - batPosX_A2);
-                            // 【修正】下方電池在前方(+Z)，軌道端點也在前方(-railZ = +12)
                             let lenB2 = Math.abs((-railZ) - batZ_A2); 
                             let lenC2 = Math.abs(rodZ2 - (-railZ)); 
                             let lenD2 = RAILS_DIST;
@@ -1587,7 +1594,6 @@
                                     dir.set(0, 0, -1); 
                                 } else if (d < lenA2 + lenB2 + lenC2) {
                                     let dist = d - (lenA2 + lenB2);
-                                    // 【修正】從前方端點(+12)往後走到金屬棒
                                     p.mesh.position.set(posRailX_A2, AMP_Y_BOT + 0.45, (-railZ) - dist); 
                                     dir.set(0, 0, -1);
                                 } else if (d < lenA2 + lenB2 + lenC2 + lenD2) {
@@ -1597,12 +1603,10 @@
                                     dir.set(dirX, 0, 0);
                                 } else if (d < lenA2 + lenB2 + lenC2*2 + lenD2) {
                                     let dist = d - (lenA2 + lenB2 + lenC2 + lenD2);
-                                    // 【修正】從金屬棒往前走回到前方端點(+12)
                                     p.mesh.position.set(negRailX_A2, AMP_Y_BOT + 0.45, rodZ2 + dist); 
                                     dir.set(0, 0, 1);
                                 } else if (d < lenA2 + lenB2*2 + lenC2*2 + lenD2) {
                                     let dist = d - (lenA2 + lenB2 + lenC2*2 + lenD2);
-                                    // 【修正】從前方端點(+12)走回電池(+16)
                                     p.mesh.position.set(negRailX_A2, AMP_Y_BOT + 0.45, (-railZ) + dist); 
                                     dir.set(0, 0, 1);
                                 } else {
@@ -1737,95 +1741,111 @@
                 }
             });
 
-            if ((showHand || showVectors) && Math.abs(currentAmp1) > 0) {
-                let targetRod, iVec;
-                
-                if (sceneMode === 'lorentz') {
-                    targetRod = lorentzRod;
-                    iVec = new THREE.Vector3(Math.sign(currentAmp1), 0, 0); 
-                } else {
-                    targetRod = ampereRodTop; // 在雙軌場景，以上方金屬棒做為主要視覺基準
-                    iVec = new THREE.Vector3(Math.sign(currentAmp1), 0, 0); 
-                }
+            // --- 統一更新空間輔助顯示 (右手與向量) 的模組 ---
+            function updateSpatialAids(rod, amp, bField, vectors, hand, showV, showH) {
+                if ((showV || showH) && Math.abs(amp) > 0) {
+                    rod.getWorldPosition(tmpPos);
+                    const iVec = new THREE.Vector3(Math.sign(amp), 0, 0);
 
-                targetRod.getWorldPosition(tmpPos);
-                
-                if(showVectors) {
-                    vectorGroup.position.copy(tmpPos);
-                    
-                    const lenI = 3 + Math.abs(currentAmp1) * 0.2;
-                    arrowI.setDirection(iVec);
-                    arrowI.setLength(lenI, 0.8, 0.6);
-                    labelI.position.copy(iVec).multiplyScalar(lenI + 0.6); 
-                    labelI.visible = true;
-                    
-                    if (sceneMode === 'lorentz') {
-                        calculateExternalBField(tmpPos, globalB);
+                    if (showV) {
+                        vectors.group.position.copy(tmpPos);
+                        const lenI = 3 + Math.abs(amp) * 0.2;
+                        vectors.arrowI.setDirection(iVec);
+                        vectors.arrowI.setLength(lenI, 0.8, 0.6);
+                        vectors.labelI.position.copy(iVec).multiplyScalar(lenI + 0.6);
+                        vectors.labelI.visible = true;
+
+                        if (bField.lengthSq() > 0.01) {
+                            vectors.arrowB.visible = true;
+                            const dirB = bField.clone().normalize();
+                            const lenB = 3 + bField.length() * 0.5;
+                            vectors.arrowB.setDirection(dirB);
+                            vectors.arrowB.setLength(lenB, 0.8, 0.6);
+                            vectors.labelB.position.copy(dirB).multiplyScalar(lenB + 0.6);
+                            vectors.labelB.visible = true;
+
+                            const fVec = new THREE.Vector3().crossVectors(iVec, bField);
+                            if (fVec.lengthSq() > 0.01) {
+                                vectors.arrowF.visible = true;
+                                const dirF = fVec.clone().normalize();
+                                const lenF = 2 + fVec.length() * 0.2;
+                                vectors.arrowF.setDirection(dirF);
+                                vectors.arrowF.setLength(lenF, 1.0, 0.8);
+                                vectors.labelF.position.copy(dirF).multiplyScalar(lenF + 0.6);
+                                vectors.labelF.visible = true;
+                            } else {
+                                vectors.arrowF.visible = false;
+                                vectors.labelF.visible = false;
+                            }
+                        } else {
+                            vectors.arrowB.visible = false;
+                            vectors.arrowF.visible = false;
+                            vectors.labelB.visible = false;
+                            vectors.labelF.visible = false;
+                        }
                     } else {
-                        globalB.set(0,0,0);
-                        // 上方導線感受到的 B 場來自下方導線 + 外部磁場疊加
-                        if (Math.abs(currentAmp2) > 0) {
-                            const r = new THREE.Vector3().subVectors(targetRod.position, ampereRodBot.position);
-                            const dist = r.length();
-                            const Bmag = 2.0 * Math.abs(currentAmp2) / dist;
-                            const curDir2 = new THREE.Vector3(Math.sign(currentAmp2), 0, 0);
-                            const B_wire2 = new THREE.Vector3().crossVectors(curDir2, r.normalize()).multiplyScalar(Bmag);
-                            globalB.add(B_wire2);
-                        }
-                        const B_ext = new THREE.Vector3();
-                        calculateExternalBField(tmpPos, B_ext);
-                        globalB.add(B_ext);
+                        vectors.group.position.set(999,999,999);
                     }
-                    
-                    if (globalB.lengthSq() > 0.01) {
-                        arrowB.visible = true;
-                        const dirB = globalB.clone().normalize();
-                        const lenB = 3 + globalB.length() * 0.5;
-                        arrowB.setDirection(dirB);
-                        arrowB.setLength(lenB, 0.8, 0.6);
-                        labelB.position.copy(dirB).multiplyScalar(lenB + 0.6);
-                        labelB.visible = true;
-                        
-                        globalF.crossVectors(iVec, globalB);
-                        if (globalF.lengthSq() > 0.01) {
-                            arrowF.visible = true;
-                            const dirF = globalF.clone().normalize();
-                            const lenF = 2 + globalF.length() * 0.2;
-                            arrowF.setDirection(dirF);
-                            arrowF.setLength(lenF, 1.0, 0.8);
-                            labelF.position.copy(dirF).multiplyScalar(lenF + 0.6);
-                            labelF.visible = true;
-                        } else { 
-                            arrowF.visible = false; 
-                            labelF.visible = false;
+
+                    if (showH && bField.lengthSq() > 0.01) {
+                        hand.position.copy(tmpPos).add(new THREE.Vector3(0, 1.5, 0));
+                        const F_dir = new THREE.Vector3().crossVectors(iVec, bField).normalize();
+                        const m = new THREE.Matrix4();
+                        const bProj = bField.clone().projectOnPlane(iVec).normalize();
+                        if (F_dir.lengthSq() > 0.01) {
+                            m.makeBasis(iVec, bProj, F_dir);
+                            hand.quaternion.setFromRotationMatrix(m);
                         }
-                        
-                    } else { 
-                        arrowB.visible = false; 
-                        arrowF.visible = false;
-                        labelB.visible = false;
-                        labelF.visible = false;
+                    } else {
+                        hand.position.set(999,999,999);
                     }
                 } else {
-                    vectorGroup.position.set(999,999,999); 
+                    vectors.group.position.set(999,999,999);
+                    hand.position.set(999,999,999);
                 }
+            }
 
-                if(showHand && globalB.lengthSq() > 0.01) {
-                    rightHandModel.position.copy(tmpPos).add(new THREE.Vector3(0, 1.5, 0)); 
-                    
-                    const upVec = new THREE.Vector3(0,1,0); 
-                    const F_dir = new THREE.Vector3().crossVectors(iVec, globalB).normalize();
-                    const m = new THREE.Matrix4();
-                    const bProj = globalB.clone().projectOnPlane(iVec).normalize();
-                    
-                    if (F_dir.lengthSq() > 0.01) {
-                        m.makeBasis(iVec, bProj, F_dir);
-                        rightHandModel.quaternion.setFromRotationMatrix(m);
-                    }
-                }
+            if (sceneMode === 'lorentz') {
+                const bField = new THREE.Vector3();
+                lorentzRod.getWorldPosition(tmpPos);
+                calculateExternalBField(tmpPos, bField);
+
+                updateSpatialAids(lorentzRod, currentAmp1, bField, vectorsTop, rightHandModelTop, showVectors, showHand);
+
+                vectorsBot.group.position.set(999,999,999);
+                rightHandModelBot.position.set(999,999,999);
             } else {
-                vectorGroup.position.set(999,999,999); 
-                rightHandModel.position.set(999,999,999);
+                // 1. 更新上方導線輔助顯示 (感受下方導線磁場 + 外部沙盒磁場)
+                const bFieldTop = new THREE.Vector3();
+                if (Math.abs(currentAmp2) > 0) {
+                    const r = new THREE.Vector3().subVectors(ampereRodTop.position, ampereRodBot.position);
+                    const dist = r.length();
+                    const Bmag = 2.0 * Math.abs(currentAmp2) / dist;
+                    const curDir2 = new THREE.Vector3(Math.sign(currentAmp2), 0, 0);
+                    bFieldTop.add(new THREE.Vector3().crossVectors(curDir2, r.normalize()).multiplyScalar(Bmag));
+                }
+                const bExtTop = new THREE.Vector3();
+                ampereRodTop.getWorldPosition(tmpPos);
+                calculateExternalBField(tmpPos, bExtTop);
+                bFieldTop.add(bExtTop);
+
+                updateSpatialAids(ampereRodTop, currentAmp1, bFieldTop, vectorsTop, rightHandModelTop, showVectors, showHand);
+
+                // 2. 更新下方導線輔助顯示 (感受上方導線磁場 + 外部沙盒磁場)
+                const bFieldBot = new THREE.Vector3();
+                if (Math.abs(currentAmp1) > 0) {
+                    const r = new THREE.Vector3().subVectors(ampereRodBot.position, ampereRodTop.position);
+                    const dist = r.length();
+                    const Bmag = 2.0 * Math.abs(currentAmp1) / dist;
+                    const curDir1 = new THREE.Vector3(Math.sign(currentAmp1), 0, 0);
+                    bFieldBot.add(new THREE.Vector3().crossVectors(curDir1, r.normalize()).multiplyScalar(Bmag));
+                }
+                const bExtBot = new THREE.Vector3();
+                ampereRodBot.getWorldPosition(tmpPos);
+                calculateExternalBField(tmpPos, bExtBot);
+                bFieldBot.add(bExtBot);
+
+                updateSpatialAids(ampereRodBot, currentAmp2, bFieldBot, vectorsBot, rightHandModelBot, showVectors, showHand);
             }
 
             controls.update();
