@@ -3,12 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>右手開掌定則與平行導線安培力模擬V19</title>
+    <title>右手開掌定則與平行導線安培力模擬V21</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
     <style>
         html { font-size: 16px; }
-        body { margin: 0; overflow: hidden; font-family: 'Noto Sans TC', sans-serif; background-color: #f0f4f8; touch-action: none; }
+        body { margin: 0; overflow: hidden; font-family: 'Noto Sans TC', sans-serif; background-color: #f0f4f8; touch-action: none; overscroll-behavior: none; }
         #canvas-container { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; z-index: 1; }
         #ui-container { position: absolute; z-index: 10; pointer-events: none; }
         .pointer-events-auto { pointer-events: auto; }
@@ -78,7 +78,7 @@
                         <li><span class="font-bold">沙盒模式：</span>兩個場景現在都能隨意添加磁鐵！試著在安培力實驗中加入外部磁場，觀察複雜的受力交互作用。</li>
                         <li><span class="font-bold">安培力實驗：</span>擁有兩組獨立電源與軌道，請試著反轉極性，觀察上下兩根金屬棒如何互相吸引或排斥滾動！</li>
                         <li><span class="font-bold">金屬棒操作：</span>取消所有工具選取後，直接拖曳軌道上的金屬棒可改變起點位置。</li>
-                        <li><span class="font-bold">物理積分磁場：</span>開啟「外部立體磁力線」，可看見由極點作為磁荷中心向外積分發射的真實立體磁場。</li>
+                        <li><span class="font-bold">物理積分磁場：</span>開啟「外部立體磁力線」，可看見由極點作為磁荷中心向外積分發射的真實立體磁場。試著移動磁鐵，磁力線會即時與周遭磁場產生真實的動態交互作用！</li>
                     </ul>
                 </div>
             </div>
@@ -211,7 +211,7 @@
                     <span class="text-[0.75rem] font-bold text-gray-700 mb-0.5">磁場視覺化</span>
                     <label class="flex items-center gap-1.5 cursor-pointer">
                         <input type="checkbox" id="toggle-field-magnet" class="w-3.5 h-3.5 text-blue-600 rounded cursor-pointer">
-                        <span class="text-[0.75rem] font-medium text-gray-800">外部立體磁力線</span>
+                        <span class="text-[0.75rem] font-medium text-gray-800">外部立體磁力線 <span class="text-emerald-500 font-bold">(動態)</span></span>
                     </label>
                     <label class="flex items-center gap-1.5 cursor-pointer">
                         <input type="checkbox" id="toggle-field-wire" class="w-3.5 h-3.5 text-blue-600 rounded cursor-pointer">
@@ -329,13 +329,13 @@
         const controls = new OrbitControls(camera, renderer.domElement);
         controls.enableDamping = true;
         controls.dampingFactor = 0.05;
-        // 【修正】優化攝影機縮放與視角限制，防止穿模或迷失
-        controls.minDistance = 6;      // 限制最近距離，防止鑽透金屬棒
-        controls.maxDistance = 150;    // 給予更寬廣的拉遠空間
-        controls.maxPolarAngle = Math.PI / 2 + 0.05; // 限制視角不要跑到地底太深
-        controls.target.set(0, 3, 0); // 將環繞縮放的中心抬高，精準對齊實驗裝置
+        // 優化攝影機縮放與視角限制，防止穿模或迷失
+        controls.minDistance = 6;      
+        controls.maxDistance = 150;    
+        controls.maxPolarAngle = Math.PI / 2 + 0.05; 
+        controls.target.set(0, 3, 0); 
         
-        // 【重要修正】加入視窗縮放自動監聽器。若未加入，當調整視窗時畫布比例會跑掉，導致縮放嚴重扭曲
+        // 視窗縮放自動監聽器
         window.addEventListener('resize', () => {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
@@ -347,6 +347,12 @@
         transformControl.addEventListener('dragging-changed', function (event) {
             controls.enabled = !event.value; 
         });
+        
+        // 【重要】當拖曳或旋轉磁鐵時，即時觸發全域磁場重繪
+        transformControl.addEventListener('change', function () {
+            if (showFieldMagnet) updateGlobalFieldLines();
+        });
+        
         scene.add(transformControl);
 
         const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
@@ -673,6 +679,97 @@
         }
 
         // ==========================================
+        //  全域動態磁力線渲染引擎 (Global Field Engine)
+        // ==========================================
+        const globalFieldLinesGroup = new THREE.Group();
+        scene.add(globalFieldLinesGroup);
+        
+        const globalLineMat = new THREE.LineBasicMaterial({ color: 0x10b981, linewidth: 2, transparent: true, opacity: 0.6 });
+        const globalArrowMat = new THREE.MeshBasicMaterial({ color: 0x10b981 });
+        let activePoles = [];
+
+        function updateActivePoles() {
+            activePoles = magnetArray.map(mag => ({
+                n: mag.localToWorld(mag.userData.localN.clone()),
+                s: mag.localToWorld(mag.userData.localS.clone()),
+                strength: mag.userData.strength
+            }));
+        }
+
+        function getFastBField(px, py, pz, outB) {
+            outB.set(0, 0, 0);
+            for (let i = 0; i < activePoles.length; i++) {
+                const pole = activePoles[i];
+                
+                const dxN = px - pole.n.x, dyN = py - pole.n.y, dzN = pz - pole.n.z;
+                const distSqN = dxN*dxN + dyN*dyN + dzN*dzN;
+                if (distSqN > 0.01) {
+                    const factorN = pole.strength / (distSqN * Math.sqrt(distSqN));
+                    outB.x += dxN * factorN; outB.y += dyN * factorN; outB.z += dzN * factorN;
+                }
+
+                const dxS = px - pole.s.x, dyS = py - pole.s.y, dzS = pz - pole.s.z;
+                const distSqS = dxS*dxS + dyS*dyS + dzS*dzS;
+                if (distSqS > 0.01) {
+                    const factorS = pole.strength / (distSqS * Math.sqrt(distSqS));
+                    outB.x -= dxS * factorS; outB.y -= dyS * factorS; outB.z -= dzS * factorS;
+                }
+            }
+        }
+
+        function updateGlobalFieldLines() {
+            while(globalFieldLinesGroup.children.length > 0) {
+                const child = globalFieldLinesGroup.children[0];
+                if (child.geometry) child.geometry.dispose();
+                globalFieldLinesGroup.remove(child);
+            }
+
+            if (typeof showFieldMagnet === 'undefined' || !showFieldMagnet || magnetArray.length === 0) return;
+
+            updateActivePoles();
+            const tempB = new THREE.Vector3();
+            const stepSize = 0.4;
+            const maxSteps = 250;
+
+            magnetArray.forEach(mag => {
+                mag.userData.seeds.forEach(localSeed => {
+                    let cur = mag.localToWorld(localSeed.clone());
+                    let pts = [cur.clone()];
+                    let hitS = false;
+
+                    for (let i = 0; i < maxSteps; i++) {
+                        getFastBField(cur.x, cur.y, cur.z, tempB);
+                        const bLenSq = tempB.lengthSq();
+                        if (bLenSq < 0.0001) break;
+
+                        tempB.multiplyScalar(stepSize / Math.sqrt(bLenSq)); 
+                        cur.add(tempB);
+                        pts.push(cur.clone());
+
+                        for (let pole of activePoles) {
+                            if (cur.distanceToSquared(pole.s) < 3.0) { hitS = true; break; }
+                            if (cur.distanceToSquared(pole.n) < 1.0 && i > 5) { hitS = true; break; }
+                        }
+                        if (hitS || cur.lengthSq() > 10000) break; 
+                    }
+
+                    if (pts.length > 3) {
+                        const curve = new THREE.CatmullRomCurve3(pts);
+                        const smoothPts = curve.getSpacedPoints(Math.floor(pts.length * 0.4) + 2);
+                        globalFieldLinesGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(smoothPts), globalLineMat));
+
+                        const midIdx = Math.floor(smoothPts.length * 0.5);
+                        const arrow = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.6, 8), globalArrowMat);
+                        arrow.position.copy(smoothPts[midIdx]);
+                        const dir = new THREE.Vector3().subVectors(smoothPts[midIdx+1], smoothPts[midIdx]).normalize();
+                        arrow.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+                        globalFieldLinesGroup.add(arrow);
+                    }
+                });
+            });
+        }
+
+        // ==========================================
         //  磁鐵生成工廠
         // ==========================================
         function createMagnetHitbox(w, h, d) {
@@ -682,181 +779,75 @@
         function addHorseshoeMagnet(px, py, pz) {
             const group = new THREE.Group();
             
-            // 放大 1.5 倍：間距(半徑)與長度增加，維持粗細不變
             const radius = 6.75;  
             const poleLen = 15.0; 
+            const Z_face = -poleLen/2; 
 
-            // 完美的 Torus 避免 NaN
             const archGeo = new THREE.TorusGeometry(radius, 1.2, 16, 32, Math.PI);
-            archGeo.rotateZ(-Math.PI / 2); 
-            archGeo.rotateY(-Math.PI / 2); 
-            archGeo.translate(0, 0, poleLen/2);
+            archGeo.rotateZ(-Math.PI / 2); archGeo.rotateY(-Math.PI / 2); archGeo.translate(0, 0, poleLen/2);
             const arch = new THREE.Mesh(archGeo, new THREE.MeshStandardMaterial({color: 0x999999, metalness: 0.6}));
             
-            // 由於圓柱體預設沿 Y 軸，我們轉至 Z 軸
             const poleGeo = new THREE.CylinderGeometry(1.2, 1.2, poleLen, 16);
             poleGeo.rotateX(Math.PI / 2);
+            const nPole = new THREE.Mesh(poleGeo, magnetNMat); nPole.position.set(0, radius, 0);
+            const sPole = new THREE.Mesh(poleGeo, magnetSMat); sPole.position.set(0, -radius, 0);
             
-            const nPole = new THREE.Mesh(poleGeo, magnetNMat);
-            nPole.position.set(0, radius, 0);
-            const sPole = new THREE.Mesh(poleGeo, magnetSMat);
-            sPole.position.set(0, -radius, 0);
-            
-            // 側邊 N/S 標籤
             const labelN1 = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 1.5), matLabelN);
-            labelN1.position.set(1.21, radius, -poleLen/2 + 2.5);
-            labelN1.rotation.y = Math.PI / 2;
-            
+            labelN1.position.set(1.21, radius, Z_face + 2.5); labelN1.rotation.y = Math.PI / 2;
             const labelN2 = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 1.5), matLabelN);
-            labelN2.position.set(-1.21, radius, -poleLen/2 + 2.5);
-            labelN2.rotation.y = -Math.PI / 2;
-
+            labelN2.position.set(-1.21, radius, Z_face + 2.5); labelN2.rotation.y = -Math.PI / 2;
             const labelS1 = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 1.5), matLabelS);
-            labelS1.position.set(1.21, -radius, -poleLen/2 + 2.5);
-            labelS1.rotation.y = Math.PI / 2;
-            
+            labelS1.position.set(1.21, -radius, Z_face + 2.5); labelS1.rotation.y = Math.PI / 2;
             const labelS2 = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 1.5), matLabelS);
-            labelS2.position.set(-1.21, -radius, -poleLen/2 + 2.5);
-            labelS2.rotation.y = -Math.PI / 2;
+            labelS2.position.set(-1.21, -radius, Z_face + 2.5); labelS2.rotation.y = -Math.PI / 2;
 
             group.add(arch); group.add(nPole); group.add(sPole);
-            group.add(labelN1); group.add(labelN2);
-            group.add(labelS1); group.add(labelS2);
+            group.add(labelN1); group.add(labelN2); group.add(labelS1); group.add(labelS2);
 
-            // ==========================================================
-            //  建立精確的 3D 立體放射狀磁力線
-            // ==========================================================
-            const fieldGroup = new THREE.Group();
-            const lineMat = new THREE.LineBasicMaterial({ color: 0x10b981, linewidth: 2, transparent: true, opacity: 0.6 });
-            const arrowMat = new THREE.MeshBasicMaterial({ color: 0x10b981 });
-            
-            const Z_face = -poleLen/2; // 端面 Z 座標 (-7.5)
-
-            // 設定模擬的正負磁荷中心
-            const chargeN = new THREE.Vector3(0, radius, Z_face + 1.2);
-            const chargeS = new THREE.Vector3(0, -radius, Z_face + 1.2);
-
-            // 空間中任意點的偶極磁場向量計算
-            function getDipoleField(pos) {
-                const rN = new THREE.Vector3().subVectors(pos, chargeN);
-                const rS = new THREE.Vector3().subVectors(pos, chargeS);
-                const dN3 = Math.pow(rN.length(), 3) || 0.001;
-                const dS3 = Math.pow(rS.length(), 3) || 0.001;
-                const B = new THREE.Vector3();
-                B.add(rN.multiplyScalar(1 / dN3)); 
-                B.sub(rS.multiplyScalar(1 / dS3)); 
-                return B.normalize();
-            }
-
-            // 利用 Euler Method 繪製磁力線
-            function traceFieldLine(startPos) {
-                let pts = [startPos.clone()];
-                let cur = startPos.clone();
-                let stepSize = 0.2; 
-                let maxSteps = 400; 
-
-                for (let i = 0; i < maxSteps; i++) {
-                    let B = getDipoleField(cur);
-                    cur.add(B.multiplyScalar(stepSize));
-                    pts.push(cur.clone());
-
-                    if (cur.z >= Z_face - 0.2 && cur.y <= -radius + 1.25 && cur.y >= -radius - 1.25 && Math.abs(cur.x) <= 1.25) {
-                        break;
-                    }
-                    if (cur.length() > 50) break; 
-                    if (i > 10 && cur.z > Z_face + 3.0 && cur.y > 0) break;
-                }
-
-                if (pts.length > 5) {
-                    const curve = new THREE.CatmullRomCurve3(pts);
-                    const smoothPts = curve.getSpacedPoints(Math.floor(pts.length * 0.3) + 5);
-                    fieldGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(smoothPts), lineMat));
-                    
-                    const midIdx = Math.floor(smoothPts.length * 0.5);
-                    const arrow = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.6, 8), arrowMat);
-                    arrow.position.copy(smoothPts[midIdx]);
-                    const dir = new THREE.Vector3().subVectors(smoothPts[midIdx+1], smoothPts[midIdx]).normalize();
-                    arrow.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
-                    fieldGroup.add(arrow);
-                }
-            }
-
-            // A. 從 N 極端面產生起始點
+            // 計算種子點供全域引擎即時積分
+            const seeds = [];
             const faceRadii = [0, 0.4, 0.8, 1.15];
             for (let r of faceRadii) {
                 let segments = r === 0 ? 1 : (r < 0.6 ? 4 : (r < 1.0 ? 8 : 12));
                 for (let i = 0; i < segments; i++) {
                     let theta = (i / segments) * Math.PI * 2;
-                    let x = r * Math.cos(theta);
-                    let y = r * Math.sin(theta);
-                    traceFieldLine(new THREE.Vector3(x, radius + y, Z_face - 0.05));
+                    seeds.push(new THREE.Vector3(r * Math.cos(theta), radius + r * Math.sin(theta), Z_face - 0.05));
                 }
             }
-
-            // B. 從 N 極柱體側邊產生起始點
             for (let z of [Z_face + 0.5, Z_face + 2.5, Z_face + 4.5]) {
                 for (let i = 0; i < 8; i++) {
                     let theta = (i / 8) * Math.PI * 2;
-                    let x = 1.2 * Math.cos(theta);
                     let y = 1.2 * Math.sin(theta);
-                    
                     if (y < -0.1 && (z > Z_face + 1.0 || i % 2 !== 0)) continue; 
-                    traceFieldLine(new THREE.Vector3(x * 1.05, radius + y * 1.05, z));
+                    seeds.push(new THREE.Vector3(1.2 * Math.cos(theta) * 1.05, radius + y * 1.05, z));
                 }
             }
-
-            // C. 內部缺口 (Gap) 的立體磁力線
-            function addInnerCurve(x, z) {
-                const p0 = new THREE.Vector3(x, radius - 1.2, z);
-                const p3 = new THREE.Vector3(x, -radius + 1.2, z);
-                
-                const bulgeZ = z + 0.6 + (z - Z_face) * 0.15; 
-                const bulgeX = x * 1.3; 
-
-                const p1 = new THREE.Vector3(bulgeX, radius * 0.4, bulgeZ);
-                const p2 = new THREE.Vector3(bulgeX, -radius * 0.4, bulgeZ);
-                
-                const curve = new THREE.CubicBezierCurve3(p0, p1, p2, p3);
-                const pts = curve.getSpacedPoints(30);
-                fieldGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), lineMat));
-                
-                const arrow = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.6, 8), arrowMat);
-                arrow.position.copy(curve.getPoint(0.5));
-                arrow.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), curve.getTangent(0.5).normalize());
-                fieldGroup.add(arrow);
-            }
-
-            // 在內部深處產生三排整齊的立體磁力線
             for (let z of [Z_face + 2.0, Z_face + 5.0, Z_face + 8.0]) {
-                addInnerCurve(0, z);          
-                addInnerCurve(0.6, z);        
-                addInnerCurve(-0.6, z);       
+                seeds.push(new THREE.Vector3(0, radius - 1.25, z));
+                seeds.push(new THREE.Vector3(0.6, radius - 1.25, z));
+                seeds.push(new THREE.Vector3(-0.6, radius - 1.25, z));
             }
 
-            group.add(fieldGroup);
-            
             group.position.set(px, py, pz);
             const hitbox = createMagnetHitbox(4, radius * 2 + 2.4, poleLen + 4);
             hitbox.position.set(0, 0, poleLen/2);
             group.add(hitbox);
 
             group.userData = {
-                isMagnet: true, type: 'horseshoe', hitbox: hitbox, fieldGroup: fieldGroup,
+                isMagnet: true, type: 'horseshoe', hitbox: hitbox, 
+                seeds: seeds,
                 localN: new THREE.Vector3(0, radius, Z_face + 1.2),
                 localS: new THREE.Vector3(0, -radius, Z_face + 1.2),
-                strength: 35.0
+                strength: 45.0
             };
 
             scene.add(group);
             magnetArray.push(group);
+            if (typeof updateGlobalFieldLines === 'function') updateGlobalFieldLines();
         }
 
-        // ==========================================================
-        //  建立平行磁鐵對
-        // ==========================================================
         function addFlatMagnet(px, py, pz) {
             const group = new THREE.Group();
-            // 【修正】將間距加大 50%，原本為 1.8，1.8 * 1.5 = 2.7
             const gapHalf = 2.7;
 
             const nHalf = new THREE.Mesh(new THREE.CylinderGeometry(2.5, 2.5, 0.6, 32), magnetNMat);
@@ -865,73 +856,44 @@
             sHalf.position.y = -gapHalf - 0.3;
             
             const labelN = new THREE.Mesh(new THREE.PlaneGeometry(2.5, 2.5), matLabelN);
-            labelN.position.set(0, gapHalf + 0.61, 0); 
-            labelN.rotation.x = -Math.PI / 2;
-            
+            labelN.position.set(0, gapHalf + 0.61, 0); labelN.rotation.x = -Math.PI / 2;
             const labelS = new THREE.Mesh(new THREE.PlaneGeometry(2.5, 2.5), matLabelS);
-            labelS.position.set(0, -gapHalf - 0.61, 0); 
-            labelS.rotation.x = Math.PI / 2;
+            labelS.position.set(0, -gapHalf - 0.61, 0); labelS.rotation.x = Math.PI / 2;
 
             group.add(nHalf); group.add(sHalf);
             group.add(labelN); group.add(labelS);
 
-            const fieldGroup = new THREE.Group();
-            const lineMat = new THREE.LineBasicMaterial({ color: 0x10b981, linewidth: 2, transparent: true, opacity: 0.6 });
-            const arrowMat = new THREE.MeshBasicMaterial({ color: 0x10b981 });
-
-            function addCurve(p0, p1, p2, p3) {
-                const curve = new THREE.CubicBezierCurve3(p0, p1, p2, p3);
-                const pts = curve.getPoints(30);
-                fieldGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), lineMat));
-                const arrow = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.6, 8), arrowMat);
-                arrow.position.copy(curve.getPoint(0.5));
-                arrow.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), curve.getTangent(0.5).normalize());
-                fieldGroup.add(arrow);
-            }
-
+            // 產生平面磁鐵的散佈種子點
+            const seeds = [];
             const radii = [0, 0.8, 1.6];
             for (let r of radii) {
                 let segments = r === 0 ? 1 : (r < 1.0 ? 6 : 12);
                 for (let i=0; i<segments; i++) {
                     let theta = (i/segments) * Math.PI*2;
-                    let x = r * Math.cos(theta);
-                    let z = r * Math.sin(theta);
-                    let p0 = new THREE.Vector3(x, gapHalf, z);
-                    let p3 = new THREE.Vector3(x, -gapHalf, z);
-                    addCurve(p0, new THREE.Vector3(x, gapHalf*0.3, z), new THREE.Vector3(x, -gapHalf*0.3, z), p3);
+                    seeds.push(new THREE.Vector3(r * Math.cos(theta), gapHalf - 0.35, r * Math.sin(theta)));
                 }
             }
-
             for (let i=0; i<16; i++) {
                 let theta = (i/16) * Math.PI*2;
-                let x = 2.4 * Math.cos(theta); 
-                let z = 2.4 * Math.sin(theta);
-                let p0 = new THREE.Vector3(x, gapHalf, z);
-                let p3 = new THREE.Vector3(x, -gapHalf, z);
-                let bulgeX = x * 1.5;
-                let bulgeZ = z * 1.5;
-                addCurve(p0, new THREE.Vector3(bulgeX, gapHalf*0.5, bulgeZ), new THREE.Vector3(bulgeX, -gapHalf*0.5, bulgeZ), p3);
+                seeds.push(new THREE.Vector3(2.4 * Math.cos(theta), gapHalf - 0.35, 2.4 * Math.sin(theta)));
             }
-            group.add(fieldGroup);
 
             group.position.set(px, py, pz);
             const hitbox = createMagnetHitbox(6, gapHalf * 2 + 1.2, 6);
             group.add(hitbox);
 
             group.userData = {
-                isMagnet: true, type: 'flat', hitbox: hitbox, fieldGroup: fieldGroup,
+                isMagnet: true, type: 'flat', hitbox: hitbox, 
+                seeds: seeds,
                 localN: new THREE.Vector3(0, gapHalf, 0),
                 localS: new THREE.Vector3(0, -gapHalf, 0),
-                strength: 15.0
+                strength: 25.0
             };
 
             scene.add(group);
             magnetArray.push(group);
+            if (typeof updateGlobalFieldLines === 'function') updateGlobalFieldLines();
         }
-
-        // 預設放入一個馬蹄形磁鐵 (點選按鈕時高度預設為2.0，適應雙場景)
-        addHorseshoeMagnet(0, 0.7, 0);
-
 
         // --- 視覺輔助工具 ---
         function createRightHandOpen() {
@@ -1117,6 +1079,7 @@
                             transformControl.detach();
                             selectedMagnet = null;
                         }
+                        if (typeof updateGlobalFieldLines === 'function') updateGlobalFieldLines(); 
                         return;
                     } else if (activeTool === 'translate' || activeTool === 'rotate') {
                         selectedMagnet = parentGroup;
@@ -1196,7 +1159,6 @@
         renderer.domElement.addEventListener('pointerup', handlePointerUp);
         renderer.domElement.addEventListener('touchend', handlePointerUp);
 
-
         // ==========================================
         //  UI 狀態與邏輯
         // ==========================================
@@ -1232,7 +1194,7 @@
             const pnlAmpTools = document.getElementById('panel-ampere-tools');
             if (pnlAmpTools) pnlAmpTools.style.display = (sceneMode === 'ampere') ? 'flex' : 'none';
             
-            magnetArray.forEach(m => m.visible = (sceneMode === 'lorentz') || (sceneMode === 'ampere'));
+            magnetArray.forEach(m => m.visible = true);
             if (sceneMode !== 'lorentz' && sceneMode !== 'ampere') {
                 transformControl.detach();
                 selectedMagnet = null;
@@ -1294,7 +1256,11 @@
             }
 
             const tFieldMagnet = document.getElementById('toggle-field-magnet');
-            if (tFieldMagnet) showFieldMagnet = tFieldMagnet.checked;
+            if (tFieldMagnet) {
+                const oldState = showFieldMagnet;
+                showFieldMagnet = tFieldMagnet.checked;
+                if (showFieldMagnet !== oldState && typeof updateGlobalFieldLines === 'function') updateGlobalFieldLines();
+            }
 
             const tFieldWire = document.getElementById('toggle-field-wire');
             if (tFieldWire) showFieldWire = tFieldWire.checked;
@@ -1307,10 +1273,9 @@
         }
 
         // ==========================================
-        //  綁定按鈕事件 (使用安全函式)
+        //  綁定按鈕事件
         // ==========================================
         safeBindChange('scene-select', (e) => {
-            // 1. 切換場景時，恢復預設狀態
             batteryCount1 = 2; isReversed1 = false; switchClosed1 = false;
             batteryCount2 = 2; isReversed2 = false; switchClosed2 = false;
             
@@ -1324,23 +1289,22 @@
             resetBtn('btn-switch');
             resetBtn('btn-switch-2');
 
-            // 2. 恢復金屬棒與導線位置
             lorentzRod.position.z = 0; lorentzRod.userData.z = 0; lorentzRod.userData.v = 0;
             ampereRodTop.position.z = 4; ampereRodTop.userData.z = 4; ampereRodTop.userData.v = 0;
             ampereRodBot.position.z = -4; ampereRodBot.userData.z = -4; ampereRodBot.userData.v = 0;
 
-            // 3. 清除所有手動加入的磁鐵
             magnetArray.forEach(m => scene.remove(m));
             magnetArray.length = 0;
             if (transformControl) transformControl.detach();
             selectedMagnet = null;
 
-            // 4. 根據場景載入預設磁鐵 (僅洛倫茲力需要預設磁鐵)
             if (e.target.value === 'lorentz') {
                 addHorseshoeMagnet(0, 0.7, 0);
+            } else {
+                // 【修正】確保切換到安培力場景 (預設無磁鐵) 時，強制清空前一個場景殘留的全域動態磁力線
+                if (typeof updateGlobalFieldLines === 'function') updateGlobalFieldLines();
             }
 
-            // 5. 更新 UI 與渲染
             updateUIState();
         });
         
@@ -1374,7 +1338,6 @@
             updateUIState(); 
         });
 
-        // 【修正】動態判斷新增磁鐵的「垂直置中」高度：場景一為 0.7，場景二(雙軌)為 2.0
         safeBindClick('btn-add-horseshoe', () => { 
             const centerHeight = (sceneMode === 'ampere') ? 2.0 : 0.7;
             addHorseshoeMagnet(0, centerHeight, 0); 
@@ -1414,40 +1377,26 @@
             });
         });
 
-        // 初始化
+
+        // 預設放入第一顆磁鐵
+        addHorseshoeMagnet(0, 0.7, 0);
+
+        // 初始化 UI
         updateUIState();
 
-        // ==========================================
-        //  物理引擎與核心運算
-        // ==========================================
+        const clock = new THREE.Clock();
         const tmpPos = new THREE.Vector3();
         const globalB = new THREE.Vector3();
         const globalF = new THREE.Vector3();
 
-        function calculateExternalBField(p, outB) {
-            outB.set(0, 0, 0);
-            magnetArray.forEach(mag => {
-                const posN = new THREE.Vector3().copy(mag.userData.localN);
-                const posS = new THREE.Vector3().copy(mag.userData.localS);
-                mag.localToWorld(posN);
-                mag.localToWorld(posS);
-
-                const rN = new THREE.Vector3().subVectors(p, posN);
-                const rS = new THREE.Vector3().subVectors(p, posS);
-                
-                const dN = rN.length();
-                const dS = rS.length();
-
-                if (dN > 0.1) outB.add(rN.normalize().multiplyScalar(mag.userData.strength / (dN * dN)));
-                if (dS > 0.1) outB.sub(rS.normalize().multiplyScalar(mag.userData.strength / (dS * dS)));
-            });
-        }
-
-        const clock = new THREE.Clock();
-
+        // ==========================================
+        //  渲染與更新迴圈
+        // ==========================================
         function animate() {
             requestAnimationFrame(animate);
             const delta = Math.min(clock.getDelta(), 0.05); 
+
+            updateActivePoles(); 
 
             if (!isPaused) {
                 
@@ -1642,7 +1591,7 @@
                     const I_vec = currentDir.clone().multiplyScalar(currentAmp1);
                     
                     lorentzRod.getWorldPosition(tmpPos);
-                    calculateExternalBField(tmpPos, globalB);
+                    getFastBField(tmpPos.x, tmpPos.y, tmpPos.z, globalB);
                     globalF.crossVectors(I_vec, globalB);
                     
                     const forceZ = globalF.z;
@@ -1661,12 +1610,9 @@
                     rodMesh.rotation.x = -lorentzRod.position.z / 0.4;
 
                 } else if (sceneMode === 'ampere') {
-                    // 安培力：上下平行金屬棒之間的吸引/排斥滾動
                     let zT = ampereRodTop.userData.z;
                     let zB = ampereRodBot.userData.z;
-                    
-                    let forceZ_T = 0;
-                    let forceZ_B = 0;
+                    let forceZ_T = 0; let forceZ_B = 0;
 
                     // A. 內部安培力 (導線互相作用)
                     if (Math.abs(currentAmp1) > 0 && Math.abs(currentAmp2) > 0) {
@@ -1674,19 +1620,14 @@
                         const dz = zT - zB;
                         const d = Math.sqrt(dy*dy + dz*dz);
                         
-                        // 簡化模型：根據兩平行導線的距離與電流產生作用力
                         const forceMag = 15.0 * Math.abs(currentAmp1 * currentAmp2) / d;
                         const attract = Math.sign(currentAmp1) === Math.sign(currentAmp2);
 
                         if (d > 0.1) {
                             if (attract) {
-                                // 互相吸引，滾向彼此以對齊 (Z 座標靠近)
-                                forceZ_T += forceMag * (-dz) / d;
-                                forceZ_B += forceMag * (dz) / d;
+                                forceZ_T += forceMag * (-dz) / d; forceZ_B += forceMag * (dz) / d;
                             } else {
-                                // 互相排斥，滾遠彼此 (Z 座標拉開)
-                                forceZ_T += forceMag * (dz) / d;
-                                forceZ_B += forceMag * (-dz) / d;
+                                forceZ_T += forceMag * (dz) / d; forceZ_B += forceMag * (-dz) / d;
                             }
                         }
                     }
@@ -1695,14 +1636,14 @@
                     const I_vec_T = new THREE.Vector3(currentAmp1, 0, 0);
                     const B_ext_T = new THREE.Vector3();
                     ampereRodTop.getWorldPosition(tmpPos);
-                    calculateExternalBField(tmpPos, B_ext_T);
+                    getFastBField(tmpPos.x, tmpPos.y, tmpPos.z, B_ext_T);
                     const F_ext_T = new THREE.Vector3().crossVectors(I_vec_T, B_ext_T);
                     forceZ_T += F_ext_T.z;
 
                     const I_vec_B = new THREE.Vector3(currentAmp2, 0, 0);
                     const B_ext_B = new THREE.Vector3();
                     ampereRodBot.getWorldPosition(tmpPos);
-                    calculateExternalBField(tmpPos, B_ext_B);
+                    getFastBField(tmpPos.x, tmpPos.y, tmpPos.z, B_ext_B);
                     const F_ext_B = new THREE.Vector3().crossVectors(I_vec_B, B_ext_B);
                     forceZ_B += F_ext_B.z;
                     
@@ -1711,7 +1652,6 @@
                     
                     ampereRodTop.userData.v += (forceZ_T / mass - ampereRodTop.userData.v * friction) * delta;
                     ampereRodTop.userData.z += ampereRodTop.userData.v * delta;
-                    
                     ampereRodBot.userData.v += (forceZ_B / mass - ampereRodBot.userData.v * friction) * delta;
                     ampereRodBot.userData.z += ampereRodBot.userData.v * delta;
                     
@@ -1729,17 +1669,10 @@
                 }
             }
 
-            // 3. 視覺輔助更新
-            magnetArray.forEach(mag => {
-                if (mag.userData.fieldGroup) {
-                    mag.userData.fieldGroup.visible = showFieldMagnet;
-                }
-            });
-            
+            // 3. 視覺輔助更新 (不被暫停限制)
             rodFieldGroup.visible = showFieldWire && (sceneMode === 'lorentz') && Math.abs(currentAmp1) > 0;
             rodFieldGroup.rotation.set(0, currentAmp1 > 0 ? 0 : Math.PI, 0);
 
-            // Ampere Scene Field groups (attached to rods)
             ampereRodTop.children.forEach(c => {
                 if(c.type === 'Group') {
                     c.visible = showFieldWire && (sceneMode === 'ampere') && Math.abs(currentAmp1) > 0;
@@ -1753,7 +1686,6 @@
                 }
             });
 
-            // --- 統一更新空間輔助顯示 (右手與向量) 的模組 ---
             function updateSpatialAids(rod, amp, bField, vectors, hand, showV, showH) {
                 if ((showV || showH) && Math.abs(amp) > 0) {
                     rod.getWorldPosition(tmpPos);
@@ -1820,43 +1752,36 @@
             if (sceneMode === 'lorentz') {
                 const bField = new THREE.Vector3();
                 lorentzRod.getWorldPosition(tmpPos);
-                calculateExternalBField(tmpPos, bField);
-
+                getFastBField(tmpPos.x, tmpPos.y, tmpPos.z, bField);
                 updateSpatialAids(lorentzRod, currentAmp1, bField, vectorsTop, rightHandModelTop, showVectors, showHand);
-
+                
                 vectorsBot.group.position.set(999,999,999);
                 rightHandModelBot.position.set(999,999,999);
             } else {
-                // 1. 更新上方導線輔助顯示 (感受下方導線磁場 + 外部沙盒磁場)
                 const bFieldTop = new THREE.Vector3();
                 if (Math.abs(currentAmp2) > 0) {
                     const r = new THREE.Vector3().subVectors(ampereRodTop.position, ampereRodBot.position);
-                    const dist = r.length();
-                    const Bmag = 2.0 * Math.abs(currentAmp2) / dist;
+                    const Bmag = 2.0 * Math.abs(currentAmp2) / r.length();
                     const curDir2 = new THREE.Vector3(Math.sign(currentAmp2), 0, 0);
                     bFieldTop.add(new THREE.Vector3().crossVectors(curDir2, r.normalize()).multiplyScalar(Bmag));
                 }
                 const bExtTop = new THREE.Vector3();
                 ampereRodTop.getWorldPosition(tmpPos);
-                calculateExternalBField(tmpPos, bExtTop);
+                getFastBField(tmpPos.x, tmpPos.y, tmpPos.z, bExtTop);
                 bFieldTop.add(bExtTop);
-
                 updateSpatialAids(ampereRodTop, currentAmp1, bFieldTop, vectorsTop, rightHandModelTop, showVectors, showHand);
 
-                // 2. 更新下方導線輔助顯示 (感受上方導線磁場 + 外部沙盒磁場)
                 const bFieldBot = new THREE.Vector3();
                 if (Math.abs(currentAmp1) > 0) {
                     const r = new THREE.Vector3().subVectors(ampereRodBot.position, ampereRodTop.position);
-                    const dist = r.length();
-                    const Bmag = 2.0 * Math.abs(currentAmp1) / dist;
+                    const Bmag = 2.0 * Math.abs(currentAmp1) / r.length();
                     const curDir1 = new THREE.Vector3(Math.sign(currentAmp1), 0, 0);
                     bFieldBot.add(new THREE.Vector3().crossVectors(curDir1, r.normalize()).multiplyScalar(Bmag));
                 }
                 const bExtBot = new THREE.Vector3();
                 ampereRodBot.getWorldPosition(tmpPos);
-                calculateExternalBField(tmpPos, bExtBot);
+                getFastBField(tmpPos.x, tmpPos.y, tmpPos.z, bExtBot);
                 bFieldBot.add(bExtBot);
-
                 updateSpatialAids(ampereRodBot, currentAmp2, bFieldBot, vectorsBot, rightHandModelBot, showVectors, showHand);
             }
 
