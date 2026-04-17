@@ -3,29 +3,33 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>直流發電機 3D 互動模擬</title>
+    <title>發電機 3D 互動模擬 (DC/AC 整合版)</title>
     <style>
         body {
-            margin: 0;
-            overflow: hidden;
-            background-color: #E6E6E6;
+            margin: 0; overflow: hidden; background-color: #E6E6E6;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         }
-        #canvas-container {
-            width: 100vw;
-            height: 100vh;
-            display: block;
+        #canvas-container { width: 100vw; height: 100vh; display: block; }
+        
+        /* 頂部模式切換 Tabs */
+        #mode-tabs {
+            position: absolute; top: 15px; left: 50%; transform: translateX(-50%);
+            display: flex; gap: 15px; z-index: 20;
+            background: rgba(255, 255, 255, 0.9); padding: 8px 12px;
+            border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);
         }
+        .mode-btn {
+            padding: 8px 20px; font-size: 16px; font-weight: bold; cursor: pointer;
+            border: 2px solid #3498db; background: transparent; color: #3498db;
+            border-radius: 6px; transition: all 0.2s ease;
+        }
+        .mode-btn.active { background: #3498db; color: white; box-shadow: 0 2px 6px rgba(52, 152, 219, 0.4); }
+        .mode-btn:not(.active):hover { background: rgba(52, 152, 219, 0.1); }
+
         #info-panel {
-            position: absolute;
-            top: 10px;
-            left: 10px;
-            background: rgba(255, 255, 255, 0.95);
-            padding: 10px 15px;
-            border-radius: 6px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-            border-left: 4px solid #f39c12;
-            z-index: 10;
+            position: absolute; top: 10px; left: 10px; background: rgba(255, 255, 255, 0.95);
+            padding: 10px 15px; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            border-left: 4px solid #f39c12; z-index: 10;
         }
         h1 { margin: 0; font-size: 16px; color: #333; }
         #info-toggle { cursor: pointer; user-select: none; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
@@ -33,203 +37,107 @@
         p { margin: 0; font-size: 12px; color: #555; line-height: 1.4; }
         
         #ui-container {
-            position: absolute;
-            bottom: 10px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: rgba(255, 255, 255, 0.95);
-            padding: 8px 12px;
-            border-radius: 6px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-            display: flex;
-            flex-wrap: wrap; 
-            justify-content: center;
-            align-items: center;
-            gap: 8px;
-            font-size: 12px;
-            font-weight: bold;
-            color: #333;
-            border: 1px solid #ddd;
-            width: 95%;
-            max-width: 1100px;
-            z-index: 10;
+            position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%);
+            background: rgba(255, 255, 255, 0.95); padding: 8px 12px; border-radius: 6px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15); display: flex; flex-wrap: wrap; 
+            justify-content: center; align-items: center; gap: 8px; font-size: 12px;
+            font-weight: bold; color: #333; border: 1px solid #ddd; width: 95%; max-width: 1150px; z-index: 10;
         }
         .control-group {
-            display: flex;
-            align-items: center;
-            gap: 4px;
-            cursor: pointer;
-            padding: 4px 6px;
-            border-radius: 4px;
-            transition: background 0.2s;
+            display: flex; align-items: center; gap: 4px; cursor: pointer;
+            padding: 4px 6px; border-radius: 4px; transition: background 0.2s;
         }
-        .control-group:hover {
-            background: #f0f0f0;
-        }
-        .control-group input[type="checkbox"] {
-            width: 14px;
-            height: 14px;
-            cursor: pointer;
-        }
+        .control-group:hover { background: #f0f0f0; }
+        .control-group input[type="checkbox"] { width: 14px; height: 14px; cursor: pointer; }
         .btn-action {
-            background: #e2e3e5; 
-            border: 1px solid #d6d8db; 
-            font-weight: bold; 
-            cursor: pointer;
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 12px;
+            background: #e2e3e5; border: 1px solid #d6d8db; font-weight: bold; 
+            cursor: pointer; padding: 4px 8px; border-radius: 4px; font-size: 12px;
         }
         .btn-action:hover { background: #d2d3d5; }
         .divider { width: 2px; height: 16px; background: #ccc; margin: 0 4px; }
 
-        /* 示波器面板共用與拖曳標籤樣式 */
         .drag-handle {
-            cursor: move;
-            margin-right: 6px;
-            padding: 2px;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 4px;
-            transition: background 0.2s;
+            cursor: move; margin-right: 6px; padding: 2px; display: inline-flex;
+            align-items: center; justify-content: center; border-radius: 4px; transition: background 0.2s;
         }
-        .drag-handle:hover {
-            background: rgba(255, 255, 255, 0.2);
-            color: #ffffff;
-        }
-        .panel-title {
-            flex-grow: 1;
-            user-select: none;
-        }
+        .drag-handle:hover { background: rgba(255, 255, 255, 0.2); color: #ffffff; }
+        .panel-title { flex-grow: 1; user-select: none; }
 
-        /* 直流示波器面板樣式 (預設右上角) */
+        /* 示波器面板樣式 (右上角) */
         #oscilloscope-panel {
-            display: none;
-            position: absolute;
-            top: 20px;
-            right: 20px;
-            width: 280px;
-            height: 160px;
-            background: rgba(20, 20, 20, 0.85);
-            border: 2px solid #555;
-            border-radius: 8px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-            z-index: 10;
-            flex-direction: column;
+            display: none; position: absolute; top: 20px; right: 20px;
+            width: 280px; height: 160px; background: rgba(20, 20, 20, 0.85);
+            border: 2px solid #555; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            z-index: 10; flex-direction: column;
         }
         #osc-header {
-            color: #00ff00;
-            font-size: 12px;
-            padding: 4px 8px;
-            border-bottom: 1px solid #444;
-            font-family: monospace;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
+            color: #00ff00; font-size: 12px; padding: 4px 8px; border-bottom: 1px solid #444;
+            font-family: monospace; display: flex; justify-content: space-between; align-items: center;
         }
 
-        /* 磁通量面板樣式 (預設右下角) */
+        /* 磁通量面板樣式 (右下角) */
         #flux-panel {
-            display: none;
-            position: absolute;
-            bottom: 85px; /* 移至右下角，避開底部UI */
-            right: 20px;
-            width: 280px;
-            height: 160px;
-            background: rgba(20, 20, 20, 0.85);
-            border: 2px solid #00aaff;
-            border-radius: 8px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-            z-index: 10;
-            flex-direction: column;
+            display: none; position: absolute; bottom: 85px; right: 20px;
+            width: 280px; height: 160px; background: rgba(20, 20, 20, 0.85);
+            border: 2px solid #00aaff; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            z-index: 10; flex-direction: column;
         }
         #flux-header {
-            color: #00aaff;
-            font-size: 12px;
-            padding: 4px 8px;
-            border-bottom: 1px solid #444;
-            font-family: monospace;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
+            color: #00aaff; font-size: 12px; padding: 4px 8px; border-bottom: 1px solid #444;
+            font-family: monospace; display: flex; justify-content: space-between; align-items: center;
         }
 
-        .osc-canvas {
-            flex-grow: 1;
-            width: 100%;
-            height: 100%;
-        }
+        .osc-canvas { flex-grow: 1; width: 100%; height: 100%; }
 
         /* 手轉大圓盤樣式 */
         #manual-wheel-container {
-            display: none;
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            width: 360px;
-            height: 360px;
-            z-index: 5;
+            display: none; position: absolute; top: 50%; left: 50%;
+            transform: translate(-50%, -50%); width: 360px; height: 360px; z-index: 5;
         }
         #manual-wheel {
-            width: 100%;
-            height: 100%;
-            border-radius: 50%;
-            background: rgba(243, 156, 18, 0.05);
-            border: 4px dashed rgba(243, 156, 18, 0.6);
-            cursor: grab;
-            position: relative;
-            touch-action: none;
-            box-sizing: border-box;
+            width: 100%; height: 100%; border-radius: 50%; background: rgba(52, 152, 219, 0.05);
+            border: 4px dashed rgba(52, 152, 219, 0.6); cursor: grab; position: relative;
+            touch-action: none; box-sizing: border-box;
         }
         #manual-wheel:active { cursor: grabbing; }
         #manual-wheel-center {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            width: 16px;
-            height: 16px;
-            background: rgba(243, 156, 18, 0.5);
-            border-radius: 50%;
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            width: 16px; height: 16px; background: rgba(52, 152, 219, 0.5); border-radius: 50%;
         }
         #manual-wheel .handle {
-            position: absolute;
-            top: -15px;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 30px;
-            height: 30px;
-            background: rgba(243, 156, 18, 0.9);
-            border-radius: 50%;
-            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+            position: absolute; top: -15px; left: 50%; transform: translateX(-50%);
+            width: 30px; height: 30px; background: rgba(52, 152, 219, 0.9);
+            border-radius: 50%; box-shadow: 0 2px 6px rgba(0,0,0,0.3);
         }
     </style>
-    <!-- 引入 Three.js 核心與 OrbitControls -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 </head>
 <body>
 
+    <div id="mode-tabs">
+        <button id="btn-mode-dc" class="mode-btn active">直流發電機 (DC)</button>
+        <button id="btn-mode-ac" class="mode-btn">交流發電機 (AC)</button>
+    </div>
+
     <div id="info-panel">
-        <h1 id="info-toggle">直流發電機 (DC Generator) 模擬 <span id="info-icon">▼</span></h1>
+        <h1 id="info-toggle"><span id="info-title">直流發電機 (DC) 模擬</span> <span id="info-icon">▼</span></h1>
         <div id="info-content" style="display: none;">
             <p>✅ <b>雙向無段調速</b>：滑桿中央為停止，左右拖曳可切換轉向。<br>
-               ✅ <b>可拖曳雙面板</b>：壓住示波器左上角 ✥ 符號即可自由拖放面板位置。<br>
+               ✅ <b>獨立雙面板觀測</b>：示波器觀察輸出，磁通量面板觀察法拉第定律本質！<br>
                ✅ <b>磁通量變化 (dΦ/dt)</b>：發電機的真理 —— 電流大小與通量的「變化率」成正比。<br>
-               ✅ <b>冷次定律 (Lenz's Law)</b>：開啟感應磁場(橘)，觀察它如何變化。<br>
-               💡 <i>同時觀察兩個面板，您會發現當藍波(Φ)斜率最陡時，橘波(變化率)與綠波(電流)達到最大值！</i></p>
+               ✅ <b>正確電流方向</b>：懸浮大箭頭與粒子流動完全遵守右手開掌定則！<br>
+               💡 <i>切換上方標籤，比較換向器(DC)與集電環(AC)產生的波形差異！</i></p>
         </div>
     </div>
 
-    <!-- 真實示波器面板 (直流輸出) -->
+    <!-- 輸出示波器面板 -->
     <div id="oscilloscope-panel">
         <div id="osc-header">
             <span class="drag-handle" title="拖曳面板">
-                <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none" style="pointer-events: none;"><path d="M5 9l-3 3 3 3M9 5l3-3 3 3M19 9l3 3-3 3M9 19l3 3 3-3M2 12h20M12 2v20"/></svg>
+                <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><path d="M5 9l-3 3 3 3M9 5l3-3 3 3M19 9l3 3-3 3M9 19l3 3 3-3M2 12h20M12 2v20"/></svg>
             </span>
-            <span class="panel-title">OSCILLOSCOPE (DC)</span>
+            <span class="panel-title" id="osc-title-text">OSCILLOSCOPE (DC)</span>
             <span id="osc-val">0.00 V</span>
         </div>
         <canvas id="osc-canvas" class="osc-canvas" width="280" height="130"></canvas>
@@ -239,7 +147,7 @@
     <div id="flux-panel">
         <div id="flux-header">
             <span class="drag-handle" title="拖曳面板">
-                <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none" style="pointer-events: none;"><path d="M5 9l-3 3 3 3M9 5l3-3 3 3M19 9l3 3-3 3M9 19l3 3 3-3M2 12h20M12 2v20"/></svg>
+                <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><path d="M5 9l-3 3 3 3M9 5l3-3 3 3M19 9l3 3-3 3M9 19l3 3 3-3M2 12h20M12 2v20"/></svg>
             </span>
             <span class="panel-title">MAGNETIC FLUX (Φ)</span>
             <span id="flux-val">0.00 Wb</span>
@@ -320,38 +228,39 @@
 
     <script>
         let scene, camera, renderer, controls;
-        let armatureGroup; 
-        let armatureMeshGroup; 
-        let magnetGroup, leftMagnet, rightMagnet;
+        let magnetGroup;
         
-        // 負載群組
+        // --- 整合版核心：將動態生成的物件打包，方便切換重置 ---
+        let dynamicSystemGroup; 
+        
+        let armatureGroup, armatureMeshGroup; 
         let loadGroup, bulbGroup, meterGroup;
         let bulbGlassMat, meterNeedle, meterSpriteV, meterSpriteA, filamentMat; 
         
-        // 物理與互動狀態
-        let speedMultiplier = 0.0; 
-        let leftMagRev = false;  
-        let rightMagRev = false; 
-        
-        // 特效群組
         let currentGroup, redWireCurrentGroup, blueWireCurrentGroup;
         let floatingArrowLeft, floatingArrowRight;
         let coilBFieldGroup; 
-        let fluxPlane, fluxNormalArrow; // 磁通量面積與法向量
+        let fluxPlane, fluxNormalArrow; 
+        let rhrGroup, leftV, leftB, rightV, rightB;
         
+        let armaturePathData, redWirePathData, blueWirePathData;
         const armatureParticles = [];
         const redParticles = [];
         const blueParticles = [];
-        
-        // 磁場曲線陣列
+
+        // 磁場靜態網格
         let magnetBFieldGroup;
         let staticCurveGeometries = [];
         const magnetBParticles = []; 
         const STATIC_CURVE_POINTS = 50;
 
-        let rhrGroup, leftV, leftB, rightV, rightB;
+        // --- 全局狀態變數 ---
+        let currentMode = 'DC'; // 預設模式：'DC' 或 'AC'
+        
+        let speedMultiplier = 0.0; 
+        let leftMagRev = false;  
+        let rightMagRev = false; 
 
-        // 動畫與運轉狀態 
         let isPaused = false; 
         let armatureAngle = 3 * Math.PI / 180; 
         const baseMotorSpeed = 0.025;
@@ -363,12 +272,10 @@
         let manualSpeed = 0;
         let manualTurnMultiplier = 1; 
 
-        // 記錄各種訊號的歷史陣列 (長度 280 配合畫布寬度)
-        const oscData = new Array(280).fill(0);       // 直流輸出波形
-        const oscFluxData = new Array(280).fill(0);   // 磁通量 (Φ)
-        const oscDerivData = new Array(280).fill(0);  // 磁通量變化率 (dΦ/dt)
-
-        let armaturePathData, redWirePathData, blueWirePathData;
+        // 歷史陣列
+        const oscData = new Array(280).fill(0);       
+        const oscFluxData = new Array(280).fill(0);   
+        const oscDerivData = new Array(280).fill(0);  
 
         init();
         animate();
@@ -380,7 +287,7 @@
             scene.background = new THREE.Color('#E6E6E6');
 
             camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.1, 100);
-            camera.position.set(0, 12, 26);
+            camera.position.set(0, 15, 28); 
 
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
@@ -398,29 +305,25 @@
             dirLight.position.set(5, 12, 8);
             scene.add(dirLight);
 
-            initPaths();
+            // 建立靜態不變的磁鐵
             buildMagnets(); 
-            buildArmatureAndCrank(); 
-            buildBrushes();  
-            buildLoadAndWires(); 
-            buildCurrentEffects(); 
-            buildRHR();
             buildMagneticFields(); 
-            buildInducedBField();
 
-            // 初始顯示狀態
-            magnetBFieldGroup.visible = false;
-            currentGroup.visible = false;
-            redWireCurrentGroup.visible = false;
-            blueWireCurrentGroup.visible = false;
-            coilBFieldGroup.visible = false;
-            rhrGroup.visible = false;
+            // 建立動態系統群組 (隨模式切換)
+            dynamicSystemGroup = new THREE.Group();
+            scene.add(dynamicSystemGroup);
+            
+            // 初次建構系統
+            buildSystemForMode(currentMode);
 
-            // --- 綁定拖曳視窗事件 ---
+            // 面板拖曳
             makeDraggable('oscilloscope-panel', '.drag-handle');
             makeDraggable('flux-panel', '.drag-handle');
 
-            // --- UI 互動事件綁定 ---
+            // --- 綁定事件 ---
+            document.getElementById('btn-mode-dc').addEventListener('click', () => switchMode('DC'));
+            document.getElementById('btn-mode-ac').addEventListener('click', () => switchMode('AC'));
+
             document.getElementById('slider-speed').addEventListener('input', (e) => {
                 let val = parseFloat(e.target.value);
                 speedMultiplier = val;
@@ -430,16 +333,12 @@
 
             document.getElementById('btn-rev-left').addEventListener('click', (e) => {
                 leftMagRev = !leftMagRev;
-                if(leftMagnet) leftMagnet.rotation.y = leftMagRev ? Math.PI : 0;
-                e.target.innerText = leftMagRev ? '🔄 左磁鐵 (S)' : '🔄 左磁鐵 (N)';
-                e.target.style.color = leftMagRev ? '#0000ff' : '#ff0000';
+                updateMagnetVisuals();
             });
 
             document.getElementById('btn-rev-right').addEventListener('click', (e) => {
                 rightMagRev = !rightMagRev;
-                if(rightMagnet) rightMagnet.rotation.y = rightMagRev ? Math.PI : 0;
-                e.target.innerText = rightMagRev ? '🔄 右磁鐵 (N)' : '🔄 右磁鐵 (S)';
-                e.target.style.color = rightMagRev ? '#ff0000' : '#0000ff';
+                updateMagnetVisuals();
             });
 
             document.getElementById('btn-play-pause').addEventListener('click', (e) => {
@@ -468,7 +367,6 @@
             document.getElementById('chk-manual-turn').addEventListener('change', (e) => {
                 const isManual = e.target.checked;
                 document.getElementById('manual-wheel-container').style.display = isManual ? 'block' : 'none';
-                
                 if (isManual) {
                     manualTurnMultiplier = camera.position.z >= 0 ? 1 : -1;
                     document.getElementById('manual-wheel').style.transform = `rotate(${-armatureAngle * manualTurnMultiplier}rad)`;
@@ -511,56 +409,129 @@
                 lastDragTime = now;
             });
 
-            window.addEventListener('pointerup', () => {
-                if (isDraggingWheel) {
-                    isDraggingWheel = false;
-                    wheel.style.cursor = 'grab';
-                }
-            });
-            
-            window.addEventListener('pointercancel', () => {
-                if (isDraggingWheel) {
-                    isDraggingWheel = false;
-                    wheel.style.cursor = 'grab';
-                }
-            });
-
-            function updateVisibility() {
-                const showCurr = document.getElementById('chk-current').checked;
-                const showRHR = document.getElementById('chk-rhr').checked;
-
-                if (currentGroup) {
-                    currentGroup.visible = showCurr || showRHR;
-                    armatureParticles.forEach(p => p.visible = showCurr);
-                }
-                if (redWireCurrentGroup) redWireCurrentGroup.visible = showCurr;
-                if (blueWireCurrentGroup) blueWireCurrentGroup.visible = showCurr;
-                if (rhrGroup) rhrGroup.visible = showRHR;
-            }
+            window.addEventListener('pointerup', () => { if (isDraggingWheel) { isDraggingWheel = false; wheel.style.cursor = 'grab'; } });
+            window.addEventListener('pointercancel', () => { if (isDraggingWheel) { isDraggingWheel = false; wheel.style.cursor = 'grab'; } });
 
             document.getElementById('chk-current').addEventListener('change', updateVisibility);
             document.getElementById('chk-rhr').addEventListener('change', updateVisibility);
             document.getElementById('chk-magnets').addEventListener('change', (e) => magnetGroup.visible = e.target.checked);
-            document.getElementById('chk-armature').addEventListener('change', (e) => {
-                if (armatureMeshGroup) armatureMeshGroup.visible = e.target.checked;
-            });
+            document.getElementById('chk-armature').addEventListener('change', (e) => { if (armatureMeshGroup) armatureMeshGroup.visible = e.target.checked; });
             document.getElementById('chk-bfield-magnet').addEventListener('change', (e) => magnetBFieldGroup.visible = e.target.checked);
             
             document.getElementById('info-toggle').addEventListener('click', () => {
                 const content = document.getElementById('info-content');
                 const icon = document.getElementById('info-icon');
-                if (content.style.display === 'none') {
-                    content.style.display = 'block'; icon.innerText = '▲';
-                } else {
-                    content.style.display = 'none'; icon.innerText = '▼';
-                }
+                if (content.style.display === 'none') { content.style.display = 'block'; icon.innerText = '▲'; } 
+                else { content.style.display = 'none'; icon.innerText = '▼'; }
             });
 
             window.addEventListener('resize', onWindowResize);
             updateVisibility();
         }
 
-        // --- 拖曳面板輔助函數 ---
+        // --- 模式切換邏輯 (重置與重建) ---
+        function switchMode(newMode) {
+            if (currentMode === newMode) return;
+            currentMode = newMode;
+
+            // 1. UI 切換視覺
+            document.getElementById('btn-mode-dc').classList.toggle('active', currentMode === 'DC');
+            document.getElementById('btn-mode-ac').classList.toggle('active', currentMode === 'AC');
+            
+            document.getElementById('info-title').innerText = currentMode === 'DC' ? '直流發電機 (DC) 模擬' : '交流發電機 (AC) 模擬';
+            document.getElementById('osc-title-text').innerText = currentMode === 'DC' ? 'OSCILLOSCOPE (DC)' : 'OSCILLOSCOPE (AC)';
+
+            // 2. 清除並重置所有 UI 狀態
+            document.getElementById('slider-speed').value = 0;
+            speedMultiplier = 0;
+            document.getElementById('speed-val').innerText = '0.0';
+            
+            document.getElementById('chk-manual-turn').checked = false;
+            document.getElementById('manual-wheel-container').style.display = 'none';
+            
+            document.getElementById('select-load').value = 'bulb';
+            
+            document.getElementById('chk-magnets').checked = true;
+            document.getElementById('chk-armature').checked = true;
+            document.getElementById('chk-bfield-magnet').checked = false;
+            document.getElementById('chk-induced-b').checked = false;
+            document.getElementById('chk-current').checked = false;
+            document.getElementById('chk-rhr').checked = false;
+            document.getElementById('chk-flux').checked = false;
+            document.getElementById('chk-osc').checked = false;
+            
+            document.getElementById('oscilloscope-panel').style.display = 'none';
+            document.getElementById('flux-panel').style.display = 'none';
+
+            // 磁極復原
+            leftMagRev = false; 
+            rightMagRev = false;
+            updateMagnetVisuals();
+
+            // 3. 陣列與物理狀態歸零
+            armatureParticles.length = 0;
+            redParticles.length = 0;
+            blueParticles.length = 0;
+            oscData.fill(0);
+            oscFluxData.fill(0);
+            oscDerivData.fill(0);
+            
+            isPaused = false;
+            document.getElementById('btn-play-pause').innerText = '⏸ 暫停';
+            document.getElementById('btn-play-pause').style.background = '#d4edda';
+            
+            armatureAngle = 3 * Math.PI / 180;
+            manualSpeed = 0;
+            isDraggingWheel = false;
+
+            // 4. 重建場景
+            scene.remove(dynamicSystemGroup);
+            dynamicSystemGroup = new THREE.Group();
+            scene.add(dynamicSystemGroup);
+            
+            buildSystemForMode(currentMode);
+
+            // 5. 套用能見度
+            updateVisibility();
+            magnetGroup.visible = true;
+            magnetBFieldGroup.visible = false;
+        }
+
+        function updateMagnetVisuals() {
+            if(leftMagnet) leftMagnet.rotation.y = leftMagRev ? Math.PI : 0;
+            const btnLeft = document.getElementById('btn-rev-left');
+            btnLeft.innerText = leftMagRev ? '🔄 左磁鐵 (S)' : '🔄 左磁鐵 (N)';
+            btnLeft.style.color = leftMagRev ? '#0000ff' : '#ff0000';
+
+            if(rightMagnet) rightMagnet.rotation.y = rightMagRev ? Math.PI : 0;
+            const btnRight = document.getElementById('btn-rev-right');
+            btnRight.innerText = rightMagRev ? '🔄 右磁鐵 (N)' : '🔄 右磁鐵 (S)';
+            btnRight.style.color = rightMagRev ? '#ff0000' : '#0000ff';
+        }
+
+        function updateVisibility() {
+            const showCurr = document.getElementById('chk-current').checked;
+            const showRHR = document.getElementById('chk-rhr').checked;
+            if (currentGroup) {
+                currentGroup.visible = showCurr || showRHR;
+                armatureParticles.forEach(p => p.visible = showCurr);
+            }
+            if (redWireCurrentGroup) redWireCurrentGroup.visible = showCurr;
+            if (blueWireCurrentGroup) blueWireCurrentGroup.visible = showCurr;
+            if (rhrGroup) rhrGroup.visible = showRHR;
+        }
+
+        // --- 依據模式建構系統元件 ---
+        function buildSystemForMode(mode) {
+            initPaths(mode);
+            buildArmatureAndCrank(mode); 
+            buildBrushes(mode);  
+            buildLoadAndWires(mode); 
+            buildCurrentEffects(); 
+            buildRHR();
+            buildInducedBField();
+        }
+
         function makeDraggable(panelId, handleSelector) {
             const panel = document.getElementById(panelId);
             const handle = panel.querySelector(handleSelector);
@@ -569,62 +540,38 @@
 
             handle.addEventListener('pointerdown', (e) => {
                 isDraggingPanel = true;
-                startX = e.clientX;
-                startY = e.clientY;
-                
-                // 將基於 right/bottom 的佈局無縫轉換為 left/top 座標，避免位移跳動
+                startX = e.clientX; startY = e.clientY;
                 const rect = panel.getBoundingClientRect();
-                panel.style.left = rect.left + 'px';
-                panel.style.top = rect.top + 'px';
-                panel.style.right = 'auto';
-                panel.style.bottom = 'auto';
-                panel.style.margin = '0';
-                
-                initialLeft = rect.left;
-                initialTop = rect.top;
-                
-                handle.setPointerCapture(e.pointerId);
-                e.preventDefault();
+                panel.style.left = rect.left + 'px'; panel.style.top = rect.top + 'px';
+                panel.style.right = 'auto'; panel.style.bottom = 'auto'; panel.style.margin = '0';
+                initialLeft = rect.left; initialTop = rect.top;
+                handle.setPointerCapture(e.pointerId); e.preventDefault();
             });
 
             handle.addEventListener('pointermove', (e) => {
                 if (!isDraggingPanel) return;
-                const dx = e.clientX - startX;
-                const dy = e.clientY - startY;
-                panel.style.left = (initialLeft + dx) + 'px';
-                panel.style.top = (initialTop + dy) + 'px';
+                panel.style.left = (initialLeft + (e.clientX - startX)) + 'px';
+                panel.style.top = (initialTop + (e.clientY - startY)) + 'px';
             });
 
-            handle.addEventListener('pointerup', (e) => {
-                isDraggingPanel = false;
-                handle.releasePointerCapture(e.pointerId);
-            });
-            
-            handle.addEventListener('pointercancel', (e) => {
-                isDraggingPanel = false;
-                handle.releasePointerCapture(e.pointerId);
-            });
+            handle.addEventListener('pointerup', (e) => { isDraggingPanel = false; handle.releasePointerCapture(e.pointerId); });
+            handle.addEventListener('pointercancel', (e) => { isDraggingPanel = false; handle.releasePointerCapture(e.pointerId); });
         }
 
         function getExternalB(pos, lPole, rPole) {
-            if (lPole !== rPole) {
-                return new THREE.Vector3(lPole * 1.5, 0, 0);
-            } else {
-                const pL = new THREE.Vector3(-4.5, 0, -2.0);
-                const pR = new THREE.Vector3( 4.5, 0, -2.0);
-                const rL = new THREE.Vector3().subVectors(pos, pL);
-                const rR = new THREE.Vector3().subVectors(pos, pR);
-                let dL = Math.max(rL.length(), 0.5), dR = Math.max(rR.length(), 0.5);
-                const bL = rL.normalize().multiplyScalar(lPole * 2.0 / (dL * dL));
-                const bR = rR.normalize().multiplyScalar(rPole * 2.0 / (dR * dR));
-                return new THREE.Vector3().addVectors(bL, bR);
-            }
+            if (lPole !== rPole) return new THREE.Vector3(lPole * 1.5, 0, 0);
+            const pL = new THREE.Vector3(-4.5, 0, -2.0), pR = new THREE.Vector3( 4.5, 0, -2.0);
+            const rL = new THREE.Vector3().subVectors(pos, pL), rR = new THREE.Vector3().subVectors(pos, pR);
+            let dL = Math.max(rL.length(), 0.5), dR = Math.max(rR.length(), 0.5);
+            return new THREE.Vector3().addVectors(
+                rL.normalize().multiplyScalar(lPole * 2.0 / (dL * dL)),
+                rR.normalize().multiplyScalar(rPole * 2.0 / (dR * dR))
+            );
         }
 
         function buildRHR() {
             rhrGroup = new THREE.Group();
-            scene.add(rhrGroup);
-
+            dynamicSystemGroup.add(rhrGroup); // 加到動態群組
             function createPhysicsVector(colorHex, text, textColor) {
                 const group = new THREE.Group();
                 const mat = new THREE.MeshLambertMaterial({ color: colorHex, transparent: true, opacity: 0.65 });
@@ -632,65 +579,45 @@
                 body.position.y = 0.5; 
                 const head = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.5, 16), mat);
                 head.position.y = 1.0 + 0.25;
-                group.add(body);
-                group.add(head);
-
+                group.add(body); group.add(head);
                 const sprite = createTextSprite(text, textColor, 80);
-                sprite.position.y = 1.8; 
-                group.add(sprite);
-
+                sprite.position.y = 1.8; group.add(sprite);
                 group.setLength = function(len) {
-                    if (len < 0.05) {
-                        group.visible = false; return;
-                    }
+                    if (len < 0.05) { group.visible = false; return; }
                     group.visible = true;
-                    body.scale.y = len;
-                    body.position.y = len / 2;
-                    head.position.y = len + 0.25;
-                    sprite.position.y = len + 0.8;
+                    body.scale.y = len; body.position.y = len / 2;
+                    head.position.y = len + 0.25; sprite.position.y = len + 0.8;
                 };
                 return group;
             }
-
-            leftV = createPhysicsVector(0xff0000, 'v(運動)', '#ff4444');
-            leftB = createPhysicsVector(0x00cc00, 'B(磁場)', '#22bb22');
-            rightV = createPhysicsVector(0xff0000, 'v(運動)', '#ff4444');
-            rightB = createPhysicsVector(0x00cc00, 'B(磁場)', '#22bb22');
-
-            rhrGroup.add(leftV); rhrGroup.add(leftB);
-            rhrGroup.add(rightV); rhrGroup.add(rightB);
+            leftV = createPhysicsVector(0xff0000, 'v(運動)', '#ff4444'); leftB = createPhysicsVector(0x00cc00, 'B(磁場)', '#22bb22');
+            rightV = createPhysicsVector(0xff0000, 'v(運動)', '#ff4444'); rightB = createPhysicsVector(0x00cc00, 'B(磁場)', '#22bb22');
+            rhrGroup.add(leftV); rhrGroup.add(leftB); rhrGroup.add(rightV); rhrGroup.add(rightB);
         }
 
         function buildInducedBField() {
             coilBFieldGroup = new THREE.Group();
             coilBFieldGroup.position.set(0, 0, -2.0); 
-            armatureGroup.add(coilBFieldGroup); 
-
+            armatureGroup.add(coilBFieldGroup); // 附在電樞上
             const mat = new THREE.MeshLambertMaterial({ color: 0xff8800 }); 
             const body = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 2.5, 16), mat);
-            body.position.set(0, 0, 0); 
             const head = new THREE.Mesh(new THREE.ConeGeometry(0.35, 0.8, 16), mat);
             head.position.set(0, 1.65, 0); 
-            
-            coilBFieldGroup.add(body);
-            coilBFieldGroup.add(head);
-
+            coilBFieldGroup.add(body); coilBFieldGroup.add(head);
             const sprite = createTextSprite('B(感應)', '#ff8800', 80);
-            sprite.position.set(0, 2.5, 0);
-            coilBFieldGroup.add(sprite);
+            sprite.position.set(0, 2.5, 0); coilBFieldGroup.add(sprite);
         }
 
         function buildMagneticFields() {
             magnetBFieldGroup = new THREE.Group();
-            scene.add(magnetBFieldGroup);
+            scene.add(magnetBFieldGroup); // 靜態物件留原位
             const matMagnetStatic = new THREE.LineBasicMaterial({ color: 0x22bb22, linewidth: 2 });
             for(let i=0; i<18; i++) {
                 const geometry = new THREE.BufferGeometry();
                 const positions = new Float32Array(STATIC_CURVE_POINTS * 3);
                 geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
                 geometry.userData = { valid: false }; 
-                const line = new THREE.Line(geometry, matMagnetStatic);
-                magnetBFieldGroup.add(line);
+                magnetBFieldGroup.add(new THREE.Line(geometry, matMagnetStatic));
                 staticCurveGeometries.push(geometry);
             }
             const matArrow = new THREE.MeshBasicMaterial({ color: 0x22bb22 });
@@ -707,53 +634,46 @@
 
         function buildMagnets() {
             magnetGroup = new THREE.Group();
-            scene.add(magnetGroup);
-            const depth = 6.0, height = 4.0, width = 2.5, zCenter = -2.0, gapOffset = 4.5; 
-            const magCenterOffset = gapOffset + width; 
-            const matBlue = new THREE.MeshLambertMaterial({ color: 0x0000ff }); 
-            const matRed = new THREE.MeshLambertMaterial({ color: 0xff0000 });  
+            scene.add(magnetGroup); // 靜態留原位
+            const depth = 6.0, height = 4.0, width = 2.5, zCenter = -2.0, magCenterOffset = 4.5 + width; 
+            const matBlue = new THREE.MeshLambertMaterial({ color: 0x0000ff }), matRed = new THREE.MeshLambertMaterial({ color: 0xff0000 });  
             const boxGeo = new THREE.BoxGeometry(width, height, depth);
 
-            leftMagnet = new THREE.Group();
-            leftMagnet.position.set(-magCenterOffset, 0, zCenter);
-            magnetGroup.add(leftMagnet);
+            leftMagnet = new THREE.Group(); leftMagnet.position.set(-magCenterOffset, 0, zCenter); magnetGroup.add(leftMagnet);
             const leftRed = new THREE.Mesh(boxGeo, matRed); leftRed.position.set(width/2, 0, 0); leftMagnet.add(leftRed);
             const leftBlue = new THREE.Mesh(boxGeo, matBlue); leftBlue.position.set(-width/2, 0, 0); leftMagnet.add(leftBlue);
             const textN_L = createTextSprite('N', '#ffffff', 80); textN_L.position.set(width/2, 0, depth/2 + 0.1); leftMagnet.add(textN_L);
             const textS_L = createTextSprite('S', '#ffffff', 80); textS_L.position.set(-width/2, 0, depth/2 + 0.1); leftMagnet.add(textS_L);
 
-            rightMagnet = new THREE.Group();
-            rightMagnet.position.set(magCenterOffset, 0, zCenter);
-            magnetGroup.add(rightMagnet);
+            rightMagnet = new THREE.Group(); rightMagnet.position.set(magCenterOffset, 0, zCenter); magnetGroup.add(rightMagnet);
             const rightBlue = new THREE.Mesh(boxGeo, matBlue); rightBlue.position.set(-width/2, 0, 0); rightMagnet.add(rightBlue);
             const rightRed = new THREE.Mesh(boxGeo, matRed); rightRed.position.set(width/2, 0, 0); rightMagnet.add(rightRed);
             const textS_R = createTextSprite('S', '#ffffff', 80); textS_R.position.set(-width/2, 0, depth/2 + 0.1); rightMagnet.add(textS_R);
             const textN_R = createTextSprite('N', '#ffffff', 80); textN_R.position.set(width/2, 0, depth/2 + 0.1); rightMagnet.add(textN_R);
         }
 
-        function buildArmatureAndCrank() {
+        // --- 核心構建：電樞與環 ---
+        function buildArmatureAndCrank(mode) {
             armatureGroup = new THREE.Group();
-            scene.add(armatureGroup);
+            dynamicSystemGroup.add(armatureGroup);
             armatureMeshGroup = new THREE.Group();
             armatureGroup.add(armatureMeshGroup);
 
             const wireMat = new THREE.MeshLambertMaterial({ color: 0x4a2e15 }); 
             const wireR = 0.08, w = 3.6, l = 6.0, zOffset = -2; 
 
-            // 磁通量視覺化面 (Flux Plane)
+            // 磁通量視覺化面
             const fluxPlaneGeo = new THREE.PlaneGeometry(w, l);
             const fluxPlaneMat = new THREE.MeshBasicMaterial({ color: 0x00aaff, transparent: true, opacity: 0.4, side: THREE.DoubleSide, depthWrite: false });
             fluxPlane = new THREE.Mesh(fluxPlaneGeo, fluxPlaneMat);
-            fluxPlane.rotation.x = -Math.PI / 2;
-            fluxPlane.position.set(0, 0, zOffset);
-            fluxPlane.visible = false;
+            fluxPlane.rotation.x = -Math.PI / 2; fluxPlane.position.set(0, 0, zOffset); fluxPlane.visible = false;
             armatureMeshGroup.add(fluxPlane);
 
-            // 磁通量面積法向量 (Area Vector)
             fluxNormalArrow = new THREE.ArrowHelper(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, zOffset), 2.5, 0x00aaff, 0.4, 0.3);
             fluxNormalArrow.visible = false;
             armatureMeshGroup.add(fluxNormalArrow);
 
+            // 線圈主體
             const backWire = new THREE.Mesh(new THREE.CylinderGeometry(wireR, wireR, w, 16), wireMat);
             backWire.rotation.z = Math.PI / 2; backWire.position.set(0, 0, zOffset - l/2); armatureMeshGroup.add(backWire);
             const leftWire = new THREE.Mesh(new THREE.CylinderGeometry(wireR, wireR, l, 16), wireMat);
@@ -764,145 +684,192 @@
             const leadX = 0.7, frontWidth = w/2 - leadX;
             const frontWireL = new THREE.Mesh(new THREE.CylinderGeometry(wireR, wireR, frontWidth, 16), wireMat);
             frontWireL.rotation.z = Math.PI / 2; frontWireL.position.set(-w/2 + frontWidth/2, 0, zOffset + l/2); armatureMeshGroup.add(frontWireL);
+            
             const frontWireR = new THREE.Mesh(new THREE.CylinderGeometry(wireR, wireR, frontWidth, 16), wireMat);
             frontWireR.rotation.z = Math.PI / 2; frontWireR.position.set(w/2 - frontWidth/2, 0, zOffset + l/2); armatureMeshGroup.add(frontWireR);
 
-            const leadLength = 3.5;
-            const leadL = new THREE.Mesh(new THREE.CylinderGeometry(wireR, wireR, leadLength, 16), wireMat);
-            leadL.rotation.x = Math.PI / 2; leadL.position.set(-leadX, 0, zOffset + l/2 + leadLength/2); armatureMeshGroup.add(leadL);
-            const leadR = new THREE.Mesh(new THREE.CylinderGeometry(wireR, wireR, leadLength, 16), wireMat);
-            leadR.rotation.x = Math.PI / 2; leadR.position.set(leadX, 0, zOffset + l/2 + leadLength/2); armatureMeshGroup.add(leadR);
-
-            const commZ = zOffset + l/2 + leadLength - 0.5;
-            const commRadiusOuter = 0.8, commRadiusInner = 0.65, commDepth = 0.8;
             const copperMat = new THREE.MeshLambertMaterial({ color: 0xaa5522, side: THREE.DoubleSide }); 
-            const gap = 0.2; 
-            const commShape = new THREE.Shape();
-            commShape.absarc(0, 0, commRadiusOuter, gap/2, Math.PI - gap/2, false);
-            commShape.absarc(0, 0, commRadiusInner, Math.PI - gap/2, gap/2, true);
-            const extrudeSettings = { depth: commDepth, bevelEnabled: false, curveSegments: 32 };
-            const commGeo = new THREE.ExtrudeGeometry(commShape, extrudeSettings);
-            commGeo.translate(0, 0, -commDepth/2); 
+            const shaftMat = new THREE.MeshLambertMaterial({ color: 0x333333 }); 
 
-            const commHalf1 = new THREE.Mesh(commGeo, copperMat);
-            commHalf1.rotation.z = Math.PI / 2; commHalf1.position.set(0, 0, commZ); armatureMeshGroup.add(commHalf1);
-            const commHalf2 = new THREE.Mesh(commGeo, copperMat);
-            commHalf2.rotation.z = -Math.PI / 2; commHalf2.position.set(0, 0, commZ); armatureMeshGroup.add(commHalf2);
+            if (mode === 'DC') {
+                // --- DC 換向器模式 ---
+                const leadLength = 3.5;
+                const leadL = new THREE.Mesh(new THREE.CylinderGeometry(wireR, wireR, leadLength, 16), wireMat);
+                leadL.rotation.x = Math.PI / 2; leadL.position.set(-leadX, 0, zOffset + l/2 + leadLength/2); armatureMeshGroup.add(leadL);
+                
+                const leadR = new THREE.Mesh(new THREE.CylinderGeometry(wireR, wireR, leadLength, 16), wireMat);
+                leadR.rotation.x = Math.PI / 2; leadR.position.set(leadX, 0, zOffset + l/2 + leadLength/2); armatureMeshGroup.add(leadR);
 
-            const shaftBack = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 2.5, 16), wireMat);
-            shaftBack.rotation.x = Math.PI / 2; shaftBack.position.set(0, 0, zOffset - l/2 - 1.25); armatureMeshGroup.add(shaftBack);
-            const crankArm = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 1.8, 16), wireMat);
-            crankArm.position.set(0, 0.9, zOffset - l/2 - 2.5); armatureMeshGroup.add(crankArm);
-            const handleMat = new THREE.MeshLambertMaterial({ color: 0x222222 });
-            const crankHandle = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 1.2, 16), handleMat);
-            crankHandle.rotation.x = Math.PI / 2; crankHandle.position.set(0, 1.8, zOffset - l/2 - 2.5 - 0.6); armatureMeshGroup.add(crankHandle);
+                const commZ = zOffset + l/2 + leadLength - 0.5;
+                const commRadiusOuter = 0.8, commRadiusInner = 0.65, commDepth = 0.8;
+                const commShape = new THREE.Shape();
+                commShape.absarc(0, 0, commRadiusOuter, 0.1, Math.PI - 0.1, false);
+                commShape.absarc(0, 0, commRadiusInner, Math.PI - 0.1, 0.1, true);
+                const commGeo = new THREE.ExtrudeGeometry(commShape, { depth: commDepth, bevelEnabled: false, curveSegments: 32 });
+                commGeo.translate(0, 0, -commDepth/2); 
+
+                const commHalf1 = new THREE.Mesh(commGeo, copperMat);
+                commHalf1.rotation.z = Math.PI / 2; commHalf1.position.set(0, 0, commZ); armatureMeshGroup.add(commHalf1);
+                const commHalf2 = new THREE.Mesh(commGeo, copperMat);
+                commHalf2.rotation.z = -Math.PI / 2; commHalf2.position.set(0, 0, commZ); armatureMeshGroup.add(commHalf2);
+            } else {
+                // --- AC 雙集電環模式 ---
+                const ring1Z = 2.0, ring2Z = 3.2; 
+                const leadL_X = -0.65, leadR_X = 0.3;
+
+                const leadL = new THREE.Mesh(new THREE.CylinderGeometry(wireR, wireR, ring1Z - (zOffset + l/2), 16), wireMat);
+                leadL.rotation.x = Math.PI / 2; leadL.position.set(leadL_X, 0, (zOffset + l/2 + ring1Z)/2); armatureMeshGroup.add(leadL);
+                
+                const leadR = new THREE.Mesh(new THREE.CylinderGeometry(wireR, wireR, ring2Z - (zOffset + l/2), 16), wireMat);
+                leadR.rotation.x = Math.PI / 2; leadR.position.set(leadR_X, 0, (zOffset + l/2 + ring2Z)/2); armatureMeshGroup.add(leadR);
+
+                const spoke = new THREE.Mesh(new THREE.CylinderGeometry(wireR, wireR, 0.35, 16), wireMat);
+                spoke.rotation.z = Math.PI / 2; spoke.position.set(0.475, 0, ring2Z); armatureMeshGroup.add(spoke);
+
+                const ringShape = new THREE.Shape();
+                ringShape.absarc(0, 0, 0.8, 0, Math.PI * 2, false);
+                const ringHole = new THREE.Path();
+                ringHole.absarc(0, 0, 0.45, 0, Math.PI * 2, true);
+                ringShape.holes.push(ringHole);
+                const ringGeo = new THREE.ExtrudeGeometry(ringShape, { depth: 0.5, bevelEnabled: false, curveSegments: 32 });
+                ringGeo.translate(0, 0, -0.25); 
+
+                const ring1 = new THREE.Mesh(ringGeo, copperMat); ring1.position.set(0, 0, ring1Z); armatureMeshGroup.add(ring1);
+                const ring2 = new THREE.Mesh(ringGeo, copperMat); ring2.position.set(0, 0, ring2Z); armatureMeshGroup.add(ring2);
+            }
+
+            // 共用：後段轉軸與曲柄 (為了視覺淨空，僅保留後段)
+            const backShaftLen = 2.5;
+            const backShaft = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, backShaftLen, 16), shaftMat);
+            backShaft.rotation.x = Math.PI / 2; backShaft.position.set(0, 0, -5.0 - backShaftLen/2); armatureMeshGroup.add(backShaft);
+
+            const crankArm = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 1.8, 16), shaftMat);
+            crankArm.position.set(0, 0.9, -7.5); armatureMeshGroup.add(crankArm);
+            const crankHandle = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 1.2, 16), new THREE.MeshLambertMaterial({ color: 0x222222 }));
+            crankHandle.rotation.x = Math.PI / 2; crankHandle.position.set(0, 1.8, -7.5 - 0.6); armatureMeshGroup.add(crankHandle);
         }
 
-        function buildBrushes() {
-            const commZ = -2 + 3.0 + 3.5 - 0.5; 
-            const commRadiusOuter = 0.8; 
+        // --- 建立電刷 ---
+        function buildBrushes(mode) {
             const bracketMat = new THREE.MeshLambertMaterial({ color: 0xc0c0c0, transparent: true, opacity: 0.85, side: THREE.DoubleSide });
+            const commRadiusOuter = 0.8; 
 
-            const brushLeftGroup = new THREE.Group(); brushLeftGroup.position.set(0, 0, commZ);
-            const baseL = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.05, 1.2), bracketMat);
-            baseL.position.set(-1.6, -1.2, 0); brushLeftGroup.add(baseL);
-            const upL = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.5, 1.2), bracketMat);
-            upL.position.set(-commRadiusOuter - 0.05, -0.45, 0); brushLeftGroup.add(upL);
-            const jointL = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 0.1, 16), new THREE.MeshLambertMaterial({color: 0x555555}));
-            jointL.position.set(-2.0, -1.15, 0); brushLeftGroup.add(jointL);
-            scene.add(brushLeftGroup);
+            function createBrush(zPos, isLeft) {
+                const group = new THREE.Group(); group.position.set(0, 0, zPos);
+                const sideDir = isLeft ? -1 : 1;
+                const base = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.05, 1.2), bracketMat);
+                base.position.set(sideDir * 1.6, -1.2, 0); group.add(base);
+                const up = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.5, 1.2), bracketMat);
+                up.position.set(sideDir * (commRadiusOuter + 0.05), -0.45, 0); group.add(up);
+                const joint = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 0.1, 16), new THREE.MeshLambertMaterial({color: 0x555555}));
+                joint.position.set(sideDir * 2.0, -1.15, 0); group.add(joint);
+                return group;
+            }
 
-            const brushRightGroup = new THREE.Group(); brushRightGroup.position.set(0, 0, commZ);
-            const baseR = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.05, 1.2), bracketMat);
-            baseR.position.set(1.6, -1.2, 0); brushRightGroup.add(baseR);
-            const upR = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.5, 1.2), bracketMat);
-            upR.position.set(commRadiusOuter + 0.05, -0.45, 0); brushRightGroup.add(upR);
-            const jointR = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 0.1, 16), new THREE.MeshLambertMaterial({color: 0x555555}));
-            jointR.position.set(2.0, -1.15, 0); brushRightGroup.add(jointR);
-            scene.add(brushRightGroup);
+            if (mode === 'DC') {
+                const commZ = 4.0; // zOffset + l/2 + leadLength - 0.5
+                dynamicSystemGroup.add(createBrush(commZ, true));
+                dynamicSystemGroup.add(createBrush(commZ, false));
+            } else {
+                dynamicSystemGroup.add(createBrush(2.0, true)); // Left brush on Rear ring
+                dynamicSystemGroup.add(createBrush(3.2, false)); // Right brush on Front ring
+            }
         }
 
-        function buildLoadAndWires() {
-            const zPos = 4; const bulbZ = 6.5; const bulbY = -2.5; 
+        // --- 建立負載與外部導線 ---
+        function buildLoadAndWires(mode) {
+            const zPosL = mode === 'DC' ? 4.0 : 2.0; 
+            const zPosR = mode === 'DC' ? 4.0 : 3.2; 
+            const bulbZ = 6.5, bulbY = -2.5; 
+            
             const redWireMat = new THREE.MeshBasicMaterial({ color: 0xff4444, transparent: true, opacity: 0.6 }); 
             const blueWireMat = new THREE.MeshBasicMaterial({ color: 0x5599ff, transparent: true, opacity: 0.6 }); 
 
-            createCylinderLine(-2.0, -1.15, zPos, -4.0, -1.15, zPos, redWireMat);
-            createCylinderLine(-4.0, -1.15, zPos, -4.0, bulbY - 0.8, bulbZ, redWireMat);
+            // 實體導線
+            createCylinderLine(-2.0, -1.15, zPosL, -4.0, -1.15, zPosL, redWireMat);
+            createCylinderLine(-4.0, -1.15, zPosL, -4.0, bulbY - 0.8, bulbZ, redWireMat);
             createCylinderLine(-4.0, bulbY - 0.8, bulbZ, -0.5, bulbY - 0.8, bulbZ, redWireMat);
 
-            createCylinderLine(2.0, -1.15, zPos, 4.0, -1.15, zPos, blueWireMat);
-            createCylinderLine(4.0, -1.15, zPos, 4.0, bulbY - 0.8, bulbZ, blueWireMat);
+            createCylinderLine(2.0, -1.15, zPosR, 4.0, -1.15, zPosR, blueWireMat);
+            createCylinderLine(4.0, -1.15, zPosR, 4.0, bulbY - 0.8, bulbZ, blueWireMat);
             createCylinderLine(4.0, bulbY - 0.8, bulbZ, 0.5, bulbY - 0.8, bulbZ, blueWireMat);
 
             loadGroup = new THREE.Group();
             loadGroup.position.set(0, bulbY, bulbZ);
-            scene.add(loadGroup);
+            dynamicSystemGroup.add(loadGroup);
 
             // 1. 燈泡模型
             bulbGroup = new THREE.Group();
             const baseMat = new THREE.MeshLambertMaterial({ color: 0x333333 });
-            const base = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 0.6, 16), baseMat);
-            base.position.set(0, -0.5, 0); bulbGroup.add(base);
-            const base2 = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.2, 0.3, 16), baseMat);
-            base2.position.set(0, -0.95, 0); bulbGroup.add(base2);
-
+            const base = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 0.6, 16), baseMat); base.position.set(0, -0.5, 0); bulbGroup.add(base);
+            const base2 = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.2, 0.3, 16), baseMat); base2.position.set(0, -0.95, 0); bulbGroup.add(base2);
             bulbGlassMat = new THREE.MeshLambertMaterial({ color: 0xffffcc, transparent: true, opacity: 0.7, emissive: 0xffaa00, emissiveIntensity: 0 });
-            const glassSphere = new THREE.Mesh(new THREE.SphereGeometry(0.8, 32, 32), bulbGlassMat);
-            glassSphere.position.set(0, 0.6, 0); bulbGroup.add(glassSphere);
-            const glassNeck = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.7, 0.8, 32), bulbGlassMat);
-            glassNeck.position.set(0, 0, 0); bulbGroup.add(glassNeck);
+            const glassSphere = new THREE.Mesh(new THREE.SphereGeometry(0.8, 32, 32), bulbGlassMat); glassSphere.position.set(0, 0.6, 0); bulbGroup.add(glassSphere);
+            const glassNeck = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.7, 0.8, 32), bulbGlassMat); glassNeck.position.set(0, 0, 0); bulbGroup.add(glassNeck);
             
             filamentMat = new THREE.MeshLambertMaterial({ color: 0x555555, emissive: 0xff3300, emissiveIntensity: 0 });
-            const post1 = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.8), filamentMat);
-            post1.position.set(-0.2, 0.2, 0); bulbGroup.add(post1);
-            const post2 = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.8), filamentMat);
-            post2.position.set(0.2, 0.2, 0); bulbGroup.add(post2);
-            const wire = new THREE.Mesh(new THREE.TorusGeometry(0.2, 0.02, 8, 16, Math.PI), filamentMat);
-            wire.position.set(0, 0.6, 0); wire.rotation.z = Math.PI; bulbGroup.add(wire);
+            const post1 = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.8), filamentMat); post1.position.set(-0.2, 0.2, 0); bulbGroup.add(post1);
+            const post2 = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.8), filamentMat); post2.position.set(0.2, 0.2, 0); bulbGroup.add(post2);
+            const wire = new THREE.Mesh(new THREE.TorusGeometry(0.2, 0.02, 8, 16, Math.PI), filamentMat); wire.position.set(0, 0.6, 0); wire.rotation.z = Math.PI; bulbGroup.add(wire);
             loadGroup.add(bulbGroup);
 
-            // 2. 儀表板模型 (V/A)
+            // 2. 儀表板模型
             meterGroup = new THREE.Group();
             const meterBox = new THREE.Mesh(new THREE.BoxGeometry(2.0, 1.8, 0.6), new THREE.MeshLambertMaterial({color: 0x222222, transparent: true, opacity: 0.4}));
             meterBox.position.set(0, 0, 0); meterGroup.add(meterBox);
             const dial = new THREE.Mesh(new THREE.PlaneGeometry(1.8, 1.2), new THREE.MeshBasicMaterial({color: 0xffffff, transparent: true, opacity: 0.7, side: THREE.DoubleSide}));
             dial.position.set(0, 0.1, 0.31); meterGroup.add(dial);
             
-            meterSpriteV = createTextSprite('V', '#000000', 80);
-            meterSpriteV.position.set(0, -0.2, 0.32); meterSpriteV.scale.set(0.8, 0.8, 1); meterGroup.add(meterSpriteV);
-            
-            meterSpriteA = createTextSprite('A', '#000000', 80);
-            meterSpriteA.position.set(0, -0.2, 0.32); meterSpriteA.scale.set(0.8, 0.8, 1); meterGroup.add(meterSpriteA);
+            const vText = mode === 'DC' ? 'V (DC)' : 'V (AC)';
+            const aText = mode === 'DC' ? 'A (DC)' : 'A (AC)';
+            meterSpriteV = createTextSprite(vText, '#000000', 60); meterSpriteV.position.set(0, -0.2, 0.32); meterSpriteV.scale.set(0.8, 0.8, 1); meterGroup.add(meterSpriteV);
+            meterSpriteA = createTextSprite(aText, '#000000', 60); meterSpriteA.position.set(0, -0.2, 0.32); meterSpriteA.scale.set(0.8, 0.8, 1); meterGroup.add(meterSpriteA);
 
-            meterNeedle = new THREE.Mesh(new THREE.PlaneGeometry(0.06, 1.0), new THREE.MeshBasicMaterial({color: 0xff0000, side: THREE.DoubleSide}));
-            meterNeedle.position.set(0, 0.5, 0.35); 
-            const pivot = new THREE.Group();
-            pivot.position.set(0, -0.4, 0);
-            pivot.add(meterNeedle);
-            meterGroup.add(pivot);
-            meterGroup.pivot = pivot; 
+            if (mode === 'DC') {
+                const textZero = createTextSprite('0', '#000000', 50); textZero.position.set(-0.6, 0.45, 0.32); textZero.scale.set(0.5, 0.5, 1); meterGroup.add(textZero);
+                const textMax = createTextSprite('Max', '#000000', 50); textMax.position.set(0.6, 0.45, 0.32); textMax.scale.set(0.5, 0.5, 1); meterGroup.add(textMax);
+                meterNeedle = new THREE.Mesh(new THREE.PlaneGeometry(0.04, 0.9), new THREE.MeshBasicMaterial({color: 0xff0000, side: THREE.DoubleSide}));
+                meterNeedle.position.set(0, 0.45, 0.35); 
+                const pivot = new THREE.Group(); pivot.position.set(-0.6, -0.4, 0); // 樞紐在左側
+                meterNeedle.position.set(0.6, 0.85, 0.35); // 調整指針相對位置
+                pivot.add(meterNeedle); meterGroup.add(pivot); meterGroup.pivot = pivot;
+            } else {
+                const tickCenter = new THREE.Mesh(new THREE.PlaneGeometry(0.04, 0.15), new THREE.MeshBasicMaterial({color: 0x000000, side: THREE.DoubleSide}));
+                tickCenter.position.set(0, 0.6, 0.32); meterGroup.add(tickCenter);
+                const textZero = createTextSprite('0', '#000000', 50); textZero.position.set(0, 0.45, 0.32); textZero.scale.set(0.5, 0.5, 1); meterGroup.add(textZero);
+                const textMinus = createTextSprite('-', '#000000', 60); textMinus.position.set(-0.6, 0.45, 0.32); textMinus.scale.set(0.5, 0.5, 1); meterGroup.add(textMinus);
+                const textPlus = createTextSprite('+', '#000000', 60); textPlus.position.set(0.6, 0.45, 0.32); textPlus.scale.set(0.5, 0.5, 1); meterGroup.add(textPlus);
+                meterNeedle = new THREE.Mesh(new THREE.PlaneGeometry(0.04, 0.9), new THREE.MeshBasicMaterial({color: 0xff0000, side: THREE.DoubleSide}));
+                meterNeedle.position.set(0, 0.45, 0.35); 
+                const pivot = new THREE.Group(); pivot.position.set(0, -0.4, 0); // 樞紐在中心
+                pivot.add(meterNeedle); meterGroup.add(pivot); meterGroup.pivot = pivot; 
+            }
             loadGroup.add(meterGroup);
         }
 
-        function initPaths() {
+        function initPaths(mode) {
+            const zPosL = mode === 'DC' ? 4.0 : 2.0; 
+            const zPosR = mode === 'DC' ? 4.0 : 3.2; 
+            const leadX = 0.7;
+
             const armaturePoints = [
-                new THREE.Vector3(-0.7, 0, 4.0), new THREE.Vector3(-0.7, 0, 1.0), 
+                new THREE.Vector3(mode==='DC' ? -leadX : -0.65, 0, zPosL), 
+                new THREE.Vector3(-0.7, 0, 1.0), 
                 new THREE.Vector3(-1.8, 0, 1.0), new THREE.Vector3(-1.8, 0, -5.0),
                 new THREE.Vector3(1.8, 0, -5.0), new THREE.Vector3(1.8, 0, 1.0),  
-                new THREE.Vector3(0.7, 0, 1.0),  new THREE.Vector3(0.7, 0, 4.0)   
+                new THREE.Vector3(0.7, 0, 1.0),  new THREE.Vector3(mode==='DC' ? leadX : 0.3, 0, zPosR)
             ];
             armaturePathData = createPathData(armaturePoints);
 
-            const bulbY = -2.5, bulbZ = 6.5, zPos = 4.0;
+            const bulbY = -2.5, bulbZ = 6.5;
             const redWirePoints = [
                 new THREE.Vector3(-0.5, bulbY - 0.8, bulbZ), new THREE.Vector3(-4.0, bulbY - 0.8, bulbZ),
-                new THREE.Vector3(-4.0, -1.15, zPos), new THREE.Vector3(-2.0, -1.15, zPos) 
+                new THREE.Vector3(-4.0, -1.15, zPosL), new THREE.Vector3(-2.0, -1.15, zPosL) 
             ];
             redWirePathData = createPathData(redWirePoints);
 
             const blueWirePoints = [
-                new THREE.Vector3(2.0, -1.15, zPos), new THREE.Vector3(4.0, -1.15, zPos),
+                new THREE.Vector3(2.0, -1.15, zPosR), new THREE.Vector3(4.0, -1.15, zPosR),
                 new THREE.Vector3(4.0, bulbY - 0.8, bulbZ), new THREE.Vector3(0.5, bulbY - 0.8, bulbZ)   
             ];
             blueWirePathData = createPathData(blueWirePoints);
@@ -918,7 +885,6 @@
                 const group = new THREE.Group();
                 const bodyMat = new THREE.MeshLambertMaterial({ color: 0xffff00 });
                 const body = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 1.8, 16), bodyMat);
-                
                 const sideMat = new THREE.MeshLambertMaterial({ color: 0xffff00 });
                 const baseMat = new THREE.MeshLambertMaterial({ color: 0xaa2200 });
                 const head = new THREE.Mesh(new THREE.ConeGeometry(0.25, 0.6, 16), [sideMat, baseMat]);
@@ -939,12 +905,12 @@
                 const mesh = createArrowMesh(); mesh.userData.t = i / 22; 
                 armatureParticles.push(mesh); currentGroup.add(mesh);
             }
-            redWireCurrentGroup = new THREE.Group(); scene.add(redWireCurrentGroup);
+            redWireCurrentGroup = new THREE.Group(); dynamicSystemGroup.add(redWireCurrentGroup);
             for (let i = 0; i < 8; i++) {
                 const mesh = createArrowMesh(); mesh.userData.t = i / 8; 
                 redParticles.push(mesh); redWireCurrentGroup.add(mesh);
             }
-            blueWireCurrentGroup = new THREE.Group(); scene.add(blueWireCurrentGroup);
+            blueWireCurrentGroup = new THREE.Group(); dynamicSystemGroup.add(blueWireCurrentGroup);
             for (let i = 0; i < 8; i++) {
                 const mesh = createArrowMesh(); mesh.userData.t = i / 8; 
                 blueParticles.push(mesh); blueWireCurrentGroup.add(mesh);
@@ -957,7 +923,7 @@
             const mesh = new THREE.Mesh(geo, material);
             mesh.position.copy(end.clone().add(start).divideScalar(2));
             mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), end.clone().sub(start).normalize());
-            scene.add(mesh);
+            dynamicSystemGroup.add(mesh);
         }
 
         function createTextSprite(text, color, size) {
@@ -986,10 +952,7 @@
                 if (currentD + pathData.lengths[i] >= targetD || i === pathData.lengths.length - 1) {
                     let segmentT = (targetD - currentD) / pathData.lengths[i];
                     let p1 = pathData.points[i], p2 = pathData.points[i+1];
-                    return { 
-                        point: new THREE.Vector3().lerpVectors(p1, p2, segmentT), 
-                        tangent: new THREE.Vector3().subVectors(p2, p1).normalize() 
-                    };
+                    return { point: new THREE.Vector3().lerpVectors(p1, p2, segmentT), tangent: new THREE.Vector3().subVectors(p2, p1).normalize() };
                 }
                 currentD += pathData.lengths[i];
             }
@@ -1063,50 +1026,39 @@
             }
         }
 
-        // --- 繪製示波器 (DC Output) ---
-        function drawOscilloscope(currentMag, unit) {
+        // --- 繪製示波器 (DC 或 AC Output) ---
+        function drawOscilloscope(currentValue, unit, mode) {
             const canvas = document.getElementById('osc-canvas');
             const ctx = canvas.getContext('2d');
             const w = canvas.width, h = canvas.height;
+            const zeroY = h / 2; // 基準皆在中央
             
             ctx.clearRect(0, 0, w, h);
             
-            ctx.strokeStyle = 'rgba(0, 255, 0, 0.15)';
-            ctx.lineWidth = 1;
-            ctx.beginPath();
+            ctx.strokeStyle = 'rgba(0, 255, 0, 0.15)'; ctx.lineWidth = 1; ctx.beginPath();
             for(let i = 10; i < h; i += 20) { ctx.moveTo(0, i); ctx.lineTo(w, i); }
             for(let i = 0; i < w; i += 20) { ctx.moveTo(i, 0); ctx.lineTo(i, h); }
             ctx.stroke();
 
-            const zeroY = h - 15;
-            ctx.strokeStyle = 'rgba(0, 255, 0, 0.6)';
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.moveTo(0, zeroY); ctx.lineTo(w, zeroY);
-            ctx.stroke();
+            ctx.strokeStyle = 'rgba(0, 255, 0, 0.6)'; ctx.lineWidth = 2; ctx.beginPath();
+            ctx.moveTo(0, zeroY); ctx.lineTo(w, zeroY); ctx.stroke();
+            
+            ctx.fillStyle = 'rgba(0, 255, 0, 0.8)'; ctx.font = '10px monospace'; ctx.fillText('0', 5, zeroY - 5);
 
-            ctx.strokeStyle = '#00ff00';
-            ctx.lineWidth = 2;
-            ctx.beginPath();
+            ctx.strokeStyle = '#00ff00'; ctx.lineWidth = 2; ctx.beginPath();
             for (let i = 0; i < oscData.length; i++) {
-                let x = i;
-                let val = oscData[i];
-                let y = zeroY - (val * 40); 
-                if (i === 0) ctx.moveTo(x, y);
-                else ctx.lineTo(x, y);
+                let x = i; let val = oscData[i];
+                let y = mode === 'DC' ? (zeroY - val * 40) : (zeroY - val * 25); 
+                if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
             }
             ctx.stroke();
 
             if (oscData.length > 0) {
                 let lastX = oscData.length - 1;
-                let lastY = zeroY - (oscData[lastX] * 40);
-                ctx.fillStyle = '#ff0000';
-                ctx.beginPath();
-                ctx.arc(lastX, lastY, 3.5, 0, Math.PI * 2);
-                ctx.fill();
+                let lastY = mode === 'DC' ? (zeroY - oscData[lastX] * 40) : (zeroY - oscData[lastX] * 25);
+                ctx.fillStyle = '#ff0000'; ctx.beginPath(); ctx.arc(lastX, lastY, 3.5, 0, Math.PI * 2); ctx.fill();
             }
-
-            document.getElementById('osc-val').innerText = currentMag.toFixed(2) + ' ' + unit;
+            document.getElementById('osc-val').innerText = currentValue.toFixed(2) + ' ' + unit;
         }
 
         // --- 繪製磁通量示波器 (Flux & Rate of Change) ---
@@ -1118,75 +1070,44 @@
             
             ctx.clearRect(0, 0, w, h);
             
-            ctx.strokeStyle = 'rgba(0, 170, 255, 0.15)';
-            ctx.lineWidth = 1;
-            ctx.beginPath();
+            ctx.strokeStyle = 'rgba(0, 170, 255, 0.15)'; ctx.lineWidth = 1; ctx.beginPath();
             for(let i = 10; i < h; i += 20) { ctx.moveTo(0, i); ctx.lineTo(w, i); }
             for(let i = 0; i < w; i += 20) { ctx.moveTo(i, 0); ctx.lineTo(i, h); }
             ctx.stroke();
 
-            ctx.strokeStyle = 'rgba(0, 170, 255, 0.6)';
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.moveTo(0, zeroY); ctx.lineTo(w, zeroY);
-            ctx.stroke();
+            ctx.strokeStyle = 'rgba(0, 170, 255, 0.6)'; ctx.lineWidth = 2; ctx.beginPath();
+            ctx.moveTo(0, zeroY); ctx.lineTo(w, zeroY); ctx.stroke();
             
-            ctx.fillStyle = 'rgba(0, 170, 255, 0.8)';
-            ctx.font = '10px monospace';
-            ctx.fillText('0', 5, zeroY - 5);
+            ctx.fillStyle = 'rgba(0, 170, 255, 0.8)'; ctx.font = '10px monospace'; ctx.fillText('0', 5, zeroY - 5);
 
-            // 1. 繪製磁通量 Φ 波形 (藍色虛線)
-            ctx.strokeStyle = '#00aaff';
-            ctx.lineWidth = 1.5;
-            ctx.setLineDash([4, 4]); 
-            ctx.beginPath();
+            // 1. 磁通量 Φ (藍色虛線)
+            ctx.strokeStyle = '#00aaff'; ctx.lineWidth = 1.5; ctx.setLineDash([4, 4]); ctx.beginPath();
             for (let i = 0; i < oscFluxData.length; i++) {
-                let x = i;
-                let val = oscFluxData[i];
-                let y = zeroY - (val * 40); 
-                if (i === 0) ctx.moveTo(x, y);
-                else ctx.lineTo(x, y);
+                let x = i; let val = oscFluxData[i]; let y = zeroY - (val * 40); 
+                if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
             }
-            ctx.stroke();
-            ctx.setLineDash([]); 
+            ctx.stroke(); ctx.setLineDash([]); 
 
             if (oscFluxData.length > 0) {
-                let lastX = oscFluxData.length - 1;
-                let lastY = zeroY - (oscFluxData[lastX] * 40);
-                ctx.fillStyle = '#00aaff';
-                ctx.beginPath();
-                ctx.arc(lastX, lastY, 3, 0, Math.PI * 2);
-                ctx.fill();
+                let lastX = oscFluxData.length - 1; let lastY = zeroY - (oscFluxData[lastX] * 40);
+                ctx.fillStyle = '#00aaff'; ctx.beginPath(); ctx.arc(lastX, lastY, 3, 0, Math.PI * 2); ctx.fill();
             }
 
-            // 2. 繪製磁通量變化率 dΦ/dt 波形 (橘色實線)
-            ctx.strokeStyle = '#ffaa00';
-            ctx.lineWidth = 2;
-            ctx.beginPath();
+            // 2. 磁通量變化率 dΦ/dt (橘色實線)
+            ctx.strokeStyle = '#ffaa00'; ctx.lineWidth = 2; ctx.beginPath();
             for (let i = 0; i < oscDerivData.length; i++) {
-                let x = i;
-                let val = oscDerivData[i];
-                let y = zeroY - (val * 25); 
-                if (i === 0) ctx.moveTo(x, y);
-                else ctx.lineTo(x, y);
+                let x = i; let val = oscDerivData[i]; let y = zeroY - (val * 25); 
+                if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
             }
             ctx.stroke();
 
             if (oscDerivData.length > 0) {
-                let lastX = oscDerivData.length - 1;
-                let lastY = zeroY - (oscDerivData[lastX] * 25);
-                ctx.fillStyle = '#ffaa00';
-                ctx.beginPath();
-                ctx.arc(lastX, lastY, 3.5, 0, Math.PI * 2);
-                ctx.fill();
+                let lastX = oscDerivData.length - 1; let lastY = zeroY - (oscDerivData[lastX] * 25);
+                ctx.fillStyle = '#ffaa00'; ctx.beginPath(); ctx.arc(lastX, lastY, 3.5, 0, Math.PI * 2); ctx.fill();
             }
 
-            // 圖例
-            ctx.fillStyle = '#00aaff';
-            ctx.fillText('Φ (磁通量)', 5, 15);
-            ctx.fillStyle = '#ffaa00';
-            ctx.fillText('dΦ/dt (變化率)', 85, 15);
-
+            ctx.fillStyle = '#00aaff'; ctx.fillText('Φ (磁通量)', 5, 15);
+            ctx.fillStyle = '#ffaa00'; ctx.fillText('dΦ/dt (變化率)', 85, 15);
             let currentFlux = oscFluxData.length > 0 ? Math.abs(oscFluxData[oscFluxData.length - 1]) : 0;
             document.getElementById('flux-val').innerText = currentFlux.toFixed(2) + ' Wb';
         }
@@ -1226,51 +1147,62 @@
                 commutatorDir = -1; 
             }
 
-            let internalCurrentMag = Math.cos(armatureAngle) * effectiveSpeed * bFieldMultiplier;
-            let externalCurrentMag = Math.abs(internalCurrentMag);
-            let actualCoilDir = Math.sign(internalCurrentMag) || 1;
+            // 基礎感應電流
+            let internalCurrentValue = Math.cos(armatureAngle) * effectiveSpeed * bFieldMultiplier;
+            // 根據模式決定外部電流 (DC 經過換向器取絕對值，AC 保持原樣)
+            let externalCurrentValue = currentMode === 'DC' ? Math.abs(internalCurrentValue) : internalCurrentValue; 
+            let absCurrentMag = Math.abs(externalCurrentValue);
+
+            // 線圈內部電流方向
+            let actualCoilDir = Math.sign(internalCurrentValue) || 1;
             if (effectiveSpeed === 0 || bFieldMultiplier === 0) actualCoilDir = 1; 
 
-            // --- 資料陣列更新紀錄 (確保背景運作) ---
+            // --- 資料陣列更新紀錄 ---
             let scopePaused = isManual ? false : isPaused;
             if (!scopePaused) {
-                oscData.push(externalCurrentMag);
+                oscData.push(externalCurrentValue);
                 if (oscData.length > 280) oscData.shift();
                 
                 oscFluxData.push(Math.sin(armatureAngle));
                 if (oscFluxData.length > 280) oscFluxData.shift();
 
-                oscDerivData.push(internalCurrentMag);
+                oscDerivData.push(internalCurrentValue);
                 if (oscDerivData.length > 280) oscDerivData.shift();
             }
 
-            // --- 磁通量視覺化 (3D 平面與法向量) ---
+            // --- 磁通量視覺化 ---
             if (fluxPlane && fluxPlane.visible) {
                 let fluxMag = Math.abs(Math.sin(armatureAngle));
                 fluxPlane.material.opacity = 0.1 + 0.5 * fluxMag;
                 fluxNormalArrow.setLength(0.5 + 2.5 * fluxMag, 0.3, 0.2);
             }
 
-            // --- 負載顯示切換與數值更新 ---
+            // --- 負載顯示與儀表更新 ---
             const loadType = document.getElementById('select-load').value;
             bulbGroup.visible = (loadType === 'bulb');
             meterGroup.visible = (loadType !== 'bulb');
 
             if (loadType === 'bulb') {
-                if (bulbGlassMat) bulbGlassMat.emissiveIntensity = externalCurrentMag * 1.5;
-                if (filamentMat) filamentMat.emissiveIntensity = externalCurrentMag * 2.5;
+                if (bulbGlassMat) bulbGlassMat.emissiveIntensity = absCurrentMag * 1.5;
+                if (filamentMat) filamentMat.emissiveIntensity = absCurrentMag * 2.5;
             } else if (meterGroup.visible) {
                 meterSpriteV.visible = (loadType === 'voltmeter');
                 meterSpriteA.visible = (loadType === 'ammeter');
+                
                 let needleMax = Math.PI / 3;
-                let targetRot = (Math.PI / 4) - (externalCurrentMag * needleMax); 
+                let targetRot;
+                if (currentMode === 'DC') {
+                    targetRot = -(externalCurrentValue / 2.0) * needleMax; // 從左側樞紐向右轉
+                } else {
+                    targetRot = -(externalCurrentValue / 2.0) * needleMax; // 從中心樞紐左右擺
+                }
                 meterGroup.pivot.rotation.z += (targetRot - meterGroup.pivot.rotation.z) * 0.2;
             }
 
             // --- 繪製獨立示波器面板 ---
             if (document.getElementById('chk-osc').checked) {
                 let displayUnit = (loadType === 'ammeter') ? 'A' : 'V';
-                drawOscilloscope(externalCurrentMag, displayUnit);
+                drawOscilloscope(externalCurrentValue, displayUnit, currentMode);
             }
             if (document.getElementById('chk-flux').checked) {
                 drawFluxOscilloscope();
@@ -1281,9 +1213,8 @@
                 let showInduced = document.getElementById('chk-induced-b').checked && (Math.abs(effectiveSpeed) > 0 && bFieldMultiplier !== 0);
                 coilBFieldGroup.visible = showInduced;
                 if (showInduced) {
-                    let bMag = Math.abs(internalCurrentMag);
-                    coilBFieldGroup.rotation.x = (actualCoilDir === 1) ? 0 : Math.PI; 
-                    let displayScale = Math.max(bMag, 0.05); 
+                    coilBFieldGroup.rotation.x = (Math.sign(internalCurrentValue) >= 0) ? 0 : Math.PI; 
+                    let displayScale = Math.max(absCurrentMag, 0.05); 
                     coilBFieldGroup.scale.set(displayScale, displayScale, displayScale);
                 }
             }
@@ -1313,15 +1244,11 @@
                     const scaleR = effectiveBScale(rightWorldPos);
                     const bDisplayBase = 3.0;
 
-                    if (scaleL > 0.02) {
-                        leftB.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), bLeftVec.clone().normalize());
-                        leftB.setLength(bDisplayBase * scaleL);
-                    } else leftB.setLength(0);
+                    if (scaleL > 0.02) { leftB.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), bLeftVec.clone().normalize()); leftB.setLength(bDisplayBase * scaleL); } 
+                    else leftB.setLength(0);
 
-                    if (scaleR > 0.02) {
-                        rightB.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), bRightVec.clone().normalize());
-                        rightB.setLength(bDisplayBase * scaleR);
-                    } else rightB.setLength(0);
+                    if (scaleR > 0.02) { rightB.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), bRightVec.clone().normalize()); rightB.setLength(bDisplayBase * scaleR); } 
+                    else rightB.setLength(0);
 
                     let theta = armatureAngle;
                     let vMag = Math.abs(effectiveSpeed) * 1.5; 
@@ -1331,10 +1258,8 @@
                     let vLeftDirWorld = vRightDirWorld.clone().negate();
 
                     if (vMag > 0.05) {
-                        leftV.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), vLeftDirWorld);
-                        leftV.setLength(vMag);
-                        rightV.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), vRightDirWorld);
-                        rightV.setLength(vMag);
+                        leftV.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), vLeftDirWorld); leftV.setLength(vMag);
+                        rightV.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), vRightDirWorld); rightV.setLength(vMag);
                     } else {
                         leftV.setLength(0); rightV.setLength(0);
                     }
@@ -1376,27 +1301,34 @@
             // 更新動態電流流動 
             if (currentGroup && currentGroup.visible) {
                 let hasCurrent = (Math.abs(effectiveSpeed) > 0 && bFieldMultiplier !== 0); 
-                
-                let extCurrentDir = Math.sign(effectiveSpeed * bFieldMultiplier) || 1;
-                let extFlowMag = (isPaused && !isManual) ? 0 : currentSpeedBase * externalCurrentMag * 15; 
-                let wireFlowVelocity = -extCurrentDir * extFlowMag;
+                let wireFlowVelocity;
+
+                if (currentMode === 'DC') {
+                    // DC 模式：外部導線方向恆定
+                    let extCurrentDir = Math.sign(effectiveSpeed * bFieldMultiplier) || 1;
+                    let extFlowMag = (isPaused && !isManual) ? 0 : currentSpeedBase * externalCurrentValue * 15; 
+                    wireFlowVelocity = -extCurrentDir * extFlowMag;
+                } else {
+                    // AC 模式：外部導線方向隨線圈交流變化
+                    wireFlowVelocity = (isPaused && !isManual) ? 0 : -internalCurrentValue * currentSpeedBase * 15; 
+                }
                 
                 redParticles.forEach(p => {
                     if(!isPaused || isManual) p.userData.t += wireFlowVelocity * 0.02; 
                     let { point, tangent } = getPointAndTangentOnPath(p.userData.t, redWirePathData);
                     if (wireFlowVelocity < 0) tangent.negate(); 
                     p.position.copy(point); p.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), tangent);
-                    p.visible = hasCurrent && externalCurrentMag > 0.05;
+                    p.visible = hasCurrent && absCurrentMag > 0.05;
                 });
                 blueParticles.forEach(p => {
                     if(!isPaused || isManual) p.userData.t += wireFlowVelocity * 0.02;
                     let { point, tangent } = getPointAndTangentOnPath(p.userData.t, blueWirePathData);
                     if (wireFlowVelocity < 0) tangent.negate(); 
                     p.position.copy(point); p.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), tangent);
-                    p.visible = hasCurrent && externalCurrentMag > 0.05;
+                    p.visible = hasCurrent && absCurrentMag > 0.05;
                 });
 
-                let armFlowMag = (isPaused && !isManual) ? 0 : currentSpeedBase * Math.abs(internalCurrentMag) * 15;
+                let armFlowMag = (isPaused && !isManual) ? 0 : currentSpeedBase * Math.abs(internalCurrentValue) * 15;
                 let coilFlowVelocity = -actualCoilDir * armFlowMag;
 
                 armatureParticles.forEach(p => {
@@ -1404,19 +1336,20 @@
                     let { point, tangent } = getPointAndTangentOnPath(p.userData.t, armaturePathData);
                     if (coilFlowVelocity < 0) tangent.negate(); 
                     p.position.copy(point); p.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), tangent);
-                    p.visible = hasCurrent && Math.abs(internalCurrentMag) > 0.05;
+                    p.visible = hasCurrent && absCurrentMag > 0.05;
                 });
 
+                // --- 修正：懸浮大箭頭方向，嚴格遵守右手開掌定則 (+Z / -Z) ---
                 if (actualCoilDir === 1) {
-                    floatingArrowLeft.rotation.x = -Math.PI / 2;  
-                    floatingArrowRight.rotation.x = Math.PI / 2;   
+                    floatingArrowLeft.rotation.x = Math.PI / 2;   // 左側電流向外 (+Z, 指向觀眾)
+                    floatingArrowRight.rotation.x = -Math.PI / 2; // 右側電流向內 (-Z, 遠離觀眾)
                 } else {
-                    floatingArrowLeft.rotation.x = Math.PI / 2;   
-                    floatingArrowRight.rotation.x = -Math.PI / 2; 
+                    floatingArrowLeft.rotation.x = -Math.PI / 2;  // 左側電流向內
+                    floatingArrowRight.rotation.x = Math.PI / 2;  // 右側電流向外
                 }
                 
-                floatingArrowLeft.visible = hasCurrent && Math.abs(internalCurrentMag) > 0.05;
-                floatingArrowRight.visible = hasCurrent && Math.abs(internalCurrentMag) > 0.05;
+                floatingArrowLeft.visible = hasCurrent && absCurrentMag > 0.05;
+                floatingArrowRight.visible = hasCurrent && absCurrentMag > 0.05;
             }
 
             controls.update();
