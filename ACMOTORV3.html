@@ -1,0 +1,940 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>交流同步馬達 (AC Motor) 3D 互動模擬</title>
+    <style>
+        body {
+            margin: 0; overflow: hidden; background-color: #E6E6E6;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #333;
+        }
+        #canvas-container { width: 100vw; height: 100vh; display: block; }
+        
+        #info-panel {
+            position: absolute; top: 15px; left: 15px; background: rgba(255, 255, 255, 0.95);
+            padding: 15px 20px; border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            border-left: 4px solid #3498db; z-index: 10; max-width: 340px;
+        }
+        #info-toggle { margin: 0 0 8px 0; font-size: 16px; color: #333; cursor: pointer; display: flex; justify-content: space-between; align-items: center; user-select: none; }
+        p { margin: 0; font-size: 12px; color: #555; line-height: 1.5; }
+        
+        /* 下方控制列樣式 (新增可收合機制) */
+        #ui-container {
+            position: absolute; bottom: 0; left: 50%; transform: translateX(-50%);
+            background: rgba(255, 255, 255, 0.95); padding: 15px 20px; 
+            border-radius: 12px 12px 0 0; /* 僅上方圓角 */
+            box-shadow: 0 -2px 10px rgba(0,0,0,0.15); display: flex; flex-wrap: wrap; 
+            justify-content: center; align-items: center; gap: 10px; font-size: 13px;
+            font-weight: bold; border: 1px solid #ccc; border-bottom: none;
+            width: 95%; max-width: 1150px; z-index: 10;
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        /* 控制列收合狀態 */
+        #ui-container.collapsed {
+            transform: translate(-50%, 100%);
+        }
+        /* 控制列收合標籤 (置於控制列正上方外側) */
+        #ui-toggle-tab {
+            position: absolute; top: -28px; left: 50%; transform: translateX(-50%);
+            background: rgba(255, 255, 255, 0.95); padding: 4px 20px;
+            border-radius: 8px 8px 0 0; border: 1px solid #ccc; border-bottom: none;
+            cursor: pointer; font-weight: bold; font-size: 12px; color: #333;
+            box-shadow: 0 -2px 5px rgba(0,0,0,0.1); user-select: none;
+            transition: background 0.2s;
+        }
+        #ui-toggle-tab:hover { background: #f0f0f0; }
+
+        .control-group {
+            display: flex; align-items: center; gap: 4px; cursor: pointer;
+            padding: 4px 6px; border-radius: 4px; transition: background 0.2s; user-select: none;
+        }
+        .control-group:hover { background: #f0f0f0; }
+        .control-group input[type="checkbox"] { width: 15px; height: 15px; cursor: pointer; }
+        .btn-action {
+            background: #e2e3e5; border: 1px solid #d6d8db; font-weight: bold; 
+            cursor: pointer; padding: 5px 10px; border-radius: 4px; font-size: 12px;
+        }
+        .btn-action:hover { background: #d2d3d5; }
+        .divider { width: 2px; height: 20px; background: #ccc; margin: 0 4px; }
+
+        /* 手轉大圓盤樣式 */
+        #manual-wheel-container {
+            display: none; position: absolute; top: 50%; left: 50%;
+            transform: translate(-50%, -50%); width: 360px; height: 360px; z-index: 5;
+        }
+        #manual-wheel {
+            width: 100%; height: 100%; border-radius: 50%; background: rgba(52, 152, 219, 0.05);
+            border: 4px dashed rgba(52, 152, 219, 0.6); cursor: grab; position: relative;
+            touch-action: none; box-sizing: border-box;
+        }
+        #manual-wheel:active { cursor: grabbing; }
+        #manual-wheel-center {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            width: 16px; height: 16px; background: rgba(52, 152, 219, 0.5); border-radius: 50%;
+        }
+        #manual-wheel .handle {
+            position: absolute; top: -15px; left: 50%; transform: translateX(-50%);
+            width: 30px; height: 30px; background: rgba(52, 152, 219, 0.9);
+            border-radius: 50%; box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+        }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+
+    <div id="info-panel">
+        <h1 id="info-toggle">交流同步馬達 (AC Motor) <span id="info-icon">▼</span></h1>
+        <div id="info-content" style="display: none;">
+            <p>✅ <b>雙集電環 (Slip Rings)</b>：線圈永遠連通同一端導線，無機械換向器。<br>
+               ✅ <b>智慧同步相位</b>：【自動旋轉】時，電池會精準等待線圈到達死點，再瞬間翻轉極性！<br>
+               ✅ <b>單擺效應</b>：取消自動，使用【切換極性】改變相位，馬達會像單擺一樣「鎖死」在特定角度。<br>
+               ✅ <b>電樞極性 (N/S)</b>：觀察電樞如何成為電磁鐵，與外部磁鐵產生同性相斥、異性相吸。<br>
+               💡 <i>啟動秘訣：先手動「切換極性」讓馬達擺動起來，等速度抓對了再點擊開始模擬與自動旋轉！</i></p>
+        </div>
+    </div>
+
+    <div id="canvas-container"></div>
+
+    <div id="ui-container">
+        <!-- 控制列收合按鈕 -->
+        <div id="ui-toggle-tab">▼ 隱藏控制列</div>
+
+        <!-- 電源與相位控制區 -->
+        <label class="control-group" style="background: #fff3cd; border: 1px solid #ffe69c;">
+            ⚡ 電壓:
+            <input type="range" id="slider-voltage" min="0" max="2" step="0.1" value="1" style="width: 50px; margin: 0 4px;">
+            <span id="voltage-val" style="display:inline-block; width: 20px; text-align: right;">1.0</span>V
+        </label>
+        
+        <div class="divider"></div>
+
+        <label class="control-group" style="background: #e8f4f8; border: 1px solid #bce8f1; color: #0077aa;">
+            <input type="checkbox" id="chk-auto-ac" checked> 🔄 自動同步相位
+        </label>
+        
+        <button id="btn-rev-battery" class="btn-action" style="background: #ffecd9; border-color: #f39c12; color: #d35400;">🔄 切換極性</button>
+        <button id="btn-reset-battery" class="btn-action" style="color: #555;">⏮ 復位</button>
+
+        <!-- 同步磁極切換區 -->
+        <div class="divider"></div>
+        <button id="btn-rev-left" class="btn-action" style="color: #ff0000;">左磁鐵 (N)</button>
+        <button id="btn-rev-both" class="btn-action" style="color: #800080;" title="同時翻轉兩側磁鐵">🔄 同步切換磁極</button>
+        <button id="btn-rev-right" class="btn-action" style="color: #0000ff;">右磁鐵 (S)</button>
+        <div class="divider"></div>
+
+        <!-- 顯示切換區 -->
+        <label class="control-group" style="color: #0000bb;"><input type="checkbox" id="chk-magnets" checked> 磁鐵</label>
+        <label class="control-group" style="color: #654321;"><input type="checkbox" id="chk-armature" checked> 電樞</label>
+        <label class="control-group" style="color: #ff8800; background: #fff5e6; border: 1px solid #ffcc88;"><input type="checkbox" id="chk-armature-poles" checked> <b>電樞極性(N/S)</b></label>
+        <label class="control-group" style="color: #22bb22;"><input type="checkbox" id="chk-bfield-magnet"> 場磁力線</label>
+        <label class="control-group" style="color: #b8860b;"><input type="checkbox" id="chk-current"> 電流</label>
+        <label class="control-group" style="color: #cc0000;"><input type="checkbox" id="chk-rhr"> 開掌定則(I,B,F)</label>
+        <div class="divider"></div>
+        
+        <!-- 運轉控制區 -->
+        <button id="btn-play-pause" class="btn-action" style="background: #d4edda; border-color: #c3e6cb; color: #155724; font-size: 14px;">▶️ 開始模擬</button>
+        <button id="btn-step-bwd" class="btn-action" title="倒退 15 度">⏪</button>
+        <button id="btn-step-fwd" class="btn-action" title="前進 15 度">⏩</button>
+    </div>
+
+    <script>
+        let scene, camera, renderer, controls;
+        let magnetGroup, leftMagnet, rightMagnet;
+        
+        let systemGroup; 
+        let armatureGroup, armatureMeshGroup, batteryGroup; 
+        
+        let currentGroup, redWireCurrentGroup, blueWireCurrentGroup;
+        let floatingArrowLeft, floatingArrowRight;
+        
+        let rhrGroup, leftF, leftB, leftI, rightF, rightB, rightI;
+        let coilBFieldGroup, textN_Arm, textS_Arm;
+
+        let magnetBFieldGroup;
+        let staticCurveGeometries = [];
+        const magnetBParticles = []; 
+        const STATIC_CURVE_POINTS = 50;
+
+        let armaturePathData, redWirePathData, blueWirePathData;
+        const armatureParticles = [];
+        const redParticles = [];
+        const blueParticles = [];
+
+        // 全局狀態
+        let voltageMultiplier = 1.0;
+        let leftMagRev = false;  
+        let rightMagRev = false; 
+
+        // 電池與相控狀態
+        let batteryAngle = 0; 
+        let targetBatteryAngle = 0;
+
+        // 物理引擎狀態
+        let isRunning = false; 
+        let armatureAngle = 3 * Math.PI / 180; 
+        let motorVelocity = 0; // 角速度
+        const currentSpeed = 0.01; // 粒子流速
+
+        init();
+        animate();
+
+        function init() {
+            const container = document.getElementById('canvas-container');
+
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color('#E6E6E6');
+
+            camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.1, 100);
+            camera.position.set(0, 15, 28);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            container.appendChild(renderer.domElement);
+
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.target.set(0, 0, 1);
+
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+            scene.add(ambientLight);
+            const dirLight = new THREE.DirectionalLight(0xffffff, 0.5);
+            dirLight.position.set(5, 10, 8);
+            scene.add(dirLight);
+
+            systemGroup = new THREE.Group();
+            scene.add(systemGroup);
+
+            buildMagnets(); 
+            buildMagneticFields(); 
+            
+            initPaths();
+            buildArmature(); 
+            buildBrushes();  
+            buildBatteryAndWires(); 
+            buildCurrentEffects(); 
+            buildRHR();
+            buildArmaturePolarity();
+
+            magnetBFieldGroup.visible = false;
+            
+            setupUIEvents();
+            updateVisibility();
+        }
+
+        function setupUIEvents() {
+            // 控制列收合事件
+            document.getElementById('ui-toggle-tab').addEventListener('click', (e) => {
+                const ui = document.getElementById('ui-container');
+                ui.classList.toggle('collapsed');
+                if (ui.classList.contains('collapsed')) {
+                    e.target.innerText = '▲ 顯示控制列';
+                } else {
+                    e.target.innerText = '▼ 隱藏控制列';
+                }
+            });
+
+            document.getElementById('slider-voltage').addEventListener('input', (e) => {
+                voltageMultiplier = parseFloat(e.target.value);
+                document.getElementById('voltage-val').innerText = voltageMultiplier.toFixed(1);
+            });
+
+            // 手動切換極性 (解除自動，並瞬間翻轉 180 度)
+            document.getElementById('btn-rev-battery').addEventListener('click', () => {
+                document.getElementById('chk-auto-ac').checked = false;
+                batteryAngle += Math.PI; 
+            });
+            
+            // 電池復位
+            document.getElementById('btn-reset-battery').addEventListener('click', () => {
+                document.getElementById('chk-auto-ac').checked = false;
+                batteryAngle = 0;
+                targetBatteryAngle = 0;
+                if (batteryGroup) batteryGroup.rotation.y = 0;
+            });
+
+            // 獨立磁極控制
+            document.getElementById('btn-rev-left').addEventListener('click', (e) => {
+                leftMagRev = !leftMagRev;
+                if(leftMagnet) leftMagnet.rotation.y = leftMagRev ? Math.PI : 0;
+                e.target.innerText = leftMagRev ? '左磁鐵 (S)' : '左磁鐵 (N)';
+                e.target.style.color = leftMagRev ? '#0000ff' : '#ff0000';
+            });
+            document.getElementById('btn-rev-right').addEventListener('click', (e) => {
+                rightMagRev = !rightMagRev;
+                if(rightMagnet) rightMagnet.rotation.y = rightMagRev ? Math.PI : 0;
+                e.target.innerText = rightMagRev ? '右磁鐵 (N)' : '右磁鐵 (S)';
+                e.target.style.color = rightMagRev ? '#ff0000' : '#0000ff';
+            });
+            
+            // 同步切換兩側磁極
+            document.getElementById('btn-rev-both').addEventListener('click', () => {
+                leftMagRev = !leftMagRev;
+                rightMagRev = !rightMagRev;
+
+                if(leftMagnet) leftMagnet.rotation.y = leftMagRev ? Math.PI : 0;
+                const btnLeft = document.getElementById('btn-rev-left');
+                btnLeft.innerText = leftMagRev ? '左磁鐵 (S)' : '左磁鐵 (N)';
+                btnLeft.style.color = leftMagRev ? '#0000ff' : '#ff0000';
+
+                if(rightMagnet) rightMagnet.rotation.y = rightMagRev ? Math.PI : 0;
+                const btnRight = document.getElementById('btn-rev-right');
+                btnRight.innerText = rightMagRev ? '右磁鐵 (N)' : '右磁鐵 (S)';
+                btnRight.style.color = rightMagRev ? '#ff0000' : '#0000ff';
+            });
+
+            // 播放/暫停按鈕控制
+            document.getElementById('btn-play-pause').addEventListener('click', (e) => {
+                isRunning = !isRunning;
+                if(isRunning) {
+                    e.target.innerText = '⏸ 暫停模擬';
+                    e.target.style.background = '#ffeeba'; e.target.style.borderColor = '#ffdf7e'; e.target.style.color = '#856404';
+                } else {
+                    e.target.innerText = '▶️ 開始模擬';
+                    e.target.style.background = '#d4edda'; e.target.style.borderColor = '#c3e6cb'; e.target.style.color = '#155724';
+                }
+            });
+
+            // 新增：步進/步退控制 (每次 15 度)
+            document.getElementById('btn-step-bwd').addEventListener('click', () => {
+                armatureAngle -= Math.PI / 12;
+            });
+            document.getElementById('btn-step-fwd').addEventListener('click', () => {
+                armatureAngle += Math.PI / 12;
+            });
+
+            // 說明面板收合控制
+            document.getElementById('info-toggle').addEventListener('click', () => {
+                const content = document.getElementById('info-content');
+                const icon = document.getElementById('info-icon');
+                if (content.style.display === 'none') {
+                    content.style.display = 'block'; icon.innerText = '▲';
+                } else {
+                    content.style.display = 'none'; icon.innerText = '▼';
+                }
+            });
+
+            // 顯示開關
+            document.getElementById('chk-current').addEventListener('change', updateVisibility);
+            document.getElementById('chk-rhr').addEventListener('change', updateVisibility);
+            document.getElementById('chk-magnets').addEventListener('change', (e) => magnetGroup.visible = e.target.checked);
+            document.getElementById('chk-armature').addEventListener('change', (e) => { if (armatureMeshGroup) armatureMeshGroup.visible = e.target.checked; });
+            document.getElementById('chk-bfield-magnet').addEventListener('change', (e) => magnetBFieldGroup.visible = e.target.checked);
+            document.getElementById('chk-armature-poles').addEventListener('change', updateVisibility);
+
+            window.addEventListener('resize', onWindowResize);
+        }
+
+        function updateVisibility() {
+            const showCurr = document.getElementById('chk-current').checked;
+            const showRHR = document.getElementById('chk-rhr').checked;
+            const showPoles = document.getElementById('chk-armature-poles').checked;
+
+            if (currentGroup) {
+                currentGroup.visible = showCurr || showRHR;
+                armatureParticles.forEach(p => p.visible = showCurr);
+            }
+            if (redWireCurrentGroup) redWireCurrentGroup.visible = showCurr;
+            if (blueWireCurrentGroup) blueWireCurrentGroup.visible = showCurr;
+            if (rhrGroup) rhrGroup.visible = showRHR;
+            
+            if (coilBFieldGroup) coilBFieldGroup.visible = showPoles;
+        }
+
+        function getExternalB(pos, lPole, rPole) {
+            if (lPole !== rPole) return new THREE.Vector3(lPole * 1.5, 0, 0);
+            const pL = new THREE.Vector3(-4.5, 0, -2.0), pR = new THREE.Vector3( 4.5, 0, -2.0);
+            const rL = new THREE.Vector3().subVectors(pos, pL), rR = new THREE.Vector3().subVectors(pos, pR);
+            let dL = Math.max(rL.length(), 0.5), dR = Math.max(rR.length(), 0.5);
+            return new THREE.Vector3().addVectors(
+                rL.normalize().multiplyScalar(lPole * 2.0 / (dL * dL)),
+                rR.normalize().multiplyScalar(rPole * 2.0 / (dR * dR))
+            );
+        }
+
+        function buildMagnets() {
+            magnetGroup = new THREE.Group();
+            scene.add(magnetGroup);
+
+            const depth = 6.0, height = 4.0, width = 2.5, zCenter = -2.0, magCenterOffset = 4.5 + width; 
+            const matBlue = new THREE.MeshLambertMaterial({ color: 0x0000ff }), matRed = new THREE.MeshLambertMaterial({ color: 0xff0000 });  
+            const boxGeo = new THREE.BoxGeometry(width, height, depth);
+
+            leftMagnet = new THREE.Group(); leftMagnet.position.set(-magCenterOffset, 0, zCenter); magnetGroup.add(leftMagnet);
+            const leftRed = new THREE.Mesh(boxGeo, matRed); leftRed.position.set(width/2, 0, 0); leftMagnet.add(leftRed);
+            const leftBlue = new THREE.Mesh(boxGeo, matBlue); leftBlue.position.set(-width/2, 0, 0); leftMagnet.add(leftBlue);
+            const textN_L = createTextSprite('N', '#ffffff', 80); textN_L.position.set(width/2, 0, depth/2 + 0.1); leftMagnet.add(textN_L);
+            const textS_L = createTextSprite('S', '#ffffff', 80); textS_L.position.set(-width/2, 0, depth/2 + 0.1); leftMagnet.add(textS_L);
+
+            rightMagnet = new THREE.Group(); rightMagnet.position.set(magCenterOffset, 0, zCenter); magnetGroup.add(rightMagnet);
+            const rightBlue = new THREE.Mesh(boxGeo, matBlue); rightBlue.position.set(-width/2, 0, 0); rightMagnet.add(rightBlue);
+            const rightRed = new THREE.Mesh(boxGeo, matRed); rightRed.position.set(width/2, 0, 0); rightMagnet.add(rightRed);
+            const textS_R = createTextSprite('S', '#ffffff', 80); textS_R.position.set(-width/2, 0, depth/2 + 0.1); rightMagnet.add(textS_R);
+            const textN_R = createTextSprite('N', '#ffffff', 80); textN_R.position.set(width/2, 0, depth/2 + 0.1); rightMagnet.add(textN_R);
+        }
+
+        function buildArmature() {
+            armatureGroup = new THREE.Group();
+            systemGroup.add(armatureGroup);
+            armatureMeshGroup = new THREE.Group();
+            armatureGroup.add(armatureMeshGroup);
+
+            const wireMat = new THREE.MeshLambertMaterial({ color: 0x4a2e15, transparent: true, opacity: 0.6 }); 
+            const wireR = 0.08, w = 3.6, l = 6.0, zOffset = -2; 
+
+            const backWire = new THREE.Mesh(new THREE.CylinderGeometry(wireR, wireR, w, 16), wireMat);
+            backWire.rotation.z = Math.PI / 2; backWire.position.set(0, 0, zOffset - l/2); armatureMeshGroup.add(backWire);
+            const leftWire = new THREE.Mesh(new THREE.CylinderGeometry(wireR, wireR, l, 16), wireMat);
+            leftWire.rotation.x = Math.PI / 2; leftWire.position.set(-w/2, 0, zOffset); armatureMeshGroup.add(leftWire);
+            const rightWire = new THREE.Mesh(new THREE.CylinderGeometry(wireR, wireR, l, 16), wireMat);
+            rightWire.rotation.x = Math.PI / 2; rightWire.position.set(w/2, 0, zOffset); armatureMeshGroup.add(rightWire);
+
+            const copperMat = new THREE.MeshLambertMaterial({ color: 0xaa5522, side: THREE.DoubleSide }); 
+
+            // AC 雙集電環 (Slip Rings)
+            const ring1Z = 2.0, ring2Z = 3.2; 
+            const leadL_X = -0.65, leadR_X = 0.3;
+
+            const frontWidthL = w/2 + leadL_X;
+            const frontWireL = new THREE.Mesh(new THREE.CylinderGeometry(wireR, wireR, frontWidthL, 16), wireMat);
+            frontWireL.rotation.z = Math.PI / 2; frontWireL.position.set(-w/2 + frontWidthL/2, 0, zOffset + l/2); armatureMeshGroup.add(frontWireL);
+            
+            const frontWidthR = w/2 - leadR_X;
+            const frontWireR = new THREE.Mesh(new THREE.CylinderGeometry(wireR, wireR, frontWidthR, 16), wireMat);
+            frontWireR.rotation.z = Math.PI / 2; frontWireR.position.set(w/2 - frontWidthR/2, 0, zOffset + l/2); armatureMeshGroup.add(frontWireR);
+
+            const leadL = new THREE.Mesh(new THREE.CylinderGeometry(wireR, wireR, ring1Z - (zOffset + l/2), 16), wireMat);
+            leadL.rotation.x = Math.PI / 2; leadL.position.set(leadL_X, 0, (zOffset + l/2 + ring1Z)/2); armatureMeshGroup.add(leadL);
+            const leadR = new THREE.Mesh(new THREE.CylinderGeometry(wireR, wireR, ring2Z - (zOffset + l/2), 16), wireMat);
+            leadR.rotation.x = Math.PI / 2; leadR.position.set(leadR_X, 0, (zOffset + l/2 + ring2Z)/2); armatureMeshGroup.add(leadR);
+
+            const spoke = new THREE.Mesh(new THREE.CylinderGeometry(wireR, wireR, 0.35, 16), wireMat);
+            spoke.rotation.z = Math.PI / 2; spoke.position.set(0.475, 0, ring2Z); armatureMeshGroup.add(spoke);
+
+            const ringShape = new THREE.Shape();
+            ringShape.absarc(0, 0, 0.8, 0, Math.PI * 2, false);
+            const ringHole = new THREE.Path();
+            ringHole.absarc(0, 0, 0.45, 0, Math.PI * 2, true);
+            ringShape.holes.push(ringHole);
+            const ringGeo = new THREE.ExtrudeGeometry(ringShape, { depth: 0.5, bevelEnabled: false, curveSegments: 32 });
+            ringGeo.translate(0, 0, -0.25); 
+
+            const ring1 = new THREE.Mesh(ringGeo, copperMat); ring1.position.set(0, 0, ring1Z); armatureMeshGroup.add(ring1);
+            const ring2 = new THREE.Mesh(ringGeo, copperMat); ring2.position.set(0, 0, ring2Z); armatureMeshGroup.add(ring2);
+        }
+
+        function buildArmaturePolarity() {
+            // 在電樞中央建立一個表示磁極的群組
+            coilBFieldGroup = new THREE.Group();
+            coilBFieldGroup.position.set(0, 0, -2.0); 
+            armatureGroup.add(coilBFieldGroup); 
+
+            // 圓柱體與圓錐，代表電樞產生的磁場方向
+            const mat = new THREE.MeshLambertMaterial({ color: 0xff8800, transparent: true, opacity: 0.8 }); 
+            const body = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 3.5, 16), mat);
+            body.position.set(0, 0, 0); 
+            const head = new THREE.Mesh(new THREE.ConeGeometry(0.4, 0.8, 16), mat);
+            head.position.set(0, 2.15, 0); 
+            
+            coilBFieldGroup.add(body); 
+            coilBFieldGroup.add(head);
+
+            // N / S 極性標籤
+            textN_Arm = createTextSprite('N', '#ff4444', 100);
+            textN_Arm.position.set(0, 3.0, 0); // 箭頭尖端為 N 極
+            coilBFieldGroup.add(textN_Arm);
+            
+            textS_Arm = createTextSprite('S', '#4444ff', 100);
+            textS_Arm.position.set(0, -2.2, 0); // 圓柱尾端為 S 極
+            coilBFieldGroup.add(textS_Arm);
+        }
+
+        function buildBrushes() {
+            const bracketMat = new THREE.MeshLambertMaterial({ color: 0xc0c0c0, transparent: true, opacity: 0.85, side: THREE.DoubleSide });
+            const commRadiusOuter = 0.8; 
+
+            function createBrush(zPos, isLeft) {
+                const group = new THREE.Group(); group.position.set(0, 0, zPos);
+                const sideDir = isLeft ? -1 : 1;
+                const base = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.05, 1.2), bracketMat);
+                base.position.set(sideDir * 1.6, -1.2, 0); group.add(base);
+                const up = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.5, 1.2), bracketMat);
+                up.position.set(sideDir * (commRadiusOuter + 0.05), -0.45, 0); group.add(up);
+                const joint = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 0.1, 16), new THREE.MeshLambertMaterial({color: 0x555555}));
+                joint.position.set(sideDir * 2.0, -1.15, 0); group.add(joint);
+                return group;
+            }
+
+            systemGroup.add(createBrush(2.0, true)); 
+            systemGroup.add(createBrush(3.2, false)); 
+        }
+
+        function buildBatteryAndWires() {
+            const zPosL = 2.0; 
+            const zPosR = 3.2; 
+            const batZ = 6.5, batY = -3.5; 
+            
+            const redWireMat = new THREE.MeshBasicMaterial({ color: 0xff4444, transparent: true, opacity: 0.5 }); 
+            const blueWireMat = new THREE.MeshBasicMaterial({ color: 0x5599ff, transparent: true, opacity: 0.5 }); 
+
+            // 導線末端留下精確的接觸間隙
+            createCylinderLine(-2.0, -1.15, zPosL, -4.0, -1.15, zPosL, redWireMat);
+            createCylinderLine(-4.0, -1.15, zPosL, -5.0, batY, batZ, redWireMat);
+            createCylinderLine(-5.0, batY, batZ, -2.0, batY, batZ, redWireMat);
+
+            createCylinderLine(2.0, -1.15, zPosR, 4.0, -1.15, zPosR, blueWireMat);
+            createCylinderLine(4.0, -1.15, zPosR, 5.0, batY, batZ, blueWireMat);
+            createCylinderLine(5.0, batY, batZ, 1.0, batY, batZ, blueWireMat);
+
+            batteryGroup = new THREE.Group();
+            batteryGroup.position.set(-0.5, batY, batZ); 
+            systemGroup.add(batteryGroup);
+
+            const bodyGeo = new THREE.CylinderGeometry(0.7, 0.7, 2.5, 32); bodyGeo.rotateZ(Math.PI / 2);
+            batteryGroup.add(new THREE.Mesh(bodyGeo, new THREE.MeshLambertMaterial({ color: 0x222222 })));
+
+            const bottomGeo = new THREE.CylinderGeometry(0.72, 0.72, 0.3, 32); bottomGeo.rotateZ(Math.PI / 2);
+            const bottom = new THREE.Mesh(bottomGeo, new THREE.MeshLambertMaterial({color: 0xaaaaaa}));
+            bottom.position.set(1.35, 0, 0); batteryGroup.add(bottom);
+
+            const yellowGeo = new THREE.CylinderGeometry(0.72, 0.72, 0.8, 32); yellowGeo.rotateZ(Math.PI/2);
+            const yellow = new THREE.Mesh(yellowGeo, new THREE.MeshLambertMaterial({color: 0xddaa00}));
+            yellow.position.set(-0.9, 0, 0); batteryGroup.add(yellow);
+
+            const capGeo = new THREE.CylinderGeometry(0.3, 0.3, 0.2, 16); capGeo.rotateZ(Math.PI/2);
+            const cap = new THREE.Mesh(capGeo, new THREE.MeshLambertMaterial({color: 0xaaaaaa}));
+            cap.position.set(-1.4, 0, 0); batteryGroup.add(cap);
+
+            const textPlus = createTextSprite('+', '#000000', 80); textPlus.position.set(-0.9, 0, 0.8); batteryGroup.add(textPlus);
+            const textMinus = createTextSprite('-', '#ffffff', 100); textMinus.position.set(0.5, 0, 0.8); batteryGroup.add(textMinus);
+        }
+
+        function initPaths() {
+            const zPosL = 2.0; 
+            const zPosR = 3.2; 
+            const leadX_L = -0.65;
+            const leadX_R = 0.3;
+
+            const armaturePoints = [
+                new THREE.Vector3(leadX_L, 0, zPosL), 
+                new THREE.Vector3(leadX_L, 0, 1.0), 
+                new THREE.Vector3(-1.8, 0, 1.0), new THREE.Vector3(-1.8, 0, -5.0),
+                new THREE.Vector3(1.8, 0, -5.0), new THREE.Vector3(1.8, 0, 1.0),  
+                new THREE.Vector3(leadX_R, 0, 1.0),  new THREE.Vector3(leadX_R, 0, zPosR)
+            ];
+            armaturePathData = createPathData(armaturePoints);
+
+            const batY = -3.5, batZ = 6.5;
+            const redWirePoints = [
+                new THREE.Vector3(-2.0, batY, batZ), new THREE.Vector3(-5.0, batY, batZ),
+                new THREE.Vector3(-4.0, -1.15, zPosL), new THREE.Vector3(-2.0, -1.15, zPosL) 
+            ];
+            redWirePathData = createPathData(redWirePoints);
+
+            const blueWirePoints = [
+                new THREE.Vector3(2.0, -1.15, zPosR), new THREE.Vector3(4.0, -1.15, zPosR),
+                new THREE.Vector3(5.0, batY, batZ), new THREE.Vector3(1.0, batY, batZ)   
+            ];
+            blueWirePathData = createPathData(blueWirePoints);
+        }
+
+        function buildCurrentEffects() {
+            function createArrowMesh() {
+                const sideMat = new THREE.MeshBasicMaterial({ color: 0xffff00 }); 
+                const baseMat = new THREE.MeshBasicMaterial({ color: 0xaa2200 }); 
+                return new THREE.Mesh(new THREE.ConeGeometry(0.18, 0.45, 16), [sideMat, baseMat]);
+            }
+            function createLargeArrow(spriteOffsetX) {
+                const group = new THREE.Group();
+                const bodyMat = new THREE.MeshLambertMaterial({ color: 0xffff00 });
+                const body = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 1.8, 16), bodyMat);
+                const sideMat = new THREE.MeshLambertMaterial({ color: 0xffff00 });
+                const baseMat = new THREE.MeshLambertMaterial({ color: 0xaa2200 });
+                const head = new THREE.Mesh(new THREE.ConeGeometry(0.25, 0.6, 16), [sideMat, baseMat]);
+                
+                head.position.y = 1.8 / 2 + 0.3; 
+                group.add(body); group.add(head);
+                const sprite = createTextSprite('I', '#ffff00', 80);
+                sprite.position.set(spriteOffsetX, 0.8, 0); 
+                group.add(sprite);
+                return group;
+            }
+
+            currentGroup = new THREE.Group(); armatureGroup.add(currentGroup);
+            floatingArrowLeft = createLargeArrow(-0.9); floatingArrowLeft.position.set(-2.6, 0, -2.0); currentGroup.add(floatingArrowLeft);
+            floatingArrowRight = createLargeArrow(0.9); floatingArrowRight.position.set(2.6, 0, -2.0); currentGroup.add(floatingArrowRight);
+
+            for (let i = 0; i < 22; i++) {
+                const mesh = createArrowMesh(); mesh.userData.t = i / 22; 
+                armatureParticles.push(mesh); currentGroup.add(mesh);
+            }
+            redWireCurrentGroup = new THREE.Group(); systemGroup.add(redWireCurrentGroup);
+            for (let i = 0; i < 8; i++) {
+                const mesh = createArrowMesh(); mesh.userData.t = i / 8; 
+                redParticles.push(mesh); redWireCurrentGroup.add(mesh);
+            }
+            blueWireCurrentGroup = new THREE.Group(); systemGroup.add(blueWireCurrentGroup);
+            for (let i = 0; i < 8; i++) {
+                const mesh = createArrowMesh(); mesh.userData.t = i / 8; 
+                blueParticles.push(mesh); blueWireCurrentGroup.add(mesh);
+            }
+        }
+
+        function createCylinderLine(x1, y1, z1, x2, y2, z2, material) {
+            const start = new THREE.Vector3(x1, y1, z1); const end = new THREE.Vector3(x2, y2, z2);
+            const mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, start.distanceTo(end), 8), material);
+            mesh.position.copy(end.clone().add(start).divideScalar(2));
+            mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), end.clone().sub(start).normalize());
+            systemGroup.add(mesh);
+        }
+
+        function createTextSprite(text, color, size) {
+            const canvas = document.createElement('canvas'); canvas.width = 256; canvas.height = 256;
+            const context = canvas.getContext('2d');
+            context.font = `bold ${size}px Arial`; context.fillStyle = color;
+            context.textAlign = 'center'; context.textBaseline = 'middle';
+            context.fillText(text, 128, 128);
+            const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(canvas), transparent: true }));
+            sprite.scale.set(2.5, 2.5, 1); 
+            return sprite;
+        }
+
+        function createPathData(points) {
+            let totalLength = 0, lengths = [];
+            for (let i = 0; i < points.length - 1; i++) {
+                let len = points[i].distanceTo(points[i + 1]); lengths.push(len); totalLength += len;
+            }
+            return { points, lengths, totalLength };
+        }
+
+        function getPointAndTangentOnPath(t, pathData) {
+            t = t % 1.0; if (t < 0) t += 1.0;
+            let targetD = t * pathData.totalLength, currentD = 0;
+            for (let i = 0; i < pathData.lengths.length; i++) {
+                if (currentD + pathData.lengths[i] >= targetD || i === pathData.lengths.length - 1) {
+                    let segmentT = (targetD - currentD) / pathData.lengths[i];
+                    let p1 = pathData.points[i], p2 = pathData.points[i+1];
+                    return { point: new THREE.Vector3().lerpVectors(p1, p2, segmentT), tangent: new THREE.Vector3().subVectors(p2, p1).normalize() };
+                }
+                currentD += pathData.lengths[i];
+            }
+            return { point: pathData.points[0], tangent: new THREE.Vector3(1, 0, 0) };
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function buildRHR() {
+            rhrGroup = new THREE.Group();
+            systemGroup.add(rhrGroup); 
+            function createPhysicsVector(colorHex, text, textColor) {
+                const group = new THREE.Group();
+                const mat = new THREE.MeshLambertMaterial({ color: colorHex, transparent: true, opacity: 0.65 });
+                const body = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 1.0, 16), mat); body.position.y = 0.5; 
+                const head = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.5, 16), mat); head.position.y = 1.0 + 0.25;
+                group.add(body); group.add(head);
+                const sprite = createTextSprite(text, textColor, 80); sprite.position.y = 1.8; group.add(sprite);
+                group.setLength = function(len) {
+                    if (len < 0.05) { group.visible = false; return; }
+                    group.visible = true; body.scale.y = len; body.position.y = len / 2;
+                    head.position.y = len + 0.25; sprite.position.y = len + 0.8;
+                };
+                return group;
+            }
+            leftF = createPhysicsVector(0xff0000, 'F', '#ff4444'); leftB = createPhysicsVector(0x00cc00, 'B', '#22bb22'); leftI = createPhysicsVector(0xffff00, 'I', '#cccc00');
+            rightF = createPhysicsVector(0xff0000, 'F', '#ff4444'); rightB = createPhysicsVector(0x00cc00, 'B', '#22bb22'); rightI = createPhysicsVector(0xffff00, 'I', '#cccc00');
+            rhrGroup.add(leftF); rhrGroup.add(leftB); rhrGroup.add(leftI);
+            rhrGroup.add(rightF); rhrGroup.add(rightB); rhrGroup.add(rightI);
+        }
+
+        function buildMagneticFields() {
+            magnetBFieldGroup = new THREE.Group(); scene.add(magnetBFieldGroup); 
+            const matMagnetStatic = new THREE.LineBasicMaterial({ color: 0x22bb22, linewidth: 2 });
+            for(let i=0; i<18; i++) {
+                const geometry = new THREE.BufferGeometry();
+                const positions = new Float32Array(STATIC_CURVE_POINTS * 3);
+                geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+                geometry.userData = { valid: false }; 
+                magnetBFieldGroup.add(new THREE.Line(geometry, matMagnetStatic));
+                staticCurveGeometries.push(geometry);
+            }
+
+            const matArrow = new THREE.MeshBasicMaterial({ color: 0x22bb22 });
+            const arrowGeo = new THREE.ConeGeometry(0.15, 0.4, 16);
+            for(let i=0; i<18; i++) {
+                for(let j=0; j<3; j++) { 
+                    const arrow = new THREE.Mesh(arrowGeo, matArrow);
+                    arrow.userData = { lineIndex: i, t: j / 3.0 };
+                    magnetBParticles.push(arrow);
+                    magnetBFieldGroup.add(arrow);
+                }
+            }
+        }
+
+        function updateMagnetFieldCurves(leftPole, rightPole) {
+            const yVals = [-1.2, 0, 1.2], zVals = [-3.2, -2.0, -0.8];
+            let lineIdx = 0;
+            if (leftPole !== rightPole) {
+                let startX = leftPole === 1 ? -4.5 : 4.5, endX = leftPole === 1 ? 4.5 : -4.5;
+                for (let y of yVals) {
+                    for (let z of zVals) {
+                        const positions = staticCurveGeometries[lineIdx].attributes.position.array;
+                        let p0 = new THREE.Vector3(startX, y, z), p2 = new THREE.Vector3(endX, y, z), p1;
+                        if (Math.abs(y) < 0.1 && Math.abs(z - (-2.0)) < 0.1) p1 = new THREE.Vector3(0, y, z); 
+                        else p1 = new THREE.Vector3(0, y + y * 1.2, z + (z - (-2.0)) * 1.2);
+                        for (let step = 0; step < STATIC_CURVE_POINTS; step++) {
+                            let t = step / (STATIC_CURVE_POINTS - 1), mt = 1 - t;
+                            positions[step * 3] = mt*mt*p0.x + 2*mt*t*p1.x + t*t*p2.x;
+                            positions[step * 3 + 1] = mt*mt*p0.y + 2*mt*t*p1.y + t*t*p2.y;
+                            positions[step * 3 + 2] = mt*mt*p0.z + 2*mt*t*p1.z + t*t*p2.z;
+                        }
+                        staticCurveGeometries[lineIdx].userData.valid = true; staticCurveGeometries[lineIdx].attributes.position.needsUpdate = true;
+                        magnetBFieldGroup.children[lineIdx].visible = true; lineIdx++;
+                    }
+                }
+                for (; lineIdx < 18; lineIdx++) { staticCurveGeometries[lineIdx].userData.valid = false; magnetBFieldGroup.children[lineIdx].visible = false; }
+            } else {
+                for(let side of [-1, 1]) {
+                    for (let y of yVals) {
+                        for (let z of zVals) {
+                            const positions = staticCurveGeometries[lineIdx].attributes.position.array;
+                            let p0, p1, p2, bendY = Math.abs(y) < 0.1 && Math.abs(z - (-2.0)) < 0.1 ? 4.0 : y + y * 3.0, bendZ = Math.abs(y) < 0.1 && Math.abs(z - (-2.0)) < 0.1 ? -2.0 : z + (z - (-2.0)) * 3.0;
+                            let pole = side < 0 ? leftPole : rightPole;
+                            if (pole === 1) { p0 = new THREE.Vector3(side * 4.5, y, z); p1 = new THREE.Vector3(side * 1.0, y, z); p2 = new THREE.Vector3(side * 0.5, bendY, bendZ); } 
+                            else { p0 = new THREE.Vector3(side * 0.5, bendY, bendZ); p1 = new THREE.Vector3(side * 1.0, y, z); p2 = new THREE.Vector3(side * 4.5, y, z); }
+                            for (let step = 0; step < STATIC_CURVE_POINTS; step++) {
+                                let t = step / (STATIC_CURVE_POINTS - 1), mt = 1 - t;
+                                positions[step * 3] = mt*mt*p0.x + 2*mt*t*p1.x + t*t*p2.x;
+                                positions[step * 3 + 1] = mt*mt*p0.y + 2*mt*t*p1.y + t*t*p2.y;
+                                positions[step * 3 + 2] = mt*mt*p0.z + 2*mt*t*p1.z + t*t*p2.z;
+                            }
+                            staticCurveGeometries[lineIdx].userData.valid = true; staticCurveGeometries[lineIdx].attributes.position.needsUpdate = true;
+                            magnetBFieldGroup.children[lineIdx].visible = true; lineIdx++;
+                        }
+                    }
+                }
+            }
+        }
+
+        // --- 動畫核心迴圈 (真實同步馬達物理引擎) ---
+        function animate() {
+            requestAnimationFrame(animate);
+
+            let leftPole = leftMagRev ? -1 : 1;   
+            let rightPole = rightMagRev ? 1 : -1; 
+            let bFieldMultiplier = (leftPole !== rightPole) ? leftPole : 0; 
+            
+            let internalI = 0;
+            let externalV = 0;
+            let torque = 0;
+
+            let isAuto = document.getElementById('chk-auto-ac').checked;
+            
+            // --- 核心更新：智慧同步相位 (Step-function tracking) ---
+            let phaseIndex = Math.floor((armatureAngle + Math.PI / 2) / Math.PI);
+            targetBatteryAngle = phaseIndex * Math.PI;
+
+            // 【修正】移除原有的 if (bFieldMultiplier < 0) 相位補償
+            // 讓外部磁場反轉時，真實產生反向扭力，使馬達完美倒轉！
+
+            // 【修正】移除 isRunning 條件，讓使用者在暫停時點擊「步進」按鈕，電池也能智慧追蹤相角
+            if (isAuto && voltageMultiplier > 0) {
+                let batSpeed = 0.15;
+                if (batteryAngle < targetBatteryAngle - 0.05) {
+                    batteryAngle += batSpeed;
+                    if (batteryAngle > targetBatteryAngle) batteryAngle = targetBatteryAngle;
+                } else if (batteryAngle > targetBatteryAngle + 0.05) {
+                    batteryAngle -= batSpeed;
+                    if (batteryAngle < targetBatteryAngle) batteryAngle = targetBatteryAngle;
+                }
+            }
+
+            let batCos = Math.cos(batteryAngle);
+            let isConnected = Math.abs(batCos) > 0.8; 
+            
+            externalV = isConnected ? Math.sign(batCos) * voltageMultiplier : 0;
+            internalI = externalV; 
+            
+            torque = internalI * bFieldMultiplier * Math.cos(armatureAngle);
+
+            if (batteryGroup) {
+                const batMesh = batteryGroup.children[0];
+                if (Math.abs(externalV) > 0) {
+                    batMesh.material.emissive.setHex(0x333333);
+                } else {
+                    batMesh.material.emissive.setHex(0x000000);
+                }
+                batteryGroup.rotation.y = batteryAngle;
+            }
+
+            if (isRunning) {
+                motorVelocity += torque * 0.005; 
+                motorVelocity *= 0.95; 
+                armatureAngle += motorVelocity;
+            } else {
+                motorVelocity = 0;
+            }
+            
+            armatureGroup.rotation.z = armatureAngle;
+
+            let absCurrentMag = Math.abs(externalV);
+            let actualCoilDir = Math.sign(internalI) || 1;
+            
+            if (currentGroup && currentGroup.visible) {
+                let hasCurrent = absCurrentMag > 0.05 && bFieldMultiplier !== 0; 
+                
+                let wireFlowVelocity = -externalV * currentSpeed * 15; 
+
+                if (isRunning || !isAuto) {
+                    redParticles.forEach(p => {
+                        p.userData.t += wireFlowVelocity * 0.02; 
+                        let { point, tangent } = getPointAndTangentOnPath(p.userData.t, redWirePathData);
+                        if (wireFlowVelocity < 0) tangent.negate(); 
+                        p.position.copy(point); p.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), tangent);
+                        p.visible = hasCurrent;
+                    });
+                    blueParticles.forEach(p => {
+                        p.userData.t += wireFlowVelocity * 0.02;
+                        let { point, tangent } = getPointAndTangentOnPath(p.userData.t, blueWirePathData);
+                        if (wireFlowVelocity < 0) tangent.negate(); 
+                        p.position.copy(point); p.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), tangent);
+                        p.visible = hasCurrent;
+                    });
+
+                    let coilFlowVelocity = -actualCoilDir * Math.abs(internalI) * currentSpeed * 15;
+                    armatureParticles.forEach(p => {
+                        p.userData.t += coilFlowVelocity * 0.02;
+                        let { point, tangent } = getPointAndTangentOnPath(p.userData.t, armaturePathData);
+                        if (coilFlowVelocity < 0) tangent.negate(); 
+                        p.position.copy(point); p.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), tangent);
+                        p.visible = hasCurrent;
+                    });
+                }
+
+                if (actualCoilDir === 1) {
+                    floatingArrowLeft.rotation.x = Math.PI / 2;   
+                    floatingArrowRight.rotation.x = -Math.PI / 2; 
+                } else {
+                    floatingArrowLeft.rotation.x = -Math.PI / 2;  
+                    floatingArrowRight.rotation.x = Math.PI / 2;  
+                }
+                floatingArrowLeft.visible = hasCurrent;
+                floatingArrowRight.visible = hasCurrent;
+            }
+
+            if (coilBFieldGroup) {
+                let hasCurrent = absCurrentMag > 0.05;
+                if (actualCoilDir === 1) {
+                    coilBFieldGroup.rotation.x = 0; 
+                } else {
+                    coilBFieldGroup.rotation.x = Math.PI; 
+                }
+                textN_Arm.material.opacity = hasCurrent ? 1.0 : 0.2;
+                textS_Arm.material.opacity = hasCurrent ? 1.0 : 0.2;
+                coilBFieldGroup.children[0].material.opacity = hasCurrent ? 0.8 : 0.1; 
+                coilBFieldGroup.children[1].material.opacity = hasCurrent ? 0.8 : 0.1; 
+            }
+
+            // --- 物理向量 (I, B, F) 更新 ---
+            if (rhrGroup && rhrGroup.visible) {
+                const leftWorldPos  = new THREE.Vector3(-2.6, 0, -2.0).applyMatrix4(armatureGroup.matrixWorld);
+                const rightWorldPos = new THREE.Vector3( 2.6, 0, -2.0).applyMatrix4(armatureGroup.matrixWorld);
+
+                leftB.position.copy(leftWorldPos); leftF.position.copy(leftWorldPos); leftI.position.copy(leftWorldPos);
+                rightB.position.copy(rightWorldPos); rightF.position.copy(rightWorldPos); rightI.position.copy(rightWorldPos);
+
+                if (absCurrentMag === 0 || bFieldMultiplier === 0) {
+                    leftB.setLength(0); rightB.setLength(0);
+                    leftF.setLength(0); rightF.setLength(0);
+                    leftI.setLength(0); rightI.setLength(0);
+                } else {
+                    let bLeftVec = getExternalB(leftWorldPos, leftPole, rightPole);
+                    let bRightVec = getExternalB(rightWorldPos, leftPole, rightPole);
+
+                    const scaleL = Math.max(0, 1.0 - Math.abs(leftWorldPos.x) / 4.5) * Math.max(0, 1.0 - Math.abs(leftWorldPos.y) / 2.5);
+                    const scaleR = Math.max(0, 1.0 - Math.abs(rightWorldPos.x) / 4.5) * Math.max(0, 1.0 - Math.abs(rightWorldPos.y) / 2.5);
+
+                    if (scaleL > 0.02) { leftB.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), bLeftVec.clone().normalize()); leftB.setLength(3.0 * scaleL); } 
+                    else leftB.setLength(0);
+                    if (scaleR > 0.02) { rightB.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), bRightVec.clone().normalize()); rightB.setLength(3.0 * scaleR); } 
+                    else rightB.setLength(0);
+
+                    let I_left_local = new THREE.Vector3(0, 0, -actualCoilDir);
+                    let I_right_local = new THREE.Vector3(0, 0, actualCoilDir);
+                    let I_left_world = I_left_local.transformDirection(armatureGroup.matrixWorld).normalize();
+                    let I_right_world = I_right_local.transformDirection(armatureGroup.matrixWorld).normalize();
+
+                    let iLen = absCurrentMag * 2.0; 
+                    if (iLen > 0.05) {
+                        leftI.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), I_left_world); leftI.setLength(iLen);
+                        rightI.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), I_right_world); rightI.setLength(iLen);
+                    } else {
+                        leftI.setLength(0); rightI.setLength(0);
+                    }
+
+                    let F_left = new THREE.Vector3().crossVectors(I_left_world, bLeftVec);
+                    let F_right = new THREE.Vector3().crossVectors(I_right_world, bRightVec);
+
+                    let fLeftLen  = F_left.length() * scaleL * 2.4 * absCurrentMag;
+                    let fRightLen = F_right.length() * scaleR * 2.4 * absCurrentMag;
+
+                    if (fLeftLen > 0.05) { leftF.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), F_left.clone().normalize()); leftF.setLength(fLeftLen); } 
+                    else leftF.setLength(0);
+                    if (fRightLen > 0.05) { rightF.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), F_right.clone().normalize()); rightF.setLength(fRightLen); } 
+                    else rightF.setLength(0);
+                }
+            }
+
+            if (magnetBFieldGroup && magnetBFieldGroup.visible) {
+                updateMagnetFieldCurves(leftPole, rightPole);
+                
+                const bFlowSpeed = currentSpeed * 1.5;
+                magnetBParticles.forEach(p => {
+                    const lIdx = p.userData.lineIndex;
+                    const geo = staticCurveGeometries[lIdx];
+                    
+                    if (!geo.userData.valid) {
+                        p.visible = false;
+                        return;
+                    }
+                    p.visible = true;
+
+                    p.userData.t += bFlowSpeed;
+                    if (p.userData.t > 1) p.userData.t -= 1;
+
+                    const positions = geo.attributes.position.array;
+                    const floatIdx = p.userData.t * (STATIC_CURVE_POINTS - 1);
+                    const idx = Math.floor(floatIdx);
+                    const frac = floatIdx - idx;
+
+                    let p1 = new THREE.Vector3();
+                    let p2 = new THREE.Vector3();
+
+                    if (idx >= STATIC_CURVE_POINTS - 1) {
+                        p1.set(positions[(STATIC_CURVE_POINTS-2)*3], positions[(STATIC_CURVE_POINTS-2)*3+1], positions[(STATIC_CURVE_POINTS-2)*3+2]);
+                        p2.set(positions[(STATIC_CURVE_POINTS-1)*3], positions[(STATIC_CURVE_POINTS-1)*3+1], positions[(STATIC_CURVE_POINTS-1)*3+2]);
+                        p.position.copy(p2);
+                    } else {
+                        p1.set(positions[idx*3], positions[idx*3+1], positions[idx*3+2]);
+                        p2.set(positions[(idx+1)*3], positions[(idx+1)*3+1], positions[(idx+1)*3+2]);
+                        p.position.lerpVectors(p1, p2, frac);
+                    }
+
+                    const tangent = new THREE.Vector3().subVectors(p2, p1).normalize();
+                    if (tangent.lengthSq() > 0.001) {
+                        p.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), tangent);
+                    }
+                });
+            }
+
+            controls.update();
+            renderer.render(scene, camera);
+        }
+    </script>
+</body>
+</html>
