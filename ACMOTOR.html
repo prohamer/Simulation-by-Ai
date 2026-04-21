@@ -788,40 +788,41 @@
             if (currentGroup && currentGroup.visible) {
                 let hasCurrent = absCurrentMag > 0.05 && bFieldMultiplier !== 0; 
                 
-                let wireFlowVelocity = -externalV * currentSpeed * 15; 
+                // 修正 1：移除原本多餘的負號，讓外部電流方向完全跟隨電壓正負號
+                let wireFlowVelocity = externalV * currentSpeed * 15; 
+                // 修正 2：內部線圈流速同理，直接跟隨內部電流方向
+                let coilFlowVelocity = internalI * currentSpeed * 15;
 
-                if (isRunning || !isAuto) {
-                    redParticles.forEach(p => {
-                        p.userData.t += wireFlowVelocity * 0.02; 
-                        let { point, tangent } = getPointAndTangentOnPath(p.userData.t, redWirePathData);
-                        if (wireFlowVelocity < 0) tangent.negate(); 
-                        p.position.copy(point); p.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), tangent);
-                        p.visible = hasCurrent;
-                    });
-                    blueParticles.forEach(p => {
-                        p.userData.t += wireFlowVelocity * 0.02;
-                        let { point, tangent } = getPointAndTangentOnPath(p.userData.t, blueWirePathData);
-                        if (wireFlowVelocity < 0) tangent.negate(); 
-                        p.position.copy(point); p.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), tangent);
-                        p.visible = hasCurrent;
-                    });
+                redParticles.forEach(p => {
+                    p.userData.t += wireFlowVelocity * 0.02; 
+                    let { point, tangent } = getPointAndTangentOnPath(p.userData.t, redWirePathData);
+                    if (wireFlowVelocity < 0) tangent.negate(); 
+                    p.position.copy(point); p.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), tangent);
+                    p.visible = hasCurrent;
+                });
+                blueParticles.forEach(p => {
+                    p.userData.t += wireFlowVelocity * 0.02;
+                    let { point, tangent } = getPointAndTangentOnPath(p.userData.t, blueWirePathData);
+                    if (wireFlowVelocity < 0) tangent.negate(); 
+                    p.position.copy(point); p.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), tangent);
+                    p.visible = hasCurrent;
+                });
 
-                    let coilFlowVelocity = -actualCoilDir * Math.abs(internalI) * currentSpeed * 15;
-                    armatureParticles.forEach(p => {
-                        p.userData.t += coilFlowVelocity * 0.02;
-                        let { point, tangent } = getPointAndTangentOnPath(p.userData.t, armaturePathData);
-                        if (coilFlowVelocity < 0) tangent.negate(); 
-                        p.position.copy(point); p.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), tangent);
-                        p.visible = hasCurrent;
-                    });
-                }
+                armatureParticles.forEach(p => {
+                    p.userData.t += coilFlowVelocity * 0.02;
+                    let { point, tangent } = getPointAndTangentOnPath(p.userData.t, armaturePathData);
+                    if (coilFlowVelocity < 0) tangent.negate(); 
+                    p.position.copy(point); p.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), tangent);
+                    p.visible = hasCurrent;
+                });
 
+                // 修正 3：重新校正懸浮大箭頭的旋轉，使其與現在「正確的流動方向」完美貼合
                 if (actualCoilDir === 1) {
-                    floatingArrowLeft.rotation.x = Math.PI / 2;   
-                    floatingArrowRight.rotation.x = -Math.PI / 2; 
+                    floatingArrowLeft.rotation.x = -Math.PI / 2;  // 左側向內 (-Z) 
+                    floatingArrowRight.rotation.x = Math.PI / 2;  // 右側向外 (+Z)
                 } else {
-                    floatingArrowLeft.rotation.x = -Math.PI / 2;  
-                    floatingArrowRight.rotation.x = Math.PI / 2;  
+                    floatingArrowLeft.rotation.x = Math.PI / 2;   // 左側向外 (+Z)
+                    floatingArrowRight.rotation.x = -Math.PI / 2; // 右側向內 (-Z)
                 }
                 floatingArrowLeft.visible = hasCurrent;
                 floatingArrowRight.visible = hasCurrent;
