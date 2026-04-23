@@ -1,0 +1,1085 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>酸鹼滴定互動模擬器</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f5f5f3;color:#1a1a1a;font-size:14px;display:flex;flex-direction:column;height:100vh;overflow:hidden}
+h1{font-size:17px;font-weight:500;padding:11px 18px;background:#fff;border-bottom:1px solid #e8e8e6;flex-shrink:0;display:flex;align-items:center;gap:10px}
+h1 span{font-size:11px;font-weight:400;color:#888;background:#f1efe8;padding:2px 8px;border-radius:20px}
+#maincontent{display:flex;flex:1;min-height:0;overflow:hidden}
+/* Left apparatus column — 50% */
+#apparatusCol{flex:1;min-width:0;background:#fafaf8;border-right:1px solid #e8e8e6;display:flex;flex-direction:column;align-items:center;padding:16px 14px;gap:12px;overflow-y:auto}
+#apparatusSvgWrap{width:100%;display:flex;justify-content:center}
+#apparatus{display:block}
+/* Right chart+controls column — 50% */
+#rightCol{flex:1;min-width:0;display:flex;flex-direction:column;overflow:hidden}
+#rightMain{flex:1;padding:14px 16px;display:flex;flex-direction:column;gap:10px;overflow-y:auto;min-height:0}
+/* Bottom collapsible panel */
+#bottomPanel{flex-shrink:0;border-top:2px solid #e8e8e6;background:#fff}
+#bottomPanel summary{font-size:12px;font-weight:600;color:#555;letter-spacing:.05em;padding:9px 16px;cursor:pointer;user-select:none;list-style:none;display:flex;align-items:center;gap:8px;background:#f9f9f7}
+#bottomPanel summary::-webkit-details-marker{display:none}
+#bottomPanel summary::before{content:'⚙';font-size:13px}
+#bottomPanel summary::after{content:'';font-size:10px;color:#aaa;margin-left:auto}
+#bottomPanel summary:hover{background:#f1efe8}
+#bottomPanelBody{padding:12px 16px 14px;overflow-y:auto;max-height:42vh;display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:16px 24px;background:#fff;border-top:1px solid #f0ede8}
+/* shared */
+.sec{font-size:10px;font-weight:600;color:#888;letter-spacing:.07em;text-transform:uppercase;margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid #f0ede8}
+.ctrl-row{margin-bottom:7px}
+.ctrl-label{font-size:12px;color:#555;margin-bottom:3px;display:block}
+.combo{display:flex;gap:4px;align-items:center}
+.combo select,.combo input[type=number]{font-size:12px;border:1px solid #ddd;border-radius:6px;padding:5px 7px;background:#fff;color:#1a1a1a;outline:none;transition:border-color .15s}
+.combo select:focus,.combo input[type=number]:focus{border-color:#378add}
+.combo select{flex:1;min-width:0}
+.combo input[type=number]{width:64px;text-align:right}
+.combo .unit{font-size:12px;color:#888;white-space:nowrap;min-width:18px}
+.err{font-size:11px;color:#e24b4a;min-height:12px;margin-top:1px}
+select{font-size:12px;border:1px solid #ddd;border-radius:6px;padding:5px 7px;background:#fff;color:#1a1a1a;width:100%;outline:none}
+select:focus{border-color:#378add}
+.stat{background:#f5f5f3;border-radius:8px;padding:8px 10px;text-align:center}
+.stat-label{font-size:10px;color:#888;margin-bottom:2px}
+.stat-val{font-size:16px;font-weight:500;color:#1a1a1a}
+button{border:1px solid #ddd;border-radius:8px;padding:7px 10px;background:#fff;color:#1a1a1a;font-size:12px;cursor:pointer;transition:background .12s,border-color .12s;display:flex;align-items:center;gap:5px;justify-content:center;white-space:nowrap}
+button:hover{background:#f5f5f3;border-color:#aaa}
+button:active{transform:scale(.98)}
+button.primary{background:#1a1a1a;color:#fff;border-color:#1a1a1a;flex:1}
+button.primary:hover{background:#333}
+.hint-box{font-size:12px;color:#555;background:#f5f5f3;border-radius:8px;padding:9px 12px;line-height:1.5}
+input[type=range]{width:100%;accent-color:#378add;cursor:pointer}
+.tag{display:inline-block;font-size:10px;padding:2px 8px;border-radius:20px;font-weight:500;margin-left:5px}
+.tag.strong{background:#fce8e8;color:#a32d2d}
+.tag.weak{background:#fff3e0;color:#854f0b}
+.tag.buf{background:#e8f0fe;color:#0c447c}
+.drop-speed{display:flex;align-items:center;gap:6px}
+.drop-speed label{font-size:12px;color:#555;white-space:nowrap}
+.drop-speed span{font-size:12px;color:#888;min-width:28px;text-align:right}
+/* info details in right */
+details.info{border-radius:8px;border:1px solid #e8e8e6;overflow:hidden;margin-bottom:8px}
+details.info summary{font-size:11px;font-weight:600;color:#555;letter-spacing:.05em;text-transform:uppercase;padding:7px 12px;cursor:pointer;background:#f9f9f7;user-select:none;list-style:none;display:flex;justify-content:space-between;align-items:center}
+details.info summary::-webkit-details-marker{display:none}
+details.info summary::after{content:'▸';font-size:10px;color:#aaa}
+details.info[open] summary::after{content:'▾'}
+details.info .detail-body{padding:9px 12px;font-size:12px;color:#555;line-height:1.7;background:#fff}
+/* spectrum */
+.color-spectrum{display:flex;height:13px;border-radius:5px;overflow:hidden;margin:3px 0 2px}
+.ph-labels{display:flex;justify-content:space-between;font-size:10px;color:#888}
+.marker-row{position:relative;height:9px;margin-top:1px}
+#specMarker{position:absolute;top:0;width:2px;height:9px;background:#1a1a1a;transition:left .1s}
+/* SVG apparatus */
+#apparatus{cursor:default;touch-action:none;-webkit-user-select:none;user-select:none;display:block}
+.stopcock-hit{fill:transparent;cursor:pointer}
+</style>
+</head>
+<body>
+
+<h1>酸鹼滴定互動模擬器 <span>廣用指示劑 · 酸鹼強弱 · 動畫播放</span>
+  <div style="margin-left:auto;display:flex;gap:4px;align-items:center">
+    <button id="btnFontDn" title="縮小字體" style="padding:3px 9px;font-size:13px;font-weight:500;border-radius:6px;line-height:1">A-</button>
+    <button id="btnFontUp" title="放大字體" style="padding:3px 9px;font-size:16px;font-weight:500;border-radius:6px;line-height:1">A+</button>
+  </div>
+</h1>
+
+<div id="maincontent">
+
+<!-- LEFT: apparatus -->
+<div id="apparatusCol">
+  <div style="font-size:11px;color:#aaa;text-align:center;margin-bottom:-6px">點活栓逐滴加入</div>
+  <div id="apparatusSvgWrap">
+  <svg id="apparatus" viewBox="0 0 180 400" role="img" aria-label="滴定裝置" style="max-width:280px">
+    <defs>
+      <clipPath id="burClip"><rect x="70" y="14" width="40" height="220"/></clipPath>
+      <clipPath id="beakerClip"><polygon points="30,280 150,280 162,390 18,390"/></clipPath>
+    </defs>
+    <!-- Clamp & stand -->
+    <rect x="84" y="4" width="12" height="14" rx="2" fill="#888"/>
+    <!-- Burette glass -->
+    <rect x="70" y="14" width="40" height="220" rx="4" fill="none" stroke="#aaa" stroke-width="1.5"/>
+    <rect x="73" y="16" width="34" height="216" fill="#e8f4ff" opacity=".5"/>
+    <rect id="burFill" x="73" y="16" width="34" height="216" fill="#85b7eb" clip-path="url(#burClip)"/>
+    <!-- Volume label outside burette, tracks liquid surface -->
+    <line id="burVolLine" x1="110" y1="20" x2="118" y2="20" stroke="#378add" stroke-width=".8" stroke-dasharray="2 2"/>
+    <text id="burVolLabel" x="120" y="23" text-anchor="start" font-size="9" fill="#185fa5" font-weight="500">0.00 mL</text>
+    <!-- Scale -->
+    <line x1="70" y1="18" x2="75" y2="18" stroke="#aaa" stroke-width=".8"/>
+    <text x="68" y="21" text-anchor="end" font-size="8" fill="#aaa">0</text>
+    <line x1="70" y1="74"  x2="73" y2="74"  stroke="#ccc" stroke-width=".6"/>
+    <line x1="70" y1="129" x2="75" y2="129" stroke="#aaa" stroke-width=".8"/>
+    <text x="68" y="132" text-anchor="end" font-size="8" fill="#aaa">12</text>
+    <line x1="70" y1="184" x2="73" y2="184" stroke="#ccc" stroke-width=".6"/>
+    <line x1="70" y1="230" x2="75" y2="230" stroke="#aaa" stroke-width=".8"/>
+    <text x="68" y="233" text-anchor="end" font-size="8" fill="#aaa">25</text>
+    <!-- Stopcock -->
+    <rect x="70" y="234" width="40" height="10" rx="3" fill="#666"/>
+    <rect id="stopcock" x="80" y="230" width="20" height="18" rx="3" fill="#444"/>
+    <line x1="90" y1="244" x2="90" y2="260" stroke="#aaa" stroke-width="2"/>
+    <rect x="88" y="259" width="4" height="5" rx="1" fill="#aaa"/>
+    <!-- Drop animation -->
+    <ellipse id="dropForm" cx="90" cy="268" rx="3" ry="2" fill="#85b7eb" opacity="0"/>
+    <circle  id="drop"    cx="90" cy="285" r="4"   fill="#85b7eb" opacity="0"/>
+    <circle  id="splash1" cx="90" cy="370" r="2"   fill="#85b7eb" opacity="0"/>
+    <circle  id="splash2" cx="84" cy="370" r="1.5" fill="#85b7eb" opacity="0"/>
+    <circle  id="splash3" cx="96" cy="370" r="1.5" fill="#85b7eb" opacity="0"/>
+    <!-- Beaker -->
+    <polygon points="30,280 150,280 162,390 18,390" fill="none" stroke="#aaa" stroke-width="1.5"/>
+    <line x1="18" y1="390" x2="162" y2="390" stroke="#aaa" stroke-width="2"/>
+    <polygon id="liquid"   points="32,340 148,340 160,388 20,388" fill="#e05555" opacity=".35" clip-path="url(#beakerClip)"/>
+    <polygon id="indLayer" points="32,340 148,340 160,388 20,388" fill="#e05555" opacity=".55" clip-path="url(#beakerClip)"/>
+    <text id="phInBeaker"    x="90" y="375" text-anchor="middle" font-size="12" font-weight="600" fill="#1a1a1a">pH 2.00</text>
+    <!-- Invisible stopcock hit area -->
+    <rect class="stopcock-hit" id="stopcockHit" x="65" y="224" width="50" height="42" rx="4">
+      <title>點擊活栓滴入 2 滴</title>
+    </rect>
+  </svg>
+  </div><!-- /apparatusSvgWrap -->
+
+  <!-- Spectrum -->
+  <div style="width:100%;max-width:280px">
+    <div style="font-size:10px;color:#888;margin-bottom:2px">廣用指示劑色譜</div>
+    <div class="color-spectrum">
+      <div style="flex:1;background:#e05555"></div><div style="flex:1;background:#e07030"></div>
+      <div style="flex:1;background:#e09020"></div><div style="flex:1;background:#d4b800"></div>
+      <div style="flex:1;background:#a8c800"></div><div style="flex:1;background:#50b850"></div>
+      <div style="flex:1;background:#30a878"></div><div style="flex:1;background:#2090b0"></div>
+      <div style="flex:1;background:#1868c0"></div><div style="flex:1;background:#5040b0"></div>
+      <div style="flex:1;background:#7030a0"></div>
+    </div>
+    <div class="ph-labels"><span>1</span><span>3</span><span>5</span><span>7</span><span>9</span><span>11+</span></div>
+    <div class="marker-row"><div id="specMarker"></div></div>
+  </div>
+</div>
+
+<!-- RIGHT: stats, chart, info -->
+<div id="rightCol">
+<div id="rightMain">
+
+  <!-- Stats row -->
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px">
+    <div class="stat"><div class="stat-label">pH</div><div class="stat-val" id="phDisp" style="font-size:22px;color:#378add">2.00</div></div>
+    <div class="stat"><div class="stat-label">已加體積</div><div class="stat-val" id="volDisp" style="font-size:13px">0.00 mL</div></div>
+    <div class="stat"><div class="stat-label">滴數</div><div class="stat-val" id="dropDisp" style="font-size:13px">0</div></div>
+  </div>
+
+  <!-- Slider + buttons -->
+  <div style="display:flex;flex-direction:column;gap:6px">
+    <div style="display:flex;align-items:center;gap:8px">
+      <input type="range" id="drops" min="0" max="400" value="0" step="1" style="flex:1;min-width:0">
+      <input type="number" id="inDrops" value="0" min="0" step="1" style="width:68px;flex-shrink:0;font-size:13px;border:1px solid #ddd;border-radius:6px;padding:4px 6px;text-align:right">
+      <span style="font-size:12px;color:#888;flex-shrink:0">滴</span>
+    </div>
+    <div style="display:flex;gap:6px;align-items:center">
+      <button class="primary" id="btnPlay">▶ 開始模擬</button>
+      <button id="btnReset">↺ 重設</button>
+      <span style="font-size:12px;color:#888;margin-left:6px;white-space:nowrap">活栓每次</span>
+      <input type="number" id="inDropsPerClick" value="2" min="1" max="20" step="1" style="width:52px;font-size:12px;border:1px solid #ddd;border-radius:6px;padding:4px 6px;text-align:right">
+      <span style="font-size:12px;color:#888;white-space:nowrap">滴</span>
+    </div>
+  </div>
+
+  <div class="hint-box" id="hint"></div>
+
+  <!-- Indicator zone -->
+  <div id="indZoneBox" style="background:#f5f5f3;border-radius:8px;padding:9px 12px;font-size:12px;color:#555;flex-shrink:0"></div>
+
+  <!-- Chart -->
+  <div style="background:#fff;border-radius:10px;border:1px solid #e8e8e6;padding:12px 14px;min-height:220px;flex-shrink:0">
+    <div style="font-size:11px;font-weight:500;color:#888;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">
+      <span>pH 滴定曲線</span>
+      <div style="display:flex;gap:10px;font-size:10px;color:#888">
+        <span style="display:flex;align-items:center;gap:3px"><span style="width:10px;height:3px;background:#378add;border-radius:1px;display:inline-block"></span>pH</span>
+        <span style="display:flex;align-items:center;gap:3px"><span style="width:7px;height:7px;border-radius:50%;background:#e24b4a;display:inline-block"></span>當量點</span>
+        <span style="display:flex;align-items:center;gap:3px"><span style="width:7px;height:7px;border-radius:50%;background:#50b850;display:inline-block"></span>目前</span>
+        <span style="display:flex;align-items:center;gap:3px"><span style="width:10px;height:8px;background:rgba(250,199,117,.5);border-radius:2px;display:inline-block"></span>指示劑區</span>
+      </div>
+    </div>
+    <div style="position:relative;width:100%;height:190px">
+      <canvas id="chart" role="img" aria-label="滴定pH曲線">滴定曲線</canvas>
+      <div id="chartCrosshair" style="display:none;position:absolute;top:0;bottom:0;width:1px;background:rgba(55,138,221,.4);pointer-events:none"></div>
+      <div id="chartTooltip" style="display:none;position:absolute;background:#1a1a1a;color:#fff;font-size:11px;padding:5px 9px;border-radius:6px;pointer-events:none;white-space:nowrap;line-height:1.6"></div>
+    </div>
+  </div>
+
+  <!-- Info collapsibles -->
+  <details class="info">
+    <summary>反應資訊 &amp; 當量點預測</summary>
+    <div class="detail-body">
+      <div id="reactionInfo"></div>
+      <div id="eqInfo" style="border-top:1px solid #f0ede8;padding-top:6px;margin-top:6px"></div>
+      <div id="eqDisp" style="display:none"></div>
+    </div>
+  </details>
+  <details class="info">
+    <summary>操作建議 &amp; 指示劑適用性</summary>
+    <div class="detail-body">
+      <div id="opHint"></div>
+      <div id="indCompat" style="border-top:1px solid #f0ede8;padding-top:6px;margin-top:6px"></div>
+    </div>
+  </details>
+
+</div><!-- /rightMain -->
+
+<!-- Bottom collapsible settings panel -->
+<details id="bottomPanel">
+  <summary>實驗設定 <span id="panelStateLabel" style="font-size:10px;font-weight:400;color:#aaa;margin-left:4px">（點擊開啟）</span></summary>
+  <div id="bottomPanelBody">
+
+    <!-- Acid -->
+    <div>
+      <div class="sec">燒杯（酸或鹼）</div>
+      <div class="ctrl-row">
+        <label class="ctrl-label">燒杯內容物</label>
+        <select id="acidType" onchange="onAcidChange()">
+          <option value="water_n_a">H₂O（純水，pH = 7）</option>
+          <optgroup label="強酸">
+            <option value="HCl_s" selected>HCl（鹽酸）</option>
+            <option value="HBr_s">HBr（氫溴酸）</option>
+            <option value="HI_s">HI（氫碘酸）</option>
+            <option value="HNO3_s">HNO₃（硝酸）</option>
+            <option value="H2SO4_s">H₂SO₄（硫酸，二元）</option>
+            <option value="HClO4_s">HClO₄（過氯酸）</option>
+          </optgroup>
+          <optgroup label="弱酸">
+            <option value="CH3COOH_w">CH₃COOH（醋酸，Ka=1.8e-5）</option>
+            <option value="HCOOH_w">HCOOH（甲酸，Ka=1.8e-4）</option>
+            <option value="HNO2_w">HNO₂（亞硝酸，Ka=4.5e-4）</option>
+            <option value="HF_w">HF（氫氟酸，Ka=6.8e-4）</option>
+            <option value="H2C2O4_w">H₂C₂O₄（草酸，Ka=5.9e-2）</option>
+            <option value="H2CO3_w">H₂CO₃（碳酸，Ka=4.3e-7）</option>
+            <option value="H2S_w">H₂S（硫化氫，Ka=9.5e-8）</option>
+            <option value="HCN_w">HCN（氰化氫，Ka=6.2e-10）</option>
+            <option value="H3PO4_w">H₃PO₄（磷酸，Ka=7.5e-3）</option>
+            <option value="NH4_w">NH₄⁺（銨根，Ka=5.6e-10）</option>
+          </optgroup>
+          <optgroup label="強鹼">
+            <option value="NaOH_s_b">NaOH（氫氧化鈉）</option>
+            <option value="KOH_s_b">KOH（氫氧化鉀）</option>
+            <option value="LiOH_s_b">LiOH（氫氧化鋰）</option>
+            <option value="Ca_OH_2_s_b">Ca(OH)₂（氫氧化鈣，二元）</option>
+            <option value="Ba_OH_2_s_b">Ba(OH)₂（氫氧化鋇，二元）</option>
+            <option value="Sr_OH_2_s_b">Sr(OH)₂（氫氧化鍶，二元）</option>
+          </optgroup>
+          <optgroup label="弱鹼">
+            <option value="NH3_w_b">NH₃（氨水，Kb=1.8e-5）</option>
+            <option value="ethylamine_w_b">C₂H₅NH₂（乙胺，Kb=4.3e-4）</option>
+            <option value="Na2CO3_w_b">Na₂CO₃（碳酸鈉，Kb=2.1e-4）</option>
+            <option value="NaHCO3_w_b">NaHCO₃（碳酸氫鈉，Kb=2.4e-8）</option>
+            <option value="Na3PO4_w_b">Na₃PO₄（磷酸鈉，Kb=2.4e-2）</option>
+            <option value="pyridine_w_b">C₅H₅N（吡啶，Kb=1.7e-9）</option>
+            <option value="aniline_w_b">C₆H₅NH₂（苯胺，Kb=4.3e-10）</option>
+          </optgroup>
+        </select>
+        <div id="acidTag" class="tag strong" style="margin-top:4px">強酸</div>
+      </div>
+      <div class="ctrl-row" id="acidConcRow">
+        <label class="ctrl-label">酸濃度</label>
+        <div class="combo">
+          <select id="selCH" onchange="syncCombo('selCH','inCH')">
+            <option value="">自訂</option>
+            <option value="0.001">0.001 M</option>
+            <option value="0.01" selected>0.01 M</option>
+            <option value="0.05">0.05 M</option>
+            <option value="0.1">0.1 M</option>
+            <option value="0.5">0.5 M</option>
+            <option value="1">1 M</option>
+          </select>
+          <input type="number" id="inCH" value="0.01" min="0.0001" max="10" step="0.001">
+          <span class="unit">M</span>
+        </div>
+        <div class="err" id="errCH"></div>
+      </div>
+      <div class="ctrl-row">
+        <label class="ctrl-label">酸體積</label>
+        <div class="combo">
+          <select id="selVH" onchange="syncCombo('selVH','inVH')">
+            <option value="">自訂</option>
+            <option value="5">5 mL</option>
+            <option value="10" selected>10 mL</option>
+            <option value="20">20 mL</option>
+            <option value="25">25 mL</option>
+            <option value="50">50 mL</option>
+          </select>
+          <input type="number" id="inVH" value="10" min="0.1" max="500" step="0.1">
+          <span class="unit">mL</span>
+        </div>
+        <div class="err" id="errVH"></div>
+      </div>
+    </div>
+
+    <!-- Base -->
+    <div>
+      <div class="sec">滴定管（酸或鹼）</div>
+      <div class="ctrl-row">
+        <label class="ctrl-label">滴定管內容物</label>
+        <select id="baseType" onchange="onBaseChange()">
+          <option value="water_n_b">H₂O（純水，pH = 7）</option>
+          <optgroup label="強鹼">
+            <option value="NaOH_s" selected>NaOH（氫氧化鈉）</option>
+            <option value="KOH_s">KOH（氫氧化鉀）</option>
+            <option value="LiOH_s">LiOH（氫氧化鋰）</option>
+            <option value="Ca_OH_2_s">Ca(OH)₂（氫氧化鈣，二元）</option>
+            <option value="Ba_OH_2_s">Ba(OH)₂（氫氧化鋇，二元）</option>
+            <option value="Sr_OH_2_s">Sr(OH)₂（氫氧化鍶，二元）</option>
+          </optgroup>
+          <optgroup label="弱鹼">
+            <option value="NH3_w">NH₃（氨水，Kb=1.8e-5）</option>
+            <option value="ethylamine_w">C₂H₅NH₂（乙胺，Kb=4.3e-4）</option>
+            <option value="Na2CO3_w">Na₂CO₃（碳酸鈉，Kb=2.1e-4）</option>
+            <option value="NaHCO3_w">NaHCO₃（碳酸氫鈉，Kb=2.4e-8）</option>
+            <option value="Na3PO4_w">Na₃PO₄（磷酸鈉，Kb=2.4e-2）</option>
+            <option value="pyridine_w">C₅H₅N（吡啶，Kb=1.7e-9）</option>
+            <option value="aniline_w">C₆H₅NH₂（苯胺，Kb=4.3e-10）</option>
+          </optgroup>
+          <optgroup label="強酸">
+            <option value="HCl_s_a">HCl（鹽酸）</option>
+            <option value="HBr_s_a">HBr（氫溴酸）</option>
+            <option value="HI_s_a">HI（氫碘酸）</option>
+            <option value="HNO3_s_a">HNO₃（硝酸）</option>
+            <option value="H2SO4_s_a">H₂SO₄（硫酸，二元）</option>
+            <option value="HClO4_s_a">HClO₄（過氯酸）</option>
+          </optgroup>
+          <optgroup label="弱酸">
+            <option value="CH3COOH_w_a">CH₃COOH（醋酸，Ka=1.8e-5）</option>
+            <option value="HCOOH_w_a">HCOOH（甲酸，Ka=1.8e-4）</option>
+            <option value="HNO2_w_a">HNO₂（亞硝酸，Ka=4.5e-4）</option>
+            <option value="HF_w_a">HF（氫氟酸，Ka=6.8e-4）</option>
+            <option value="H2C2O4_w_a">H₂C₂O₄（草酸，Ka=5.9e-2）</option>
+            <option value="H2CO3_w_a">H₂CO₃（碳酸，Ka=4.3e-7）</option>
+            <option value="H2S_w_a">H₂S（硫化氫，Ka=9.5e-8）</option>
+            <option value="HCN_w_a">HCN（氰化氫，Ka=6.2e-10）</option>
+            <option value="H3PO4_w_a">H₃PO₄（磷酸，Ka=7.5e-3）</option>
+            <option value="NH4_w_a">NH₄⁺（銨根，Ka=5.6e-10）</option>
+          </optgroup>
+        </select>
+        <div id="baseTag" class="tag strong" style="margin-top:4px">強鹼</div>
+      </div>
+      <div class="ctrl-row" id="baseConcRow">
+        <label class="ctrl-label">鹼濃度</label>
+        <div class="combo">
+          <select id="selCB" onchange="syncCombo('selCB','inCB')">
+            <option value="">自訂</option>
+            <option value="0.001">0.001 M</option>
+            <option value="0.01" selected>0.01 M</option>
+            <option value="0.05">0.05 M</option>
+            <option value="0.1">0.1 M</option>
+            <option value="0.5">0.5 M</option>
+            <option value="1">1 M</option>
+          </select>
+          <input type="number" id="inCB" value="0.01" min="0.0001" max="10" step="0.001">
+          <span class="unit">M</span>
+        </div>
+        <div class="err" id="errCB"></div>
+      </div>
+      <div class="ctrl-row">
+        <label class="ctrl-label">每滴體積</label>
+        <div class="combo">
+          <select id="selDrop" onchange="syncCombo('selDrop','inDrop')">
+            <option value="">自訂</option>
+            <option value="0.02">0.02 mL</option>
+            <option value="0.03">0.03 mL</option>
+            <option value="0.05" selected>0.05 mL</option>
+            <option value="0.1">0.1 mL</option>
+            <option value="0.2">0.2 mL</option>
+          </select>
+          <input type="number" id="inDrop" value="0.05" min="0.001" max="5" step="0.001">
+          <span class="unit">mL</span>
+        </div>
+        <div class="err" id="errDrop"></div>
+      </div>
+    </div>
+
+    <!-- Indicator + Speed -->
+    <div>
+      <div class="sec">指示劑</div>
+      <div class="ctrl-row">
+        <label class="ctrl-label">選擇指示劑</label>
+        <select id="indicator" onchange="onIndicatorChange()">
+          <option value="universal">廣用指示劑（pH 1–14）</option>
+          <optgroup label="酸性變色">
+            <option value="methyl_orange">甲基橙（3.1–4.4）</option>
+            <option value="methyl_red">甲基紅（4.4–6.2）</option>
+            <option value="congo_red">剛果紅（3.0–5.0）</option>
+            <option value="bromocresol_green">溴甲酚綠（3.8–5.4）</option>
+          </optgroup>
+          <optgroup label="中性附近">
+            <option value="litmus">石蕊（5.0–8.0）</option>
+            <option value="bromothymol_blue">溴瑞香草藍（6.0–7.6）</option>
+            <option value="neutral_red">中性紅（6.8–8.0）</option>
+          </optgroup>
+          <optgroup label="鹼性變色">
+            <option value="phenol_red">酚紅（6.8–8.4）</option>
+            <option value="phenolphthalein">酚酞（8.2–10.0）</option>
+            <option value="thymolphthalein">麝香草酚酞（9.3–10.5）</option>
+            <option value="alizarin_yellow">茜素黃（10.1–12.0）</option>
+          </optgroup>
+        </select>
+      </div>
+
+
+      <div class="sec" style="margin-top:8px">播放速度</div>
+      <div class="drop-speed">
+        <label>慢</label>
+        <input type="range" id="speedSlider" min="1" max="10" value="1" step="1">
+        <label>快</label>
+        <span id="speedLabel">1×</span>
+      </div>
+    </div>
+
+  </div>
+</details>
+
+</div><!-- /rightCol -->
+</div><!-- /maincontent -->
+
+<script>
+const ACIDS = {
+  water_n:  {name:'H₂O',    strong:false, n:0, Ka:null, isWater:true},
+  HCl_s:    {name:'HCl',    strong:true,  n:1, Ka:null},
+  HBr_s:    {name:'HBr',    strong:true,  n:1, Ka:null},
+  HI_s:     {name:'HI',     strong:true,  n:1, Ka:null},
+  HNO3_s:   {name:'HNO₃',  strong:true,  n:1, Ka:null},
+  H2SO4_s:  {name:'H₂SO₄', strong:true,  n:2, Ka:null},
+  HClO4_s:  {name:'HClO₄', strong:true,  n:1, Ka:null},
+  CH3COOH_w:{name:'CH₃COOH',strong:false,n:1, Ka:1.8e-5},
+  H2CO3_w:  {name:'H₂CO₃', strong:false, n:1, Ka:4.3e-7},
+  H3PO4_w:  {name:'H₃PO₄', strong:false, n:1, Ka:7.5e-3},
+  HF_w:     {name:'HF',     strong:false, n:1, Ka:6.8e-4},
+  HCN_w:    {name:'HCN',    strong:false, n:1, Ka:6.2e-10},
+  H2S_w:    {name:'H₂S',   strong:false, n:1, Ka:9.5e-8},
+  HNO2_w:   {name:'HNO₂',  strong:false, n:1, Ka:4.5e-4},
+  HCOOH_w:  {name:'HCOOH', strong:false, n:1, Ka:1.8e-4},
+  NH4_w:    {name:'NH₄⁺',  strong:false, n:1, Ka:5.6e-10},
+  H2C2O4_w: {name:'H₂C₂O₄',strong:false,n:1, Ka:5.9e-2},
+};
+const BASES = {
+  water_n:   {name:'H₂O',    strong:false, n:0, Kb:null, isWater:true},
+  NaOH_s:    {name:'NaOH',   strong:true,  n:1, Kb:null},
+  KOH_s:     {name:'KOH',    strong:true,  n:1, Kb:null},
+  LiOH_s:    {name:'LiOH',   strong:true,  n:1, Kb:null},
+  Ca_OH_2_s: {name:'Ca(OH)₂',strong:true, n:2, Kb:null},
+  Ba_OH_2_s: {name:'Ba(OH)₂',strong:true, n:2, Kb:null},
+  Sr_OH_2_s: {name:'Sr(OH)₂',strong:true, n:2, Kb:null},
+  NH3_w:     {name:'NH₃',    strong:false, n:1, Kb:1.8e-5},
+  Na2CO3_w:  {name:'Na₂CO₃', strong:false, n:1, Kb:2.1e-4},
+  NaHCO3_w:  {name:'NaHCO₃', strong:false, n:1, Kb:2.4e-8},
+  pyridine_w:{name:'C₅H₅N', strong:false, n:1, Kb:1.7e-9},
+  aniline_w: {name:'C₆H₅NH₂',strong:false,n:1, Kb:4.3e-10},
+  Na3PO4_w:  {name:'Na₃PO₄', strong:false, n:1, Kb:2.4e-2},
+  ethylamine_w:{name:'C₂H₅NH₂',strong:false,n:1,Kb:4.3e-4},
+};
+const INDICATORS = {
+  universal:         {name:'廣用指示劑',pLow:1,   pHigh:14,  acidCol:'#e05555', baseCol:'#7030a0', type:'universal'},
+  methyl_orange:     {name:'甲基橙',   pLow:3.1, pHigh:4.4, acidCol:'#e05555', baseCol:'#f0c040'},
+  methyl_red:        {name:'甲基紅',   pLow:4.4, pHigh:6.2, acidCol:'#e24b4a', baseCol:'#f0c040'},
+  congo_red:         {name:'剛果紅',   pLow:3.0, pHigh:5.0, acidCol:'#1868c0', baseCol:'#e24b4a'},
+  bromocresol_green: {name:'溴甲酚綠', pLow:3.8, pHigh:5.4, acidCol:'#f0c040', baseCol:'#50b850'},
+  litmus:            {name:'石蕊',     pLow:5.0, pHigh:8.0, acidCol:'#e24b4a', baseCol:'#378add'},
+  bromothymol_blue:  {name:'溴瑞香草藍',pLow:6.0,pHigh:7.6, acidCol:'#f0c040', baseCol:'#378add'},
+  neutral_red:       {name:'中性紅',   pLow:6.8, pHigh:8.0, acidCol:'#e24b4a', baseCol:'#f0c040'},
+  phenol_red:        {name:'酚紅',     pLow:6.8, pHigh:8.4, acidCol:'#f0c040', baseCol:'#e24b4a'},
+  phenolphthalein:   {name:'酚酞',     pLow:8.2, pHigh:10.0,acidCol:'#f8f8f8', baseCol:'#f4c0d1', pFade:12.0, fadeCol:'#f8f8f8', triColor:true},
+  thymolphthalein:   {name:'麝香草酚酞',pLow:9.3,pHigh:10.5,acidCol:'#f8f8f8', baseCol:'#b5d4f4'},
+  alizarin_yellow:   {name:'茜素黃',   pLow:10.1,pHigh:12.0,acidCol:'#f0c040', baseCol:'#e24b4a'},
+};
+
+const WATER={name:'H₂O',strong:false,n:0,Ka:null,Kb:null,isWater:true};
+
+// Unified lookup: strip _a/_b suffix, check ACIDS then BASES
+function lookup(key){
+  if(key==='water_n_a'||key==='water_n_b')return WATER;
+  const base=key.replace(/_a$/,'').replace(/_b$/,'');
+  return ACIDS[base]||BASES[base]||WATER;
+}
+function isAcidic(key){
+  if(key==='water_n_a'||key==='water_n_b')return false;
+  const base=key.replace(/_a$/,'').replace(/_b$/,'');
+  return !!ACIDS[base];
+}
+function isBasic(key){
+  if(key==='water_n_a'||key==='water_n_b')return false;
+  const base=key.replace(/_a$/,'').replace(/_b$/,'');
+  return !!BASES[base];
+}
+
+let S={cAcid:.01,vAcid:10,cBase:.01,dropVol:.05,drops:0,acidKey:'HCl_s',baseKey:'NaOH_s',indKey:'universal'};
+let chart=null,chartLabels=[],chartData=[];
+let animId=null,playing=false,animStart=null,animFrom=0,animTo=0;
+let dropAnimId=null,dropActive=false,dropPhase=0;
+let dropsPerClick=2;
+function getDropsPerClick(){return dropsPerClick;}
+
+function getEqDrops(){
+  const a=lookup(S.acidKey),b=lookup(S.baseKey);
+  if(a.isWater||b.isWater)return 0;
+  // If base in beaker, acid in burette — swap roles for equiv calc
+  const beakerIsBase=isBasic(S.acidKey);
+  if(beakerIsBase){
+    return Math.round((S.cAcid*S.vAcid*b.n)/(S.cBase*S.dropVol*a.n));
+  }
+  return Math.round((S.cAcid*S.vAcid*a.n)/(S.cBase*S.dropVol*b.n));
+}
+
+function calcPH(drops){
+  const rawA=lookup(S.acidKey), rawB=lookup(S.baseKey);
+  // Determine which is acid and which is base regardless of beaker/burette
+  const beakerIsBase=isBasic(S.acidKey)&&isAcidic(S.baseKey);
+  const a=beakerIsBase?rawB:rawA; // acid
+  const b=beakerIsBase?rawA:rawB; // base
+  const cAcid=beakerIsBase?S.cBase:S.cAcid;
+  const vAcid=beakerIsBase?0:S.vAcid; // beaker vol always S.vAcid
+  const cBase=beakerIsBase?S.cAcid:S.cBase;
+
+  if(a.isWater&&b.isWater)return 7;
+
+  const vAcidActual=S.vAcid; // beaker volume is always vAcid
+  const nAcidTotal=beakerIsBase?(cBase*S.dropVol*drops*b.n):(cAcid*vAcidActual*a.n);
+  const nBaseTotal=beakerIsBase?(cAcid*vAcidActual*a.n):(cBase*S.dropVol*drops*b.n);
+  const Vt=(vAcidActual+drops*S.dropVol)/1000;
+
+  if(a.isWater){
+    const nB=nBaseTotal, Vl=Vt*1000;
+    if(nB<1e-12)return 7;
+    if(b.strong)return 14+Math.log10(nB/Vl);
+    const cOH=Math.sqrt(b.Kb*nB/Vl);return 14+Math.log10(cOH);
+  }
+  if(b.isWater){
+    const nA=nAcidTotal, Vl=Vt*1000;
+    if(a.strong)return -Math.log10(nA/Vl);
+    return 0.5*(-Math.log10(a.Ka)-Math.log10(nA/Vl));
+  }
+
+  const diff=nBaseTotal-nAcidTotal;
+  if(a.strong&&b.strong){
+    if(diff<-1e-12)return -Math.log10((nAcidTotal-nBaseTotal)/(Vt*1000));
+    if(Math.abs(diff)<1e-12)return 7;
+    return 14+Math.log10((nBaseTotal-nAcidTotal)/(Vt*1000));
+  }
+  if(!a.strong&&b.strong){
+    const Ka=a.Ka,Vl=Vt*1000;
+    if(diff<-1e-12){const nHA=nAcidTotal-nBaseTotal,nA=nBaseTotal;if(nA<1e-12)return .5*(Math.log10(1/Ka)-Math.log10(nHA/Vl));return -Math.log10(Ka)+Math.log10(nA/nHA);}
+    if(Math.abs(diff)<1e-12){return 14+Math.log10(Math.sqrt(1e-14/Ka*nAcidTotal/Vl));}
+    return 14+Math.log10((nBaseTotal-nAcidTotal)/Vl);
+  }
+  if(a.strong&&!b.strong){
+    const Kb=b.Kb,Ka=1e-14/Kb,Vl=Vt*1000;
+    if(diff<-1e-12)return -Math.log10((nAcidTotal-nBaseTotal)/Vl);
+    if(Math.abs(diff)<1e-12)return .5*(-Math.log10(Ka)+Math.log10(nAcidTotal/Vl)+14);
+    const nBf=nBaseTotal-nAcidTotal,nBH=nAcidTotal;
+    if(nBH<1e-12)return 14+Math.log10(Math.sqrt(Kb*nBf/Vl));
+    return 14-(-Math.log10(Kb)+Math.log10(nBH/nBf));
+  }
+  const Ka=a.Ka,Kb=b.Kb,Vl=Vt*1000;
+  if(diff<-1e-12){const nHA=nAcidTotal-nBaseTotal,nA=nBaseTotal;if(nA<1e-12)return .5*(Math.log10(1/Ka)-Math.log10(nHA/Vl));return -Math.log10(Ka)+Math.log10(nA/nHA);}
+  if(Math.abs(diff)<1e-12)return 7+.5*(Math.log10(Ka)-Math.log10(Kb));
+  const nBf=nBaseTotal-nAcidTotal,nBH=nAcidTotal;
+  if(nBH<1e-12)return 14+Math.log10(Math.sqrt(Kb*nBf/Vl));
+  return 14-(-Math.log10(Kb)+Math.log10(nBH/nBf));
+}
+
+function phToUniversalCol(ph){
+  const stops=[[1,'#e05555'],[2,'#e05555'],[3,'#e07030'],[4,'#e09020'],[5,'#d4b800'],[6,'#a8c800'],[7,'#50b850'],[8,'#30a878'],[9,'#2090b0'],[10,'#1868c0'],[11,'#5040b0'],[14,'#7030a0']];
+  const c=Math.max(1,Math.min(14,ph));
+  for(let i=0;i<stops.length-1;i++){
+    const[p0,c0]=stops[i],[p1,c1]=stops[i+1];
+    if(c>=p0&&c<=p1){
+      const t=(c-p0)/(p1-p0),parse=s=>[parseInt(s.slice(1,3),16),parseInt(s.slice(3,5),16),parseInt(s.slice(5,7),16)];
+      const[ar,ag,ab]=parse(c0),[br,bg,bb]=parse(c1);
+      return '#'+[ar+(br-ar)*t,ag+(bg-ag)*t,ab+(bb-ab)*t].map(v=>Math.round(v).toString(16).padStart(2,'0')).join('');
+    }
+  }
+  return '#7030a0';
+}
+function lerpHex(a,b,t){
+  const p=s=>[parseInt(s.slice(1,3),16),parseInt(s.slice(3,5),16),parseInt(s.slice(5,7),16)];
+  const[ar,ag,ab]=p(a),[br,bg,bb]=p(b);
+  return '#'+[ar+(br-ar)*t,ag+(bg-ag)*t,ab+(bb-ab)*t].map(v=>Math.round(v).toString(16).padStart(2,'0')).join('');
+}
+function phToIndicatorCol(ph){
+  const ind=INDICATORS[S.indKey];
+  if(ind.type==='universal')return phToUniversalCol(ph);
+  if(ph<=ind.pLow)return ind.acidCol;
+  // tri-color: acid → peak → fade back (e.g. phenolphthalein)
+  if(ind.triColor){
+    const pMid=(ind.pLow+ind.pHigh)/2;
+    if(ph<=ind.pHigh){
+      const t=(ph-ind.pLow)/(ind.pHigh-ind.pLow);
+      return lerpHex(ind.acidCol,ind.baseCol,Math.min(t*2,1));
+    }
+    if(ph<=ind.pFade){
+      const t=(ph-ind.pHigh)/(ind.pFade-ind.pHigh);
+      return lerpHex(ind.baseCol,ind.fadeCol,t);
+    }
+    return ind.fadeCol;
+  }
+  if(ph>=ind.pHigh)return ind.baseCol;
+  return lerpHex(ind.acidCol,ind.baseCol,(ph-ind.pLow)/(ind.pHigh-ind.pLow));
+}
+function phToUniversalName(ph){
+  if(ph<2.5)return'紅色';if(ph<3.5)return'橙紅';if(ph<4.5)return'橙色';
+  if(ph<5.5)return'橙黃';if(ph<6.3)return'黃色';if(ph<7.3)return'黃綠';
+  if(ph<8.3)return'綠色';if(ph<9.2)return'藍綠';if(ph<10.3)return'藍色';
+  if(ph<11.3)return'深藍紫';return'紫色';
+}
+function phToColorName(ph){
+  const ind=INDICATORS[S.indKey];
+  if(ind.type==='universal')return phToUniversalName(ph);
+  if(ph<=ind.pLow)return ind.desc?ind.desc.split('酸:')[1].split(' ')[0]:'';
+  if(ph>=ind.pHigh)return ind.desc?ind.desc.split('鹼:')[1]:'';
+  return'漸變中';
+}
+function getHint(drops,ph){
+  const eq=getEqDrops();
+  if(eq===0){
+    const a=lookup(S.acidKey),b=lookup(S.baseKey);
+    if(a.isWater&&b.isWater)return'兩者均為純水，pH 恆為 7。';
+    if(b.isWater)return'滴入純水為純稀釋，pH 緩慢趨近 7，無當量點。';
+    return'燒杯為純水，滴入鹼後 pH 從 7 上升，無中和當量點。';
+  }
+  if(drops===0)return`尚未滴加。點擊活栓每次加入 ${getDropsPerClick()} 滴，或按「開始模擬」自動播放。`;
+  const r=drops/eq;
+  if(r<.7)return'距當量點尚遠，可較快速滴加。';
+  if(r<.9)return'超過70%當量，建議每滴後搖晃觀察。';
+  if(r<.97)return'接近當量點！每滴後充分搖晃，仔細觀察顏色。';
+  if(Math.abs(r-1)<.02)return'當量點附近！一滴可能造成明顯顏色突變。';
+  if(r>1.05)return'已超過當量點，鹼過量，溶液呈鹼性。';
+  return'剛過當量點，繼續觀察顏色變化。';
+}
+function updateBurette(drops){
+  const eq=getEqDrops(),maxD=eq*2||400,pct=Math.min(drops/maxD,1);
+  const fillH=Math.max(0,Math.round(216*(1-pct)));
+  const surfaceY=16+216-fillH; // top of liquid in SVG coords
+  const el=document.getElementById('burFill');
+  el.setAttribute('height',fillH);
+  el.setAttribute('y',surfaceY);
+  // Label tracks surface, clamped to visible range
+  const labelY=Math.max(20,Math.min(230,surfaceY+3));
+  const line=document.getElementById('burVolLine');
+  line.setAttribute('y1',labelY);line.setAttribute('y2',labelY);
+  const lbl=document.getElementById('burVolLabel');
+  lbl.setAttribute('y',labelY+3);
+  lbl.textContent=(drops*S.dropVol).toFixed(2)+' mL';
+}
+function updateUI(d){
+  S.drops=d;
+  const ph=Math.max(0,Math.min(14,calcPH(d)));
+  const col=phToIndicatorCol(ph);
+  document.getElementById('drops').value=d;
+  document.getElementById('inDrops').value=d;
+  document.getElementById('phDisp').textContent=ph.toFixed(2);
+  document.getElementById('phDisp').style.color=col;
+  document.getElementById('volDisp').textContent=(d*S.dropVol).toFixed(2)+' mL';
+  document.getElementById('dropDisp').textContent=d;
+  document.getElementById('hint').textContent=getHint(d,ph);
+  document.getElementById('liquid').setAttribute('fill',col);
+  document.getElementById('indLayer').setAttribute('fill',col);
+  document.getElementById('phInBeaker').textContent='pH '+ph.toFixed(2);
+  const eq=getEqDrops();
+  const liqFrac=Math.min(d/(eq||200),1.5);
+  const topY=340-liqFrac*55;
+  const pts=`32,${topY} 148,${topY} 160,388 20,388`;
+  document.getElementById('liquid').setAttribute('points',pts);
+  document.getElementById('indLayer').setAttribute('points',pts);
+  const pct=Math.max(0,Math.min(100,(Math.min(ph,14)-1)/13*100));
+  document.getElementById('specMarker').style.left='calc('+pct.toFixed(1)+'% - 1px)';
+  updateBurette(d);
+  updateChart(d,ph);
+}
+
+function updateChart(d,ph){
+  if(!chart||!chartLabels.length)return;
+  const eq=getEqDrops(),hasEq=eq>0;
+  const ind=INDICATORS[S.indKey];
+  const revealed=chartLabels.map((l,i)=>l<=d?chartData[i]:null);
+  chart.data.datasets[0].data=revealed;
+  chart.data.datasets[1].data=chartLabels.map(l=>(hasEq&&l===eq&&d>=eq)?Math.max(0,Math.min(14,calcPH(eq))):null);
+  chart.data.datasets[1].pointRadius=chartLabels.map(l=>(hasEq&&l===eq&&d>=eq)?5:0);
+  const ci=chartLabels.reduce((bi,l,i)=>Math.abs(l-d)<Math.abs(chartLabels[bi]-d)?i:bi,0);
+  const cur=new Array(chartLabels.length).fill(null);cur[ci]=ph;
+  const pr=new Array(chartLabels.length).fill(0);pr[ci]=6;
+  chart.data.datasets[2].data=cur;
+  chart.data.datasets[2].pointRadius=pr;
+  chart.update('none');
+}
+
+function rebuildChart(){
+  const eq=getEqDrops(),hasEq=eq>0;
+  const maxD=hasEq?Math.min(Math.max(eq*2,20),50000):400;
+  const step=Math.max(1,Math.floor(maxD/300));
+  const labels=new Set();
+  for(let d=0;d<=maxD;d+=step)labels.add(d);
+  // Dense sampling around equivalence point (±10% of maxD, min 20 points)
+  if(hasEq){
+    const window=Math.max(Math.floor(maxD*0.06),10);
+    const fineStep=Math.max(1,Math.floor(window/40));
+    for(let d=Math.max(0,eq-window);d<=Math.min(maxD,eq+window);d+=fineStep)labels.add(d);
+    labels.add(eq);
+  }
+  chartLabels=[...labels].sort((a,b)=>a-b);
+  chartData=chartLabels.map(d=>Math.max(0,Math.min(14,parseFloat(calcPH(d).toFixed(4)))));
+  const ind=INDICATORS[S.indKey];
+
+  const indGradientPlugin={
+    id:'indGradient',
+    beforeDraw(ch){
+      const ca=ch.chartArea;
+      if(!ca)return;
+      const {ctx,scales:{y}}=ch;
+      const {left,right,top,bottom}=ca;
+      const pLow=ind.pLow, pHigh=ind.triColor?ind.pFade:ind.pHigh;
+      const yTop=y.getPixelForValue(pHigh);
+      const yBot=y.getPixelForValue(pLow);
+      if(yTop>=bottom||yBot<=top)return;
+      const yT=Math.max(top,yTop), yB=Math.min(bottom,yBot);
+      const grad=ctx.createLinearGradient(0,yB,0,yT);
+      if(ind.triColor){
+        const pMid=ind.pHigh;
+        const tMid=Math.max(0,Math.min(1,(pMid-pLow)/(pHigh-pLow)));
+        grad.addColorStop(0,ind.acidCol+'aa');
+        grad.addColorStop(tMid,ind.baseCol+'cc');
+        grad.addColorStop(1,ind.fadeCol+'44');
+      } else {
+        grad.addColorStop(0,ind.acidCol+'99');
+        grad.addColorStop(1,ind.baseCol+'99');
+      }
+      ctx.save();
+      ctx.fillStyle=grad;
+      ctx.fillRect(left,yT,right-left,yB-yT);
+      ctx.restore();
+    }
+  };
+
+  const ctx2=document.getElementById('chart').getContext('2d');
+  if(chart)chart.destroy();
+  chart=new Chart(ctx2,{
+    type:'line',
+    plugins:[indGradientPlugin],
+    data:{labels:chartLabels,datasets:[
+      {label:'pH',data:new Array(chartLabels.length).fill(null),borderColor:'#378add',borderWidth:2,pointRadius:0,tension:0,fill:false,spanGaps:false},
+      {label:'eq',data:new Array(chartLabels.length).fill(null),backgroundColor:'#e24b4a',borderColor:'#e24b4a',pointRadius:new Array(chartLabels.length).fill(0),showLine:false},
+      {label:'cur',data:new Array(chartLabels.length).fill(null),backgroundColor:'#50b850',borderColor:'#fff',borderWidth:2,pointRadius:new Array(chartLabels.length).fill(0),showLine:false}
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,
+      interaction:{mode:'index',intersect:false},
+      plugins:{legend:{display:false},tooltip:{enabled:false}},
+      scales:{
+        x:{title:{display:true,text:'滴數',color:'#888',font:{size:11}},ticks:{maxTicksLimit:8,color:'#888',font:{size:10}},grid:{color:'rgba(128,128,128,0.1)'}},
+        y:{min:0,max:14,title:{display:true,text:'pH',color:'#888',font:{size:11}},ticks:{color:'#888',font:{size:10}},grid:{color:'rgba(128,128,128,0.1)'}}
+      }}
+  });
+  document.getElementById('drops').max=maxD;
+  document.getElementById('inDrops').max=maxD;
+  if(S.drops>maxD)S.drops=0;
+  document.getElementById('eqDisp').textContent=hasEq?eq.toLocaleString()+'滴':'無當量點';
+  updateInfoPanels();
+  updateUI(S.drops);
+}
+
+function updateInfoPanels(){
+  const rawA=lookup(S.acidKey),rawB=lookup(S.baseKey),ind=INDICATORS[S.indKey];
+  const beakerIsBase=isBasic(S.acidKey)&&isAcidic(S.baseKey);
+  const acid=beakerIsBase?rawB:rawA, base=beakerIsBase?rawA:rawB;
+  const eq=getEqDrops(),eqPH=Math.max(0,Math.min(14,calcPH(eq||0)));
+  const noEq=rawA.isWater||rawB.isWater;
+  const acidDesc=acid.isWater?'純水（pH=7）':acid.strong?'強酸':'弱酸（Ka='+acid.Ka?.toExponential(1)+'）';
+  const baseDesc=base.isWater?'純水（pH=7）':base.strong?'強鹼':'弱鹼（Kb='+base.Kb?.toExponential(1)+'）';
+  const beakerLabel=beakerIsBase?'鹼（燒杯）':'酸（燒杯）';
+  const buretteLabel=beakerIsBase?'酸（滴定管）':'鹼（滴定管）';
+  document.getElementById('reactionInfo').innerHTML=`<b>${acid.name}（酸） + ${base.name}（鹼）</b><br>${beakerLabel}：${beakerIsBase?baseDesc:acidDesc}<br>${buretteLabel}：${beakerIsBase?acidDesc:baseDesc}<br>${(!noEq)?'酸當量：'+acid.n+'，鹼當量：'+base.n:'（純水不參與中和）'}`;
+  document.getElementById('eqInfo').innerHTML=noEq?(rawA.isWater&&rawB.isWater?'兩者皆為純水，pH 恆 7，無當量點。':rawA.isWater?'燒杯為純水，無傳統當量點。':'滴定管為純水，純稀釋效果，無當量點。'):`當量點約 <b>${eq}</b> 滴，對應 pH ≈ <b>${eqPH.toFixed(2)}</b><br>${acid.strong&&base.strong?'強酸強鹼：當量點 pH = 7':!acid.strong&&base.strong?'弱酸強鹼：當量點 pH > 7':acid.strong&&!base.strong?'強酸弱鹼：當量點 pH < 7':'弱酸弱鹼：pH 由 Ka/Kb 決定'}`;
+  document.getElementById('opHint').innerHTML=noEq?'• 純水：pH 變化緩慢，無突躍':'• 前 70% 可快速滴加<br>• 70–97% 每 2–3 滴後搖晃<br>• 97% 後一滴一滴加<br>• 白色背景下觀察顏色';
+  const inRange=!noEq&&eqPH>=ind.pLow&&eqPH<=ind.pHigh;
+  const margin=Math.min(Math.abs(eqPH-ind.pLow),Math.abs(eqPH-ind.pHigh));
+  document.getElementById('indCompat').innerHTML=`指示劑：<b>${ind.name}</b>，變色 pH ${ind.pLow}–${ind.pHigh}<br>${noEq?'無當量點，指示劑僅供顏色觀察。':`<span style="color:${inRange?'#3b6d11':'#a32d2d'}">${inRange?'✓ 適合（當量點在變色範圍內）':'✗ 不適合，誤差約 '+margin.toFixed(1)+' pH 單位'}</span>`}`;
+  document.getElementById('indZoneBox').innerHTML=`<div style="font-weight:500;margin-bottom:5px;color:#1a1a1a">${ind.name} 變色區</div><div style="height:14px;border-radius:5px;overflow:hidden;display:flex;margin-bottom:3px"><div style="flex:${ind.pLow-1};background:#e8e8e6"></div><div style="flex:${ind.pHigh-ind.pLow};background:linear-gradient(to right,${ind.acidCol},${ind.baseCol})"></div><div style="flex:${14-ind.pHigh};background:#e8e8e6"></div></div><div style="display:flex;justify-content:space-between;font-size:10px;color:#888"><span>pH 1</span><span>${ind.pLow}</span><span>${ind.pHigh}</span><span>14</span></div><div style="margin-top:4px;font-size:11px;color:#666">${ind.desc||'全 pH 範圍連續變色'}</div>`;
+}
+
+// Drop animation
+let dropAnimStart=null;
+function getDropCycleDur(){
+  const spd=parseInt(document.getElementById('speedSlider').value)||1;
+  return Math.round(800/spd);
+}
+function clearDropElements(){
+  const formEl=document.getElementById('dropForm'),dropEl=document.getElementById('drop');
+  const sp1=document.getElementById('splash1'),sp2=document.getElementById('splash2'),sp3=document.getElementById('splash3');
+  [formEl,dropEl,sp1,sp2,sp3].forEach(e=>e.setAttribute('opacity',0));
+  if(formEl){formEl.setAttribute('ry',2);formEl.setAttribute('cy',266);}
+}
+function runDropAnim(ts){
+  if(!dropActive){clearDropElements();return;}
+  if(!dropAnimStart)dropAnimStart=ts;
+  const elapsed=ts-dropAnimStart;
+  const dur=getDropCycleDur();
+  const raw=(elapsed%dur)/dur; // 0..1 looping
+  dropPhase=Math.floor(raw*80); // 0..79
+
+  const formEl=document.getElementById('dropForm'),dropEl=document.getElementById('drop');
+  const sp1=document.getElementById('splash1'),sp2=document.getElementById('splash2'),sp3=document.getElementById('splash3');
+  if(dropPhase<15){
+    const t=dropPhase/15;
+    formEl.setAttribute('ry',2+t*3);formEl.setAttribute('cy',266+t*5);formEl.setAttribute('opacity',.8);
+    dropEl.setAttribute('opacity',0);[sp1,sp2,sp3].forEach(e=>e.setAttribute('opacity',0));
+  } else if(dropPhase<38){
+    formEl.setAttribute('opacity',0);
+    const t=(dropPhase-15)/23,y=275+t*95;
+    dropEl.setAttribute('cy',y);dropEl.setAttribute('opacity',.85);
+    [sp1,sp2,sp3].forEach(e=>e.setAttribute('opacity',0));
+  } else if(dropPhase<55){
+    dropEl.setAttribute('opacity',0);formEl.setAttribute('ry',2);formEl.setAttribute('cy',266);
+    const t=(dropPhase-38)/17;
+    sp1.setAttribute('cy',370+t*5);sp1.setAttribute('opacity',.7-t*.7);
+    sp2.setAttribute('cy',366-t*8);sp2.setAttribute('cx',84);sp2.setAttribute('opacity',.6-t*.6);
+    sp3.setAttribute('cy',366-t*8);sp3.setAttribute('cx',96);sp3.setAttribute('opacity',.6-t*.6);
+  } else {
+    [sp1,sp2,sp3,dropEl,formEl].forEach(e=>e.setAttribute('opacity',0));
+    formEl.setAttribute('ry',2);formEl.setAttribute('cy',266);
+  }
+  dropAnimId=requestAnimationFrame(runDropAnim);
+}
+
+// Playback
+function getAnimDur(){return Math.round(5000/(parseInt(document.getElementById('speedSlider').value)||5));}
+function togglePlay(){
+  if(playing){pauseSim();return;}
+  const eq=getEqDrops(),maxD=parseInt(document.getElementById('drops').max)||eq*2||400;
+  if(S.drops>=maxD)S.drops=0;
+  animFrom=S.drops;animTo=maxD;animStart=null;playing=true;
+  document.getElementById('btnPlay').textContent='⏸ 暫停';
+  dropActive=true;
+  if(dropAnimId)cancelAnimationFrame(dropAnimId);
+  dropPhase=0;dropAnimStart=null;requestAnimationFrame(runDropAnim);
+  requestAnimationFrame(animFrame);
+}
+function animFrame(ts){
+  if(!playing)return;
+  if(!animStart)animStart=ts;
+  const t=Math.min((ts-animStart)/getAnimDur(),1);
+  const e=t<.5?2*t*t:(4-2*t)*t-1;
+  updateUI(Math.round(animFrom+(animTo-animFrom)*e));
+  if(t<1){animId=requestAnimationFrame(animFrame);}
+  else{playing=false;document.getElementById('btnPlay').textContent='▶ 重新模擬';dropActive=false;clearDropElements();}
+}
+function pauseSim(){
+  playing=false;if(animId)cancelAnimationFrame(animId);
+  document.getElementById('btnPlay').textContent='▶ 繼續模擬';
+}
+function stopDropAnim(){
+  dropActive=false;clearDropElements();
+}
+function resetSim(){
+  pauseSim();stopDropAnim();S.drops=0;
+  document.getElementById('btnPlay').textContent='▶ 開始模擬';
+  updateUI(0);
+}
+function onSlider(){pauseSim();updateUI(parseInt(document.getElementById('drops').value));}
+function onDropInput(){pauseSim();const v=Math.max(0,parseInt(document.getElementById('inDrops').value)||0);document.getElementById('drops').value=v;updateUI(v);}
+
+// Combos
+function syncCombo(selId,inId){
+  const v=document.getElementById(selId).value;
+  if(v!==''){document.getElementById(inId).value=v;rebuild();}
+}
+function rebuild(){
+  const ch=parseFloat(document.getElementById('inCH').value);
+  const vh=parseFloat(document.getElementById('inVH').value);
+  const cb=parseFloat(document.getElementById('inCB').value);
+  const dr=parseFloat(document.getElementById('inDrop').value);
+  if(!isNaN(ch)&&ch>0)S.cAcid=ch;
+  if(!isNaN(vh)&&vh>0)S.vAcid=vh;
+  if(!isNaN(cb)&&cb>0)S.cBase=cb;
+  if(!isNaN(dr)&&dr>0)S.dropVol=dr;
+  rebuildChart();
+}
+function onAcidChange(){
+  const k=document.getElementById('acidType').value;S.acidKey=k;
+  const e=lookup(k),tag=document.getElementById('acidTag'),row=document.getElementById('acidConcRow');
+  if(e.isWater){tag.textContent='純水（中性）';tag.className='tag buf';row.style.display='none';}
+  else if(isBasic(k)){tag.textContent=e.strong?'強鹼（n='+e.n+')':'弱鹼 Kb='+e.Kb?.toExponential(1);tag.className='tag '+(e.strong?'strong':'weak');row.style.display='';}
+  else{tag.textContent=e.strong?'強酸（n='+e.n+')':'弱酸 Ka='+e.Ka?.toExponential(1);tag.className='tag '+(e.strong?'strong':'weak');row.style.display='';}
+  pauseSim();rebuild();
+}
+function onBaseChange(){
+  const k=document.getElementById('baseType').value;S.baseKey=k;
+  const e=lookup(k),tag=document.getElementById('baseTag'),row=document.getElementById('baseConcRow');
+  if(e.isWater){tag.textContent='純水（中性）';tag.className='tag buf';row.style.display='none';}
+  else if(isAcidic(k)){tag.textContent=e.strong?'強酸（n='+e.n+')':'弱酸 Ka='+e.Ka?.toExponential(1);tag.className='tag '+(e.strong?'strong':'weak');row.style.display='';}
+  else{tag.textContent=e.strong?'強鹼（n='+e.n+')':'弱鹼 Kb='+e.Kb?.toExponential(1);tag.className='tag '+(e.strong?'strong':'weak');row.style.display='';}
+  pauseSim();rebuild();
+}
+function onIndicatorChange(){S.indKey=document.getElementById('indicator').value;pauseSim();rebuild();}
+
+// Init — all events bound after functions are defined
+(function init(){
+  // Slider & number input
+  document.getElementById('drops').addEventListener('input',function(){pauseSim();updateUI(parseInt(this.value));});
+  document.getElementById('inDrops').addEventListener('input',function(){
+    pauseSim();const v=Math.max(0,parseInt(this.value)||0);
+    document.getElementById('drops').value=v;updateUI(v);
+  });
+  document.getElementById('inDrops').addEventListener('change',function(){
+    pauseSim();const v=Math.max(0,parseInt(this.value)||0);
+    document.getElementById('drops').value=v;updateUI(v);
+  });
+
+  // Play / reset buttons
+  document.getElementById('btnPlay').addEventListener('click',togglePlay);
+  document.getElementById('btnReset').addEventListener('click',resetSim);
+
+  // Speed slider
+  document.getElementById('speedSlider').addEventListener('input',function(){
+    document.getElementById('speedLabel').textContent=this.value+'×';
+  });
+
+  // Combo number inputs
+  ['CH','VH','CB','Drop'].forEach(k=>{
+    const inEl=document.getElementById('in'+k);
+    const selEl=document.getElementById('sel'+k);
+    inEl.addEventListener('input',()=>{selEl.value='';rebuild();});
+    inEl.addEventListener('change',()=>{selEl.value='';rebuild();});
+  });
+
+  // Acid / base / indicator selects
+  document.getElementById('acidType').addEventListener('change',onAcidChange);
+  document.getElementById('baseType').addEventListener('change',onBaseChange);
+  document.getElementById('indicator').addEventListener('change',onIndicatorChange);
+
+  // Font size A+/A- — only scales right column
+  let zoomLevel=1.0;
+  const rightCol=document.getElementById('rightCol');
+  function applyZoom(z){
+    zoomLevel=Math.max(0.7,Math.min(1.5,parseFloat(z.toFixed(2))));
+    rightCol.style.zoom=zoomLevel;
+  }
+  document.getElementById('btnFontUp').addEventListener('click',()=>applyZoom(zoomLevel+0.05));
+  document.getElementById('btnFontDn').addEventListener('click',()=>applyZoom(zoomLevel-0.05));
+
+  // Drops per click
+  document.getElementById('inDropsPerClick').addEventListener('input',function(){
+    dropsPerClick=Math.max(1,parseInt(this.value)||2);
+    updateUI(S.drops);
+  });
+
+  // Bottom panel state label
+  const panel=document.getElementById('bottomPanel');
+  const label=document.getElementById('panelStateLabel');
+  function updatePanelLabel(){label.textContent=panel.open?'（點擊收合）':'（點擊開啟）';}
+  panel.addEventListener('toggle',updatePanelLabel);
+  updatePanelLabel();
+
+  // Stopcock — short press = one drip, long press (hold >400ms) = continuous
+  const hit=document.getElementById('stopcockHit');
+  let scDown=false, scHolding=false, scHoldTimer=null, scInterval=null;
+
+  function scDrop(){
+    const maxD=parseInt(document.getElementById('drops').max)||400;
+    const n=Math.min(getDropsPerClick(),maxD-S.drops);
+    if(n<=0)return;
+    if(playing){playing=false;if(animId)cancelAnimationFrame(animId);document.getElementById('btnPlay').textContent='▶ 繼續模擬';}
+    if(dropAnimId)cancelAnimationFrame(dropAnimId);
+    dropActive=true;
+    dropPhase=0;dropAnimStart=null;requestAnimationFrame(runDropAnim);
+    updateUI(S.drops+n);
+  }
+
+  function scStart(e){
+    e.preventDefault();
+    if(scDown)return;
+    scDown=true; scHolding=false;
+    hit.setPointerCapture(e.pointerId);
+    document.getElementById('stopcock').setAttribute('fill','#222');
+    scHoldTimer=setTimeout(()=>{
+      scHolding=true;
+      scDrop();
+      scInterval=setInterval(()=>{
+        const maxD=parseInt(document.getElementById('drops').max)||400;
+        if(S.drops>=maxD){scEnd();return;}
+        scDrop();
+      },350);
+    },400);
+  }
+
+  function scEnd(){
+    if(!scDown)return;
+    scDown=false;
+    clearTimeout(scHoldTimer); scHoldTimer=null;
+    clearInterval(scInterval); scInterval=null;
+    document.getElementById('stopcock').setAttribute('fill','#444');
+    if(!scHolding) scDrop();
+    scHolding=false;
+    setTimeout(()=>{stopDropAnim();},700);
+  }
+
+  hit.addEventListener('pointerdown', scStart);
+  hit.addEventListener('pointerup', scEnd);
+  hit.addEventListener('pointercancel', scEnd);
+
+  // Chart crosshair
+  const chartCanvas=document.getElementById('chart');
+  const crosshair=document.getElementById('chartCrosshair');
+  const tooltip=document.getElementById('chartTooltip');
+  const ind2=INDICATORS;
+  chartCanvas.addEventListener('mousemove',function(e){
+    if(!chart)return;
+    const rect=chartCanvas.getBoundingClientRect();
+    const x=e.clientX-rect.left;
+    const y=e.clientY-rect.top;
+    const area=chart.chartArea;
+    if(x<area.left||x>area.right||y<area.top||y>area.bottom){
+      crosshair.style.display='none';tooltip.style.display='none';return;
+    }
+    crosshair.style.display='block';
+    crosshair.style.left=x+'px';
+    // Map x pixel to drop index
+    const pct=(x-area.left)/(area.right-area.left);
+    const idx=Math.round(pct*(chartLabels.length-1));
+    const clampedIdx=Math.max(0,Math.min(chartLabels.length-1,idx));
+    const drops=chartLabels[clampedIdx];
+    const phVal=chartData[clampedIdx];
+    const revealed=drops<=S.drops;
+    const ind=INDICATORS[S.indKey];
+    const inIndZone=phVal>=ind.pLow&&phVal<=ind.pHigh;
+    const eq=getEqDrops();
+    let lines=`<b>${drops} 滴</b>　${(drops*S.dropVol).toFixed(2)} mL`;
+    if(revealed){lines+=`<br>pH ${phVal.toFixed(2)}`;}
+    else{lines+=`<br>pH（未到達）`;}
+    if(eq>0&&drops===eq)lines+='　<span style="color:#f09595">◀ 當量點</span>';
+    if(inIndZone&&revealed)lines+='<br><span style="color:#fac775">● 指示劑變色區</span>';
+    tooltip.innerHTML=lines;
+    tooltip.style.display='block';
+    // Position tooltip: flip if near right edge
+    const tipW=tooltip.offsetWidth;
+    const tipX=x+12+tipW>rect.width?x-tipW-12:x+12;
+    tooltip.style.left=tipX+'px';
+    tooltip.style.top=Math.max(area.top,Math.min(y-20,area.bottom-tooltip.offsetHeight))+'px';
+  });
+  chartCanvas.addEventListener('mouseleave',function(){
+    crosshair.style.display='none';tooltip.style.display='none';
+  });
+
+  // SVG auto-scale to 90% of column width/height
+  (function(){
+    const col=document.getElementById('apparatusCol');
+    const svg=document.getElementById('apparatus');
+    function scaleSVG(){
+      const maxW=col.clientWidth*0.9;
+      const maxH=col.clientHeight*0.88;
+      const aspect=400/180;
+      const byW=maxW, byH=maxH/aspect;
+      const w=Math.min(byW,byH,280);
+      svg.style.width=w+'px';
+      svg.style.height=(w*aspect)+'px';
+    }
+    scaleSVG();
+    new ResizeObserver(scaleSVG).observe(col);
+  })();
+
+  // Initial render
+  onAcidChange();
+  onBaseChange();
+  onIndicatorChange();
+  rebuildChart();
+})();
+</script>
+</body>
+</html>
