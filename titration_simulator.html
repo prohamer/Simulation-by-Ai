@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>酸鹼滴定模擬</title>
+<title>酸鹼滴定模擬V10</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -75,7 +75,7 @@ details.info .detail-body{padding:9px 12px;font-size:12px;color:#555;line-height
 </head>
 <body>
 
-<h1>酸鹼滴定模擬 <span>廣用指示劑 · 酸鹼強弱 · 動畫播放</span>
+<h1>酸鹼滴定模擬V10 <span>廣用指示劑 · 酸鹼強弱 · 動畫播放</span>
   <div style="margin-left:auto;display:flex;gap:4px;align-items:center">
     <button id="btnFontDn" title="縮小字體" style="padding:3px 9px;font-size:13px;font-weight:500;border-radius:6px;line-height:1">A-</button>
     <button id="btnFontUp" title="放大字體" style="padding:3px 9px;font-size:16px;font-weight:500;border-radius:6px;line-height:1">A+</button>
@@ -406,6 +406,10 @@ details.info .detail-body{padding:9px 12px;font-size:12px;color:#555;line-height
         <label class="ctrl-label">選擇指示劑</label>
         <select id="indicator" onchange="onIndicatorChange()">
           <option value="universal">廣用指示劑（pH 1–14）</option>
+          <optgroup label="天然指示劑">
+            <option value="butterfly_pea">蝶豆花（pH 3–11，藍紫↔紅）</option>
+            <option value="red_cabbage">紫色高麗菜（pH 1–14，多段彩虹）</option>
+          </optgroup>
           <optgroup label="酸性變色">
             <option value="methyl_orange">甲基橙（3.1–4.4）</option>
             <option value="methyl_red">甲基紅（4.4–6.2）</option>
@@ -480,6 +484,17 @@ const BASES = {
 };
 const INDICATORS = {
   universal:         {name:'廣用指示劑',pLow:1,   pHigh:14,  acidCol:'#e05555', baseCol:'#7030a0', type:'universal'},
+  butterfly_pea:     {name:'蝶豆花',    pLow:4.0, pHigh:9.0, acidCol:'#c0507a', baseCol:'#3a8a6a',
+    type:'multi', stops:[
+      {ph:1, col:'#d84070'},{ph:3, col:'#c0507a'},{ph:5, col:'#8060b0'},
+      {ph:7, col:'#4060c8'},{ph:9, col:'#3a8a6a'},{ph:11, col:'#3a8a6a'},{ph:14, col:'#3a8a6a'}
+    ]},
+  red_cabbage:       {name:'紫色高麗菜',pLow:2.0, pHigh:12.0, acidCol:'#d83040', baseCol:'#c8b800',
+    type:'multi', stops:[
+      {ph:1, col:'#d83040'},{ph:2, col:'#d83040'},{ph:4, col:'#9040a0'},
+      {ph:6, col:'#6040c0'},{ph:7, col:'#4050d0'},{ph:8, col:'#3090a0'},
+      {ph:10, col:'#40a060'},{ph:12, col:'#88a820'},{ph:14, col:'#c8b800'}
+    ]},
   methyl_orange:     {name:'甲基橙',   pLow:3.1, pHigh:4.4, acidCol:'#e05555', baseCol:'#f0c040'},
   methyl_red:        {name:'甲基紅',   pLow:4.4, pHigh:6.2, acidCol:'#e24b4a', baseCol:'#f0c040'},
   congo_red:         {name:'剛果紅',   pLow:3.0, pHigh:5.0, acidCol:'#1868c0', baseCol:'#e24b4a'},
@@ -608,18 +623,22 @@ function lerpHex(a,b,t){
 function phToIndicatorCol(ph){
   const ind=INDICATORS[S.indKey];
   if(ind.type==='universal')return phToUniversalCol(ph);
+  // multi-stop: interpolate between defined pH/color stops (e.g. 蝶豆花, 紫色高麗菜)
+  if(ind.type==='multi'){
+    const stops=ind.stops;
+    const c=Math.max(stops[0].ph,Math.min(stops[stops.length-1].ph,ph));
+    for(let i=0;i<stops.length-1;i++){
+      if(c>=stops[i].ph&&c<=stops[i+1].ph){
+        const t=(c-stops[i].ph)/(stops[i+1].ph-stops[i].ph);
+        return lerpHex(stops[i].col,stops[i+1].col,t);
+      }
+    }
+    return stops[stops.length-1].col;
+  }
   if(ph<=ind.pLow)return ind.acidCol;
-  // tri-color: acid → peak → fade back (e.g. phenolphthalein)
   if(ind.triColor){
-    const pMid=(ind.pLow+ind.pHigh)/2;
-    if(ph<=ind.pHigh){
-      const t=(ph-ind.pLow)/(ind.pHigh-ind.pLow);
-      return lerpHex(ind.acidCol,ind.baseCol,Math.min(t*2,1));
-    }
-    if(ph<=ind.pFade){
-      const t=(ph-ind.pHigh)/(ind.pFade-ind.pHigh);
-      return lerpHex(ind.baseCol,ind.fadeCol,t);
-    }
+    if(ph<=ind.pHigh){const t=(ph-ind.pLow)/(ind.pHigh-ind.pLow);return lerpHex(ind.acidCol,ind.baseCol,Math.min(t*2,1));}
+    if(ph<=ind.pFade){const t=(ph-ind.pHigh)/(ind.pFade-ind.pHigh);return lerpHex(ind.baseCol,ind.fadeCol,t);}
     return ind.fadeCol;
   }
   if(ph>=ind.pHigh)return ind.baseCol;
@@ -736,13 +755,19 @@ function rebuildChart(){
       if(!ca)return;
       const {ctx,scales:{y}}=ch;
       const {left,right,top,bottom}=ca;
-      const pLow=ind.pLow, pHigh=ind.triColor?ind.pFade:ind.pHigh;
+      const pLow=ind.pLow, pHigh=ind.triColor?ind.pFade:(ind.type==='multi'?ind.stops[ind.stops.length-1].ph:ind.pHigh);
       const yTop=y.getPixelForValue(pHigh);
       const yBot=y.getPixelForValue(pLow);
       if(yTop>=bottom||yBot<=top)return;
       const yT=Math.max(top,yTop), yB=Math.min(bottom,yBot);
       const grad=ctx.createLinearGradient(0,yB,0,yT);
-      if(ind.triColor){
+      if(ind.type==='multi'){
+        const range=pHigh-pLow;
+        ind.stops.forEach(s=>{
+          const t=Math.max(0,Math.min(1,(s.ph-pLow)/range));
+          grad.addColorStop(t,s.col+'99');
+        });
+      } else if(ind.triColor){
         const pMid=ind.pHigh;
         const tMid=Math.max(0,Math.min(1,(pMid-pLow)/(pHigh-pLow)));
         grad.addColorStop(0,ind.acidCol+'aa');
@@ -872,6 +897,7 @@ function animFrame(ts){
 }
 function pauseSim(){
   playing=false;if(animId)cancelAnimationFrame(animId);
+  stopDropAnim();
   document.getElementById('btnPlay').textContent='▶ 繼續模擬';
 }
 function stopDropAnim(){
