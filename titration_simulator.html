@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>酸鹼滴定模擬V10</title>
+<title>酸鹼滴定模擬</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -75,7 +75,7 @@ details.info .detail-body{padding:9px 12px;font-size:12px;color:#555;line-height
 </head>
 <body>
 
-<h1>酸鹼滴定模擬V10 <span>廣用指示劑 · 酸鹼強弱 · 動畫播放</span>
+<h1>酸鹼滴定模擬 <span>廣用指示劑 · 酸鹼強弱 · 動畫播放</span>
   <div style="margin-left:auto;display:flex;gap:4px;align-items:center">
     <button id="btnFontDn" title="縮小字體" style="padding:3px 9px;font-size:13px;font-weight:500;border-radius:6px;line-height:1">A-</button>
     <button id="btnFontUp" title="放大字體" style="padding:3px 9px;font-size:16px;font-weight:500;border-radius:6px;line-height:1">A+</button>
@@ -137,15 +137,8 @@ details.info .detail-body{padding:9px 12px;font-size:12px;color:#555;line-height
 
   <!-- Spectrum -->
   <div style="width:100%;max-width:280px">
-    <div style="font-size:10px;color:#888;margin-bottom:2px">廣用指示劑色譜</div>
-    <div class="color-spectrum">
-      <div style="flex:1;background:#e05555"></div><div style="flex:1;background:#e07030"></div>
-      <div style="flex:1;background:#e09020"></div><div style="flex:1;background:#d4b800"></div>
-      <div style="flex:1;background:#a8c800"></div><div style="flex:1;background:#50b850"></div>
-      <div style="flex:1;background:#30a878"></div><div style="flex:1;background:#2090b0"></div>
-      <div style="flex:1;background:#1868c0"></div><div style="flex:1;background:#5040b0"></div>
-      <div style="flex:1;background:#7030a0"></div>
-    </div>
+    <div style="font-size:10px;color:#888;margin-bottom:2px" id="specLabel">廣用指示劑色譜</div>
+    <div class="color-spectrum" id="specBar"></div>
     <div class="ph-labels"><span>1</span><span>3</span><span>5</span><span>7</span><span>9</span><span>11+</span></div>
     <div class="marker-row"><div id="specMarker"></div></div>
   </div>
@@ -943,7 +936,48 @@ function onBaseChange(){
   else{tag.textContent=e.strong?'強鹼（n='+e.n+')':'弱鹼 Kb='+e.Kb?.toExponential(1);tag.className='tag '+(e.strong?'strong':'weak');row.style.display='';}
   pauseSim();rebuild();
 }
-function onIndicatorChange(){S.indKey=document.getElementById('indicator').value;pauseSim();rebuild();}
+function updateSpectrum(){
+  const ind=INDICATORS[S.indKey];
+  const bar=document.getElementById('specBar');
+  const lbl=document.getElementById('specLabel');
+  if(!bar)return;
+  lbl.textContent=ind.name+' 色譜';
+  // Build gradient CSS from 1 to 14 by sampling every 0.5 pH
+  const stops=[];
+  for(let ph=1;ph<=14;ph+=0.5){
+    // Temporarily set indKey to compute colour, then restore
+    const col=phToIndicatorColFor(ph,ind);
+    const pct=((ph-1)/13*100).toFixed(1);
+    stops.push(`${col} ${pct}%`);
+  }
+  bar.style.background=`linear-gradient(to right,${stops.join(',')})`;
+  bar.innerHTML=''; // clear any child divs
+}
+
+function phToIndicatorColFor(ph,ind){
+  if(ind.type==='universal')return phToUniversalCol(ph);
+  if(ind.type==='multi'){
+    const stops=ind.stops;
+    const c=Math.max(stops[0].ph,Math.min(stops[stops.length-1].ph,ph));
+    for(let i=0;i<stops.length-1;i++){
+      if(c>=stops[i].ph&&c<=stops[i+1].ph){
+        const t=(c-stops[i].ph)/(stops[i+1].ph-stops[i].ph);
+        return lerpHex(stops[i].col,stops[i+1].col,t);
+      }
+    }
+    return stops[stops.length-1].col;
+  }
+  if(ph<=ind.pLow)return ind.acidCol;
+  if(ind.triColor){
+    if(ph<=ind.pHigh){const t=(ph-ind.pLow)/(ind.pHigh-ind.pLow);return lerpHex(ind.acidCol,ind.baseCol,Math.min(t*2,1));}
+    if(ph<=(ind.pFade||14)){const t=(ph-ind.pHigh)/((ind.pFade||14)-ind.pHigh);return lerpHex(ind.baseCol,ind.fadeCol||ind.acidCol,t);}
+    return ind.fadeCol||ind.acidCol;
+  }
+  if(ph>=ind.pHigh)return ind.baseCol;
+  return lerpHex(ind.acidCol,ind.baseCol,(ph-ind.pLow)/(ind.pHigh-ind.pLow));
+}
+
+function onIndicatorChange(){S.indKey=document.getElementById('indicator').value;updateSpectrum();pauseSim();rebuild();}
 
 // Init — all events bound after functions are defined
 (function init(){
