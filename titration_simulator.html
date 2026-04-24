@@ -6,7 +6,7 @@
 <title>酸鹼滴定模擬</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <style>
-*{box-sizing:border-box;margin:0;padding:0}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f5f5f3;color:#1a1a1a;font-size:14px;display:flex;flex-direction:column;height:90vh;height:90dvh;overflow:hidden}
 h1{font-size:17px;font-weight:500;padding:8px 18px;background:#fff;border-bottom:1px solid #e8e8e6;flex-shrink:0;display:flex;align-items:center;gap:10px}
 h1 span{font-size:11px;font-weight:400;color:#888;background:#f1efe8;padding:2px 8px;border-radius:20px}
@@ -48,6 +48,7 @@ button:active{transform:scale(.98)}
 button.primary{background:#1a1a1a;color:#fff;border-color:#1a1a1a;flex:1}
 button.primary:hover{background:#333}
 .hint-box{font-size:12px;color:#555;background:#f5f5f3;border-radius:8px;padding:9px 12px;line-height:1.5}
+input,select,textarea{-webkit-user-select:auto;user-select:auto;-webkit-touch-callout:default}
 input[type=range]{width:100%;accent-color:#378add;cursor:pointer}
 .tag{display:inline-block;font-size:10px;padding:2px 8px;border-radius:20px;font-weight:500;margin-left:5px}
 .tag.strong{background:#fce8e8;color:#a32d2d}
@@ -102,6 +103,11 @@ details.info .detail-body{padding:9px 12px;font-size:12px;color:#555;line-height
     <!-- Volume label outside burette, tracks liquid surface -->
     <line id="burVolLine" x1="110" y1="20" x2="118" y2="20" stroke="#378add" stroke-width=".8" stroke-dasharray="2 2"/>
     <text id="burVolLabel" x="120" y="23" text-anchor="start" font-size="9" fill="#185fa5" font-weight="500">0.00 mL</text>
+    <!-- Burette solution name & conc — left side -->
+    <text id="burSolLabel" x="68" y="80" text-anchor="end" font-size="8.5" fill="#444" font-weight="500"></text>
+    <text id="burConcLabel" x="68" y="91" text-anchor="end" font-size="8" fill="#666"></text>
+    <!-- Burette pH label — tracks with vol label -->
+    <text id="burPhLabel" x="120" y="35" text-anchor="start" font-size="8" fill="#888"></text>
     <!-- Scale -->
     <line x1="70" y1="18" x2="75" y2="18" stroke="#aaa" stroke-width=".8"/>
     <text x="68" y="21" text-anchor="end" font-size="8" fill="#aaa">0</text>
@@ -127,7 +133,10 @@ details.info .detail-body{padding:9px 12px;font-size:12px;color:#555;line-height
     <line x1="18" y1="390" x2="162" y2="390" stroke="#aaa" stroke-width="2"/>
     <polygon id="liquid"   points="32,340 148,340 160,388 20,388" fill="#e05555" opacity=".35" clip-path="url(#beakerClip)"/>
     <polygon id="indLayer" points="32,340 148,340 160,388 20,388" fill="#e05555" opacity=".55" clip-path="url(#beakerClip)"/>
-    <text id="phInBeaker"    x="90" y="375" text-anchor="middle" font-size="12" font-weight="600" fill="#1a1a1a">pH 2.00</text>
+    <text id="phInBeaker"    x="90" y="370" text-anchor="middle" font-size="12" font-weight="600" fill="#1a1a1a">pH 2.00</text>
+    <!-- Beaker solution name & conc -->
+    <text id="beakerSolLabel"  x="90" y="385" text-anchor="middle" font-size="8.5" fill="#444" font-weight="500"></text>
+    <text id="beakerConcLabel" x="90" y="395" text-anchor="middle" font-size="8" fill="#666"></text>
     <!-- Invisible stopcock hit area -->
     <rect class="stopcock-hit" id="stopcockHit" x="65" y="224" width="50" height="42" rx="4">
       <title>點擊活栓滴入 2 滴</title>
@@ -477,12 +486,12 @@ const BASES = {
 };
 const INDICATORS = {
   universal:         {name:'廣用指示劑',pLow:1,   pHigh:14,  acidCol:'#e05555', baseCol:'#7030a0', type:'universal'},
-  butterfly_pea:     {name:'蝶豆花',    pLow:4.0, pHigh:9.0, acidCol:'#c0507a', baseCol:'#3a8a6a',
+  butterfly_pea:     {name:'蝶豆花',    pLow:1.0, pHigh:11.0, acidCol:'#d84070', baseCol:'#3a8a6a',
     type:'multi', stops:[
       {ph:1, col:'#d84070'},{ph:3, col:'#c0507a'},{ph:5, col:'#8060b0'},
       {ph:7, col:'#4060c8'},{ph:9, col:'#3a8a6a'},{ph:11, col:'#3a8a6a'},{ph:14, col:'#3a8a6a'}
     ]},
-  red_cabbage:       {name:'紫色高麗菜',pLow:2.0, pHigh:12.0, acidCol:'#d83040', baseCol:'#c8b800',
+  red_cabbage:       {name:'紫色高麗菜',pLow:1.0, pHigh:14.0, acidCol:'#d83040', baseCol:'#c8b800',
     type:'multi', stops:[
       {ph:1, col:'#d83040'},{ph:2, col:'#d83040'},{ph:4, col:'#9040a0'},
       {ph:6, col:'#6040c0'},{ph:7, col:'#4050d0'},{ph:8, col:'#3090a0'},
@@ -529,70 +538,176 @@ function getDropsPerClick(){return dropsPerClick;}
 
 function getEqDrops(){
   const a=lookup(S.acidKey),b=lookup(S.baseKey);
-  if(a.isWater||b.isWater)return 0;
-  // If base in beaker, acid in burette — swap roles for equiv calc
-  const beakerIsBase=isBasic(S.acidKey);
-  if(beakerIsBase){
-    return Math.round((S.cAcid*S.vAcid*b.n)/(S.cBase*S.dropVol*a.n));
+  const aIsAcid=isAcidic(S.acidKey), aIsBase=isBasic(S.acidKey);
+  const bIsAcid=isAcidic(S.baseKey), bIsBase=isBasic(S.baseKey);
+  const aIsWater=a.isWater, bIsWater=b.isWater;
+
+  // Same type or water involved: no true equivalence point, return 0
+  if((aIsAcid&&bIsAcid)||(aIsBase&&bIsBase))return 0;
+  if(aIsWater&&bIsWater)return 0;
+  // Neutralisation: calculate real equivalence point
+  if(!aIsWater&&!bIsWater){
+    const beakerIsBase=aIsBase&&bIsAcid;
+    if(beakerIsBase){
+      return Math.round((S.cAcid*S.vAcid*(a.n||1))/(S.cBase*S.dropVol*(b.n||1)));
+    }
+    return Math.round((S.cAcid*S.vAcid*(a.n||1))/(S.cBase*S.dropVol*(b.n||1)));
   }
-  return Math.round((S.cAcid*S.vAcid*a.n)/(S.cBase*S.dropVol*b.n));
+  return 0;
+}
+
+// For chart range: how many drops to show (may be more than eq for dilution curves)
+function getChartMaxDrops(){
+  const eq=getEqDrops();
+  if(eq>0)return Math.min(Math.max(eq*2,20),50000);
+  // Water or same-type: show enough drops to see pH approach 7
+  // Need ~100x dilution to get within 0.1 pH of 7 → 100*vAcid/dropVol drops
+  const a=lookup(S.acidKey),b=lookup(S.baseKey);
+  const aIsWater=a.isWater, bIsWater=b.isWater;
+  if(aIsWater&&bIsWater)return 200;
+  // Find drops where pH is within 0.05 of 7 by binary search (max 2000 drops)
+  const target=7;
+  let lo=0,hi=Math.min(Math.round(S.vAcid*100/S.dropVol),10000);
+  for(let i=0;i<30;i++){
+    const mid=Math.round((lo+hi)/2);
+    const ph=Math.max(0,Math.min(14,calcPH(mid)));
+    if(Math.abs(ph-target)<0.05){hi=mid;break;}
+    if(ph>target===calcPH(0)>target)lo=mid; else hi=mid;
+  }
+  return Math.min(Math.max(hi*1.3,200),10000);
 }
 
 function calcPH(drops){
   const rawA=lookup(S.acidKey), rawB=lookup(S.baseKey);
-  // Determine which is acid and which is base regardless of beaker/burette
-  const beakerIsBase=isBasic(S.acidKey)&&isAcidic(S.baseKey);
-  const a=beakerIsBase?rawB:rawA; // acid
-  const b=beakerIsBase?rawA:rawB; // base
-  const cAcid=beakerIsBase?S.cBase:S.cAcid;
-  const vAcid=beakerIsBase?0:S.vAcid; // beaker vol always S.vAcid
-  const cBase=beakerIsBase?S.cAcid:S.cBase;
+  const aIsAcid=isAcidic(S.acidKey), aIsBase=isBasic(S.acidKey);
+  const bIsAcid=isAcidic(S.baseKey), bIsBase=isBasic(S.baseKey);
+  const aIsWater=rawA.isWater, bIsWater=rawB.isWater;
 
-  if(a.isWater&&b.isWater)return 7;
+  // Both water
+  if(aIsWater&&bIsWater)return 7;
 
-  const vAcidActual=S.vAcid; // beaker volume is always vAcid
-  const nAcidTotal=beakerIsBase?(cBase*S.dropVol*drops*b.n):(cAcid*vAcidActual*a.n);
-  const nBaseTotal=beakerIsBase?(cAcid*vAcidActual*a.n):(cBase*S.dropVol*drops*b.n);
-  const Vt=(vAcidActual+drops*S.dropVol)/1000;
+  const vBur=drops*S.dropVol;
+  const Vt=(S.vAcid+vBur)/1000;
+  const Vl=Vt*1000;
 
-  if(a.isWater){
-    const nB=nBaseTotal, Vl=Vt*1000;
+  // Water in beaker — adding acid or base to water, pH starts at 7
+  if(aIsWater){
+    if(bIsWater)return 7;
+    const nB=S.cBase*vBur*(rawB.n||1);
     if(nB<1e-12)return 7;
-    if(b.strong)return 14+Math.log10(nB/Vl);
-    const cOH=Math.sqrt(b.Kb*nB/Vl);return 14+Math.log10(cOH);
-  }
-  if(b.isWater){
-    const nA=nAcidTotal, Vl=Vt*1000;
-    if(a.strong)return -Math.log10(nA/Vl);
-    return 0.5*(-Math.log10(a.Ka)-Math.log10(nA/Vl));
+    if(bIsBase){
+      let ph;
+      if(rawB.strong)ph=14+Math.log10(nB/Vl);
+      else{const cOH=Math.sqrt(rawB.Kb*nB/Vl);ph=14+Math.log10(cOH);}
+      return Math.max(7,Math.min(14,ph)); // adding base: pH ≥ 7
+    }
+    if(bIsAcid){
+      let ph;
+      if(rawB.strong)ph=-Math.log10(nB/Vl);
+      else ph=0.5*(-Math.log10(rawB.Ka)-Math.log10(nB/Vl));
+      return Math.min(7,Math.max(0,ph)); // adding acid: pH ≤ 7
+    }
+    return 7;
   }
 
-  const diff=nBaseTotal-nAcidTotal;
-  if(a.strong&&b.strong){
-    if(diff<-1e-12)return -Math.log10((nAcidTotal-nBaseTotal)/(Vt*1000));
+  // Water in burette — pure dilution toward pH 7
+  if(bIsWater){
+    const nBeaker=S.cAcid*S.vAcid*(rawA.n||1);
+    if(nBeaker<1e-12)return 7;
+    if(aIsAcid){
+      let ph;
+      if(rawA.strong)ph=-Math.log10(nBeaker/Vl);
+      else ph=0.5*(-Math.log10(rawA.Ka)-Math.log10(nBeaker/Vl));
+      return Math.min(7,Math.max(0,ph)); // acid can only approach 7 from below
+    }
+    if(aIsBase){
+      let ph;
+      if(rawA.strong)ph=14+Math.log10(nBeaker/Vl);
+      else{const cOH=Math.sqrt(rawA.Kb*nBeaker/Vl);ph=14+Math.log10(cOH);}
+      return Math.max(7,Math.min(14,ph)); // base can only approach 7 from above
+    }
+    return 7;
+  }
+
+  // Acid + Acid (no neutralisation, just mixing)
+  if((aIsAcid&&bIsAcid)){
+    const nA1=S.cAcid*S.vAcid*(rawA.n||1);
+    const nA2=S.cBase*vBur*(rawB.n||1);
+    const nTotal=nA1+nA2;
+    if(rawA.strong&&rawB.strong)return -Math.log10(nTotal/Vl);
+    // Approximate: use weighted average Ka
+    if(rawA.strong)return -Math.log10(nTotal/Vl);
+    if(rawB.strong)return -Math.log10(nTotal/Vl);
+    const cH1=Math.sqrt(rawA.Ka*nA1/Vl), cH2=Math.sqrt(rawB.Ka*nA2/Vl);
+    return -Math.log10(cH1+cH2);
+  }
+
+  // Base + Base
+  if((aIsBase&&bIsBase)){
+    const nB1=S.cAcid*S.vAcid*(rawA.n||1);
+    const nB2=S.cBase*vBur*(rawB.n||1);
+    const nTotal=nB1+nB2;
+    if(rawA.strong&&rawB.strong)return 14+Math.log10(nTotal/Vl);
+    const cOH1=rawA.strong?nB1/Vl:Math.sqrt(rawA.Kb*nB1/Vl);
+    const cOH2=rawB.strong?nB2/Vl:Math.sqrt(rawB.Kb*nB2/Vl);
+    return 14+Math.log10(cOH1+cOH2);
+  }
+
+  // Acid + Base neutralisation (normal titration)
+  const beakerIsBase=aIsBase&&bIsAcid;
+  const acid=beakerIsBase?rawB:rawA;
+  const base=beakerIsBase?rawA:rawB;
+  const nAcid=beakerIsBase?(S.cBase*vBur*(rawB.n||1)):(S.cAcid*S.vAcid*(rawA.n||1));
+  const nBase=beakerIsBase?(S.cAcid*S.vAcid*(rawA.n||1)):(S.cBase*vBur*(rawB.n||1));
+  const diff=nBase-nAcid;
+
+  if(acid.strong&&base.strong){
+    if(diff<-1e-12)return -Math.log10((nAcid-nBase)/Vl);
     if(Math.abs(diff)<1e-12)return 7;
-    return 14+Math.log10((nBaseTotal-nAcidTotal)/(Vt*1000));
+    return 14+Math.log10((nBase-nAcid)/Vl);
   }
-  if(!a.strong&&b.strong){
-    const Ka=a.Ka,Vl=Vt*1000;
-    if(diff<-1e-12){const nHA=nAcidTotal-nBaseTotal,nA=nBaseTotal;if(nA<1e-12)return .5*(Math.log10(1/Ka)-Math.log10(nHA/Vl));return -Math.log10(Ka)+Math.log10(nA/nHA);}
-    if(Math.abs(diff)<1e-12){return 14+Math.log10(Math.sqrt(1e-14/Ka*nAcidTotal/Vl));}
-    return 14+Math.log10((nBaseTotal-nAcidTotal)/Vl);
+  if(!acid.strong&&base.strong){
+    // Exact: f(h) = c_HA*Ka/(Ka+h) + Kw/h - c_NaOH - h = 0
+    const Ka=acid.Ka,Kw=1e-14;
+    const c_HA=nAcid/Vl, c_NaOH=nBase/Vl;
+    const f=h=>c_HA*Ka/(Ka+h)+Kw/h-c_NaOH-h;
+    let lo=1e-14,hi=1;
+    for(let i=0;i<120;i++){const mid=Math.sqrt(lo*hi),fm=f(mid);if(Math.abs(fm)<1e-15||(hi/lo<1+1e-12))break;if(f(lo)*fm<0)hi=mid;else lo=mid;}
+    return Math.max(0,Math.min(14,-Math.log10(Math.sqrt(lo*hi))));
   }
-  if(a.strong&&!b.strong){
-    const Kb=b.Kb,Ka=1e-14/Kb,Vl=Vt*1000;
-    if(diff<-1e-12)return -Math.log10((nAcidTotal-nBaseTotal)/Vl);
-    if(Math.abs(diff)<1e-12)return .5*(-Math.log10(Ka)+Math.log10(nAcidTotal/Vl)+14);
-    const nBf=nBaseTotal-nAcidTotal,nBH=nAcidTotal;
-    if(nBH<1e-12)return 14+Math.log10(Math.sqrt(Kb*nBf/Vl));
-    return 14-(-Math.log10(Kb)+Math.log10(nBH/nBf));
+  if(acid.strong&&!base.strong){
+    // Exact: f(h) = h + c_B*h/(Ka+h) - c_HCl - Kw/h = 0  where Ka=Kw/Kb
+    const Kb=base.Kb,Ka=1e-14/Kb,Kw=1e-14;
+    const c_B=nBase/Vl, c_HCl=nAcid/Vl;
+    const f=h=>h+c_B*h/(Ka+h)-c_HCl-Kw/h;
+    let lo=1e-14,hi=1;
+    for(let i=0;i<120;i++){const mid=Math.sqrt(lo*hi),fm=f(mid);if(Math.abs(fm)<1e-15||(hi/lo<1+1e-12))break;if(f(lo)*fm<0)hi=mid;else lo=mid;}
+    return Math.max(0,Math.min(14,-Math.log10(Math.sqrt(lo*hi))));
   }
-  const Ka=a.Ka,Kb=b.Kb,Vl=Vt*1000;
-  if(diff<-1e-12){const nHA=nAcidTotal-nBaseTotal,nA=nBaseTotal;if(nA<1e-12)return .5*(Math.log10(1/Ka)-Math.log10(nHA/Vl));return -Math.log10(Ka)+Math.log10(nA/nHA);}
-  if(Math.abs(diff)<1e-12)return 7+.5*(Math.log10(Ka)-Math.log10(Kb));
-  const nBf=nBaseTotal-nAcidTotal,nBH=nAcidTotal;
-  if(nBH<1e-12)return 14+Math.log10(Math.sqrt(Kb*nBf/Vl));
-  return 14-(-Math.log10(Kb)+Math.log10(nBH/nBf));
+  // weak acid + weak base — use bisection on combined charge balance
+  {
+    const Ka=acid.Ka,Kb=base.Kb,Kw=1e-14;
+    const c_HA=nAcid/Vl, c_B=nBase/Vl;
+    // f(h) = c_HA*Ka/(Ka+h) - c_B*h/(Kb_conj+h) + Kw/h - h = 0
+    // where Kb_conj = Ka for the base's conjugate (Kw/Ka_BH = Kb... it's complex)
+    // Simplify: treat as simultaneous equilibria, use Henderson-Hasselbalch with bisection fallback
+    const f=h=>{
+      const Ka_BH=Kw/Kb; // Ka of conjugate acid BH+
+      const A_minus=c_HA*Ka/(Ka+h);
+      const BH_plus=c_B*h/(Ka_BH+h);
+      return A_minus+Kw/h-BH_plus-h; // charge balance: [A-]+[OH-]=[BH+]+[H+] (no strong ions)
+    };
+    let lo=1e-14,hi=1;
+    // Ensure bracket
+    if(f(lo)*f(hi)>0){
+      // fallback to HH approximation
+      const nHA=Math.max(1e-15,nAcid-nBase),nA=nBase,nBf=Math.max(1e-15,nBase-nAcid),nBH=nAcid;
+      if(nAcid<nBase)return 14-(-Math.log10(Kb)+Math.log10(Math.max(1e-15,nBH)/nBf));
+      return -Math.log10(Ka)+Math.log10(Math.max(1e-15,nA)/nHA);
+    }
+    for(let i=0;i<120;i++){const mid=Math.sqrt(lo*hi),fm=f(mid);if(Math.abs(fm)<1e-15||(hi/lo<1+1e-12))break;if(f(lo)*fm<0)hi=mid;else lo=mid;}
+    return Math.max(0,Math.min(14,-Math.log10(Math.sqrt(lo*hi))));
+  }
 }
 
 function phToUniversalCol(ph){
@@ -668,19 +783,45 @@ function getHint(drops,ph){
   return'剛過當量點，繼續觀察顏色變化。';
 }
 function updateBurette(drops){
-  const eq=getEqDrops(),maxD=eq*2||400,pct=Math.min(drops/maxD,1);
+  const maxD=getChartMaxDrops()||400,pct=Math.min(drops/maxD,1);
   const fillH=Math.max(0,Math.round(216*(1-pct)));
   const surfaceY=16+216-fillH; // top of liquid in SVG coords
   const el=document.getElementById('burFill');
   el.setAttribute('height',fillH);
   el.setAttribute('y',surfaceY);
-  // Label tracks surface, clamped to visible range
   const labelY=Math.max(20,Math.min(230,surfaceY+3));
   const line=document.getElementById('burVolLine');
   line.setAttribute('y1',labelY);line.setAttribute('y2',labelY);
   const lbl=document.getElementById('burVolLabel');
   lbl.setAttribute('y',labelY+3);
   lbl.textContent=(drops*S.dropVol).toFixed(2)+' mL';
+  // Burette pH — fixed initial pH of burette solution itself
+  const burPh=document.getElementById('burPhLabel');
+  if(burPh){
+    burPh.setAttribute('y',labelY+14);
+    const bur=lookup(S.baseKey);
+    let burPhVal=7;
+    if(!bur.isWater){
+      if(isBasic(S.baseKey)){
+        if(bur.strong)burPhVal=14+Math.log10(S.cBase);
+        else burPhVal=14+Math.log10(Math.sqrt(bur.Kb*S.cBase));
+      } else if(isAcidic(S.baseKey)){
+        if(bur.strong)burPhVal=-Math.log10(S.cBase);
+        else burPhVal=0.5*(-Math.log10(bur.Ka)-Math.log10(S.cBase));
+      }
+    }
+    burPhVal=Math.max(0,Math.min(14,burPhVal));
+    burPh.textContent='pH '+burPhVal.toFixed(2);
+  }
+  // Burette solution name & conc
+  const bl=getSolLabel(S.baseKey,S.cBase);
+  const bsl=document.getElementById('burSolLabel');const bcl=document.getElementById('burConcLabel');
+  if(bsl)bsl.textContent=bl.name;if(bcl)bcl.textContent=bl.conc;
+}
+function getSolLabel(key,conc){
+  const e=lookup(key);
+  if(e.isWater)return{name:'H₂O',conc:''};
+  return{name:e.name,conc:conc+' M'};
 }
 function updateUI(d){
   S.drops=d;
@@ -696,6 +837,10 @@ function updateUI(d){
   document.getElementById('liquid').setAttribute('fill',col);
   document.getElementById('indLayer').setAttribute('fill',col);
   document.getElementById('phInBeaker').textContent='pH '+ph.toFixed(2);
+  // Beaker solution labels
+  const al=getSolLabel(S.acidKey,S.cAcid);
+  const asl=document.getElementById('beakerSolLabel');const acl=document.getElementById('beakerConcLabel');
+  if(asl)asl.textContent=al.name;if(acl)acl.textContent=al.conc;
   const eq=getEqDrops();
   const liqFrac=Math.min(d/(eq||200),1.5);
   const topY=340-liqFrac*55;
@@ -712,10 +857,32 @@ function updateChart(d,ph){
   if(!chart||!chartLabels.length)return;
   const eq=getEqDrops(),hasEq=eq>0;
   const ind=INDICATORS[S.indKey];
+
+  // Auto-extend chart if drops exceed precomputed range
+  const currentMax=chartLabels[chartLabels.length-1];
+  if(d>currentMax){
+    const newMax=Math.ceil(d*1.3); // extend to 130% of current drops
+    const step=Math.max(1,Math.floor(newMax/300));
+    const newLabels=new Set(chartLabels);
+    for(let l=currentMax+step;l<=newMax;l+=step)newLabels.add(l);
+    chartLabels=[...newLabels].sort((a,b)=>a-b);
+    chartData=chartLabels.map(l=>Math.max(0,Math.min(14,parseFloat(calcPH(l).toFixed(4)))));
+    chart.data.labels=chartLabels;
+    chart.data.datasets.forEach(ds=>{
+      if(ds.data.length<chartLabels.length){
+        const pad=new Array(chartLabels.length-ds.data.length).fill(null);
+        ds.data=[...ds.data,...pad];
+        if(ds.pointRadius)ds.pointRadius=[...ds.pointRadius,...new Array(pad.length).fill(0)];
+      }
+    });
+    // Do NOT update slider max — user controls that via number input
+  }
+
   const revealed=chartLabels.map((l,i)=>l<=d?chartData[i]:null);
   chart.data.datasets[0].data=revealed;
-  chart.data.datasets[1].data=chartLabels.map(l=>(hasEq&&l===eq&&d>=eq)?Math.max(0,Math.min(14,calcPH(eq))):null);
-  chart.data.datasets[1].pointRadius=chartLabels.map(l=>(hasEq&&l===eq&&d>=eq)?5:0);
+  const eqLabel=hasEq?chartLabels.reduce((bi,l,i)=>Math.abs(l-eq)<Math.abs(chartLabels[bi]-eq)?i:bi,0):-1;
+  chart.data.datasets[1].data=chartLabels.map((l,i)=>(hasEq&&i===eqLabel&&d>=eq)?Math.max(0,Math.min(14,calcPH(chartLabels[eqLabel]))):null);
+  chart.data.datasets[1].pointRadius=chartLabels.map((l,i)=>(hasEq&&i===eqLabel&&d>=eq)?5:0);
   const ci=chartLabels.reduce((bi,l,i)=>Math.abs(l-d)<Math.abs(chartLabels[bi]-d)?i:bi,0);
   const cur=new Array(chartLabels.length).fill(null);cur[ci]=ph;
   const pr=new Array(chartLabels.length).fill(0);pr[ci]=6;
@@ -726,16 +893,34 @@ function updateChart(d,ph){
 
 function rebuildChart(){
   const eq=getEqDrops(),hasEq=eq>0;
-  const maxD=hasEq?Math.min(Math.max(eq*2,20),50000):400;
+  const maxD=getChartMaxDrops();
   const step=Math.max(1,Math.floor(maxD/300));
   const labels=new Set();
   for(let d=0;d<=maxD;d+=step)labels.add(d);
-  // Dense sampling around equivalence point (±10% of maxD, min 20 points)
+  // Dense sampling around equivalence point (but NOT the exact eq drop to avoid discontinuity)
   if(hasEq){
     const window=Math.max(Math.floor(maxD*0.06),10);
     const fineStep=Math.max(1,Math.floor(window/40));
-    for(let d=Math.max(0,eq-window);d<=Math.min(maxD,eq+window);d+=fineStep)labels.add(d);
-    labels.add(eq);
+    for(let d=Math.max(0,eq-window);d<=Math.min(maxD,eq+window);d+=fineStep){
+      if(d!==eq)labels.add(d); // skip exact eq point
+    }
+    // Add points just before and after eq but not the exact integer
+    labels.add(Math.max(0,eq-1));
+    labels.add(Math.min(maxD,eq+1));
+  }
+  // Dense sampling where pH crosses 7 for dilution/water curves
+  if(!hasEq){
+    const ph0=calcPH(0), phEnd=calcPH(maxD);
+    const crossesSeven=(ph0>7&&phEnd<7.1)||(ph0<7&&phEnd>6.9);
+    if(crossesSeven){
+      // find crossing by binary search and add fine points around it
+      let lo=0,hi=maxD;
+      for(let i=0;i<20;i++){const m=Math.round((lo+hi)/2);if(calcPH(m)>7===ph0>7)lo=m;else hi=m;}
+      const cross=Math.round((lo+hi)/2);
+      const win=Math.max(10,Math.round(maxD*0.05));
+      const fs=Math.max(1,Math.floor(win/30));
+      for(let d=Math.max(0,cross-win);d<=Math.min(maxD,cross+win);d+=fs)labels.add(d);
+    }
   }
   chartLabels=[...labels].sort((a,b)=>a-b);
   chartData=chartLabels.map(d=>Math.max(0,Math.min(14,parseFloat(calcPH(d).toFixed(4)))));
@@ -889,9 +1074,11 @@ function animFrame(ts){
   else{playing=false;document.getElementById('btnPlay').textContent='▶ 重新模擬';dropActive=false;clearDropElements();}
 }
 function pauseSim(){
-  playing=false;if(animId)cancelAnimationFrame(animId);
+  if(playing){
+    playing=false;if(animId)cancelAnimationFrame(animId);
+    document.getElementById('btnPlay').textContent='▶ 繼續模擬';
+  }
   stopDropAnim();
-  document.getElementById('btnPlay').textContent='▶ 繼續模擬';
 }
 function stopDropAnim(){
   dropActive=false;clearDropElements();
@@ -1101,47 +1288,55 @@ function onIndicatorChange(){S.indKey=document.getElementById('indicator').value
   hit.addEventListener('pointerup', scEnd);
   hit.addEventListener('pointercancel', scEnd);
 
-  // Chart crosshair
+  // Chart crosshair — mouse and touch
   const chartCanvas=document.getElementById('chart');
   const crosshair=document.getElementById('chartCrosshair');
   const tooltip=document.getElementById('chartTooltip');
-  const ind2=INDICATORS;
-  chartCanvas.addEventListener('mousemove',function(e){
+
+  function showCrosshair(clientX,clientY){
     if(!chart)return;
     const rect=chartCanvas.getBoundingClientRect();
-    const x=e.clientX-rect.left;
-    const y=e.clientY-rect.top;
+    const x=clientX-rect.left;
+    const y=clientY-rect.top;
     const area=chart.chartArea;
-    if(x<area.left||x>area.right||y<area.top||y>area.bottom){
+    if(!area||x<area.left||x>area.right||y<area.top||y>area.bottom){
       crosshair.style.display='none';tooltip.style.display='none';return;
     }
     crosshair.style.display='block';
     crosshair.style.left=x+'px';
-    // Map x pixel to drop index
     const pct=(x-area.left)/(area.right-area.left);
-    const idx=Math.round(pct*(chartLabels.length-1));
-    const clampedIdx=Math.max(0,Math.min(chartLabels.length-1,idx));
-    const drops=chartLabels[clampedIdx];
-    const phVal=chartData[clampedIdx];
+    const idx=Math.max(0,Math.min(chartLabels.length-1,Math.round(pct*(chartLabels.length-1))));
+    const drops=chartLabels[idx];
+    const phVal=chartData[idx];
     const revealed=drops<=S.drops;
     const ind=INDICATORS[S.indKey];
     const inIndZone=phVal>=ind.pLow&&phVal<=ind.pHigh;
     const eq=getEqDrops();
     let lines=`<b>${drops} 滴</b>　${(drops*S.dropVol).toFixed(2)} mL`;
-    if(revealed){lines+=`<br>pH ${phVal.toFixed(2)}`;}
-    else{lines+=`<br>pH（未到達）`;}
-    if(eq>0&&drops===eq)lines+='　<span style="color:#f09595">◀ 當量點</span>';
+    lines+=revealed?`<br>pH ${phVal.toFixed(2)}`:`<br>pH（未到達）`;
+    if(eq>0&&Math.abs(drops-eq)<=1)lines+='　<span style="color:#f09595">◀ 當量點</span>';
     if(inIndZone&&revealed)lines+='<br><span style="color:#fac775">● 指示劑變色區</span>';
     tooltip.innerHTML=lines;
     tooltip.style.display='block';
-    // Position tooltip: flip if near right edge
     const tipW=tooltip.offsetWidth;
     const tipX=x+12+tipW>rect.width?x-tipW-12:x+12;
     tooltip.style.left=tipX+'px';
     tooltip.style.top=Math.max(area.top,Math.min(y-20,area.bottom-tooltip.offsetHeight))+'px';
-  });
-  chartCanvas.addEventListener('mouseleave',function(){
-    crosshair.style.display='none';tooltip.style.display='none';
+  }
+
+  chartCanvas.addEventListener('mousemove',e=>showCrosshair(e.clientX,e.clientY));
+  chartCanvas.addEventListener('mouseleave',()=>{crosshair.style.display='none';tooltip.style.display='none';});
+  chartCanvas.addEventListener('touchmove',e=>{
+    e.preventDefault();
+    const t=e.touches[0];
+    showCrosshair(t.clientX,t.clientY);
+  },{passive:false});
+  chartCanvas.addEventListener('touchstart',e=>{
+    const t=e.touches[0];
+    showCrosshair(t.clientX,t.clientY);
+  },{passive:true});
+  chartCanvas.addEventListener('touchend',()=>{
+    setTimeout(()=>{crosshair.style.display='none';tooltip.style.display='none';},1500);
   });
 
   // SVG auto-scale to 90% of column width/height
