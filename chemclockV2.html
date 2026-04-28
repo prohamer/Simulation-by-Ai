@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>反應速率模擬實驗室</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
+    <style>
+        input[type=range] { -webkit-appearance: none; width: 100%; background: transparent; }
+        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; height: 16px; width: 16px; border-radius: 50%; background: #3b82f6; cursor: pointer; margin-top: -6px; }
+        input[type=range]:disabled::-webkit-slider-thumb { background: #94a3b8; cursor: not-allowed; }
+        input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 4px; cursor: pointer; background: #cbd5e1; border-radius: 2px; }
+        
+        #beaker-container {
+            position: relative; width: 130px; height: 130px; border-radius: 50%;
+            background-color: #ffffff; border: 4px solid #94a3b8;
+            box-shadow: inset 0 0 15px rgba(0,0,0,0.1), 0 8px 10px -3px rgba(0,0,0,0.1);
+            overflow: hidden; display: flex; align-items: center; justify-content: center;
+        }
+        #cross-mark { font-size: 55px; font-weight: bold; color: #1e293b; user-select: none; z-index: 10; transition: opacity 0.1s; }
+        #reaction-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; z-index: 20; transition: opacity 0.1s linear; }
+
+        input[type=number]::-webkit-inner-spin-button, 
+        input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 h-screen overflow-x-hidden flex flex-col p-2 md:p-3 font-sans">
+
+    <div class="max-w-7xl mx-auto space-y-3 w-full flex-1 flex flex-col h-full">
+        <!-- 標題與場景切換區 -->
+        <header class="bg-white rounded-xl shadow-sm p-3 border border-slate-200 shrink-0 flex flex-col lg:flex-row justify-between items-center gap-3">
+            <div class="flex flex-col gap-1 w-full lg:w-auto">
+                <div class="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4">
+                    <h1 id="main-title" class="text-xl md:text-2xl font-bold text-slate-800">🧪 反應速率模擬</h1>
+                    <select id="reaction-selector" class="bg-blue-50 border border-blue-200 text-blue-800 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-1.5 font-bold cursor-pointer hover:bg-blue-100 transition-colors">
+                        <option value="thiosulfate">硫代硫酸鈉 + 鹽酸 (沉澱反應)</option>
+                        <option value="iodineClock">碘鐘反應 (瞬間變色)</option>
+                    </select>
+                </div>
+                <p id="main-equation" class="text-slate-500 text-xs md:text-sm font-mono bg-slate-100 px-2 py-1 rounded break-all whitespace-pre-line">
+                    Na₂S₂O₃(aq) + 2HCl(aq) → 2NaCl(aq) + SO₂(g) + H₂O(l) + S(s)↓
+                </p>
+            </div>
+        </header>
+
+        <!-- 主要視覺與數據區 -->
+        <div class="grid grid-cols-1 lg:grid-cols-4 gap-3 flex-1 min-h-0">
+            <!-- 左側：視覺模擬 -->
+            <div class="bg-white rounded-xl shadow-sm p-4 border border-slate-200 flex flex-col items-center lg:col-span-1 relative overflow-y-auto">
+                <h2 class="text-base font-semibold w-full text-left mb-2 text-slate-700">👀 燒杯俯視圖</h2>
+                
+                <div class="flex-1 flex flex-col items-center justify-center gap-4 w-full mt-2">
+                    <div id="beaker-container">
+                        <div id="cross-mark">X</div>
+                        <div id="reaction-overlay"></div>
+                    </div>
+                    
+                    <div class="text-center w-full bg-slate-50 py-3 rounded-xl border border-slate-100">
+                        <div class="text-xs text-slate-500 font-bold mb-1">當前實驗：Exp <span id="current-exp-id">1</span></div>
+                        <div class="text-3xl font-mono font-bold text-slate-800" id="timer-display">00.0 s</div>
+                        <div class="text-xs text-slate-500 mt-1 font-medium" id="status-text">準備就緒</div>
+                    </div>
+
+                    <div class="w-full space-y-2 text-xs md:text-sm">
+                        <div class="flex justify-between bg-blue-50 p-2 rounded text-blue-800">
+                            <span id="label-data-r1">[Na₂S₂O₃] 殘留</span> <span id="data-r1" class="font-mono font-bold">0.0000 M</span>
+                        </div>
+                        <div class="flex justify-between bg-yellow-50 p-2 rounded text-yellow-800" id="box-data-p">
+                            <span id="label-data-p">S(s) 生成質量</span> <span id="data-p" class="font-mono font-bold">0.0000 g</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 右側：圖表與操作 -->
+            <div class="bg-white rounded-xl shadow-sm p-4 border border-slate-200 flex flex-col gap-3 lg:col-span-3 min-h-0">
+                <div class="flex flex-wrap justify-between items-center gap-2">
+                    <h2 class="text-base font-semibold text-slate-700 flex items-center gap-2">
+                        📈 數據圖表
+                        <div class="flex items-center gap-2 ml-2 text-xs font-normal bg-slate-100 px-2 py-1 rounded">
+                            <label class="flex items-center gap-1 cursor-pointer text-blue-700"><input type="checkbox" id="toggle-r1" checked class="w-3 h-3"> <span id="legend-r1">[Na₂S₂O₃]</span></label>
+                            <label class="flex items-center gap-1 cursor-pointer text-yellow-700" id="legend-p-container"><input type="checkbox" id="toggle-p" checked class="w-3 h-3"> <span id="legend-p">S(s)</span></label>
+                        </div>
+                    </h2>
+                    
+                    <div class="flex flex-wrap items-center gap-3 text-xs bg-slate-50 p-1.5 px-3 rounded-lg border border-slate-200">
+                        <button id="btn-reset-zoom" class="flex items-center gap-1 text-blue-500 hover:text-blue-700 font-semibold transition-colors">
+                            🔍 重置縮放
+                        </button>
+                        <div class="w-px h-4 bg-slate-300 mx-1"></div>
+                        <label class="flex items-center gap-1 cursor-pointer font-medium text-slate-700">
+                            <input type="checkbox" id="lock-x-axis" class="w-3 h-3 text-blue-600 rounded">
+                            鎖定X最大值
+                        </label>
+                        <input type="range" id="x-axis-slider" min="10" max="300" step="10" value="60" class="w-20 md:w-24" disabled>
+                        <span id="x-axis-label" class="w-8 text-slate-500 text-right">自動</span>
+                        
+                        <div class="w-px h-4 bg-slate-300 mx-1 hidden sm:block"></div>
+                        
+                        <button id="btn-export-csv" class="flex items-center gap-1 text-emerald-600 hover:text-emerald-700 font-semibold transition-colors">
+                            💾 匯出CSV
+                        </button>
+                        <button id="btn-clear-all" class="flex items-center gap-1 text-red-500 hover:text-red-600 font-semibold transition-colors">
+                            🗑️ 清空
+                        </button>
+                    </div>
+                </div>
+
+                <div class="flex-1 relative w-full min-h-[150px]">
+                    <canvas id="reactionChart"></canvas>
+                </div>
+
+                <div class="shrink-0 max-h-16 overflow-y-auto bg-slate-50 rounded p-2 border border-slate-100">
+                    <div class="text-[10px] text-slate-400 font-bold mb-1">已記錄的實驗條件：</div>
+                    <div id="exp-info-list" class="flex flex-wrap gap-2 text-xs">
+                        <span class="text-slate-400 italic">尚未建立實驗數據...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 底部：變因控制區 -->
+        <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden shrink-0">
+            <button id="toggle-panel-btn" class="w-full px-4 py-2.5 flex justify-between items-center bg-slate-50 hover:bg-slate-100 transition-colors focus:outline-none">
+                <h2 class="text-base font-semibold flex items-center gap-2 text-slate-700">
+                    <span>🎛️</span> 變因設定 <span class="text-xs font-normal text-slate-500 ml-2">(展開/收合)</span>
+                </h2>
+                <svg id="panel-icon" class="w-5 h-5 text-slate-400 transform transition-transform duration-300 rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+            </button>
+            
+            <div id="controls-panel" class="p-4 pt-2 grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="md:col-span-2 grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div class="space-y-1.5">
+                        <label class="text-xs font-medium text-slate-700 flex justify-between">
+                            <span id="label-slider-r1">Na₂S₂O₃ 濃度 (M)</span>
+                            <span id="vol-r1" class="text-[10px] text-slate-400">50 mL</span>
+                        </label>
+                        <div class="flex items-center gap-2">
+                            <input type="range" id="slider-r1" min="0.05" max="0.5" step="0.01" value="0.15" class="flex-1">
+                            <input type="number" id="num-r1" min="0.05" max="0.5" step="0.01" value="0.15" class="w-14 p-1 text-center border rounded text-xs font-bold text-blue-600 bg-slate-50 outline-none">
+                        </div>
+                    </div>
+
+                    <div class="space-y-1.5">
+                        <label class="text-xs font-medium text-slate-700 flex justify-between">
+                            <span id="label-slider-r2">HCl 濃度 (M)</span>
+                            <span id="vol-r2" class="text-[10px] text-slate-400">10 mL</span>
+                        </label>
+                        <div class="flex items-center gap-2">
+                            <input type="range" id="slider-r2" min="0.5" max="5.0" step="0.1" value="2.0" class="flex-1">
+                            <input type="number" id="num-r2" min="0.5" max="5.0" step="0.1" value="2.0" class="w-14 p-1 text-center border rounded text-xs font-bold text-blue-600 bg-slate-50 outline-none">
+                        </div>
+                    </div>
+
+                    <div class="space-y-1.5">
+                        <label class="text-xs font-medium text-slate-700">溫度 (°C)</label>
+                        <div class="flex items-center gap-2">
+                            <input type="range" id="slider-temp" min="10" max="80" step="1" value="25" class="flex-1">
+                            <input type="number" id="num-temp" min="10" max="80" step="1" value="25" class="w-14 p-1 text-center border rounded text-xs font-bold text-red-500 bg-slate-50 outline-none">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex flex-row md:flex-col gap-2 justify-end md:border-l md:pl-4 border-slate-100">
+                    <button id="btn-new-exp" class="flex-1 md:flex-none bg-indigo-100 hover:bg-indigo-200 text-indigo-700 font-bold py-2 px-3 rounded-lg text-xs transition-all shadow-sm">
+                        ➕ 新實驗 (保留圖)
+                    </button>
+                    <button id="btn-reset" class="flex-1 md:flex-none bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-2 px-3 rounded-lg text-xs transition-all">
+                        ↺ 重置當前燒杯
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 懸浮控制面板 -->
+    <div id="floating-controls" class="fixed bottom-4 right-4 md:bottom-8 md:right-8 z-50 flex flex-col items-center bg-white/90 backdrop-blur shadow-xl border border-blue-100 rounded-xl p-2 cursor-grab active:cursor-grabbing transition-shadow hover:shadow-2xl select-none touch-none">
+        <div class="text-[10px] text-slate-400 font-bold mb-1 flex items-center gap-1 pointer-events-none uppercase">
+            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l4-4 4 4m0 6l-4 4-4-4"></path></svg>
+            拖曳
+        </div>
+        <button id="btn-start" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-5 md:py-3 md:px-6 rounded-lg transition-colors shadow-sm active:scale-95 whitespace-nowrap text-sm md:text-base">
+            ▶ 開始 (Exp 1)
+        </button>
+    </div>
+
+    <script>
+        // --- 反應場景設定檔 ---
+        const CONFIG = {
+            thiosulfate: {
+                id: 'thiosulfate',
+                title: "🧪 反應速率模擬：Na₂S₂O₃ + HCl",
+                equation: "Na₂S₂O₃(aq) + 2HCl(aq) → 2NaCl(aq) + SO₂(g) + H₂O(l) + S(s)↓",
+                r1Label: "Na₂S₂O₃", r1Max: 0.5, r1Min: 0.05, r1Step: 0.01, r1Def: 0.15, r1Vol: 0.050,
+                r2Label: "HCl", r2Max: 5.0, r2Min: 0.5, r2Step: 0.1, r2Def: 2.0, r2Vol: 0.010,
+                pLabel: "S(s)", pUnit: "g", pColor: "#fde047", // 黃色
+                showCross: true,
+                y1Title: "硫質量 (g)",
+                eventText: "十字消失",
+                calcP: (currentP, totalVol) => currentP * totalVol * 32.06, // M 轉 g
+                kineticRate: (k, r1, r2) => k * r1, // 對HCl零級反應
+                stoichiometry: { r1: 1, r2: 2, p: 1 },
+                baseK25: 0.0012,
+                threshold: 0.004 // 消失閾值
+            },
+            iodineClock: {
+                id: 'iodineClock',
+                title: "⏱️ 碘鐘反應：KIO₃ + NaHSO₃",
+                equation: "IO₃⁻(aq) + 3HSO₃⁻(aq) → I⁻(aq) + 3SO₄²⁻(aq) + 3H⁺(aq)\n(耗盡後) IO₃⁻ + 5I⁻ + 6H⁺ → 3I₂ + 3H₂O",
+                r1Label: "KIO₃", r1Max: 0.1, r1Min: 0.01, r1Step: 0.005, r1Def: 0.05, r1Vol: 0.050,
+                r2Label: "NaHSO₃", r2Max: 0.05, r2Min: 0.005, r2Step: 0.001, r2Def: 0.02, r2Vol: 0.050,
+                pLabel: "I₂ (碘澱粉)", pUnit: "M", pColor: "#0f172a", // 深藍黑
+                showCross: false,
+                y1Title: "[I₂] 濃度 (M)",
+                eventText: "瞬間變色",
+                calcP: (currentP, totalVol) => currentP, // 直接顯示 M
+                kineticRate: (k, r1, r2) => k * r1, // 【修正】改為對 NaHSO3 零級反應，使其呈現線性消耗
+                stoichiometry: { r1: 1, r2: 3, p: 1 }, // r1消耗1, r2消耗3
+                baseK25: 0.015, // 【修正】調整基準速率常數以配合新模型
+                threshold: null // 瞬間觸發
+            }
+        };
+
+        let currentType = 'thiosulfate';
+        let cfg = CONFIG[currentType];
+
+        // --- 核心變數 ---
+        let isRunning = false;
+        let time = 0;
+        let intervalId = null;
+        let dt = 0.1; 
+        let stepCount = 0;
+
+        let currentR1 = 0;
+        let currentR2 = 0;
+        let currentP = 0; // 內部濃度
+        let currentExpId = 1;
+        let hasTriggeredEvent = false;
+
+        let allExperimentsData = []; 
+        const colorPalette = [
+            ['#3b82f6', '#eab308'], ['#a855f7', '#f97316'], ['#14b8a6', '#ef4444'], 
+            ['#ec4899', '#84cc16'], ['#6366f1', '#f59e0b'], ['#0ea5e9', '#d946ef']
+        ];
+
+        // --- DOM ---
+        const ui = {
+            selector: document.getElementById('reaction-selector'),
+            title: document.getElementById('main-title'),
+            equation: document.getElementById('main-equation'),
+            slR1: document.getElementById('slider-r1'), numR1: document.getElementById('num-r1'),
+            slR2: document.getElementById('slider-r2'), numR2: document.getElementById('num-r2'),
+            slTemp: document.getElementById('slider-temp'), numTemp: document.getElementById('num-temp'),
+            lblSlR1: document.getElementById('label-slider-r1'), volR1: document.getElementById('vol-r1'),
+            lblSlR2: document.getElementById('label-slider-r2'), volR2: document.getElementById('vol-r2'),
+            
+            btnStart: document.getElementById('btn-start'), btnNew: document.getElementById('btn-new-exp'),
+            btnReset: document.getElementById('btn-reset'), btnClearAll: document.getElementById('btn-clear-all'),
+            btnExportCsv: document.getElementById('btn-export-csv'), btnResetZoom: document.getElementById('btn-reset-zoom'),
+            
+            timer: document.getElementById('timer-display'), status: document.getElementById('status-text'),
+            overlay: document.getElementById('reaction-overlay'), crossMark: document.getElementById('cross-mark'),
+            dataR1: document.getElementById('data-r1'), dataP: document.getElementById('data-p'),
+            lblDataR1: document.getElementById('label-data-r1'), lblDataP: document.getElementById('label-data-p'),
+            boxDataP: document.getElementById('box-data-p'),
+            
+            expIdDisplay: document.getElementById('current-exp-id'), expInfoList: document.getElementById('exp-info-list'),
+            panelToggle: document.getElementById('toggle-panel-btn'), panelContent: document.getElementById('controls-panel'),
+            panelIcon: document.getElementById('panel-icon'),
+            
+            lockX: document.getElementById('lock-x-axis'), sliderX: document.getElementById('x-axis-slider'), labelX: document.getElementById('x-axis-label'),
+            toggleR1: document.getElementById('toggle-r1'), toggleP: document.getElementById('toggle-p'),
+            legendR1: document.getElementById('legend-r1'), legendP: document.getElementById('legend-p'),
+            legendPContainer: document.getElementById('legend-p-container')
+        };
+
+        // --- 場景切換邏輯 ---
+        function applyReactionScene(typeId) {
+            currentType = typeId;
+            cfg = CONFIG[currentType];
+            
+            // 停止並清空
+            clearAllData();
+
+            // 更新文字與標籤
+            ui.title.textContent = cfg.title.split('：')[0]; // 取前綴
+            ui.equation.textContent = cfg.equation;
+            ui.lblSlR1.textContent = `${cfg.r1Label} 濃度 (M)`;
+            ui.lblSlR2.textContent = `${cfg.r2Label} 濃度 (M)`;
+            ui.volR1.textContent = `${cfg.r1Vol * 1000} mL`;
+            ui.volR2.textContent = `${cfg.r2Vol * 1000} mL`;
+            
+            ui.lblDataR1.textContent = `[${cfg.r1Label}] 殘留`;
+            ui.lblDataP.textContent = `${cfg.pLabel} 產量`;
+            ui.legendR1.textContent = `[${cfg.r1Label}]`;
+            ui.legendP.textContent = cfg.pLabel;
+
+            // 更新滑桿範圍與預設值
+            const setSlider = (sl, num, min, max, step, def) => {
+                sl.min = num.min = min; sl.max = num.max = max;
+                sl.step = num.step = step; sl.value = num.value = def;
+            };
+            setSlider(ui.slR1, ui.numR1, cfg.r1Min, cfg.r1Max, cfg.r1Step, cfg.r1Def);
+            setSlider(ui.slR2, ui.numR2, cfg.r2Min, cfg.r2Max, cfg.r2Step, cfg.r2Def);
+            
+            // 視覺更新
+            ui.crossMark.style.display = cfg.showCross ? 'block' : 'none';
+            ui.overlay.style.backgroundColor = cfg.pColor;
+            ui.boxDataP.className = `flex justify-between p-2 rounded ${currentType === 'iodineClock' ? 'bg-indigo-50 text-indigo-800' : 'bg-yellow-50 text-yellow-800'}`;
+            ui.legendPContainer.className = `flex items-center gap-1 cursor-pointer ${currentType === 'iodineClock' ? 'text-indigo-700' : 'text-yellow-700'}`;
+
+            // 圖表 Y1 軸標題更新
+            if(chart) {
+                chart.options.scales.y1.title.text = cfg.y1Title;
+                chart.update();
+            }
+
+            calculateInitialConcentrations();
+        }
+
+        ui.selector.addEventListener('change', (e) => applyReactionScene(e.target.value));
+
+        // --- 介面同步邏輯 ---
+        ui.panelToggle.addEventListener('click', () => {
+            ui.panelContent.classList.toggle('hidden');
+            ui.panelIcon.classList.toggle('rotate-180');
+        });
+
+        function syncInputs(slider, numField) {
+            slider.addEventListener('input', () => {
+                numField.value = slider.value;
+                if (!isRunning && time === 0) calculateInitialConcentrations();
+            });
+            numField.addEventListener('input', () => {
+                let val = parseFloat(numField.value);
+                if (val < parseFloat(slider.min)) val = slider.min;
+                if (val > parseFloat(slider.max)) val = slider.max;
+                slider.value = val;
+                if (!isRunning && time === 0) calculateInitialConcentrations();
+            });
+        }
+        syncInputs(ui.slR1, ui.numR1);
+        syncInputs(ui.slR2, ui.numR2);
+        syncInputs(ui.slTemp, ui.numTemp);
+
+        function getInputsDisabled(state) {
+            ui.slR1.disabled = ui.numR1.disabled = state;
+            ui.slR2.disabled = ui.numR2.disabled = state;
+            ui.slTemp.disabled = ui.numTemp.disabled = state;
+        }
+
+        ui.toggleR1.addEventListener('change', (e) => { chart.data.datasets.forEach(ds => { if (ds.yAxisID === 'y') ds.hidden = !e.target.checked; }); chart.update(); });
+        ui.toggleP.addEventListener('change', (e) => { chart.data.datasets.forEach(ds => { if (ds.yAxisID === 'y1') ds.hidden = !e.target.checked; }); chart.update(); });
+
+        function updateExpInfoListUI() {
+            if (allExperimentsData.length === 0) {
+                ui.expInfoList.innerHTML = '<span class="text-slate-400 italic">尚未建立實驗數據...</span>';
+                return;
+            }
+            ui.expInfoList.innerHTML = '';
+            allExperimentsData.forEach(exp => {
+                const colorIdx = (exp.expId - 1) % colorPalette.length;
+                const baseColor = colorPalette[colorIdx][0];
+                const badge = document.createElement('div');
+                badge.className = 'px-2 py-1 rounded border whitespace-nowrap font-medium';
+                badge.style.cssText = `background-color: ${baseColor}15; border-color: ${baseColor}40; color: ${baseColor}`;
+                badge.innerHTML = `<span class="font-bold">Exp ${exp.expId}:</span> ${exp.temp}°C | ${cfg.r1Label}=${exp.r1Init}M | ${cfg.r2Label}=${exp.r2Init}M`;
+                ui.expInfoList.appendChild(badge);
+            });
+        }
+
+        // --- Chart.js ---
+        let chart;
+        const verticalLinePlugin = {
+            id: 'verticalLinePlugin',
+            afterDraw: (chart) => {
+                const ctx = chart.ctx; const xAxis = chart.scales.x; const yAxis = chart.scales.y;
+                allExperimentsData.forEach(exp => {
+                    if (exp.markedTime !== null) {
+                        const xPos = xAxis.getPixelForValue(exp.markedTime);
+                        if (xPos >= xAxis.left && xPos <= xAxis.right) {
+                            ctx.save(); ctx.beginPath(); ctx.moveTo(xPos, yAxis.top); ctx.lineTo(xPos, yAxis.bottom);
+                            ctx.lineWidth = 1.5; ctx.strokeStyle = '#ef4444'; ctx.setLineDash([4, 4]); ctx.stroke();
+                            ctx.fillStyle = '#ef4444'; ctx.font = 'bold 10px sans-serif'; ctx.textAlign = 'center';
+                            let yOffset = yAxis.top + 15 + ((exp.expId % 3) * 12); 
+                            ctx.fillText(`Exp${exp.expId} ${cfg.eventText}(${exp.markedTime}s)`, xPos, yOffset);
+                            ctx.restore();
+                        }
+                    }
+                });
+            }
+        };
+
+        function initChart() {
+            const ctx = document.getElementById('reactionChart').getContext('2d');
+            chart = new Chart(ctx, {
+                type: 'line', data: { datasets: [] }, plugins: [verticalLinePlugin],
+                options: {
+                    responsive: true, maintainAspectRatio: false, animation: false, interaction: { mode: 'nearest', axis: 'x', intersect: false },
+                    scales: {
+                        x: { type: 'linear', title: { display: true, text: '時間 (秒)', font:{weight:'bold', size: 10} }, min: 0, ticks: { font: {size: 10} } },
+                        y: { type: 'linear', display: true, position: 'left', title: { display: true, text: '濃度 (M)', font:{weight:'bold', size: 10} }, min: 0, ticks: { font: {size: 10} } },
+                        y1: { type: 'linear', display: true, position: 'right', title: { display: true, text: cfg.y1Title, font:{weight:'bold', size: 10} }, min: 0, grid: { drawOnChartArea: false }, ticks: { font: {size: 10} } }
+                    },
+                    plugins: {
+                        legend: { position: 'top', labels: { boxWidth: 10, usePointStyle: true, font: {size: 10} } },
+                        tooltip: { callbacks: {
+                            title: (items) => `時間: ${items[0].parsed.x} s`,
+                            label: (context) => { let unit = context.dataset.yAxisID === 'y1' ? cfg.pUnit : 'M'; return `${context.dataset.label}: ${context.parsed.y.toFixed(4)} ${unit}`; }
+                        }},
+                        zoom: { pan: { enabled: true, mode: 'xy' }, zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'xy' } }
+                    }
+                }
+            });
+        }
+
+        ui.btnResetZoom.addEventListener('click', () => {
+            if(chart) { chart.resetZoom(); chart.options.scales.x.min = 0; chart.options.scales.y.min = 0; if(chart.options.scales.y1) chart.options.scales.y1.min = 0; chart.update(); }
+        });
+
+        ui.lockX.addEventListener('change', (e) => {
+            const isLocked = e.target.checked; ui.sliderX.disabled = !isLocked;
+            if (isLocked) { chart.options.scales.x.max = parseFloat(ui.sliderX.value); ui.labelX.textContent = `${ui.sliderX.value}s`; } 
+            else { chart.options.scales.x.max = undefined; ui.labelX.textContent = '自動'; }
+            chart.update();
+        });
+
+        ui.sliderX.addEventListener('input', (e) => {
+            if (ui.lockX.checked) { const maxVal = parseFloat(e.target.value); chart.options.scales.x.max = maxVal; ui.labelX.textContent = `${maxVal}s`; chart.update(); }
+        });
+
+        // --- 核心反應邏輯 ---
+        function calculateInitialConcentrations() {
+            const volTotal = cfg.r1Vol + cfg.r2Vol;
+            currentR1 = (parseFloat(ui.numR1.value) * cfg.r1Vol) / volTotal;
+            currentR2 = (parseFloat(ui.numR2.value) * cfg.r2Vol) / volTotal;
+            currentP = 0;
+            
+            ui.dataR1.textContent = `${currentR1.toFixed(4)} M`;
+            ui.dataP.textContent = `0.0000 ${cfg.pUnit}`;
+            ui.overlay.style.opacity = 0;
+        }
+
+        function createNewExperimentDataset() {
+            const colorIdx = (currentExpId - 1) % colorPalette.length;
+            const colors = currentType === 'iodineClock' ? [colorPalette[colorIdx][0], '#0f172a'] : colorPalette[colorIdx]; // 碘鐘固定深藍
+
+            const expRecord = { expId: currentExpId, temp: ui.numTemp.value, r1Init: ui.numR1.value, r2Init: ui.numR2.value, records: [], markedTime: null };
+            allExperimentsData.push(expRecord);
+            updateExpInfoListUI();
+
+            chart.data.datasets.push({ label: `Exp ${currentExpId}: [${cfg.r1Label}]`, data: [], borderColor: colors[0], backgroundColor: colors[0], borderWidth: 2, pointRadius: 0, tension: 0.1, yAxisID: 'y', hidden: !ui.toggleR1.checked });
+            chart.data.datasets.push({ label: `Exp ${currentExpId}: ${cfg.pLabel}`, data: [], borderColor: colors[1], backgroundColor: colors[1], borderWidth: 2, pointRadius: 0, tension: 0.1, borderDash: [4, 4], yAxisID: 'y1', hidden: !ui.toggleP.checked });
+            chart.update();
+        }
+
+        function reactionStep() {
+            const temp = parseFloat(ui.numTemp.value);
+            const k = cfg.baseK25 * Math.pow(2, (temp - 25) / 10);
+
+            let rate = cfg.kineticRate(k, currentR1, currentR2);
+            if (currentR1 <= 0 || currentR2 <= 0) rate = 0;
+
+            const delta = rate * dt;
+            currentR1 -= delta * cfg.stoichiometry.r1;
+            currentR2 -= delta * cfg.stoichiometry.r2;
+            
+            // 【修正】數值防呆：當濃度低於極小值時直接歸零，避免電腦浮點數運算無限拖延
+            if (currentR2 < 0.00005) {
+                currentR2 = 0;
+            }
+
+            // 產物生成邏輯分歧
+            if (currentType === 'thiosulfate') {
+                currentP += delta * cfg.stoichiometry.p;
+            }
+
+            if (currentR1 < 0) currentR1 = 0;
+            if (currentR2 < 0) currentR2 = 0;
+
+            // 碘鐘反應特例：當 NaHSO3 (R2) 耗盡時瞬間生成 I2
+            if (currentType === 'iodineClock') {
+                if (currentR2 <= 0) {
+                    currentR2 = 0;
+                    currentP = 0.015; // 瞬間圖表突波高度維持不變 (不會掉回0)
+                    rate = 0; // 反應停止
+                } else {
+                    currentP = 0;
+                }
+            }
+
+            time += dt;
+            stepCount++;
+            let currentEvent = "";
+            const totalVol = cfg.r1Vol + cfg.r2Vol;
+            const displayP = cfg.calcP(currentP, totalVol);
+
+            ui.timer.textContent = `${time.toFixed(1)} s`;
+            ui.dataR1.textContent = `${currentR1.toFixed(4)} M`;
+            ui.dataP.textContent = `${displayP.toFixed(4)} ${cfg.pUnit}`;
+            
+            // 視覺透明度計算
+            let opacity = 0;
+            if (currentType === 'thiosulfate') {
+                opacity = currentP / cfg.threshold;
+                if (currentP >= cfg.threshold && !hasTriggeredEvent) {
+                    hasTriggeredEvent = true; currentEvent = cfg.eventText;
+                    ui.status.textContent = `${cfg.eventText}！(${time.toFixed(1)}s)`;
+                    ui.status.className = "text-xs mt-1 font-bold text-red-600";
+                    allExperimentsData.find(e => e.expId === currentExpId).markedTime = time.toFixed(1);
+                }
+            } else if (currentType === 'iodineClock') {
+                if (currentP > 0 && !hasTriggeredEvent) { // 碘出現
+                    opacity = 1;
+                    hasTriggeredEvent = true; currentEvent = cfg.eventText;
+                    ui.status.textContent = `${cfg.eventText}！(${time.toFixed(1)}s)`;
+                    ui.status.className = "text-xs mt-1 font-bold text-indigo-800";
+                    allExperimentsData.find(e => e.expId === currentExpId).markedTime = time.toFixed(1);
+                } else {
+                    opacity = hasTriggeredEvent ? 1 : 0;
+                }
+            }
+            ui.overlay.style.opacity = opacity > 1 ? 1 : opacity;
+
+            if (stepCount % 5 === 0 || currentEvent !== "") {
+                const tFixed = parseFloat(time.toFixed(1));
+                const currentRecord = allExperimentsData.find(e => e.expId === currentExpId);
+                currentRecord.records.push({ time: tFixed, r1: currentR1, p: displayP, event: currentEvent });
+
+                const dLen = chart.data.datasets.length;
+                if(dLen >= 2) {
+                    chart.data.datasets[dLen - 2].data.push({x: tFixed, y: currentR1});
+                    chart.data.datasets[dLen - 1].data.push({x: tFixed, y: displayP});
+                }
+                if(tFixed > parseFloat(ui.sliderX.max)) ui.sliderX.max = Math.ceil(tFixed / 50) * 50;
+                chart.update();
+            }
+
+            // 移除自動停止邏輯，讓時間繼續走，模擬真實手動按碼錶
+            if (rate === 0 && !hasTriggeredEvent && ui.status.textContent !== "反應結束") {
+                ui.status.textContent = "反應結束";
+            }
+        }
+
+        // --- 流程控制 ---
+        function startReaction() {
+            if (isRunning) return;
+            if (time === 0) {
+                calculateInitialConcentrations();
+                getInputsDisabled(true);
+                if (!allExperimentsData.find(e => e.expId === currentExpId)) createNewExperimentDataset();
+                ui.status.textContent = "反應進行中..."; ui.status.className = "text-xs mt-1 text-blue-600";
+                hasTriggeredEvent = false;
+            }
+            isRunning = true;
+            ui.btnStart.innerHTML = `⏸ 暫停 (Exp ${currentExpId})`; ui.btnStart.classList.replace('bg-blue-600', 'bg-amber-500'); ui.btnStart.classList.replace('hover:bg-blue-700', 'hover:bg-amber-600');
+            intervalId = setInterval(reactionStep, dt * 1000);
+        }
+
+        function stopReaction() {
+            isRunning = false; clearInterval(intervalId);
+            ui.btnStart.innerHTML = `▶ 開始 (Exp ${currentExpId})`; ui.btnStart.classList.replace('bg-amber-500', 'bg-blue-600'); ui.btnStart.classList.replace('hover:bg-amber-600', 'hover:bg-blue-700');
+        }
+
+        function resetCurrentBeaker() {
+            stopReaction(); time = 0; stepCount = 0; hasTriggeredEvent = false;
+            ui.timer.textContent = "00.0 s"; ui.status.textContent = "準備就緒"; ui.status.className = "text-xs text-slate-500 mt-1 font-medium";
+            ui.btnStart.innerHTML = `▶ 開始 (Exp ${currentExpId})`;
+            getInputsDisabled(false); calculateInitialConcentrations();
+            const dLen = chart.data.datasets.length;
+            if(dLen >= 2) { chart.data.datasets[dLen - 2].data.length = 0; chart.data.datasets[dLen - 1].data.length = 0; }
+            const currentRecord = allExperimentsData.find(e => e.expId === currentExpId);
+            if(currentRecord) { currentRecord.records = []; currentRecord.markedTime = null; }
+            chart.update();
+        }
+
+        function createNewExperiment() {
+            if (isRunning) stopReaction();
+            currentExpId++; ui.expIdDisplay.textContent = currentExpId;
+            time = 0; stepCount = 0; hasTriggeredEvent = false;
+            ui.timer.textContent = "00.0 s"; ui.status.textContent = "準備就緒 (新實驗)"; ui.status.className = "text-xs text-slate-500 mt-1 font-medium";
+            ui.btnStart.innerHTML = `▶ 開始 (Exp ${currentExpId})`;
+            getInputsDisabled(false); calculateInitialConcentrations();
+        }
+
+        function clearAllData() {
+            stopReaction(); currentExpId = 1; allExperimentsData = []; chart.data.datasets = [];
+            if(chart) { chart.resetZoom(); chart.options.scales.x.min = 0; chart.options.scales.y.min = 0; if(chart.options.scales.y1) chart.options.scales.y1.min = 0; chart.update(); }
+            ui.expIdDisplay.textContent = currentExpId; updateExpInfoListUI(); resetCurrentBeaker();
+        }
+
+        function exportToCsv() {
+            if (allExperimentsData.length === 0) return alert("目前沒有實驗數據可匯出！");
+            let csvContent = `實驗編號,溫度(°C),初始[${cfg.r1Label}](M),初始[${cfg.r2Label}](M),時間(s),殘留[${cfg.r1Label}](M),生成${cfg.pLabel}(${cfg.pUnit}),事件\n`;
+            allExperimentsData.forEach(exp => { exp.records.forEach(r => { csvContent += `${exp.expId},${exp.temp},${exp.r1Init},${exp.r2Init},${r.time},${r.r1.toFixed(5)},${r.p.toFixed(5)},${r.event}\n`; }); });
+            const link = document.createElement("a"); link.setAttribute("href", URL.createObjectURL(new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' })));
+            link.setAttribute("download", `${cfg.id}_實驗數據_${new Date().getTime()}.csv`);
+            document.body.appendChild(link); link.click(); document.body.removeChild(link);
+        }
+
+        // --- 懸浮按鈕拖曳邏輯 ---
+        const floatingBox = document.getElementById('floating-controls');
+        let isDraggingBox = false, dragHasMoved = false, dragOffsetX = 0, dragOffsetY = 0;
+        const startDrag = (e) => { isDraggingBox = true; dragHasMoved = false; const clientX = e.touches ? e.touches[0].clientX : e.clientX; const clientY = e.touches ? e.touches[0].clientY : e.clientY; const rect = floatingBox.getBoundingClientRect(); dragOffsetX = clientX - rect.left; dragOffsetY = clientY - rect.top; floatingBox.style.cursor = 'grabbing'; };
+        const doDrag = (e) => { if (!isDraggingBox) return; dragHasMoved = true; const clientX = e.touches ? e.touches[0].clientX : e.clientX; const clientY = e.touches ? e.touches[0].clientY : e.clientY; let newX = clientX - dragOffsetX; let newY = clientY - dragOffsetY; newX = Math.max(0, Math.min(newX, window.innerWidth - floatingBox.offsetWidth)); newY = Math.max(0, Math.min(newY, window.innerHeight - floatingBox.offsetHeight)); floatingBox.style.left = `${newX}px`; floatingBox.style.top = `${newY}px`; floatingBox.style.right = 'auto'; floatingBox.style.bottom = 'auto'; };
+        const stopDrag = () => { isDraggingBox = false; floatingBox.style.cursor = 'grab'; };
+
+        floatingBox.addEventListener('mousedown', startDrag); window.addEventListener('mousemove', doDrag); window.addEventListener('mouseup', stopDrag);
+        floatingBox.addEventListener('touchstart', startDrag, { passive: true }); window.addEventListener('touchmove', doDrag, { passive: true }); window.addEventListener('touchend', stopDrag);
+
+        ui.btnStart.addEventListener('click', (e) => { if (dragHasMoved) { e.preventDefault(); return; } if (isRunning) stopReaction(); else startReaction(); });
+        ui.btnReset.addEventListener('click', resetCurrentBeaker); ui.btnNew.addEventListener('click', createNewExperiment); ui.btnClearAll.addEventListener('click', clearAllData); ui.btnExportCsv.addEventListener('click', exportToCsv);
+
+        // --- 初始化 ---
+        initChart(); applyReactionScene('thiosulfate');
+    </script>
+</body>
+</html>
