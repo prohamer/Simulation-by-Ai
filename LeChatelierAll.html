@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>動態平衡與勒沙特列原理V8</title>
+    <title>動態平衡與勒沙特列V9</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         html, body { height: 100%; margin: 0; padding: 0; background-color: #f5f7fa; color: #2c3e50; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; overflow: hidden; display: flex; flex-direction: column; }
@@ -87,9 +87,9 @@
     </div>
     
     <div id="helpPanel" class="help-panel">
-        <h3>📖 大一統引擎：操作與教學說明</h3>
+        <h3>📖 操作與教學說明</h3>
         <ul>
-            <li><b>七大系統整合：</b>包含相態、溶解度、離子反應、氣相氣壓等多種平衡，展現一致的微觀動態與巨觀圖表。</li>
+            <li><b>七系統整合：</b>包含相態、溶解度、離子反應、氣相氣壓等多種平衡，展現一致的微觀動態與巨觀圖表。</li>
             <li><b>開放容器與勒沙特列：</b>水、汽水、碳酸鈣系統可切換為「開放系統」，展示氣體逸散打破平衡導致單向反應。氣體均相(NO₂, 哈伯法)預設密閉以展現體積壓力效應。</li>
             <li><b>微觀碰撞：</b>鉻酸根、NO₂、哈伯法完整實裝粒子碰撞學說！粒子必須極度靠近才會觸發結合；且平衡時會優先選擇「剛合成」的粒子裂解，完美詮釋微觀可逆性。</li>
             <li><b>圖表完美連動：</b>點擊右上角「暫停」，勾選「鎖定圖表看數據」，游標會在三張圖上絕對同步對齊。</li>
@@ -940,15 +940,20 @@
                     n_bulk += -dn_evap + dn_cond; n_mobile += dn_evap - dn_cond - dn_escape;
                     sum_evap += dn_evap; sum_cond += dn_cond;
                     
-                    // 【修改】帶入真實莫耳體積轉換
                     V_liq = Math.max(0, n_bulk / 55.5);
                     if (document.activeElement !== document.getElementById('liqSlider')) { document.getElementById('liqSlider').value = V_liq; document.getElementById('liqVal').innerText = V_liq.toFixed(1); }
 
                 } else if (activeSystem === 'CO2') {
                     P_tot = isOpenSystem ? 0 : (n_mobile * R * T) / Math.max(0.1, V_gas);
-                    let k_H = 1.5 * Math.exp(2400 * (1/T - 1/298));
-                    Rf = (n_bulk > 0 && V_liq > 0) ? 0.25 * k_H * (n_bulk / V_liq) : 0; 
-                    Rb = (isOpenSystem || V_liq <= 0) ? 0 : 0.25 * P_tot; 
+                    
+                    // 【修正】氣體溶解度動力學：
+                    // 氣體逸散 (aq -> g) 為吸熱，活化能較高，隨溫度上升急遽加快
+                    let k_escape = 0.375 * Math.exp(3000 * (1/298 - 1/T)); 
+                    // 氣體溶解 (g -> aq) 活化能較低，隨溫度上升微幅加快
+                    let k_dissolve = 0.25 * Math.exp(600 * (1/298 - 1/T)); 
+                    
+                    Rf = (n_bulk > 0 && V_liq > 0) ? k_escape * (n_bulk / V_liq) : 0; 
+                    Rb = (isOpenSystem || V_liq <= 0) ? 0 : k_dissolve * P_tot; 
                     let R_escape = isOpenSystem ? (n_mobile * 1.5) : 0;
 
                     let dn_evap = Rf * sub_dt; let dn_cond = Rb * sub_dt; let dn_escape = R_escape * sub_dt;
