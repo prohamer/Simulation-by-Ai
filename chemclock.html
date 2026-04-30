@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>反應速率模擬</title>
+    <title>反應速率模擬實驗室</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js"></script>
@@ -30,9 +30,46 @@
         * { -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
         /* 恢復輸入欄位的選取與編輯能力 */
         input[type=number], input[type=text], textarea, select { -webkit-user-select: text; -moz-user-select: text; -ms-user-select: text; user-select: text; }
+        /* 手機上 canvas 不攔截垂直滾動，避免圖表 touch 吃掉 slider 操作 */
+        @media (pointer: coarse) { canvas { touch-action: pan-y !important; } }
+
+        /* ── 手機 Bottom Sheet ── */
+        #sheet-backdrop {
+            display: none;
+            position: fixed; inset: 0; background: rgba(0,0,0,0.35);
+            z-index: 200; backdrop-filter: blur(2px);
+        }
+        #sheet-backdrop.open { display: block; }
+
+        #bottom-sheet {
+            position: fixed; bottom: 0; left: 0; right: 0;
+            background: #fff; border-radius: 20px 20px 0 0;
+            box-shadow: 0 -4px 30px rgba(0,0,0,0.15);
+            z-index: 201; padding: 0 0 env(safe-area-inset-bottom, 12px);
+            transform: translateY(100%);
+            transition: transform 0.3s cubic-bezier(0.32,0.72,0,1);
+            max-height: 85vh; display: flex; flex-direction: column;
+        }
+        #bottom-sheet.open { transform: translateY(0); }
+
+        #sheet-handle {
+            width: 40px; height: 4px; background: #cbd5e1;
+            border-radius: 2px; margin: 12px auto 4px;
+            flex-shrink: 0;
+        }
+        #sheet-inner { overflow-y: auto; padding: 8px 16px 16px; flex: 1; }
+
+        /* 桌機：隱藏 bottom sheet 相關元素 */
+        @media (min-width: 1024px) {
+            #sheet-backdrop, #bottom-sheet { display: none !important; }
+        }
+        /* 手機：隱藏原本的 inline controls wrapper */
+        @media (max-width: 1023px) {
+            #inline-controls-wrapper { display: none !important; }
+        }
     </style>
 </head>
-<body class="bg-slate-50 text-slate-800 h-screen overflow-x-hidden flex flex-col p-2 md:p-3 font-sans">
+<body class="bg-slate-50 text-slate-800 overflow-x-hidden flex flex-col p-2 md:p-3 pb-20 lg:pb-3 lg:h-screen font-sans">
 
     <div class="max-w-7xl mx-auto space-y-3 w-full flex-1 flex flex-col h-full">
         <!-- 標題與場景切換區 -->
@@ -40,7 +77,7 @@
             <div class="flex flex-col gap-1 w-full lg:w-auto">
                 <div class="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4">
                     <div class="flex items-center gap-1.5">
-                        <h1 id="main-title" class="text-xl md:text-2xl font-bold text-slate-800">🧪 反應速率模擬V5</h1>
+                        <h1 id="main-title" class="text-xl md:text-2xl font-bold text-slate-800">🧪 反應速率模擬V6</h1>
                         <button onclick="toggleGuide()" title="使用說明" class="w-6 h-6 rounded-full bg-slate-200 hover:bg-blue-100 text-slate-500 hover:text-blue-600 text-xs font-bold flex items-center justify-center transition-colors shrink-0">?</button>
                     </div>
                     <select id="reaction-selector" class="bg-blue-50 border border-blue-200 text-blue-800 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-1.5 font-bold cursor-pointer hover:bg-blue-100 transition-colors">
@@ -255,8 +292,8 @@
             </div>
         </div>
 
-        <!-- 底部：變因控制區 -->
-        <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden shrink-0">
+        <!-- 底部：變因控制區（桌機 inline，手機 bottom sheet） -->
+        <div id="inline-controls-wrapper" class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden shrink-0 pb-safe">
             <button id="toggle-panel-btn" class="w-full px-4 py-2.5 flex justify-between items-center bg-slate-50 hover:bg-slate-100 transition-colors focus:outline-none">
                 <h2 class="text-base font-semibold flex items-center gap-2 text-slate-700">
                     <span>🎛️</span> 變因設定 <span class="text-xs font-normal text-slate-500 ml-2">(展開/收合)</span>
@@ -264,7 +301,7 @@
                 <svg id="panel-icon" class="w-5 h-5 text-slate-400 transform transition-transform duration-300 rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
             </button>
             
-            <div id="controls-panel" class="p-4 pt-2 grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div id="controls-panel" class="p-4 pt-2 pb-6 grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div class="md:col-span-2 grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div class="space-y-1.5">
                         <label class="text-xs font-medium text-slate-700 flex justify-between">
@@ -309,8 +346,31 @@
         </div>
     </div>
 
+    <!-- 手機 Bottom Sheet backdrop -->
+    <div id="sheet-backdrop" onclick="closeSheet()"></div>
+
+    <!-- 手機 Bottom Sheet -->
+    <div id="bottom-sheet" role="dialog" aria-modal="true" aria-label="變因設定">
+        <div id="sheet-handle"></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:0 16px 8px;">
+            <span style="font-size:15px;font-weight:600;color:#334155;">🎛️ 變因設定</span>
+            <button onclick="closeSheet()" style="font-size:20px;color:#94a3b8;background:none;border:none;padding:4px 8px;cursor:pointer;">✕</button>
+        </div>
+        <div id="sheet-inner">
+            <!-- slider 內容由 JS cloneControls() 鏡像填入 -->
+        </div>
+    </div>
+
     <!-- 懸浮控制面板 -->
-    <div id="floating-controls" class="fixed bottom-4 right-4 md:bottom-8 md:right-8 z-50 flex flex-col items-center bg-white/90 backdrop-blur shadow-xl border border-blue-100 rounded-xl p-2 cursor-grab active:cursor-grabbing transition-shadow hover:shadow-2xl select-none touch-none">
+    <!-- 手機底部工具列（僅 < lg 顯示） -->
+    <div id="mobile-toolbar" class="fixed bottom-0 left-0 right-0 z-100 lg:hidden bg-white border-t border-slate-200 shadow-lg flex gap-2 px-3 py-2" style="padding-bottom: max(8px, env(safe-area-inset-bottom));">
+        <button id="btn-start-mobile" class="flex-1 bg-blue-600 text-white font-bold py-2.5 rounded-xl text-sm active:scale-95 transition-transform">▶ 開始</button>
+        <button onclick="openSheet()" class="flex-1 bg-slate-100 text-slate-700 font-bold py-2.5 rounded-xl text-sm active:scale-95 transition-transform">🎛️ 變因設定</button>
+        <button id="btn-new-exp-mobile" class="flex-1 bg-indigo-100 text-indigo-700 font-bold py-2.5 rounded-xl text-sm active:scale-95 transition-transform">➕ 新實驗</button>
+    </div>
+
+    <!-- 桌機懸浮面板（僅 ≥ lg 顯示） -->
+    <div id="floating-controls" class="fixed bottom-4 right-4 md:bottom-8 md:right-8 z-50 hidden lg:flex flex-col items-center bg-white/90 backdrop-blur shadow-xl border border-blue-100 rounded-xl p-2 cursor-grab active:cursor-grabbing transition-shadow hover:shadow-2xl select-none touch-none">
         <div class="text-[10px] text-slate-400 font-bold mb-1 flex items-center gap-1 pointer-events-none uppercase">
             <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l4-4 4 4m0 6l-4 4-4-4"></path></svg>
             拖曳
@@ -321,6 +381,100 @@
     </div>
 
     <script>
+
+        // --- 手機 Bottom Sheet ---
+        function openSheet() {
+            document.getElementById('sheet-backdrop').classList.add('open');
+            document.getElementById('bottom-sheet').classList.add('open');
+            syncSheetValues();
+            // 同步鎖定狀態：實驗已開始（time > 0）時保持鎖定
+            const locked = (typeof time !== 'undefined' && time > 0);
+            ['r1','r2','temp'].forEach(id => {
+                const sl  = document.getElementById('sheet-slider-' + id);
+                const num = document.getElementById('sheet-num-' + id);
+                if (sl)  sl.disabled  = locked;
+                if (num) num.disabled = locked;
+            });
+            const hint = document.getElementById('sheet-lock-hint');
+            if (hint) hint.style.display = locked ? 'flex' : 'none';
+        }
+        function closeSheet() {
+            document.getElementById('sheet-backdrop').classList.remove('open');
+            document.getElementById('bottom-sheet').classList.remove('open');
+        }
+
+        // 把 inline controls 的當前值同步到 sheet 的 mirror controls
+        function syncSheetValues() {
+            ['r1','r2','temp'].forEach(id => {
+                const src = document.getElementById('slider-' + id);
+                const numSrc = document.getElementById('num-' + id);
+                const dst = document.getElementById('sheet-slider-' + id);
+                const numDst = document.getElementById('sheet-num-' + id);
+                if (src && dst) { dst.value = src.value; numDst.value = numSrc.value; }
+            });
+        }
+
+        // sheet slider 變動 → 同步回 inline controls → 觸發 input 事件
+        function sheetSliderChanged(id, value) {
+            const inlineSlider = document.getElementById('slider-' + id);
+            const inlineNum   = document.getElementById('num-' + id);
+            const sheetNum    = document.getElementById('sheet-num-' + id);
+            inlineSlider.value = value;
+            inlineNum.value = parseFloat(value).toFixed(id === 'temp' ? 0 : (id === 'r2' ? 1 : 2));
+            sheetNum.value = inlineNum.value;
+            inlineSlider.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+        function sheetNumChanged(id, value) {
+            const inlineSlider = document.getElementById('slider-' + id);
+            const inlineNum   = document.getElementById('num-' + id);
+            const sheetSlider = document.getElementById('sheet-slider-' + id);
+            inlineSlider.value = value; inlineNum.value = value;
+            sheetSlider.value = value;
+            inlineSlider.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+
+        // 填入 sheet-inner 的 HTML（只執行一次）
+        function buildSheetContent() {
+            const inner = document.getElementById('sheet-inner');
+            if (inner.dataset.built) return;
+            inner.dataset.built = '1';
+            inner.innerHTML = `
+                <div id="sheet-lock-hint" style="display:none;align-items:center;gap:8px;background:#fef3c7;border:1px solid #fcd34d;border-radius:10px;padding:8px 12px;margin-bottom:4px;font-size:12px;color:#92400e;">
+                    🔒 實驗進行中，請先「重置燒杯」或「新實驗」才能修改變因。
+                </div>
+                <div style="display:grid;gap:20px;">
+                    <div>
+                        <label style="font-size:12px;font-weight:500;color:#475569;display:flex;justify-content:space-between;">
+                            <span id="sheet-label-r1">Na₂S₂O₃ 濃度 (M)</span>
+                            <span id="sheet-vol-r1" style="font-size:10px;color:#94a3b8;">50 mL</span>
+                        </label>
+                        <div style="display:flex;align-items:center;gap:8px;margin-top:6px;">
+                            <input type="range" id="sheet-slider-r1" min="0.05" max="0.5" step="0.01" value="0.15" style="flex:1;" oninput="sheetSliderChanged('r1',this.value)">
+                            <input type="number" id="sheet-num-r1" min="0.05" max="0.5" step="0.01" value="0.15" style="width:56px;padding:4px;text-align:center;border:1px solid #e2e8f0;border-radius:6px;font-size:12px;font-weight:700;color:#2563eb;" oninput="sheetNumChanged('r1',this.value)">
+                        </div>
+                    </div>
+                    <div>
+                        <label style="font-size:12px;font-weight:500;color:#475569;display:flex;justify-content:space-between;">
+                            <span id="sheet-label-r2">HCl 濃度 (M)</span>
+                            <span id="sheet-vol-r2" style="font-size:10px;color:#94a3b8;">10 mL</span>
+                        </label>
+                        <div style="display:flex;align-items:center;gap:8px;margin-top:6px;">
+                            <input type="range" id="sheet-slider-r2" min="0.5" max="5.0" step="0.1" value="2.0" style="flex:1;" oninput="sheetSliderChanged('r2',this.value)">
+                            <input type="number" id="sheet-num-r2" min="0.5" max="5.0" step="0.1" value="2.0" style="width:56px;padding:4px;text-align:center;border:1px solid #e2e8f0;border-radius:6px;font-size:12px;font-weight:700;color:#2563eb;" oninput="sheetNumChanged('r2',this.value)">
+                        </div>
+                    </div>
+                    <div>
+                        <label style="font-size:12px;font-weight:500;color:#475569;">溫度 (°C)</label>
+                        <div style="display:flex;align-items:center;gap:8px;margin-top:6px;">
+                            <input type="range" id="sheet-slider-temp" min="10" max="80" step="1" value="25" style="flex:1;" oninput="sheetSliderChanged('temp',this.value)">
+                            <input type="number" id="sheet-num-temp" min="10" max="80" step="1" value="25" style="width:56px;padding:4px;text-align:center;border:1px solid #e2e8f0;border-radius:6px;font-size:12px;font-weight:700;color:#ef4444;" oninput="sheetNumChanged('temp',this.value)">
+                        </div>
+                    </div>
+                    <div style="display:flex;gap:8px;">
+                        <button onclick="closeSheet()" style="flex:1;background:#dbeafe;color:#1d4ed8;font-weight:700;padding:10px;border-radius:10px;border:none;font-size:13px;">✓ 完成</button>
+                    </div>
+                </div>`;
+        }
 
         // --- 使用說明面板折疊 ---
         function toggleGuide() {
@@ -530,6 +684,16 @@
             ui.slR1.disabled = ui.numR1.disabled = state;
             ui.slR2.disabled = ui.numR2.disabled = state;
             ui.slTemp.disabled = ui.numTemp.disabled = state;
+            // 同步鎖定 bottom sheet 的 mirror controls
+            ['r1','r2','temp'].forEach(id => {
+                const sl  = document.getElementById('sheet-slider-' + id);
+                const num = document.getElementById('sheet-num-' + id);
+                if (sl)  sl.disabled  = state;
+                if (num) num.disabled = state;
+            });
+            // 鎖定時在 sheet 頂部顯示提示
+            const hint = document.getElementById('sheet-lock-hint');
+            if (hint) hint.style.display = state ? 'flex' : 'none';
         }
 
         ui.toggleR1.addEventListener('change', (e) => { chart.data.datasets.forEach(ds => { if (ds.yAxisID === 'y') ds.hidden = !e.target.checked; }); chart.update(); });
@@ -591,7 +755,13 @@
                             title: (items) => `時間: ${items[0].parsed.x} s`,
                             label: (context) => { let unit = context.dataset.yAxisID === 'y1' ? cfg.pUnit : 'M'; return `${context.dataset.label}: ${context.parsed.y.toFixed(4)} ${unit}`; }
                         }},
-                        zoom: { pan: { enabled: true, mode: 'xy' }, zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'xy' } }
+                        zoom: (function() {
+                            const isMobile = window.matchMedia('(pointer: coarse)').matches;
+                            return {
+                                pan:  { enabled: !isMobile, mode: 'xy' },
+                                zoom: { wheel: { enabled: !isMobile }, pinch: { enabled: false }, mode: 'xy' }
+                            };
+                        })()
                     }
                 }
             });
@@ -774,18 +944,20 @@
             }
             isRunning = true;
             ui.btnStart.innerHTML = `⏸ 暫停 (Exp ${currentExpId})`; ui.btnStart.classList.replace('bg-blue-600', 'bg-amber-500'); ui.btnStart.classList.replace('hover:bg-blue-700', 'hover:bg-amber-600');
+            syncMobileStartBtn(true);
             intervalId = setInterval(reactionStep, dt * 1000);
         }
 
         function stopReaction() {
             isRunning = false; clearInterval(intervalId);
-            ui.btnStart.innerHTML = `▶ 開始 (Exp ${currentExpId})`; ui.btnStart.classList.replace('bg-amber-500', 'bg-blue-600'); ui.btnStart.classList.replace('hover:bg-amber-600', 'hover:bg-blue-700');
+            ui.btnStart.innerHTML = `▶ 開始 (Exp ${currentExpId})`; syncMobileStartBtn(false); ui.btnStart.classList.replace('bg-amber-500', 'bg-blue-600'); ui.btnStart.classList.replace('hover:bg-amber-600', 'hover:bg-blue-700');
+            syncMobileStartBtn(false);
         }
 
         function resetCurrentBeaker() {
             stopReaction(); time = 0; stepCount = 0; hasTriggeredEvent = false;
             ui.timer.textContent = "00.0 s"; ui.status.textContent = "準備就緒"; ui.status.className = "text-xs text-slate-500 mt-1 font-medium";
-            ui.btnStart.innerHTML = `▶ 開始 (Exp ${currentExpId})`;
+            ui.btnStart.innerHTML = `▶ 開始 (Exp ${currentExpId})`; syncMobileStartBtn(false); syncMobileStartBtn(false);
             getInputsDisabled(false); calculateInitialConcentrations();
             // 移除當前 Exp 的兩條 dataset，讓下次開始時重新建立，避免重複堆疊
             chart.data.datasets = chart.data.datasets.filter(
@@ -803,7 +975,7 @@
             currentExpId++; ui.expIdDisplay.textContent = currentExpId;
             time = 0; stepCount = 0; hasTriggeredEvent = false;
             ui.timer.textContent = "00.0 s"; ui.status.textContent = "準備就緒 (新實驗)"; ui.status.className = "text-xs text-slate-500 mt-1 font-medium";
-            ui.btnStart.innerHTML = `▶ 開始 (Exp ${currentExpId})`;
+            ui.btnStart.innerHTML = `▶ 開始 (Exp ${currentExpId})`; syncMobileStartBtn(false); syncMobileStartBtn(false);
             getInputsDisabled(false); calculateInitialConcentrations();
         }
 
@@ -838,6 +1010,49 @@
 
         // --- 初始化 ---
         initChart(); applyReactionScene('thiosulfate');
+        buildSheetContent();
+
+        // 手機工具列按鈕接線
+        const btnStartMob = document.getElementById('btn-start-mobile');
+        const btnNewMob   = document.getElementById('btn-new-exp-mobile');
+        if (btnStartMob) btnStartMob.addEventListener('click', () => { if (isRunning) stopReaction(); else startReaction(); });
+        if (btnNewMob)   btnNewMob.addEventListener('click', () => { ui.btnNew.click(); });
+
+        // 同步場景切換時 sheet 的標籤文字
+        function syncSheetLabels() {
+            const l1 = document.getElementById('sheet-label-r1');
+            const l2 = document.getElementById('sheet-label-r2');
+            const v1 = document.getElementById('sheet-vol-r1');
+            const v2 = document.getElementById('sheet-vol-r2');
+            if (l1) l1.textContent = document.getElementById('label-slider-r1').textContent;
+            if (l2) l2.textContent = document.getElementById('label-slider-r2').textContent;
+            if (v1) v1.textContent = document.getElementById('vol-r1').textContent;
+            if (v2) v2.textContent = document.getElementById('vol-r2').textContent;
+        }
+        ui.selector.addEventListener('change', () => setTimeout(syncSheetLabels, 50));
+
+        // 同步 mobile start 按鈕狀態
+        function syncMobileStartBtn(running) {
+            const btn = document.getElementById('btn-start-mobile');
+            if (!btn) return;
+            if (running) {
+                btn.textContent = '⏸ 暫停';
+                btn.style.background = '#f59e0b';
+            } else {
+                btn.textContent = '▶ 開始';
+                btn.style.background = '#2563eb';
+            }
+        }
+
+        // 曝露到 window，讓 HTML onclick attribute 可以呼叫
+        window.startReaction  = startReaction;
+        window.stopReaction   = stopReaction;
+        window.openSheet      = openSheet;
+        window.closeSheet     = closeSheet;
+        window.toggleGuide    = toggleGuide;
+        window.toggleOrdersPanel = toggleOrdersPanel;
+        window.sheetSliderChanged = sheetSliderChanged;
+        window.sheetNumChanged    = sheetNumChanged;
     </script>
 </body>
 </html>
