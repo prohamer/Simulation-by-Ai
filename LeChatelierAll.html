@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>動態平衡與勒沙特列原理V10</title>
+    <title>動態平衡與勒沙特列V12</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         html, body { height: 100%; margin: 0; padding: 0; background-color: #f5f7fa; color: #2c3e50; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; overflow: hidden; display: flex; flex-direction: column; }
@@ -236,9 +236,12 @@
 
     const maxMemoryPoints = 3000; 
     let visualDataPoints = 240; 
-    let history = { time: [], n1: [], n2: [], n3: [], RateF: [], RateB: [], Pressure: [], Actions: [] };
+    let history = { time: [], n1: [], n2: [], n3: [], n4: [], RateF: [], RateB: [], Pressure: [], Actions: [] };
     let disp = { n1: 0, n2: 0, n3: 0, Rf: 0, Rb: 0, Pressure: 0 }; 
     let pendingActions = {};
+    
+    // 【V11 新增】CHROMATE 系統專用：OH⁻ 莫耳數（NaOH 過量時累積）
+    let n_OH = 0.0;
     
     window.toggleOpenSystem = function() {
         if (activeSystem === 'NO2' || activeSystem === 'HABER') {
@@ -381,6 +384,7 @@
             else if (type === 'CrO4') this.radius = 3.5;
             else if (type === 'Cr2O7') this.radius = 5.5;
             else if (type === 'H_PLUS') this.radius = 2.5;
+            else if (type === 'OH_MINUS') this.radius = 2.5;
             else if (type === 'NO2') this.radius = 4;
             else if (type === 'N2O4') this.radius = 6.5;
             else if (type === 'H2') this.radius = 3;
@@ -396,7 +400,7 @@
                 else if (type === 'NH3') speed *= 0.8;
                 else if (type === 'H2') speed *= 1.0; 
             }
-            else if(state === 'aq') speed *= (type === 'H_PLUS' ? 2.5 : 1.0); 
+            else if(state === 'aq') speed *= (type === 'H_PLUS' || type === 'OH_MINUS' ? 2.5 : 1.0); 
             else speed = 0; 
             
             let angle = Math.random() * Math.PI * 2;
@@ -504,6 +508,10 @@
                 ctx.beginPath(); ctx.arc(-3, 0, 4, 0, Math.PI*2); ctx.stroke(); ctx.beginPath(); ctx.arc(3, 0, 4, 0, Math.PI*2); ctx.stroke();
             } else if (this.type === 'H_PLUS') {
                 ctx.fillStyle = '#e74c3c'; ctx.beginPath(); ctx.arc(0, 0, 2.5, 0, Math.PI*2); ctx.fill();
+            } else if (this.type === 'OH_MINUS') {
+                // 【V11】OH⁻：紫色小圓，帶負號標記
+                ctx.fillStyle = '#9b59b6'; ctx.beginPath(); ctx.arc(0, 0, 2.5, 0, Math.PI*2); ctx.fill();
+                ctx.strokeStyle = '#6c3483'; ctx.lineWidth = 0.8; ctx.stroke();
             } else if (this.type === 'NO2') {
                 ctx.rotate(this.rotation); ctx.fillStyle = '#2980b9'; ctx.beginPath(); ctx.arc(0, 0, 3, 0, Math.PI*2); ctx.fill();
                 ctx.fillStyle = '#e74c3c'; ctx.beginPath(); ctx.arc(-2.5, -3.5, 2.5, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(-2.5, 3.5, 2.5, 0, Math.PI*2); ctx.fill();
@@ -571,10 +579,11 @@
     window.switchSystem = function(sys) {
         activeSystem = sys; particles = []; flashes = []; time = 0; frameCounter = 0;
         
-        history.time.length = 0; history.n1.length = 0; history.n2.length = 0; history.n3.length = 0;
+        history.time.length = 0; history.n1.length = 0; history.n2.length = 0; history.n3.length = 0; history.n4.length = 0;
         history.RateF.length = 0; history.RateB.length = 0; history.Pressure.length = 0; history.Actions.length = 0;
         disp = { n1: 0, n2: 0, n3: 0, Rf: 0, Rb: 0, Pressure: 0 };
-        pendingActions = {}; 
+        pendingActions = {};
+        n_OH = 0.0; 
         
         isOpenSystem = false;
         document.getElementById('btnToggleSystem').innerText = "🔒 密閉容器 (點擊打開)";
@@ -628,26 +637,22 @@
                 { label: '結晶速率 (aq → s)', borderColor: '#9b59b6', backgroundColor: 'transparent', fill: false, data: history.RateB, tension: 0 } 
             ];
             V_gas = 5.0; V_liq = 5.0; T = 300; n_bulk = 0.0; n_mobile = 0.0; n_third = 0.0;
-            document.getElementById('addAmount').value = 10; // 糖預設加10莫耳比較容易看見固體
             volSlider.disabled = true; btnToggleSystem.disabled = false;
             
         } else if(sys === 'CHROMATE') {
             eqTitle.innerHTML = `2CrO<sub>4</sub><sup>2-</sup><sub>(aq)</sub> + 2H<sup>+</sup> &rightleftharpoons; Cr<sub>2</sub>O<sub>7</sub><sup>2-</sup><sub>(aq)</sub> + H<sub>2</sub>O`;
             sel.innerHTML = `<option value="CrO4">鉻酸鉀 K₂CrO₄ (黃)</option><option value="Cr2O7">二鉻酸鉀 K₂Cr₂O₇ (橘)</option><option value="HCl">鹽酸 HCl (提供 H⁺)</option><option value="NaOH">氫氧化鈉 NaOH (中和 H⁺)</option>`;
             molesChart.data.datasets = [ 
-                { label: 'CrO₄²⁻ (黃)', borderColor: '#f1c40f', backgroundColor: 'transparent', fill: false, data: history.n1, tension: 0 }, 
-                { label: 'Cr₂O₇²⁻ (橘)', borderColor: '#e67e22', backgroundColor: 'transparent', fill: false, data: history.n2, tension: 0 },
-                { label: 'H⁺ (酸)', borderColor: '#e74c3c', backgroundColor: 'transparent', fill: false, data: history.n3, tension: 0 }
+                { label: 'CrO₄²⁻ mol (黃)', borderColor: '#f1c40f', backgroundColor: 'transparent', fill: false, data: history.n1, tension: 0 }, 
+                { label: 'Cr₂O₇²⁻ mol (橘)', borderColor: '#e67e22', backgroundColor: 'transparent', fill: false, data: history.n2, tension: 0 },
+                { label: 'H⁺ mol (酸)', borderColor: '#e74c3c', backgroundColor: 'transparent', fill: false, data: history.n3, tension: 0 },
+                { label: 'OH⁻ mol (鹼)', borderColor: '#9b59b6', backgroundColor: 'transparent', fill: false, data: history.n4, tension: 0 }
             ];
             rateChart.data.datasets = [ 
-                { label: '正反應 (變橘)', borderColor: '#d35400', backgroundColor: 'transparent', fill: false, data: history.RateF, tension: 0 }, 
-                { label: '逆反應 (變黃)', borderColor: '#f39c12', backgroundColor: 'transparent', fill: false, data: history.RateB, tension: 0 } 
+                { label: '正反應速率 (→橘)', borderColor: '#d35400', backgroundColor: 'transparent', fill: false, data: history.RateF, tension: 0 }, 
+                { label: '逆反應速率 (→黃)', borderColor: '#f39c12', backgroundColor: 'transparent', fill: false, data: history.RateB, tension: 0 } 
             ];
-            V_gas = 5.0; V_liq = 10.0; T = 300; n_bulk = 0.0; n_mobile = 0.0; n_third = 0.0;
-            
-            // 【修正】強制設定鉻酸根系統的預設加入量為 10 莫耳，配合 4 級反應的合理濃度
-            document.getElementById('addAmount').value = 10;
-            
+            V_gas = 5.0; V_liq = 10.0; T = 300; n_bulk = 0.0; n_mobile = 0.0; n_third = 0.0; n_OH = 0.0;
             volSlider.disabled = true; btnToggleSystem.disabled = false;
             
         } else if(sys === 'CACO3') {
@@ -663,7 +668,6 @@
                 { label: '逆向沉澱 (g → s)', borderColor: '#c0392b', backgroundColor: 'transparent', fill: false, data: history.RateB, tension: 0 } 
             ];
             V_gas = 5.0; V_liq = 8.0; T = 300; n_bulk = 0.0; n_mobile = 0.0; n_third = 0.0;
-            document.getElementById('addAmount').value = 10; // 碳酸鈣也預設10莫耳
             volSlider.disabled = false; btnToggleSystem.disabled = false;
         } else if (sys === 'NO2') {
             eqTitle.innerHTML = `2NO<sub>2(g)</sub> &rightleftharpoons; N<sub>2</sub>O<sub>4(g)</sub> + 熱`;
@@ -727,14 +731,40 @@
             if(activeSystem === 'CACO3') { n_mobile += amt; for(let i=0; i<Math.min(amt*visual_Ca, 100); i++) particles.push(new Particle('H_PLUS', 'aq', b.minX+10+Math.random()*(b.maxX-b.minX-20), b.liquidY+10+Math.random()*(b.maxY-b.liquidY-20))); }
         }
         if(val === 'NaOH') {
-            let removeTarget = (activeSystem === 'CHROMATE') ? n_third : n_mobile;
-            let actualRemove = Math.min(amt, removeTarget);
-            if(activeSystem === 'CHROMATE') n_third -= actualRemove;
-            if(activeSystem === 'CACO3') n_mobile -= actualRemove;
-            let targets = particles.filter(p => p.type === 'H_PLUS' && p.state === 'aq');
-            let count = Math.min(targets.length, actualRemove * visual_Cr);
-            for(let i=0; i<count; i++) targets[i].toBeRemoved = true;
-            pendingActions['add'] = `+${amt} NaOH (中和 ${actualRemove.toFixed(1)} H⁺)`;
+            if(activeSystem === 'CHROMATE') {
+                // 【V11 完整修正】NaOH 加入的完整邏輯：
+                // 1. 先讓 NaOH 中和現有 H⁺（H⁺ + OH⁻ → H₂O）
+                // 2. 若 NaOH 過量，多餘的 OH⁻ 累積在 n_OH 中
+                // 3. 若目前已有 OH⁻ 存在，先讓 OH⁻ 被中和
+                let naoh = amt;
+                // 先用新的 NaOH 中和現有 OH⁻（若已在鹼性側不需要，但加入的是 NaOH）
+                // 實際邏輯：新 NaOH 先中和現有 H⁺
+                let neutralize_H = Math.min(naoh, n_third);
+                n_third -= neutralize_H;
+                naoh -= neutralize_H;
+                // 剩餘 NaOH 變成 OH⁻ 累積
+                n_OH += naoh;
+                // 視覺粒子：移除 H⁺ 粒子，加入 OH⁻ 粒子（紫色小圓）
+                let targets = particles.filter(p => p.type === 'H_PLUS' && p.state === 'aq');
+                let removeCount = Math.min(targets.length, Math.round(neutralize_H * visual_Cr));
+                for(let i = 0; i < removeCount; i++) targets[i].toBeRemoved = true;
+                if(naoh > 0) {
+                    for(let i = 0; i < Math.min(naoh * visual_Cr, 100); i++) {
+                        particles.push(new Particle('OH_MINUS', 'aq', b.minX+10+Math.random()*(b.maxX-b.minX-20), b.liquidY+10+Math.random()*(b.maxY-b.liquidY-20)));
+                    }
+                }
+                let neutralStr = neutralize_H > 0 ? ` 中和H⁺ ${neutralize_H.toFixed(2)}mol` : '';
+                let excessStr = naoh > 0 ? ` 過量OH⁻ ${naoh.toFixed(2)}mol` : '';
+                pendingActions['add'] = `+${amt} NaOH:${neutralStr}${excessStr}`;
+            } else if(activeSystem === 'CACO3') {
+                let removeTarget = n_mobile;
+                let actualRemove = Math.min(amt, removeTarget);
+                n_mobile -= actualRemove;
+                let targets = particles.filter(p => p.type === 'H_PLUS' && p.state === 'aq');
+                let count = Math.min(targets.length, actualRemove * visual_Ca);
+                for(let i=0; i<count; i++) targets[i].toBeRemoved = true;
+                pendingActions['add'] = `+${amt} NaOH (中和 ${actualRemove.toFixed(1)} H⁺)`;
+            }
             snapToPresent(); if(isPaused) drawSystem(); return; 
         }
         if(val === 'CaCO3_s') { n_bulk += amt; }
@@ -909,6 +939,58 @@
             let actStr = Object.values(pendingActions).join(', ');
             if (actStr) { ctx.fillStyle = '#e74c3c'; ctx.font = 'bold 18px sans-serif'; ctx.textAlign = 'center'; ctx.fillText(`已預約: ${actStr}`, canvas.width / 2, b.liquidY > 100 ? b.liquidY - 20 : b.maxY - 20); }
         }
+
+        // 【V10 新增】CHROMATE 系統右上角顯示即時 Keq 與平衡組成
+        if (activeSystem === 'CHROMATE') {
+            let vl = Math.max(V_liq, 0.001);
+            let cCrO4 = n_bulk / vl;
+            let cCr2O7 = n_mobile / vl;
+            let cH = n_third / vl;
+            let cOH = n_OH / vl;
+            let Keq_num = cCr2O7;
+            let Keq_den = Math.pow(cCrO4, 2) * Math.pow(cH, 2);
+            let Keq_disp = (Keq_den > 1e-10) ? (Keq_num / Keq_den) : Infinity;
+
+            // 計算 pH
+            let pH_val;
+            if (n_OH > 0.0001) {
+                let pOH = -Math.log10(Math.max(cOH, 1e-14));
+                pH_val = (14 - pOH).toFixed(2);
+            } else if (n_third > 0.0001) {
+                pH_val = (-Math.log10(Math.max(cH, 1e-14))).toFixed(2);
+            } else {
+                pH_val = '7.00';
+            }
+
+            let panelX = b.maxX - 185; let panelY = 10;
+
+            ctx.fillStyle = 'rgba(44, 62, 80, 0.85)';
+            ctx.beginPath(); ctx.roundRect(panelX, panelY, 175, 130, 8); ctx.fill();
+
+            ctx.font = 'bold 11px monospace'; ctx.textAlign = 'left';
+            ctx.fillStyle = '#f1c40f';
+            ctx.fillText(`c(CrO₄²⁻) = ${cCrO4.toFixed(4)} M`, panelX + 10, panelY + 20);
+            ctx.fillStyle = '#e67e22';
+            ctx.fillText(`c(Cr₂O₇²⁻) = ${cCr2O7.toFixed(4)} M`, panelX + 10, panelY + 38);
+            ctx.fillStyle = '#e74c3c';
+            ctx.fillText(`c(H⁺)      = ${cH.toFixed(4)} M`, panelX + 10, panelY + 56);
+            // 【V11 新增】OH⁻ 濃度行
+            ctx.fillStyle = '#9b59b6';
+            ctx.fillText(`c(OH⁻)     = ${cOH.toFixed(4)} M`, panelX + 10, panelY + 74);
+            // pH 行
+            let phColor = n_OH > 0.0001 ? '#2ecc71' : (n_third > 0.0001 ? '#e74c3c' : '#ecf0f1');
+            ctx.fillStyle = phColor;
+            ctx.fillText(`pH = ${pH_val}`, panelX + 10, panelY + 94);
+            // Qc / Keq 行
+            ctx.fillStyle = '#ecf0f1';
+            let keqStr = isFinite(Keq_disp) ? (Keq_disp > 9999 ? Keq_disp.toExponential(2) : Keq_disp.toFixed(1)) : '∞';
+            ctx.fillText(`Qc = ${keqStr}`, panelX + 10, panelY + 114);
+            let tempF = Math.exp(2000 * (1/298 - 1/T));
+            let tempB = Math.exp(8000 * (1/298 - 1/T));
+            let Keq_eq = (2000 * tempF) / (0.1 * tempB);
+            ctx.fillStyle = '#2ecc71';
+            ctx.fillText(`Keq = ${Keq_eq > 9999 ? Keq_eq.toExponential(2) : Keq_eq.toFixed(1)}`, panelX + 90, panelY + 114);
+        }
     }
 
     function updateSimulation() {
@@ -977,10 +1059,15 @@
                         V_liq -= 0.5 * sub_dt; if (V_liq < 0) V_liq = 0;
                         if (document.activeElement !== document.getElementById('liqSlider')) { document.getElementById('liqSlider').value = V_liq; document.getElementById('liqVal').innerText = V_liq.toFixed(1); }
                     }
-                    let S_T = 2.0 * Math.exp(3 * (1 - 298/T)); 
+                    
+                    // 【加速更新】將溶解 (kf) 與結晶 (kb) 速率常數皆放大 5 倍
+                    // 讓糖的溶解與沉澱平衡能在 4~5 秒內迅速完成
+                    let kf = 1.0 * Math.exp(3000 * (1/298 - 1/T)); 
+                    let kb = 0.25 * Math.exp(1200 * (1/298 - 1/T)); 
+                    
                     if (V_liq > 0) {
-                        Rf = (n_bulk > 0) ? 0.10 * Math.pow(n_bulk, 0.6) * S_T : 0; 
-                        Rb = 0.10 * Math.pow(Math.max(n_bulk, 0.1), 0.6) * (n_mobile / V_liq); 
+                        Rf = (n_bulk > 0) ? kf * Math.pow(n_bulk, 0.6) : 0; 
+                        Rb = kb * Math.pow(Math.max(n_bulk, 0.1), 0.6) * (n_mobile / V_liq); 
                     } else { Rf = 0; Rb = n_mobile / sub_dt; }
                     P_tot = 0;
 
@@ -992,21 +1079,54 @@
                     sum_evap += dn_evap; sum_cond += dn_cond;
                     
                 } else if (activeSystem === 'CHROMATE') {
+                    // 【物理修正 V10】
+                    // 反應：2CrO4²⁻ + 2H⁺ ⇌ Cr2O7²⁻ + H2O
+                    // 真實 Keq ≈ 10^14，此處取 kf/kb = 2000/0.1 = 20000（模擬尺度）
+                    // 正反應對 CrO4²⁻ 二級、對 H⁺ 二級；逆反應對 Cr2O7²⁻ 一級
+                    // 注意：逆反應產生 H⁺（正確），但【溫度效應】：
+                    //   正反應（脫水縮合）放熱 → 升溫使正反應速率下降（kb更大），平衡左移（更黃）
                     if (V_liq <= 0) V_liq = 10;
+
+                    // 【V11 新增】OH⁻ 與 H⁺ 的快速中和（酸鹼中和遠快於平衡反應）
+                    // 每個 sub_step 讓 H⁺ 和 OH⁻ 盡量相消
+                    let neutralize = Math.min(n_third, n_OH);
+                    n_third -= neutralize;
+                    n_OH -= neutralize;
+
+                    // 溫度修正：以 298K 為基準，正反應 Ea_f=2000，逆反應 Ea_b=8000（放熱反應逆向活化能更高）
+                    let tempFactor_f = Math.exp(2000 * (1/298 - 1/T));
+                    let tempFactor_b = Math.exp(8000 * (1/298 - 1/T));
+                    let kf_chr = 2000 * tempFactor_f;
+                    let kb_chr = 0.1 * tempFactor_b;
                     let c_CrO4 = n_bulk / V_liq; let c_H = n_third / V_liq; let c_Cr2O7 = n_mobile / V_liq;
-                    
-                    // 【修正】還原合理的物理速率常數，保留 4 級反應對濃度的極端敏感性！
-                    let kf = 2.0; 
-                    let kb = 0.2;  
-                    Rf = kf * Math.pow(c_CrO4, 2) * Math.pow(c_H, 2); 
-                    Rb = kb * c_Cr2O7; 
+                    // 【V11】若有過量 OH⁻，有效 H⁺ 濃度為 0，正反應完全停止
+                    // 逆反應速率不受影響（Cr2O7²⁻ 水解），且逆反應產生的 H⁺ 立刻被 OH⁻ 中和
+                    let c_H_eff = (n_OH > 0) ? 0 : c_H;
+                    Rf = kf_chr * Math.pow(c_CrO4, 2) * Math.pow(c_H_eff, 2); 
+                    Rb = kb_chr * c_Cr2O7; 
                     P_tot = 0;
 
                     let dn_f = Rf * sub_dt; let dn_b = Rb * sub_dt;
                     if (dn_f > Math.min(n_bulk/2, n_third/2)) { dn_f = Math.min(n_bulk/2, n_third/2); Rf = dn_f / sub_dt; }
                     if (dn_b > n_mobile) { dn_b = n_mobile; Rb = dn_b / sub_dt; }
 
-                    n_bulk += -2*dn_f + 2*dn_b; n_third += -2*dn_f + 2*dn_b; n_mobile += dn_f - dn_b;     
+                    // 正反應：消耗 2 CrO4²⁻ + 2 H⁺，生成 1 Cr2O7²⁻
+                    // 逆反應：消耗 1 Cr2O7²⁻，生成 2 CrO4²⁻ + 2 H⁺
+                    n_bulk  += -2*dn_f + 2*dn_b;
+                    n_third += -2*dn_f + 2*dn_b;
+                    n_mobile += dn_f - dn_b;
+
+                    // 【V11】逆反應生成的 H⁺ 若遇到過量 OH⁻，立刻再次中和
+                    let neutralize2 = Math.min(n_third, n_OH);
+                    n_third -= neutralize2;
+                    n_OH -= neutralize2;
+
+                    // 安全限制：防止數值負值
+                    if (n_bulk < 0) n_bulk = 0;
+                    if (n_third < 0) n_third = 0;
+                    if (n_mobile < 0) n_mobile = 0;
+                    if (n_OH < 0) n_OH = 0;
+
                     sum_evap += dn_f; sum_cond += dn_b;
                     
                 } else if (activeSystem === 'CACO3') {
@@ -1124,13 +1244,44 @@
                     if (cr2o7s.length > 0) {
                         let p = cr2o7s[cr2o7s.length - 1]; p.toBeRemoved = true;
                         let p1 = new Particle('CrO4', 'aq', p.x - 6, p.y); p1.vx = -1.5; let p2 = new Particle('CrO4', 'aq', p.x + 6, p.y); p2.vx = 1.5;
-                        let h1 = new Particle('H_PLUS', 'aq', p.x, p.y - 6); h1.vy = -1.5; let h2 = new Particle('H_PLUS', 'aq', p.x, p.y + 6); h2.vy = 1.5;
-                        particles.push(p1, p2, h1, h2); flashes.push({x: p.x, y: p.y, c: 'rgba(241, 196, 15, 1.0)', life: 1.0, r: 15}); window.accum_cond_particles -= 1;
+                        particles.push(p1, p2);
+                        // 【V11】若有 OH⁻ 存在，逆反應生成的 H⁺ 立刻被中和，顯示中和閃光而非 H⁺ 粒子
+                        if (n_OH > 0.01) {
+                            flashes.push({x: p.x, y: p.y - 6, c: 'rgba(155, 89, 182, 0.9)', life: 1.0, r: 10});
+                            flashes.push({x: p.x, y: p.y + 6, c: 'rgba(155, 89, 182, 0.9)', life: 1.0, r: 10});
+                            // 同時消除對應的 OH⁻ 粒子
+                            let ohs = particles.filter(q => q.type === 'OH_MINUS' && !q.toBeRemoved);
+                            if (ohs.length >= 2) { ohs[0].toBeRemoved = true; ohs[1].toBeRemoved = true; }
+                        } else {
+                            let h1 = new Particle('H_PLUS', 'aq', p.x, p.y - 6); h1.vy = -1.5; 
+                            let h2 = new Particle('H_PLUS', 'aq', p.x, p.y + 6); h2.vy = 1.5;
+                            particles.push(h1, h2);
+                        }
+                        flashes.push({x: p.x, y: p.y, c: 'rgba(241, 196, 15, 1.0)', life: 1.0, r: 15}); 
+                        window.accum_cond_particles -= 1;
                     } else if (window.accum_cond_particles > 5) {
                         let mx = b.minX + Math.random()*(b.maxX-b.minX); let my = b.liquidY + Math.random()*(b.maxY-b.liquidY);
                         particles.push(new Particle('CrO4', 'aq', mx, my), new Particle('CrO4', 'aq', mx, my));
-                        particles.push(new Particle('H_PLUS', 'aq', mx, my), new Particle('H_PLUS', 'aq', mx, my));
+                        if (n_OH <= 0.01) {
+                            particles.push(new Particle('H_PLUS', 'aq', mx, my), new Particle('H_PLUS', 'aq', mx, my));
+                        }
                         window.accum_cond_particles -= 1;
+                    }
+                }
+                // 【V11】OH⁻ 與 H⁺ 粒子若距離很近，製造中和閃光並消除
+                {
+                    let ohParticles = particles.filter(q => q.type === 'OH_MINUS' && !q.toBeRemoved);
+                    let hParticles  = particles.filter(q => q.type === 'H_PLUS'   && !q.toBeRemoved);
+                    for (let oh of ohParticles) {
+                        for (let hp of hParticles) {
+                            if (!oh.toBeRemoved && !hp.toBeRemoved) {
+                                let dist = Math.hypot(oh.x - hp.x, oh.y - hp.y);
+                                if (dist < 15) {
+                                    oh.toBeRemoved = true; hp.toBeRemoved = true;
+                                    flashes.push({x: (oh.x+hp.x)/2, y: (oh.y+hp.y)/2, c: 'rgba(255,255,255,0.9)', life: 0.8, r: 8});
+                                }
+                            }
+                        }
                     }
                 }
             } 
@@ -1251,13 +1402,15 @@
                 // 【新增】繪圖時，水系統的液態水真實數值 (n_bulk) 縮小 100 倍畫在圖上，對應 (×10² mol)
                 let plotted_n1 = (activeSystem === 'WATER') ? (n_bulk / 100) : n_bulk;
                 history.n1.push(plotted_n1); history.n2.push(n_mobile); history.n3.push(n_third);
+                // 【V11 新增】記錄 OH⁻ 莫耳數
+                history.n4.push((activeSystem === 'CHROMATE') ? n_OH : 0);
                 
                 history.RateF.push(disp.Rf); history.RateB.push(disp.Rb); history.Pressure.push(disp.Pressure);
                 
                 let actStr = Object.values(pendingActions).join(', '); history.Actions.push(actStr ? actStr : null); pendingActions = {};
                 
                 if (history.time.length > maxMemoryPoints) { 
-                    history.time.shift(); history.n1.shift(); history.n2.shift(); history.n3.shift();
+                    history.time.shift(); history.n1.shift(); history.n2.shift(); history.n3.shift(); history.n4.shift();
                     history.RateF.shift(); history.RateB.shift(); history.Pressure.shift(); history.Actions.shift(); 
                 }
                 
