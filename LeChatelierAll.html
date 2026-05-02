@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>動態平衡與勒沙特列V9</title>
+    <title>動態平衡與勒沙特列原理V10</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         html, body { height: 100%; margin: 0; padding: 0; background-color: #f5f7fa; color: #2c3e50; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; overflow: hidden; display: flex; flex-direction: column; }
@@ -971,15 +971,10 @@
                         V_liq -= 0.5 * sub_dt; if (V_liq < 0) V_liq = 0;
                         if (document.activeElement !== document.getElementById('liqSlider')) { document.getElementById('liqSlider').value = V_liq; document.getElementById('liqVal').innerText = V_liq.toFixed(1); }
                     }
-                    
-                    // 【加速更新】將溶解 (kf) 與結晶 (kb) 速率常數皆放大 5 倍
-                    // 讓糖的溶解與沉澱平衡能在 4~5 秒內迅速完成
-                    let kf = 1.0 * Math.exp(3000 * (1/298 - 1/T)); 
-                    let kb = 0.25 * Math.exp(1200 * (1/298 - 1/T)); 
-                    
+                    let S_T = 2.0 * Math.exp(3 * (1 - 298/T)); 
                     if (V_liq > 0) {
-                        Rf = (n_bulk > 0) ? kf * Math.pow(n_bulk, 0.6) : 0; 
-                        Rb = kb * Math.pow(Math.max(n_bulk, 0.1), 0.6) * (n_mobile / V_liq); 
+                        Rf = (n_bulk > 0) ? 0.10 * Math.pow(n_bulk, 0.6) * S_T : 0; 
+                        Rb = 0.10 * Math.pow(Math.max(n_bulk, 0.1), 0.6) * (n_mobile / V_liq); 
                     } else { Rf = 0; Rb = n_mobile / sub_dt; }
                     P_tot = 0;
 
@@ -993,7 +988,13 @@
                 } else if (activeSystem === 'CHROMATE') {
                     if (V_liq <= 0) V_liq = 10;
                     let c_CrO4 = n_bulk / V_liq; let c_H = n_third / V_liq; let c_Cr2O7 = n_mobile / V_liq;
-                    Rf = 0.05 * Math.pow(c_CrO4, 2) * Math.pow(c_H, 2); Rb = 0.5 * c_Cr2O7; P_tot = 0;
+                    
+                    // 【修正】還原合理的物理速率常數，保留 4 級反應對濃度的極端敏感性！
+                    let kf = 2.0; 
+                    let kb = 0.2;  
+                    Rf = kf * Math.pow(c_CrO4, 2) * Math.pow(c_H, 2); 
+                    Rb = kb * c_Cr2O7; 
+                    P_tot = 0;
 
                     let dn_f = Rf * sub_dt; let dn_b = Rb * sub_dt;
                     if (dn_f > Math.min(n_bulk/2, n_third/2)) { dn_f = Math.min(n_bulk/2, n_third/2); Rf = dn_f / sub_dt; }
