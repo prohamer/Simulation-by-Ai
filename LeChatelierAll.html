@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>動態平衡與勒沙特列V12</title>
+    <title>動態平衡與勒沙特列V16</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         html, body { height: 100%; margin: 0; padding: 0; background-color: #f5f7fa; color: #2c3e50; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; overflow: hidden; display: flex; flex-direction: column; }
@@ -188,6 +188,9 @@
                     <button class="action btn-add" onclick="addCustomSubstance()">+ 加入</button>
                     <button class="action btn-remove" onclick="removeCustomSubstance()">- 移除</button>
                 </div>
+                <div style="margin-top: 10px;">
+                    <button class="action" style="background: #8e44ad; width: 100%;" onclick="resetExperiment()">🔄 重設實驗</button>
+                </div>
             </div>
 
             <div class="control-block" id="haberCatalystBlock" style="display: none;">
@@ -212,6 +215,22 @@
         setTimeout(() => { if(molesChart) {molesChart.resize(); rateChart.resize(); pressureChart.resize();} }, 300);
     }
     function toggleHelp() { document.getElementById('helpPanel').classList.toggle('open'); }
+
+    window.resetExperiment = function() {
+        // 停止暫停狀態
+        if (isPaused) togglePause();
+        // 停止升降溫
+        tempChangeMode = 0; updateTempButtons();
+        // 重設溫度到 300K
+        T = 300;
+        document.getElementById('tempSlider').value = 300;
+        document.getElementById('tempVal').innerText = '300';
+        document.getElementById('canvasTempVal').innerText = '300';
+        // 重設加入量欄位
+        document.getElementById('addAmount').value = 1;
+        // 重新初始化目前系統（等同於重新切換到同一系統）
+        switchSystem(activeSystem);
+    };
 
     let activeSystem = 'WATER'; 
     let isOpenSystem = false; 
@@ -987,7 +1006,7 @@
             ctx.fillText(`Qc = ${keqStr}`, panelX + 10, panelY + 114);
             let tempF = Math.exp(2000 * (1/298 - 1/T));
             let tempB = Math.exp(8000 * (1/298 - 1/T));
-            let Keq_eq = (2000 * tempF) / (0.1 * tempB);
+            let Keq_eq = (20000 * tempF) / (1.0 * tempB);
             ctx.fillStyle = '#2ecc71';
             ctx.fillText(`Keq = ${Keq_eq > 9999 ? Keq_eq.toExponential(2) : Keq_eq.toFixed(1)}`, panelX + 90, panelY + 114);
         }
@@ -1079,53 +1098,53 @@
                     sum_evap += dn_evap; sum_cond += dn_cond;
                     
                 } else if (activeSystem === 'CHROMATE') {
-                    // 【物理修正 V10】
-                    // 反應：2CrO4²⁻ + 2H⁺ ⇌ Cr2O7²⁻ + H2O
-                    // 真實 Keq ≈ 10^14，此處取 kf/kb = 2000/0.1 = 20000（模擬尺度）
-                    // 正反應對 CrO4²⁻ 二級、對 H⁺ 二級；逆反應對 Cr2O7²⁻ 一級
-                    // 注意：逆反應產生 H⁺（正確），但【溫度效應】：
-                    //   正反應（脫水縮合）放熱 → 升溫使正反應速率下降（kb更大），平衡左移（更黃）
                     if (V_liq <= 0) V_liq = 10;
 
-                    // 【V11 新增】OH⁻ 與 H⁺ 的快速中和（酸鹼中和遠快於平衡反應）
-                    // 每個 sub_step 讓 H⁺ 和 OH⁻ 盡量相消
+                    // 【V14 修正】H⁺ 與 OH⁻ 的中和：在每個 sub_step 開頭即時相消
+                    // 不用硬切換，而是維持「淨 H⁺」與「淨 OH⁻」兩個值永遠不同時為正
                     let neutralize = Math.min(n_third, n_OH);
                     n_third -= neutralize;
-                    n_OH -= neutralize;
+                    n_OH    -= neutralize;
 
-                    // 溫度修正：以 298K 為基準，正反應 Ea_f=2000，逆反應 Ea_b=8000（放熱反應逆向活化能更高）
+                    // 溫度修正
                     let tempFactor_f = Math.exp(2000 * (1/298 - 1/T));
                     let tempFactor_b = Math.exp(8000 * (1/298 - 1/T));
-                    let kf_chr = 2000 * tempFactor_f;
-                    let kb_chr = 0.1 * tempFactor_b;
-                    let c_CrO4 = n_bulk / V_liq; let c_H = n_third / V_liq; let c_Cr2O7 = n_mobile / V_liq;
-                    // 【V11】若有過量 OH⁻，有效 H⁺ 濃度為 0，正反應完全停止
-                    // 逆反應速率不受影響（Cr2O7²⁻ 水解），且逆反應產生的 H⁺ 立刻被 OH⁻ 中和
-                    let c_H_eff = (n_OH > 0) ? 0 : c_H;
-                    Rf = kf_chr * Math.pow(c_CrO4, 2) * Math.pow(c_H_eff, 2); 
-                    Rb = kb_chr * c_Cr2O7; 
+                    let kf_chr = 20000 * tempFactor_f;
+                    let kb_chr = 1.0   * tempFactor_b;
+
+                    // 【V14】有效 H⁺ 濃度直接用連續淨值，不做硬切換
+                    // 若 n_OH > 0，n_third 已在上面被壓到 0，c_H_eff 自然為 0
+                    // 若 n_OH = 0，c_H_eff 就是真實 H⁺ 濃度，平滑過渡
+                    let c_CrO4  = n_bulk  / V_liq;
+                    let c_Cr2O7 = n_mobile / V_liq;
+                    let c_H_eff = n_third  / V_liq;   // 已是淨值，不需額外判斷
+
+                    Rf = kf_chr * Math.pow(c_CrO4, 2) * Math.pow(c_H_eff, 2);
+                    Rb = kb_chr * c_Cr2O7;
                     P_tot = 0;
 
-                    let dn_f = Rf * sub_dt; let dn_b = Rb * sub_dt;
+                    let dn_f = Rf * sub_dt;
+                    let dn_b = Rb * sub_dt;
                     if (dn_f > Math.min(n_bulk/2, n_third/2)) { dn_f = Math.min(n_bulk/2, n_third/2); Rf = dn_f / sub_dt; }
                     if (dn_b > n_mobile) { dn_b = n_mobile; Rb = dn_b / sub_dt; }
 
                     // 正反應：消耗 2 CrO4²⁻ + 2 H⁺，生成 1 Cr2O7²⁻
                     // 逆反應：消耗 1 Cr2O7²⁻，生成 2 CrO4²⁻ + 2 H⁺
-                    n_bulk  += -2*dn_f + 2*dn_b;
-                    n_third += -2*dn_f + 2*dn_b;
-                    n_mobile += dn_f - dn_b;
+                    n_bulk   += -2*dn_f + 2*dn_b;
+                    n_third  += -2*dn_f + 2*dn_b;
+                    n_mobile +=    dn_f -   dn_b;
 
-                    // 【V11】逆反應生成的 H⁺ 若遇到過量 OH⁻，立刻再次中和
+                    // 【V14】逆反應剛產生的 H⁺ 若有 OH⁻ 等待，立刻在同一 sub_step 內中和
+                    // 這讓速率曲線平滑而非突變
                     let neutralize2 = Math.min(n_third, n_OH);
                     n_third -= neutralize2;
-                    n_OH -= neutralize2;
+                    n_OH    -= neutralize2;
 
-                    // 安全限制：防止數值負值
-                    if (n_bulk < 0) n_bulk = 0;
-                    if (n_third < 0) n_third = 0;
+                    // 安全限制
+                    if (n_bulk   < 0) n_bulk   = 0;
+                    if (n_third  < 0) n_third  = 0;
                     if (n_mobile < 0) n_mobile = 0;
-                    if (n_OH < 0) n_OH = 0;
+                    if (n_OH     < 0) n_OH     = 0;
 
                     sum_evap += dn_f; sum_cond += dn_b;
                     
@@ -1181,7 +1200,16 @@
                 }
             }
 
-            disp.Rf = sum_evap / physical_dt; disp.Rb = sum_cond / physical_dt;
+            // 【V14】CHROMATE 用最後一個 sub_step 的瞬時速率顯示，避免幀平均造成的延遲缺口
+            // 其他系統仍用整幀累積量平均（視覺上更平滑）
+            if (activeSystem === 'CHROMATE') {
+                // 【V15】EMA 平滑：α=0.25，讓瞬時速率平滑累積到 disp，避免取樣幀率不同造成的缺口
+                let α = 0.25;
+                disp.Rf = α * Rf + (1 - α) * disp.Rf;
+                disp.Rb = α * Rb + (1 - α) * disp.Rb;
+            } else {
+                disp.Rf = sum_evap / physical_dt; disp.Rb = sum_cond / physical_dt;
+            }
             
             if (activeSystem === 'WATER' || activeSystem === 'CO2') { disp.Pressure = isOpenSystem ? 0 : (n_mobile * R * T) / Math.max(0.1, V_gas); } 
             else if (activeSystem === 'CACO3') { disp.Pressure = isOpenSystem ? 0 : (n_third * R * T) / Math.max(0.1, V_gas); }
