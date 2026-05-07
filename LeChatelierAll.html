@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>動態平衡與勒沙特列V16</title>
+    <title>動態平衡與勒沙特列V18</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         html, body { height: 100%; margin: 0; padding: 0; background-color: #f5f7fa; color: #2c3e50; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; overflow: hidden; display: flex; flex-direction: column; }
@@ -1350,6 +1350,7 @@
                     if (no2s.length >= 2) {
                         let bestP1 = null, bestP2 = null, minD = Infinity;
                         for(let a=0; a<no2s.length; a++){ for(let b=a+1; b<no2s.length; b++){ let d = Math.hypot(no2s[a].x - no2s[b].x, no2s[a].y - no2s[b].y); if(d < minD){ minD = d; bestP1 = no2s[a]; bestP2 = no2s[b]; } } }
+                        // 碰撞學說：保留距離硬門檻
                         if (bestP1 && bestP2 && minD < 100) { bestP1.toBeRemoved = true; bestP2.toBeRemoved = true; let mx = (bestP1.x + bestP2.x)/2, my = (bestP1.y + bestP2.y)/2; particles.push(new Particle('N2O4', 'gas', mx, my, Math.atan2(bestP2.y - bestP1.y, bestP2.x - bestP1.x))); flashes.push({x: mx, y: my, type: 'synth', c: 'rgba(241, 196, 15, 1)', life: 1.0}); }
                     }
                 }
@@ -1359,6 +1360,37 @@
                         let p = n2o4s[n2o4s.length-1]; p.toBeRemoved = true;
                         let p1 = new Particle('NO2', 'gas', p.x-4, p.y); let p2 = new Particle('NO2', 'gas', p.x+4, p.y);
                         p1.vx = p.vx-3; p2.vx = p.vx+3; particles.push(p1, p2); flashes.push({x: p.x, y: p.y, type: 'decomp', c: 'rgba(255, 255, 255, 1)', life: 1.0}); 
+                    }
+                }
+
+                // 【V17】每 60 幀做一次粒子數校正，強制對齊真實莫耳比例
+                // 這確保視覺粒子數不會因為硬門檻積壓而長期和莫耳數脫節
+                {
+                    const visual_NO2 = 8;
+                    const visual_N2O4 = 5;
+                    let cur_no2  = particles.filter(p => p.type === 'NO2'  && !p.toBeRemoved).length;
+                    let cur_n2o4 = particles.filter(p => p.type === 'N2O4' && !p.toBeRemoved).length;
+                    let tgt_no2  = Math.round(n_bulk  * visual_NO2);
+                    let tgt_n2o4 = Math.round(n_mobile * visual_N2O4);
+
+                    // 【關鍵】若粒子數與莫耳數差距超過 3 顆，立刻補正而非等 60 幀
+                    // 這解決加入大量物質後分解粒子不夠用的問題
+                    let urgentCorrect = Math.abs(cur_no2 - tgt_no2) > 3 || Math.abs(cur_n2o4 - tgt_n2o4) > 3;
+
+                    if (frameCounter % 60 === 0 || urgentCorrect) {
+                        // 補充或移除 NO₂ 粒子
+                        let no2list = particles.filter(p => p.type === 'NO2' && !p.toBeRemoved);
+                        for (let i = no2list.length; i < tgt_no2; i++)
+                            particles.push(new Particle('NO2', 'gas', b.minX+10+Math.random()*(b.maxX-b.minX-20), b.pistonY+10+Math.random()*(b.maxY-b.pistonY-20)));
+                        if (no2list.length > tgt_no2)
+                            no2list.slice(tgt_no2).forEach(p => p.toBeRemoved = true);
+
+                        // 補充或移除 N₂O₄ 粒子
+                        let n2o4list = particles.filter(p => p.type === 'N2O4' && !p.toBeRemoved);
+                        for (let i = n2o4list.length; i < tgt_n2o4; i++)
+                            particles.push(new Particle('N2O4', 'gas', b.minX+10+Math.random()*(b.maxX-b.minX-20), b.pistonY+10+Math.random()*(b.maxY-b.pistonY-20)));
+                        if (n2o4list.length > tgt_n2o4)
+                            n2o4list.slice(tgt_n2o4).forEach(p => p.toBeRemoved = true);
                     }
                 }
             } else if (activeSystem === 'HABER') {
