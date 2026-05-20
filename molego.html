@@ -149,18 +149,53 @@
 
         @keyframes fadeIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
         .modal-animate { animation: fadeIn 0.2s ease-out forwards; }
+
+        /* 預載選單 */
+        #preset-wrapper { position: relative; display: inline-block; }
+        #preset-select {
+            appearance: none; -webkit-appearance: none;
+            background: #374151; color: #e5e7eb;
+            border: 1px solid #4b5563; border-radius: 6px;
+            padding: 3px 24px 3px 8px; font-size: 0.75rem;
+            cursor: pointer; outline: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%239ca3af'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 6px center;
+            max-width: 130px;
+        }
+        #preset-select:focus { border-color: #6366f1; }
+        #preset-select option[disabled] { color: #6b7280; }
+        #preset-select optgroup { color: #93c5fd; font-style: normal; font-size: 0.7rem; }
+        #preset-select optgroup option { color: #e5e7eb; padding-left: 4px; }
     </style>
 </head>
 <body>
 
 <div id="canvas-container"></div>
 
+<!-- 拖曳匯入提示層 -->
+<div id="drop-overlay" style="
+    display:none; position:fixed; inset:0; z-index:100;
+    background:rgba(59,130,246,0.18);
+    border:3px dashed #3b82f6;
+    border-radius:1rem; margin:0.5rem;
+    pointer-events:none;
+    align-items:center; justify-content:center;
+    flex-direction:column; gap:0.5rem;
+    color:#93c5fd; font-size:1.5rem; font-weight:bold;
+    text-shadow:0 2px 8px rgba(0,0,0,0.7);
+">
+    <div style="font-size:3rem;">📂</div>
+    <div>放開以合併匯入 .mc 檔</div>
+    <div style="font-size:0.85rem;opacity:0.75;">原有分子將保留，新分子加入場景</div>
+</div>
+
 <!-- ═══ INFO MODAL ═══ -->
 <div id="info-modal" class="hidden absolute inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center" style="pointer-events:auto">
     <div class="bg-gray-800 text-white p-6 rounded-2xl max-w-lg w-11/12 shadow-2xl border border-gray-600 modal-animate relative" style="max-height:90vh;overflow-y:auto;">
         <button onclick="toggleInfo()" class="absolute top-4 right-4 text-gray-400 hover:text-white text-2xl leading-none">&times;</button>
         <h2 class="text-xl font-bold mb-1">📖 使用說明</h2>
-        <p class="text-xs text-gray-500 mb-4">3D 分子建構器 V16</p>
+        <p class="text-xs text-gray-500 mb-4">3D 分子建構器 V18</p>
 
         <div class="mb-4">
             <p class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">顯示設定</p>
@@ -201,7 +236,7 @@
             <ul class="space-y-1.5 text-sm text-gray-300">
                 <li><span class="text-white font-semibold">📸 PNG</span>　匯出透明背景圖片，可貼入簡報或文件。</li>
                 <li><span class="text-white font-semibold">⬇️ .mc</span>　儲存原子座標與鍵結為 .mc 檔供日後重新載入。</li>
-                <li><span class="text-white font-semibold">⬆️ 匯入</span>　載入 .mc 檔（場景原有內容將被替換）。</li>
+                <li><span class="text-white font-semibold">⬆️ 匯入</span>　載入 .mc 檔（場景原有內容將被替換），也可直接拖曳MC檔匯入。</li>
             </ul>
         </div>
 
@@ -226,6 +261,43 @@
             class="bg-gray-700 hover:bg-gray-600 text-gray-200 w-6 h-6 rounded-full flex items-center justify-center border border-gray-500 transition-colors text-xs">
             ⇄
         </button>
+        <!-- 預載分子選單 -->
+        <div id="preset-wrapper">
+            <select id="preset-select" onchange="loadPreset(this.value); this.value=''">
+                <option value="" disabled selected>📦 預載分子</option>
+                <optgroup label="── 烷類 ──">
+                    <option value="methane">甲烷 CH₄</option>
+                    <option value="ethane">乙烷 C₂H₆</option>
+                    <option value="propane">丙烷 C₃H₈</option>
+                </optgroup>
+                <optgroup label="── 烯類 ──">
+                    <option value="ethylene">乙烯 C₂H₄</option>
+                    <option value="propylene">丙烯 C₃H₆</option>
+                </optgroup>
+                <optgroup label="── 炔類 ──">
+                    <option value="acetylene">乙炔 C₂H₂</option>
+                </optgroup>
+                <optgroup label="── 芳香族 ──">
+                    <option value="benzene">苯 C₆H₆</option>
+                </optgroup>
+                <optgroup label="── 醇類 ──">
+                    <option value="methanol">甲醇 CH₃OH</option>
+                    <option value="ethanol">乙醇 C₂H₅OH</option>
+                </optgroup>
+                <optgroup label="── 其他 ──">
+                    <option value="water">水 H₂O</option>
+                    <option value="ammonia">氨 NH₃</option>
+                    <option value="co2">二氧化碳 CO₂</option>
+                </optgroup>
+                <optgroup label="── 教學情境 ──">
+                    <option value="acetic_ethanol">乙酸與乙醇</option>
+                    <option value="dimethyl_ether_ethanol">甲醚與乙醇</option>
+                    <option value="cellulose_monomer">纖維素與單體</option>
+                    <option value="thermo_thermoset">熱塑與熱固</option>
+                    <option value="triglyceride">三酸甘油脂</option>
+                </optgroup>
+            </select>
+        </div>
     </div>
     <div class="flex gap-2">
         <button onclick="exportPNG()" class="bg-purple-600 hover:bg-purple-500 px-3 py-1.5 rounded text-sm font-semibold shadow transition-colors text-white">📸 PNG</button>
@@ -632,6 +704,7 @@ function init() {
     updateAppHeight();
     checkOrientation();
     buildUI();
+    initDragDrop();
     animate();
 }
 
@@ -1164,25 +1237,317 @@ function exportMC() {
     document.body.appendChild(a);a.click();a.remove();
 }
 
-function importMC(event) {
-    let file=event.target.files[0];if(!file)return;
-    let reader=new FileReader();
-    reader.onload=function(e){
-        try{
-            let data=JSON.parse(e.target.result);
-            atoms.slice().forEach(a=>deleteAtom(a.id));atoms=[];bonds=[];
-            if(data.atoms)data.atoms.forEach(a=>createAtom(a.element,new THREE.Vector3(a.x,a.y,a.z),a.id));
-            if(data.bonds)data.bonds.forEach(b=>{
-                let e1=atoms.find(a=>a.id===b.atom1_id).element,e2=atoms.find(a=>a.id===b.atom2_id).element;
-                let ionic=ELEMENTS[e1].isMetal||ELEMENTS[e2].isMetal;
-                let obj={id:b.id,atom1_id:b.atom1_id,atom2_id:b.atom2_id,order:b.order,bondType:b.bondType||(ionic?'ionic':'covalent'),group:new THREE.Group()};
-                scene.add(obj.group);bonds.push(obj);updateBondMesh(obj);
-            });
+// 從 JSON 資料載入場景（replace=取代, merge=合併）
+function loadMCData(data, mode) {
+    try {
+        if (mode === 'replace') {
+            pushHistory();
+            atoms.slice().forEach(a => deleteAtom(a.id)); atoms = []; bonds = [];
+        } else {
+            // 合併模式：為避免 id 衝突，重新產生新 id
+            pushHistory();
+        }
+
+        // id 對照表（合併時舊 id → 新 id）
+        let idMap = {};
+        if (data.atoms) data.atoms.forEach(a => {
+            let newId = mode === 'replace' ? a.id : Math.random().toString(36).substr(2, 9);
+            idMap[a.id] = newId;
+            createAtom(a.element, new THREE.Vector3(a.x, a.y, a.z), newId);
+        });
+        if (data.bonds) data.bonds.forEach(b => {
+            let a1id = idMap[b.atom1_id] || b.atom1_id;
+            let a2id = idMap[b.atom2_id] || b.atom2_id;
+            let a1 = atoms.find(a => a.id === a1id);
+            let a2 = atoms.find(a => a.id === a2id);
+            if (!a1 || !a2) return;
+            let ionic = ELEMENTS[a1.element].isMetal || ELEMENTS[a2.element].isMetal;
+            let newBondId = mode === 'replace' ? b.id : Math.random().toString(36).substr(2, 9);
+            let obj = {
+                id: newBondId, atom1_id: a1id, atom2_id: a2id,
+                order: b.order, bondType: b.bondType || (ionic ? 'ionic' : 'covalent'),
+                group: new THREE.Group()
+            };
+            scene.add(obj.group); bonds.push(obj); updateBondMesh(obj);
+        });
+
+        if (mode === 'replace') {
             undoStack = []; redoStack = []; updateUndoRedoBtns();
-            showToast("載入成功！");
-        }catch(err){showToast("檔案格式錯誤或不相容！");}
+            showToast("✅ 載入成功（已取代場景）");
+        } else {
+            updateUndoRedoBtns();
+            showToast("✅ 合併匯入成功，已加入場景");
+        }
+    } catch(err) {
+        showToast("❌ 檔案格式錯誤或不相容！");
+    }
+}
+
+// 按鈕匯入：取代模式
+function importMC(event) {
+    let file = event.target.files[0]; if (!file) return;
+    let reader = new FileReader();
+    reader.onload = function(e) {
+        try { loadMCData(JSON.parse(e.target.result), 'replace'); }
+        catch(err) { showToast("❌ 檔案格式錯誤或不相容！"); }
     };
-    reader.readAsText(file);event.target.value='';
+    reader.readAsText(file); event.target.value = '';
+}
+
+// --- 預載分子資料 ---
+// 格式與 .mc 檔相同，之後可直接貼上你提供的 MC 檔內容
+const PRESETS = {
+
+    // ── 烷類 ──
+    methane: {"version":"1.0","atoms":[
+        {"id":"m1","element":"C","x":0,"y":0,"z":0},
+        {"id":"m2","element":"H","x":0.63,"y":0.63,"z":0.63},
+        {"id":"m3","element":"H","x":-0.63,"y":-0.63,"z":0.63},
+        {"id":"m4","element":"H","x":-0.63,"y":0.63,"z":-0.63},
+        {"id":"m5","element":"H","x":0.63,"y":-0.63,"z":-0.63}
+    ],"bonds":[
+        {"id":"b1","atom1_id":"m1","atom2_id":"m2","order":1,"bondType":"covalent"},
+        {"id":"b2","atom1_id":"m1","atom2_id":"m3","order":1,"bondType":"covalent"},
+        {"id":"b3","atom1_id":"m1","atom2_id":"m4","order":1,"bondType":"covalent"},
+        {"id":"b4","atom1_id":"m1","atom2_id":"m5","order":1,"bondType":"covalent"}
+    ]},
+
+    ethane: {"version":"1.0","atoms":[
+        {"id":"e1","element":"C","x":-0.77,"y":0,"z":0},
+        {"id":"e2","element":"C","x":0.77,"y":0,"z":0},
+        {"id":"e3","element":"H","x":-1.17,"y":1.02,"z":0},
+        {"id":"e4","element":"H","x":-1.17,"y":-0.51,"z":0.88},
+        {"id":"e5","element":"H","x":-1.17,"y":-0.51,"z":-0.88},
+        {"id":"e6","element":"H","x":1.17,"y":1.02,"z":0},
+        {"id":"e7","element":"H","x":1.17,"y":-0.51,"z":0.88},
+        {"id":"e8","element":"H","x":1.17,"y":-0.51,"z":-0.88}
+    ],"bonds":[
+        {"id":"b1","atom1_id":"e1","atom2_id":"e2","order":1,"bondType":"covalent"},
+        {"id":"b2","atom1_id":"e1","atom2_id":"e3","order":1,"bondType":"covalent"},
+        {"id":"b3","atom1_id":"e1","atom2_id":"e4","order":1,"bondType":"covalent"},
+        {"id":"b4","atom1_id":"e1","atom2_id":"e5","order":1,"bondType":"covalent"},
+        {"id":"b5","atom1_id":"e2","atom2_id":"e6","order":1,"bondType":"covalent"},
+        {"id":"b6","atom1_id":"e2","atom2_id":"e7","order":1,"bondType":"covalent"},
+        {"id":"b7","atom1_id":"e2","atom2_id":"e8","order":1,"bondType":"covalent"}
+    ]},
+
+    propane: {"version":"1.0","atoms":[
+        {"id":"p1","element":"C","x":-1.54,"y":0,"z":0},
+        {"id":"p2","element":"C","x":0,"y":0,"z":0},
+        {"id":"p3","element":"C","x":1.54,"y":0,"z":0},
+        {"id":"p4","element":"H","x":-1.94,"y":1.02,"z":0},
+        {"id":"p5","element":"H","x":-1.94,"y":-0.51,"z":0.88},
+        {"id":"p6","element":"H","x":-1.94,"y":-0.51,"z":-0.88},
+        {"id":"p7","element":"H","x":0,"y":1.09,"z":0},
+        {"id":"p8","element":"H","x":0,"y":-1.09,"z":0},
+        {"id":"p9","element":"H","x":1.94,"y":1.02,"z":0},
+        {"id":"p10","element":"H","x":1.94,"y":-0.51,"z":0.88},
+        {"id":"p11","element":"H","x":1.94,"y":-0.51,"z":-0.88}
+    ],"bonds":[
+        {"id":"b1","atom1_id":"p1","atom2_id":"p2","order":1,"bondType":"covalent"},
+        {"id":"b2","atom1_id":"p2","atom2_id":"p3","order":1,"bondType":"covalent"},
+        {"id":"b3","atom1_id":"p1","atom2_id":"p4","order":1,"bondType":"covalent"},
+        {"id":"b4","atom1_id":"p1","atom2_id":"p5","order":1,"bondType":"covalent"},
+        {"id":"b5","atom1_id":"p1","atom2_id":"p6","order":1,"bondType":"covalent"},
+        {"id":"b6","atom1_id":"p2","atom2_id":"p7","order":1,"bondType":"covalent"},
+        {"id":"b7","atom1_id":"p2","atom2_id":"p8","order":1,"bondType":"covalent"},
+        {"id":"b8","atom1_id":"p3","atom2_id":"p9","order":1,"bondType":"covalent"},
+        {"id":"b9","atom1_id":"p3","atom2_id":"p10","order":1,"bondType":"covalent"},
+        {"id":"b10","atom1_id":"p3","atom2_id":"p11","order":1,"bondType":"covalent"}
+    ]},
+
+    // ── 烯類 ──
+    ethylene: {"version":"1.0","atoms":[
+        {"id":"v1","element":"C","x":-0.67,"y":0,"z":0},
+        {"id":"v2","element":"C","x":0.67,"y":0,"z":0},
+        {"id":"v3","element":"H","x":-1.23,"y":0.93,"z":0},
+        {"id":"v4","element":"H","x":-1.23,"y":-0.93,"z":0},
+        {"id":"v5","element":"H","x":1.23,"y":0.93,"z":0},
+        {"id":"v6","element":"H","x":1.23,"y":-0.93,"z":0}
+    ],"bonds":[
+        {"id":"b1","atom1_id":"v1","atom2_id":"v2","order":2,"bondType":"covalent"},
+        {"id":"b2","atom1_id":"v1","atom2_id":"v3","order":1,"bondType":"covalent"},
+        {"id":"b3","atom1_id":"v1","atom2_id":"v4","order":1,"bondType":"covalent"},
+        {"id":"b4","atom1_id":"v2","atom2_id":"v5","order":1,"bondType":"covalent"},
+        {"id":"b5","atom1_id":"v2","atom2_id":"v6","order":1,"bondType":"covalent"}
+    ]},
+
+    propylene: {"version":"1.0","atoms":[
+        {"id":"r1","element":"C","x":-1.34,"y":0,"z":0},
+        {"id":"r2","element":"C","x":0,"y":0,"z":0},
+        {"id":"r3","element":"C","x":1.54,"y":0,"z":0},
+        {"id":"r4","element":"H","x":-1.89,"y":0.93,"z":0},
+        {"id":"r5","element":"H","x":-1.89,"y":-0.93,"z":0},
+        {"id":"r6","element":"H","x":0.5,"y":0.93,"z":0},
+        {"id":"r7","element":"H","x":1.94,"y":1.02,"z":0},
+        {"id":"r8","element":"H","x":1.94,"y":-0.51,"z":0.88},
+        {"id":"r9","element":"H","x":1.94,"y":-0.51,"z":-0.88}
+    ],"bonds":[
+        {"id":"b1","atom1_id":"r1","atom2_id":"r2","order":2,"bondType":"covalent"},
+        {"id":"b2","atom1_id":"r2","atom2_id":"r3","order":1,"bondType":"covalent"},
+        {"id":"b3","atom1_id":"r1","atom2_id":"r4","order":1,"bondType":"covalent"},
+        {"id":"b4","atom1_id":"r1","atom2_id":"r5","order":1,"bondType":"covalent"},
+        {"id":"b5","atom1_id":"r2","atom2_id":"r6","order":1,"bondType":"covalent"},
+        {"id":"b6","atom1_id":"r3","atom2_id":"r7","order":1,"bondType":"covalent"},
+        {"id":"b7","atom1_id":"r3","atom2_id":"r8","order":1,"bondType":"covalent"},
+        {"id":"b8","atom1_id":"r3","atom2_id":"r9","order":1,"bondType":"covalent"}
+    ]},
+
+    // ── 炔類 ──
+    acetylene: {"version":"1.0","atoms":[
+        {"id":"a1","element":"C","x":-0.60,"y":0,"z":0},
+        {"id":"a2","element":"C","x":0.60,"y":0,"z":0},
+        {"id":"a3","element":"H","x":-1.66,"y":0,"z":0},
+        {"id":"a4","element":"H","x":1.66,"y":0,"z":0}
+    ],"bonds":[
+        {"id":"b1","atom1_id":"a1","atom2_id":"a2","order":3,"bondType":"covalent"},
+        {"id":"b2","atom1_id":"a1","atom2_id":"a3","order":1,"bondType":"covalent"},
+        {"id":"b3","atom1_id":"a2","atom2_id":"a4","order":1,"bondType":"covalent"}
+    ]},
+
+    // ── 芳香族 ──
+    benzene: {"version":"1.0","atoms":[
+        {"id":"bz1","element":"C","x":1.40,"y":0,"z":0},
+        {"id":"bz2","element":"C","x":0.70,"y":1.21,"z":0},
+        {"id":"bz3","element":"C","x":-0.70,"y":1.21,"z":0},
+        {"id":"bz4","element":"C","x":-1.40,"y":0,"z":0},
+        {"id":"bz5","element":"C","x":-0.70,"y":-1.21,"z":0},
+        {"id":"bz6","element":"C","x":0.70,"y":-1.21,"z":0},
+        {"id":"bz7","element":"H","x":2.48,"y":0,"z":0},
+        {"id":"bz8","element":"H","x":1.24,"y":2.15,"z":0},
+        {"id":"bz9","element":"H","x":-1.24,"y":2.15,"z":0},
+        {"id":"bz10","element":"H","x":-2.48,"y":0,"z":0},
+        {"id":"bz11","element":"H","x":-1.24,"y":-2.15,"z":0},
+        {"id":"bz12","element":"H","x":1.24,"y":-2.15,"z":0}
+    ],"bonds":[
+        {"id":"b1","atom1_id":"bz1","atom2_id":"bz2","order":2,"bondType":"covalent"},
+        {"id":"b2","atom1_id":"bz2","atom2_id":"bz3","order":1,"bondType":"covalent"},
+        {"id":"b3","atom1_id":"bz3","atom2_id":"bz4","order":2,"bondType":"covalent"},
+        {"id":"b4","atom1_id":"bz4","atom2_id":"bz5","order":1,"bondType":"covalent"},
+        {"id":"b5","atom1_id":"bz5","atom2_id":"bz6","order":2,"bondType":"covalent"},
+        {"id":"b6","atom1_id":"bz6","atom2_id":"bz1","order":1,"bondType":"covalent"},
+        {"id":"b7","atom1_id":"bz1","atom2_id":"bz7","order":1,"bondType":"covalent"},
+        {"id":"b8","atom1_id":"bz2","atom2_id":"bz8","order":1,"bondType":"covalent"},
+        {"id":"b9","atom1_id":"bz3","atom2_id":"bz9","order":1,"bondType":"covalent"},
+        {"id":"b10","atom1_id":"bz4","atom2_id":"bz10","order":1,"bondType":"covalent"},
+        {"id":"b11","atom1_id":"bz5","atom2_id":"bz11","order":1,"bondType":"covalent"},
+        {"id":"b12","atom1_id":"bz6","atom2_id":"bz12","order":1,"bondType":"covalent"}
+    ]},
+
+    // ── 醇類 ──
+    methanol: {"version":"1.0","atoms":[
+        {"id":"mo1","element":"C","x":-0.75,"y":0,"z":0},
+        {"id":"mo2","element":"O","x":0.75,"y":0,"z":0},
+        {"id":"mo3","element":"H","x":-1.14,"y":1.03,"z":0},
+        {"id":"mo4","element":"H","x":-1.14,"y":-0.51,"z":0.89},
+        {"id":"mo5","element":"H","x":-1.14,"y":-0.51,"z":-0.89},
+        {"id":"mo6","element":"H","x":1.14,"y":0.94,"z":0}
+    ],"bonds":[
+        {"id":"b1","atom1_id":"mo1","atom2_id":"mo2","order":1,"bondType":"covalent"},
+        {"id":"b2","atom1_id":"mo1","atom2_id":"mo3","order":1,"bondType":"covalent"},
+        {"id":"b3","atom1_id":"mo1","atom2_id":"mo4","order":1,"bondType":"covalent"},
+        {"id":"b4","atom1_id":"mo1","atom2_id":"mo5","order":1,"bondType":"covalent"},
+        {"id":"b5","atom1_id":"mo2","atom2_id":"mo6","order":1,"bondType":"covalent"}
+    ]},
+
+    ethanol: {"version":"1.0","atoms":[
+        {"id":"et1","element":"C","x":-1.52,"y":0,"z":0},
+        {"id":"et2","element":"C","x":0,"y":0,"z":0},
+        {"id":"et3","element":"O","x":0.68,"y":1.17,"z":0},
+        {"id":"et4","element":"H","x":-1.88,"y":1.02,"z":0},
+        {"id":"et5","element":"H","x":-1.88,"y":-0.51,"z":0.89},
+        {"id":"et6","element":"H","x":-1.88,"y":-0.51,"z":-0.89},
+        {"id":"et7","element":"H","x":0.36,"y":-0.52,"z":0.89},
+        {"id":"et8","element":"H","x":0.36,"y":-0.52,"z":-0.89},
+        {"id":"et9","element":"H","x":1.64,"y":1.06,"z":0}
+    ],"bonds":[
+        {"id":"b1","atom1_id":"et1","atom2_id":"et2","order":1,"bondType":"covalent"},
+        {"id":"b2","atom1_id":"et2","atom2_id":"et3","order":1,"bondType":"covalent"},
+        {"id":"b3","atom1_id":"et1","atom2_id":"et4","order":1,"bondType":"covalent"},
+        {"id":"b4","atom1_id":"et1","atom2_id":"et5","order":1,"bondType":"covalent"},
+        {"id":"b5","atom1_id":"et1","atom2_id":"et6","order":1,"bondType":"covalent"},
+        {"id":"b6","atom1_id":"et2","atom2_id":"et7","order":1,"bondType":"covalent"},
+        {"id":"b7","atom1_id":"et2","atom2_id":"et8","order":1,"bondType":"covalent"},
+        {"id":"b8","atom1_id":"et3","atom2_id":"et9","order":1,"bondType":"covalent"}
+    ]},
+
+    // ── 其他 ──
+    water: {"version":"1.0","atoms":[
+        {"id":"w1","element":"O","x":0,"y":0,"z":0},
+        {"id":"w2","element":"H","x":0.96,"y":0,"z":0},
+        {"id":"w3","element":"H","x":-0.24,"y":0.93,"z":0}
+    ],"bonds":[
+        {"id":"b1","atom1_id":"w1","atom2_id":"w2","order":1,"bondType":"covalent"},
+        {"id":"b2","atom1_id":"w1","atom2_id":"w3","order":1,"bondType":"covalent"}
+    ]},
+
+    ammonia: {"version":"1.0","atoms":[
+        {"id":"n1","element":"N","x":0,"y":0,"z":0},
+        {"id":"n2","element":"H","x":0.94,"y":0,"z":-0.33},
+        {"id":"n3","element":"H","x":-0.47,"y":0.82,"z":-0.33},
+        {"id":"n4","element":"H","x":-0.47,"y":-0.82,"z":-0.33}
+    ],"bonds":[
+        {"id":"b1","atom1_id":"n1","atom2_id":"n2","order":1,"bondType":"covalent"},
+        {"id":"b2","atom1_id":"n1","atom2_id":"n3","order":1,"bondType":"covalent"},
+        {"id":"b3","atom1_id":"n1","atom2_id":"n4","order":1,"bondType":"covalent"}
+    ]},
+
+    co2: {"version":"1.0","atoms":[
+        {"id":"c1","element":"C","x":0,"y":0,"z":0},
+        {"id":"c2","element":"O","x":1.16,"y":0,"z":0},
+        {"id":"c3","element":"O","x":-1.16,"y":0,"z":0}
+    ],"bonds":[
+        {"id":"b1","atom1_id":"c1","atom2_id":"c2","order":2,"bondType":"covalent"},
+        {"id":"b2","atom1_id":"c1","atom2_id":"c3","order":2,"bondType":"covalent"}
+    ]},
+
+    // 教學情境
+    acetic_ethanol: {"version":"1.0","atoms":[{"id":"bqu4tow22","element":"C","x":-5.094003032566281,"y":-0.38407719958922637,"z":-7.197682198069629},{"id":"13o5lfnrf","element":"C","x":-4.05350134059266,"y":-0.2161672615087552,"z":-5.740676654130698},{"id":"smzkk5adl","element":"H","x":-5.048903522550781,"y":-1.286731333608645,"z":-7.71616131479879},{"id":"d7hy41ljk","element":"H","x":-6.134558215854524,"y":-0.2580084115065464,"z":-7.016270866742547},{"id":"pgweogcg1","element":"O","x":-3.8078084860316315,"y":-1.2436136446435966,"z":-4.948949265745593},{"id":"20woizyqs","element":"H","x":-3.2376030969504526,"y":-0.3482504658936698,"z":-4.048862687936505},{"id":"v4mctwi1v","element":"H","x":-4.361858650217453,"y":0.7773953995284792,"z":-5.210412181827959},{"id":"ps3nes4wr","element":"H","x":-3.0189776870812395,"y":0.21956518997718766,"z":-6.121959175275723},{"id":"kmajdsdki","element":"H","x":-4.9551362208422525,"y":0.32640370990328227,"z":-8.000268088227436},{"id":"mb2ex0ceq","element":"C","x":-3.5503431587219882,"y":0.13463845765076585,"z":-0.32509995227564126},{"id":"0em7o3ygy","element":"C","x":-2.112305672679171,"y":-0.20058243582010044,"z":0.7082007495021146},{"id":"buwi92h5t","element":"O","x":-3.4604982415152987,"y":1.5223228010268466,"z":-1.0161610163872965},{"id":"5jojnb7vk","element":"O","x":-4.7063367636232645,"y":-0.5121013843258035,"z":-0.32487931611607057},{"id":"cbg6ezu45","element":"H","x":-5.059794539865689,"y":-0.1846620106866192,"z":-1.777266804485915},{"id":"cm6mm9zqr","element":"H","x":-2.253050611814399,"y":0.04733090575559101,"z":1.7140341976433813},{"id":"l0uipifdf","element":"H","x":-1.7840095428220621,"y":-1.1845275714347947,"z":0.6199631852226587},{"id":"tihxswyd7","element":"H","x":-1.2337667691921217,"y":0.3775812378341144,"z":0.40120895689676866}],"bonds":[{"id":"anc1rxh1s","atom1_id":"bqu4tow22","atom2_id":"13o5lfnrf","order":1,"bondType":"covalent"},{"id":"25ggb5xk6","atom1_id":"bqu4tow22","atom2_id":"smzkk5adl","order":1,"bondType":"covalent"},{"id":"67dvy8idf","atom1_id":"bqu4tow22","atom2_id":"d7hy41ljk","order":1,"bondType":"covalent"},{"id":"wpk7etv8z","atom1_id":"13o5lfnrf","atom2_id":"pgweogcg1","order":1,"bondType":"covalent"},{"id":"9lbxr9l5x","atom1_id":"pgweogcg1","atom2_id":"20woizyqs","order":1,"bondType":"covalent"},{"id":"3su0jkk5w","atom1_id":"13o5lfnrf","atom2_id":"v4mctwi1v","order":1,"bondType":"covalent"},{"id":"a62yebcsq","atom1_id":"13o5lfnrf","atom2_id":"ps3nes4wr","order":1,"bondType":"covalent"},{"id":"gzfount27","atom1_id":"bqu4tow22","atom2_id":"kmajdsdki","order":1,"bondType":"covalent"},{"id":"a5vsqfnrx","atom1_id":"mb2ex0ceq","atom2_id":"0em7o3ygy","order":1,"bondType":"covalent"},{"id":"jvzqcv0xi","atom1_id":"mb2ex0ceq","atom2_id":"buwi92h5t","order":2,"bondType":"covalent"},{"id":"1zpdrfr3v","atom1_id":"mb2ex0ceq","atom2_id":"5jojnb7vk","order":1,"bondType":"covalent"},{"id":"ot4f4ljad","atom1_id":"5jojnb7vk","atom2_id":"cbg6ezu45","order":1,"bondType":"covalent"},{"id":"wrb3qmxii","atom1_id":"0em7o3ygy","atom2_id":"cm6mm9zqr","order":1,"bondType":"covalent"},{"id":"ya7kxeouc","atom1_id":"0em7o3ygy","atom2_id":"l0uipifdf","order":1,"bondType":"covalent"},{"id":"uapr00pok","atom1_id":"0em7o3ygy","atom2_id":"tihxswyd7","order":1,"bondType":"covalent"}]},
+    dimethyl_ether_ethanol: {"version":"1.0","atoms":[{"id":"0j41umran","element":"C","x":-4.109356679233773,"y":-0.0888591563494237,"z":-0.255204929982401},{"id":"5ha3nt8en","element":"C","x":-2.3410291785209756,"y":-0.11612338645641526,"z":0.04680936274155612},{"id":"10vzc6jeu","element":"O","x":-1.6026325302632625,"y":0.9806826819862146,"z":0.38305628540432396},{"id":"jeeiw3qal","element":"H","x":-0.44060724066610124,"y":1.1467640509713004,"z":0.8605924755769904},{"id":"9cku3nl5q","element":"H","x":-2.1453416227879574,"y":-0.9690450912001611,"z":0.7898965246758847},{"id":"vwnvk0j4h","element":"H","x":-1.8462866104327535,"y":-0.6382905833653704,"z":-0.8410993152970667},{"id":"rn7w8xxbr","element":"H","x":-4.703588657611336,"y":0.22150721482084507,"z":0.565047967523721},{"id":"s881tcc1m","element":"H","x":-4.565099037559314,"y":-1.0448187753956144,"z":-0.4875718658735421},{"id":"l73vl7zfl","element":"H","x":-4.444371382018649,"y":0.5081830449886288,"z":-1.0615265047694706},{"id":"tsbhk9ovv","element":"C","x":4.36273929641899,"y":-0.8404294686548814,"z":0.2508706941681905},{"id":"jjwl3vgyd","element":"C","x":2.285837162533129,"y":0.9389838451232203,"z":-0.3333919538065371},{"id":"jz184bx5w","element":"O","x":3.3247964563617054,"y":-0.2924556895784988,"z":-0.10069974597292695},{"id":"j6uknh835","element":"H","x":5.201734129777936,"y":-1.4352674897826776,"z":-0.5265709506743002},{"id":"fm1rckiru","element":"H","x":4.308991456105186,"y":-1.9102455516010743,"z":1.0563184783753654},{"id":"lvitayku2","element":"H","x":5.317866961568006,"y":-0.3050958865732732,"z":0.9757577028668329},{"id":"nuv82aq0y","element":"H","x":1.551287632659743,"y":0.7352923683146272,"z":-1.1230933534417598},{"id":"fg40pthzg","element":"H","x":1.6473520667215862,"y":1.196770683921087,"z":0.44831317349853433},{"id":"5wjruttew","element":"H","x":2.6376233264710898,"y":1.9124471888314636,"z":-0.6475040450133875}],"bonds":[{"id":"rlsiul4o1","atom1_id":"0j41umran","atom2_id":"5ha3nt8en","order":1,"bondType":"covalent"},{"id":"pbnc44ngg","atom1_id":"5ha3nt8en","atom2_id":"10vzc6jeu","order":1,"bondType":"covalent"},{"id":"jz064j9xn","atom1_id":"10vzc6jeu","atom2_id":"jeeiw3qal","order":1,"bondType":"covalent"},{"id":"bvxe5l568","atom1_id":"5ha3nt8en","atom2_id":"9cku3nl5q","order":1,"bondType":"covalent"},{"id":"ooh2o7x7y","atom1_id":"5ha3nt8en","atom2_id":"vwnvk0j4h","order":1,"bondType":"covalent"},{"id":"94gyx56p8","atom1_id":"0j41umran","atom2_id":"rn7w8xxbr","order":1,"bondType":"covalent"},{"id":"00hd3hosl","atom1_id":"0j41umran","atom2_id":"s881tcc1m","order":1,"bondType":"covalent"},{"id":"bsy6i3sf3","atom1_id":"tsbhk9ovv","atom2_id":"jz184bx5w","order":1,"bondType":"covalent"},{"id":"81sctkdt1","atom1_id":"jz184bx5w","atom2_id":"jjwl3vgyd","order":1,"bondType":"covalent"},{"id":"eq7ka21cf","atom1_id":"tsbhk9ovv","atom2_id":"j6uknh835","order":1,"bondType":"covalent"},{"id":"patjgg6pu","atom1_id":"tsbhk9ovv","atom2_id":"fm1rckiru","order":1,"bondType":"covalent"},{"id":"q56ou8zeh","atom1_id":"tsbhk9ovv","atom2_id":"lvitayku2","order":1,"bondType":"covalent"},{"id":"j6qz3dibe","atom1_id":"jjwl3vgyd","atom2_id":"nuv82aq0y","order":1,"bondType":"covalent"},{"id":"0obgcvlcq","atom1_id":"jjwl3vgyd","atom2_id":"fg40pthzg","order":1,"bondType":"covalent"},{"id":"059lv9eeh","atom1_id":"jjwl3vgyd","atom2_id":"5wjruttew","order":1,"bondType":"covalent"},{"id":"wzn4s46k7","atom1_id":"0j41umran","atom2_id":"l73vl7zfl","order":1,"bondType":"covalent"}]},
+    cellulose_monomer: {"version":"1.0","atoms":[{"id":"9rm80da7a","element":"C","x":15.026671837236565,"y":-6.084418168149829,"z":-11.538417888076317},{"id":"93kgs1z5t","element":"C","x":15.640187022502095,"y":-5.027540258458813,"z":-10.666960187463957},{"id":"mnzmyhq4g","element":"C","x":14.867769157084433,"y":-4.428215691187686,"z":-8.907089973714466},{"id":"ah2gbz9oy","element":"C","x":13.669844256264376,"y":-5.10153861267121,"z":-7.901647135903426},{"id":"22vii98aj","element":"C","x":13.281306288105382,"y":-6.594389646868503,"z":-9.061760297909062},{"id":"jjkswjfk8","element":"C","x":13.084669621740472,"y":-8.10334969924698,"z":-9.063138142033111},{"id":"2hwatb3w6","element":"O","x":13.811369701531657,"y":-6.51871847261992,"z":-10.432280363998816},{"id":"b2kt5ods0","element":"O","x":12.780416907996592,"y":-4.316318169498112,"z":-6.027366462842243},{"id":"ogwg36jmh","element":"C","x":12.088383608800243,"y":-3.6723039378467326,"z":-4.55534218801912},{"id":"deijip6wx","element":"C","x":10.95184819062699,"y":-2.432417488279947,"z":-3.64374048084283},{"id":"nudopxeu5","element":"C","x":10.181015555275636,"y":-2.4317557999843475,"z":-1.9963001872785304},{"id":"q2ghba07x","element":"C","x":10.084536983874774,"y":-3.4309013111827276,"z":-0.5401813674055753},{"id":"uqizw1at9","element":"C","x":11.405516705894296,"y":-4.029873607109106,"z":-1.3559774538679694},{"id":"nb2mdxlb6","element":"C","x":13.047455691354692,"y":-4.262667642831006,"z":-0.4574003496734509},{"id":"px0atqqck","element":"O","x":12.010353467568835,"y":-4.28477063075343,"z":-2.8953204203759784},{"id":"eattna8nz","element":"O","x":8.923769236705546,"y":-3.95656193619713,"z":1.2295243253316266},{"id":"9xfx759a4","element":"C","x":7.997268706252588,"y":-4.432998159226019,"z":2.667746831308776},{"id":"zgwbtcehq","element":"C","x":7.204773640111728,"y":-5.928203039517866,"z":3.6182166513372174},{"id":"rdr4nr6nm","element":"C","x":5.733621034703259,"y":-6.16734265845181,"z":4.633495560113798},{"id":"xc48a1mv6","element":"C","x":4.295120793469785,"y":-4.8713127345241976,"z":5.305216618552358},{"id":"ni62l8cq2","element":"C","x":5.875341675977038,"y":-3.560800051446963,"z":5.357781024551099},{"id":"gy4xrb6p8","element":"C","x":6.489249669858335,"y":-3.070869902541239,"z":6.610017238541031},{"id":"6bpawwuk9","element":"O","x":6.892542656935887,"y":-3.589480758012298,"z":4.007247341562598},{"id":"nea1zuhz4","element":"O","x":2.5849613595181564,"y":-4.858530039632822,"z":5.6624843649606795},{"id":"0sw1vl9z2","element":"C","x":0.4810972562338695,"y":-4.826365327445055,"z":6.068706253691415},{"id":"lz4baugri","element":"C","x":-0.7333375388706052,"y":-3.93168850753272,"z":6.812781037844335},{"id":"uk5ozdscl","element":"C","x":-2.6582279427468083,"y":-3.7723455307976,"z":6.402422834598596},{"id":"zon8nqtue","element":"C","x":-3.717023051367467,"y":-4.419539992838308,"z":5.386375129953017},{"id":"qx2a4eb6z","element":"C","x":-2.765524965116918,"y":-5.723615849509071,"z":5.387177257005032},{"id":"eoyi9a8bk","element":"C","x":-3.186262556440234,"y":-7.452706203798244,"z":5.720314506778798},{"id":"u2bxorsly","element":"O","x":-0.7801544408730512,"y":-5.5602150640770756,"z":5.538751583222995},{"id":"w5r92v1h6","element":"O","x":-5.483377587140033,"y":-3.52949462365862,"z":4.494673795646096},{"id":"o0b7l53gf","element":"C","x":-6.8104418352967455,"y":-2.8548303683003695,"z":3.824320047024775},{"id":"i8fl2j8c3","element":"C","x":-8.13695828658538,"y":-1.556542256137021,"z":4.360330301740759},{"id":"njejrt0sn","element":"C","x":-9.11145363065343,"y":-0.3972705245264799,"z":3.5575493502025752},{"id":"csbfyviuu","element":"C","x":-9.616572633919844,"y":-0.06685341236221684,"z":1.7235012719362783},{"id":"rhvtf361h","element":"C","x":-9.409040422246166,"y":-2.0394456528474714,"z":1.5493733726692542},{"id":"5ldjlbbdf","element":"C","x":-10.442016610136577,"y":-2.9814840263067266,"z":0.933738045823403},{"id":"5ixamatoq","element":"O","x":-8.039039740229029,"y":-2.7054227393164516,"z":2.322556320901809},{"id":"wqeja8fu5","element":"O","x":-10.018953212932734,"y":1.364776853229026,"z":0.9319407487486838},{"id":"bza024g3s","element":"C","x":-10.499311778996068,"y":3.2361526963712914,"z":-0.0717614944865492},{"id":"g77pcxx0r","element":"C","x":-10.267850614277778,"y":4.238224784437199,"z":-1.470727896263537},{"id":"povx0rtka","element":"C","x":-10.493190071589357,"y":6.105024776716103,"z":-1.9420956293355556},{"id":"awfa3uxw2","element":"C","x":-11.110814557689958,"y":7.456671760825574,"z":-0.9891062407850582},{"id":"i1xrbo6js","element":"C","x":-12.150620040703599,"y":6.146799447921731,"z":-0.030029381020103316},{"id":"ijstoftpn","element":"C","x":-13.645733025302182,"y":6.106475447407087,"z":0.019468788134331998},{"id":"iwuavw25a","element":"O","x":-11.487261489916202,"y":4.657185027714313,"z":0.34989427412329727},{"id":"13rn1cqkm","element":"O","x":-10.87500342380559,"y":9.22207591709168,"z":-0.6208390831156425},{"id":"5s79av8h2","element":"C","x":-10.59727371324862,"y":11.311683451284845,"z":-0.27528840958305134},{"id":"t4xoe7dve","element":"C","x":-10.844244287784813,"y":12.604985908308937,"z":-1.1548300041238542},{"id":"3fu8jgxwy","element":"C","x":-10.505348352212417,"y":14.484967605305638,"z":-0.9939346335292313},{"id":"f8eitss89","element":"C","x":-10.107249731328704,"y":15.067241615955748,"z":0.5045202240581419},{"id":"rqu8tkh4b","element":"C","x":-9.878931205359775,"y":13.943465746336523,"z":1.9368282683589748},{"id":"onr3tll1q","element":"C","x":-9.961644274457042,"y":14.591677118218579,"z":3.414446939753543},{"id":"1eyek7ymp","element":"O","x":-10.223768957504804,"y":12.241396821534929,"z":1.028318880988307},{"id":"fg52w6u2t","element":"O","x":-14.962091855128174,"y":6.413005367240101,"z":1.1168678474387141},{"id":"pkroa8s1j","element":"O","x":-9.478924463124601,"y":6.49114131142405,"z":-3.359478472063612},{"id":"zp4t1m6av","element":"O","x":-10.030963604295405,"y":3.2840967047846057,"z":-2.8021570933497286},{"id":"ya18y9r34","element":"O","x":-9.166994900906861,"y":15.763703550171225,"z":3.927903775634385},{"id":"mguev5fob","element":"O","x":-10.818914597538825,"y":16.2285186750076,"z":0.8815764545136171},{"id":"9b8bg60xi","element":"O","x":-11.24895882366055,"y":15.435458360295707,"z":-1.7835862958311748},{"id":"uwbwtnls1","element":"O","x":-12.422680933355517,"y":12.787513648819797,"z":-1.7980978815604294},{"id":"c14ic6kmz","element":"O","x":15.065080040475918,"y":-2.956646555165202,"z":-9.149920162944685},{"id":"k3drqalz5","element":"O","x":16.443284160013143,"y":-3.908476592030559,"z":-11.720605973699195},{"id":"x5a5m9dek","element":"O","x":14.839998557182016,"y":-6.136169079774799,"z":-13.312793120987006},{"id":"gxyka4l4r","element":"O","x":12.458238559518586,"y":-9.51041171337504,"z":-10.050392023191272},{"id":"5svpdqqd2","element":"O","x":-10.823530503793478,"y":-3.9398530849202773,"z":-0.5026802915188269},{"id":"yrkzokq8r","element":"O","x":-9.938677029383763,"y":0.2989464369612969,"z":4.346039223787804},{"id":"jc437em5f","element":"O","x":-8.664184129050371,"y":-2.0113401020373654,"z":5.511296281393024},{"id":"oczndiq52","element":"O","x":10.740395309083961,"y":-1.0566149437389774,"z":-4.6739729170460365},{"id":"dyufenkj4","element":"O","x":9.524916273173238,"y":-0.882463101241892,"z":-1.8869725911937534},{"id":"zucsjesvr","element":"O","x":13.91442802037984,"y":-5.321585867206164,"z":-0.14379081272997138},{"id":"zmm6ph3mx","element":"O","x":7.54221763574274,"y":-7.129468800932392,"z":2.919061563233217},{"id":"2xuyjty3h","element":"O","x":5.179387542760007,"y":-7.43690768705031,"z":4.58671319049152},{"id":"hsupg55st","element":"O","x":-3.7838996096831776,"y":-8.62756138160512,"z":5.071156738975953},{"id":"xrevhjtln","element":"O","x":-3.265297463640935,"y":-2.920625111943529,"z":7.744289779668608},{"id":"wa3h5srr0","element":"O","x":-0.34415641766657357,"y":-3.206967486422626,"z":8.257196039176184},{"id":"2lynfu7bi","element":"O","x":7.449517640839019,"y":-3.3257421549218815,"z":8.143753891499246},{"id":"2t4834del","element":"H","x":17.19342478318035,"y":-3.6704288841399806,"z":-12.311031950262784},{"id":"8y2n24gih","element":"H","x":15.791672361821865,"y":-1.8496600338285976,"z":-9.42973185979301},{"id":"78xwqlix1","element":"H","x":12.50242462627446,"y":-10.46429759241322,"z":-10.227272047751706},{"id":"hb41gwaqg","element":"H","x":10.880577263264088,"y":-0.2689024175036332,"z":-5.159349040905378},{"id":"djmtebc8y","element":"H","x":15.100572309754755,"y":-5.533959793384491,"z":0.4000460856963391},{"id":"meqfroro8","element":"H","x":5.220845014711367,"y":-8.717863053647445,"z":5.010197311866645},{"id":"4orgapsiw","element":"H","x":-3.519534810153955,"y":-2.7483839936436607,"z":8.67601922654976},{"id":"sq4648m75","element":"H","x":-4.1871998380529565,"y":-9.889173581991194,"z":5.25367037502434},{"id":"2v0sq4ujd","element":"H","x":-9.38933358015652,"y":-2.2607675860127303,"z":6.594970972579167},{"id":"lqyuxofvy","element":"H","x":-10.844651074440293,"y":0.5053303150836186,"z":5.282445634351874},{"id":"g7s9yg75d","element":"H","x":-11.484981902520621,"y":-4.599061423773819,"z":-0.8884236354492538},{"id":"1grapqw1g","element":"H","x":-10.197153511320698,"y":2.9172111130237672,"z":-3.6825663136698186},{"id":"6yhdddpk2","element":"H","x":-9.349081131325594,"y":6.5799802105780065,"z":-4.331877885685275},{"id":"cw45w8lp1","element":"H","x":-15.978762449020165,"y":6.422160250342817,"z":1.2639187008224584},{"id":"k0u818jyz","element":"H","x":-13.120352395233425,"y":13.158673583903182,"z":-2.416500721780725},{"id":"54z319sil","element":"H","x":-11.45303513096049,"y":16.517638301048876,"z":-2.574042456399826},{"id":"fs883mmrt","element":"H","x":9.604474201508847,"y":0.09038395785692954,"z":-1.9099539282042561},{"id":"5nflj1q8q","element":"H","x":8.139793411920069,"y":-8.328745273506126,"z":2.926372068534759},{"id":"ecic3399r","element":"H","x":-0.2718199903562443,"y":-3.0443271595481476,"z":9.222950207827648},{"id":"12ium2272","element":"H","x":-9.752280376998309,"y":14.138344920838348,"z":4.3955353108534805},{"id":"vjctkm9w4","element":"H","x":-10.830745969804797,"y":15.033514537419915,"z":3.9086616785281842},{"id":"48r8m125v","element":"H","x":-9.143829673748801,"y":15.700626566988557,"z":0.4481387798840441},{"id":"k6x150lc2","element":"H","x":-9.617044994760779,"y":14.737762391364173,"z":-1.6934573880521813},{"id":"o1sd1ws70","element":"H","x":-10.434076728312276,"y":12.565578867467817,"z":-2.4226649813856236},{"id":"gn6jye2o6","element":"H","x":-8.661747317685244,"y":13.808127189445868,"z":1.9859584475058163},{"id":"8p5t1yrp5","element":"H","x":-9.441768263292435,"y":11.049688358037203,"z":-0.45320137047809017},{"id":"0wbz9euwm","element":"H","x":-14.639647368335973,"y":6.654688329716353,"z":-0.8938194619055035},{"id":"4z4fepu66","element":"H","x":-12.00668077719716,"y":6.53962462352225,"z":1.0564746501145514},{"id":"lvaht9pe5","element":"H","x":-14.513923615899992,"y":5.050831722059393,"z":-0.33878924155303863},{"id":"705j3blh4","element":"H","x":-11.853202363152924,"y":7.857372060015957,"z":-1.7338746629493542},{"id":"1pp7azyw0","element":"H","x":-11.3617076103386,"y":5.8845831535915165,"z":-2.9946882582437433},{"id":"gpkd5yzx7","element":"H","x":-11.799762778998165,"y":-2.7600530322487886,"z":0.9344316469924588},{"id":"6pandtudk","element":"H","x":-10.895809651394408,"y":-4.0834932332409615,"z":1.5662619479246904},{"id":"rjvhc92b2","element":"H","x":-4.6550306160054875,"y":-4.7805537449667534,"z":6.162144734653971},{"id":"jsvpkb9h8","element":"H","x":-2.6510552669438803,"y":-6.027796327787888,"z":4.093725538922553},{"id":"frltloy9u","element":"H","x":-3.82486742039008,"y":-7.688864090106877,"z":6.634202342097875},{"id":"3gpey992s","element":"H","x":-2.482720829659831,"y":-8.199947585424598,"z":6.238628827640479},{"id":"b3l7or9ct","element":"H","x":0.8016913851934784,"y":-5.5705295534510375,"z":6.990829337224293},{"id":"03gor0ksc","element":"H","x":5.260497858282134,"y":-2.6998695367251924,"z":4.995697729847309},{"id":"yftyrz78a","element":"H","x":5.8399808420981305,"y":-2.232419911092765,"z":7.540545273451671},{"id":"jtb63fi6v","element":"H","x":7.891206517660216,"y":-3.00162566114444,"z":8.979391019809443},{"id":"8b23jk50c","element":"H","x":6.12408108257724,"y":-6.463793266289203,"z":5.712081983267285},{"id":"synaxex8y","element":"H","x":13.797824659800575,"y":-9.121206938397059,"z":-8.44614548012592},{"id":"13nzdzbll","element":"H","x":15.838134067608419,"y":-7.123387295187538,"z":-11.861063422785383},{"id":"bjncjsi9t","element":"H","x":16.893933204614267,"y":-5.382812945556137,"z":-10.474117639155509},{"id":"f36bh12e9","element":"H","x":16.030557826772146,"y":-4.461768023840379,"z":-8.368618582348605},{"id":"tfk6s3kh5","element":"H","x":14.392850187818823,"y":-5.729516688549932,"z":-7.084053288195499},{"id":"ng2s7g9lv","element":"H","x":12.177853450370565,"y":-6.359970778076008,"z":-9.313900184860383},{"id":"cqwfpzx6c","element":"H","x":13.07122517257932,"y":-3.034192839841293,"z":-4.496185539016323},{"id":"e1mo5dewj","element":"H","x":13.7590211739323,"y":-3.4034688147404677,"z":-0.16016101101990377},{"id":"nfw5acwka","element":"H","x":8.100018999656472,"y":-6.1899573235712015,"z":4.344342252202975},{"id":"yw53lnefa","element":"H","x":8.988638630094258,"y":-4.235900057924875,"z":3.2574486578038124},{"id":"xpwgp1foo","element":"H","x":10.57685480906133,"y":-2.599592679885975,"z":0.22603205808527507},{"id":"255tv9q70","element":"H","x":7.2460593881844595,"y":-1.9046302646554087,"z":6.677230130077981},{"id":"hm433bln4","element":"H","x":12.513597768963834,"y":-7.133003423878747,"z":-8.884518308741129},{"id":"fmmcna99f","element":"H","x":10.70938908517641,"y":-3.171009034056997,"z":-2.8098963043381477},{"id":"7zag73ruu","element":"H","x":10.244954326983347,"y":-3.568556028176391,"z":-1.9397575073364928},{"id":"zn0nwp4mk","element":"H","x":11.959336543860875,"y":-4.602405358671555,"z":-0.4706293062753823},{"id":"ova2sy18y","element":"H","x":-0.6366769734229669,"y":-3.852745558115749,"z":5.679632880794829},{"id":"odkimn0t5","element":"H","x":-2.526867791278205,"y":-3.8234156217142945,"z":5.2711685058025},{"id":"dqpmfi2c6","element":"H","x":-7.436168015107189,"y":-0.7024303194143036,"z":4.07928618607688},{"id":"0vjw2hjb4","element":"H","x":-8.035244418290233,"y":-0.44937363828659105,"z":3.1851799143447312},{"id":"idzfjx0fn","element":"H","x":-9.89642695755516,"y":0.6207756493818556,"z":0.8583724774856559},{"id":"h39vu5ahu","element":"H","x":-9.58478072474322,"y":-1.9101228395440828,"z":0.43044935557178365},{"id":"0awmdtncr","element":"H","x":-9.895558524239643,"y":4.90509844312221,"z":-0.6243957374469735},{"id":"tmddm7nkn","element":"H","x":-10.09330604782783,"y":2.1935495595340586,"z":0.14672888359840872},{"id":"v6acpu4os","element":"H","x":-8.13058446500924,"y":15.448517393317687,"z":4.118982541828855},{"id":"zaa3adpih","element":"H","x":-10.284953967896264,"y":16.736900170545667,"z":1.6979307287023409},{"id":"sdgm80zri","element":"H","x":14.066780102885602,"y":-5.417155936305307,"z":-13.621262441104232},{"id":"ohg76pc9d","element":"C","x":11.16013894053441,"y":11.240674391353025,"z":-10.355017453269948},{"id":"0ypoo27g4","element":"C","x":10.12903257803838,"y":10.19895717491964,"z":-10.243463727559618},{"id":"z6fma0ynq","element":"C","x":8.611503803301488,"y":10.525196586638716,"z":-9.749954488336813},{"id":"qjz5m4sch","element":"C","x":8.163433362587396,"y":12.024205524021625,"z":-9.426528583987384},{"id":"uopqg8j72","element":"C","x":9.124132224058904,"y":13.219879828952475,"z":-9.692353423589179},{"id":"wwfq5yd41","element":"C","x":9.180420504993098,"y":14.940073659639895,"z":-9.057053050637318},{"id":"ig1a1tjy7","element":"O","x":10.416853629460723,"y":12.758419735088149,"z":-10.111785015463653},{"id":"ihm6kmid9","element":"O","x":8.967768554737148,"y":16.298663498375177,"z":-9.582707334388497},{"id":"6tyesk7ru","element":"O","x":6.3355181826932,"y":12.335362433609209,"z":-9.304249165041506},{"id":"kv92wwhfr","element":"O","x":8.010046236824898,"y":9.400342135345614,"z":-8.667663965235624},{"id":"1ago0xyio","element":"O","x":10.794071787123551,"y":8.78746044009932,"z":-9.601734303533114},{"id":"ctr34skvd","element":"H","x":8.975921022273434,"y":17.551094707606836,"z":-9.24179417289847},{"id":"lf994es1m","element":"H","x":10.13592380323658,"y":15.25195191745202,"z":-8.552576603087482},{"id":"ynftaxt1b","element":"H","x":8.671289675269866,"y":15.201817711281945,"z":-8.081116790069034},{"id":"xrwomuila","element":"H","x":8.723610279381582,"y":13.776692229348939,"z":-10.821324953039882},{"id":"bupp11bp8","element":"H","x":7.9522947107895465,"y":12.055300172945508,"z":-8.042207095604986},{"id":"hz1vzf9yb","element":"H","x":7.733459090148301,"y":10.000503973576748,"z":-10.677726093559903},{"id":"il5zsrbxk","element":"H","x":7.4865803565697755,"y":8.685392152840292,"z":-8.246075723855004},{"id":"ujg37r1kd","element":"H","x":11.258751343086427,"y":7.929801656175551,"z":-9.505264844875938},{"id":"ycjkaf7xi","element":"H","x":10.118356694941273,"y":9.54790215095093,"z":-11.440318097051433},{"id":"ugn7cer7q","element":"H","x":12.094180498152728,"y":11.270124262650278,"z":-9.328364374515289},{"id":"6v70cwnyl","element":"H","x":5.487868144224933,"y":12.465312757324382,"z":-8.887873042835464},{"id":"nllsk7xpr","element":"C","x":0.8556762314322911,"y":11.798831655744218,"z":-9.524219294023698},{"id":"ln7vx117d","element":"C","x":-0.3524138319830469,"y":12.618552869576655,"z":-8.642233359152563},{"id":"q46mdl2va","element":"C","x":-1.2215344301345263,"y":11.333819556628555,"z":-7.663992274817337},{"id":"epytzi5ld","element":"C","x":-0.7550330307074926,"y":9.74151585454913,"z":-7.415844273871769},{"id":"r70aa2mdt","element":"C","x":0.49057654892281666,"y":9.06919638249047,"z":-8.17486276786185},{"id":"02dxxas06","element":"C","x":1.119626954739001,"y":7.198383184411666,"z":-8.575335272584065},{"id":"7rcfqe9kz","element":"O","x":1.039360437011836,"y":10.10258428198365,"z":-9.139108361062103},{"id":"hun0cyns5","element":"O","x":-2.1108291191056012,"y":8.702105988006219,"z":-6.689443744455667},{"id":"ss0f8c6bg","element":"O","x":-1.7542279600191724,"y":12.007466434406334,"z":-6.571560530348698},{"id":"a88ibzs12","element":"O","x":-0.9239703458278528,"y":13.891628477372349,"z":-9.178232478218625},{"id":"44cfcl4lx","element":"O","x":0.8925729929329087,"y":5.987780535439931,"z":-7.9608320368775445},{"id":"nwyjfm4u9","element":"H","x":1.3689186290971067,"y":4.767052741710484,"z":-7.900232591969969},{"id":"cuzpeerfh","element":"H","x":1.461820194019145,"y":9.007124652863654,"z":-7.369247404075232},{"id":"7whxu3nbj","element":"H","x":-2.5733371419726634,"y":8.2700905793498,"z":-5.976682091337863},{"id":"e3iywzm1f","element":"H","x":-0.4138130518051727,"y":9.734911186437207,"z":-6.121510057992126},{"id":"09oy4szlz","element":"H","x":-2.2461718200839442,"y":11.32893890978957,"z":-8.245131536719393},{"id":"0u9v16y5u","element":"H","x":0.23535610517923755,"y":13.25168695809033,"z":-7.856800614411437},{"id":"dl12tolaa","element":"H","x":-0.9594590446389197,"y":15.18296742536695,"z":-9.254724097049108},{"id":"muu2drsjd","element":"H","x":-2.5080935728041602,"y":12.663183938897411,"z":-5.699561866169404},{"id":"rhwxd3vxg","element":"H","x":0.662845356262511,"y":11.805095921105364,"z":-10.649709246738691},{"id":"z86r04nq7","element":"H","x":1.031731546614583,"y":6.92088737712025,"z":-9.638009107128696},{"id":"0w11lx5jj","element":"H","x":2.2704503390917354,"y":7.14978477793977,"z":-8.609141949406629},{"id":"ltt7x32vb","element":"O","x":12.777969428244852,"y":11.379464661955023,"z":-11.23974633622196},{"id":"c543wha65","element":"H","x":13.723243203441328,"y":11.492431014573718,"z":-11.226262902297012},{"id":"us6qd5yuv","element":"O","x":2.076907533140445,"y":12.379020166146791,"z":-9.549031139681915},{"id":"cemlx7g90","element":"H","x":3.113218866022541,"y":12.932386767567905,"z":-10.145294945762183}],"bonds":[{"id":"3nstpmu5m","atom1_id":"9rm80da7a","atom2_id":"93kgs1z5t","order":1,"bondType":"covalent"},{"id":"1nyzo9b1w","atom1_id":"93kgs1z5t","atom2_id":"mnzmyhq4g","order":1,"bondType":"covalent"},{"id":"2shzpyufs","atom1_id":"mnzmyhq4g","atom2_id":"ah2gbz9oy","order":1,"bondType":"covalent"},{"id":"dk7qc91m7","atom1_id":"ah2gbz9oy","atom2_id":"22vii98aj","order":1,"bondType":"covalent"},{"id":"wgoevk86b","atom1_id":"22vii98aj","atom2_id":"jjkswjfk8","order":1,"bondType":"covalent"},{"id":"ny4i8rbti","atom1_id":"22vii98aj","atom2_id":"2hwatb3w6","order":1,"bondType":"covalent"},{"id":"n87iuuctf","atom1_id":"2hwatb3w6","atom2_id":"9rm80da7a","order":1,"bondType":"covalent"},{"id":"9r7ksa1p3","atom1_id":"b2kt5ods0","atom2_id":"ogwg36jmh","order":1,"bondType":"covalent"},{"id":"kmhy86j2i","atom1_id":"ogwg36jmh","atom2_id":"deijip6wx","order":1,"bondType":"covalent"},{"id":"4ysq1xmt3","atom1_id":"deijip6wx","atom2_id":"nudopxeu5","order":1,"bondType":"covalent"},{"id":"dj87c7e5o","atom1_id":"nudopxeu5","atom2_id":"q2ghba07x","order":1,"bondType":"covalent"},{"id":"m9730jio7","atom1_id":"q2ghba07x","atom2_id":"uqizw1at9","order":1,"bondType":"covalent"},{"id":"9mpf3ciz3","atom1_id":"uqizw1at9","atom2_id":"nb2mdxlb6","order":1,"bondType":"covalent"},{"id":"14ftva24n","atom1_id":"uqizw1at9","atom2_id":"px0atqqck","order":1,"bondType":"covalent"},{"id":"duq2484ay","atom1_id":"ogwg36jmh","atom2_id":"px0atqqck","order":1,"bondType":"covalent"},{"id":"mgrt4g7x9","atom1_id":"eattna8nz","atom2_id":"9xfx759a4","order":1,"bondType":"covalent"},{"id":"j38kdzohp","atom1_id":"9xfx759a4","atom2_id":"zgwbtcehq","order":1,"bondType":"covalent"},{"id":"ex7f7p3r5","atom1_id":"zgwbtcehq","atom2_id":"rdr4nr6nm","order":1,"bondType":"covalent"},{"id":"6bjh5szt2","atom1_id":"rdr4nr6nm","atom2_id":"xc48a1mv6","order":1,"bondType":"covalent"},{"id":"eep6r4hgr","atom1_id":"xc48a1mv6","atom2_id":"ni62l8cq2","order":1,"bondType":"covalent"},{"id":"lans7inzo","atom1_id":"ni62l8cq2","atom2_id":"gy4xrb6p8","order":1,"bondType":"covalent"},{"id":"4fmf3lt8m","atom1_id":"ni62l8cq2","atom2_id":"6bpawwuk9","order":1,"bondType":"covalent"},{"id":"cyoqo14yw","atom1_id":"9xfx759a4","atom2_id":"6bpawwuk9","order":1,"bondType":"covalent"},{"id":"36j73qiht","atom1_id":"nea1zuhz4","atom2_id":"0sw1vl9z2","order":1,"bondType":"covalent"},{"id":"ij43806r4","atom1_id":"0sw1vl9z2","atom2_id":"lz4baugri","order":1,"bondType":"covalent"},{"id":"aufshs0an","atom1_id":"lz4baugri","atom2_id":"uk5ozdscl","order":1,"bondType":"covalent"},{"id":"e70xhzutt","atom1_id":"uk5ozdscl","atom2_id":"zon8nqtue","order":1,"bondType":"covalent"},{"id":"kg23bpxzn","atom1_id":"zon8nqtue","atom2_id":"qx2a4eb6z","order":1,"bondType":"covalent"},{"id":"zavs31b8j","atom1_id":"qx2a4eb6z","atom2_id":"eoyi9a8bk","order":1,"bondType":"covalent"},{"id":"7szsllvs6","atom1_id":"qx2a4eb6z","atom2_id":"u2bxorsly","order":1,"bondType":"covalent"},{"id":"ykg127zqr","atom1_id":"0sw1vl9z2","atom2_id":"u2bxorsly","order":1,"bondType":"covalent"},{"id":"5yinu15xv","atom1_id":"w5r92v1h6","atom2_id":"o0b7l53gf","order":1,"bondType":"covalent"},{"id":"blx3pq56k","atom1_id":"o0b7l53gf","atom2_id":"i8fl2j8c3","order":1,"bondType":"covalent"},{"id":"ng1gmghkz","atom1_id":"i8fl2j8c3","atom2_id":"njejrt0sn","order":1,"bondType":"covalent"},{"id":"99y185fir","atom1_id":"njejrt0sn","atom2_id":"csbfyviuu","order":1,"bondType":"covalent"},{"id":"tapi2nyis","atom1_id":"csbfyviuu","atom2_id":"rhvtf361h","order":1,"bondType":"covalent"},{"id":"ehisk4pep","atom1_id":"rhvtf361h","atom2_id":"5ldjlbbdf","order":1,"bondType":"covalent"},{"id":"dzxyhzyf8","atom1_id":"rhvtf361h","atom2_id":"5ixamatoq","order":1,"bondType":"covalent"},{"id":"h1g0naeih","atom1_id":"5ixamatoq","atom2_id":"o0b7l53gf","order":1,"bondType":"covalent"},{"id":"jm0eoys3p","atom1_id":"wqeja8fu5","atom2_id":"bza024g3s","order":1,"bondType":"covalent"},{"id":"hwiaov818","atom1_id":"bza024g3s","atom2_id":"g77pcxx0r","order":1,"bondType":"covalent"},{"id":"qwdke94m9","atom1_id":"g77pcxx0r","atom2_id":"povx0rtka","order":1,"bondType":"covalent"},{"id":"9gjyyjl3x","atom1_id":"povx0rtka","atom2_id":"awfa3uxw2","order":1,"bondType":"covalent"},{"id":"xpig5jafu","atom1_id":"awfa3uxw2","atom2_id":"i1xrbo6js","order":1,"bondType":"covalent"},{"id":"3g00bc0xw","atom1_id":"i1xrbo6js","atom2_id":"ijstoftpn","order":1,"bondType":"covalent"},{"id":"x3czkhsyf","atom1_id":"i1xrbo6js","atom2_id":"iwuavw25a","order":1,"bondType":"covalent"},{"id":"3d389q9h1","atom1_id":"iwuavw25a","atom2_id":"bza024g3s","order":1,"bondType":"covalent"},{"id":"jb6r3nphd","atom1_id":"13rn1cqkm","atom2_id":"5s79av8h2","order":1,"bondType":"covalent"},{"id":"hky94l4gr","atom1_id":"5s79av8h2","atom2_id":"t4xoe7dve","order":1,"bondType":"covalent"},{"id":"8q72r63x2","atom1_id":"t4xoe7dve","atom2_id":"3fu8jgxwy","order":1,"bondType":"covalent"},{"id":"yorzkwzgf","atom1_id":"3fu8jgxwy","atom2_id":"f8eitss89","order":1,"bondType":"covalent"},{"id":"5nn8y1v9n","atom1_id":"f8eitss89","atom2_id":"rqu8tkh4b","order":1,"bondType":"covalent"},{"id":"njds4k0kc","atom1_id":"rqu8tkh4b","atom2_id":"onr3tll1q","order":1,"bondType":"covalent"},{"id":"djs115oss","atom1_id":"rqu8tkh4b","atom2_id":"1eyek7ymp","order":1,"bondType":"covalent"},{"id":"ewcs1ze8i","atom1_id":"1eyek7ymp","atom2_id":"5s79av8h2","order":1,"bondType":"covalent"},{"id":"w6631oqwl","atom1_id":"b2kt5ods0","atom2_id":"ah2gbz9oy","order":1,"bondType":"covalent"},{"id":"76s2vvgqn","atom1_id":"eattna8nz","atom2_id":"q2ghba07x","order":1,"bondType":"covalent"},{"id":"x3qang6g7","atom1_id":"nea1zuhz4","atom2_id":"xc48a1mv6","order":1,"bondType":"covalent"},{"id":"zx5qof2m4","atom1_id":"w5r92v1h6","atom2_id":"zon8nqtue","order":1,"bondType":"covalent"},{"id":"awonc86l0","atom1_id":"wqeja8fu5","atom2_id":"csbfyviuu","order":1,"bondType":"covalent"},{"id":"a0w3uuvmk","atom1_id":"13rn1cqkm","atom2_id":"awfa3uxw2","order":1,"bondType":"covalent"},{"id":"oixm57i7c","atom1_id":"ijstoftpn","atom2_id":"fg52w6u2t","order":1,"bondType":"covalent"},{"id":"g0ie3rzg4","atom1_id":"povx0rtka","atom2_id":"pkroa8s1j","order":1,"bondType":"covalent"},{"id":"4ybjttleq","atom1_id":"g77pcxx0r","atom2_id":"zp4t1m6av","order":1,"bondType":"covalent"},{"id":"qrr01tiro","atom1_id":"onr3tll1q","atom2_id":"ya18y9r34","order":1,"bondType":"covalent"},{"id":"kuu153pci","atom1_id":"f8eitss89","atom2_id":"mguev5fob","order":1,"bondType":"covalent"},{"id":"xs97hc8dl","atom1_id":"3fu8jgxwy","atom2_id":"9b8bg60xi","order":1,"bondType":"covalent"},{"id":"y8gymtcpg","atom1_id":"t4xoe7dve","atom2_id":"uwbwtnls1","order":1,"bondType":"covalent"},{"id":"rcan8zwwp","atom1_id":"mnzmyhq4g","atom2_id":"c14ic6kmz","order":1,"bondType":"covalent"},{"id":"a4idpacow","atom1_id":"93kgs1z5t","atom2_id":"k3drqalz5","order":1,"bondType":"covalent"},{"id":"xfrtyapuq","atom1_id":"9rm80da7a","atom2_id":"x5a5m9dek","order":1,"bondType":"covalent"},{"id":"9dl12i2bj","atom1_id":"jjkswjfk8","atom2_id":"gxyka4l4r","order":1,"bondType":"covalent"},{"id":"c1k3213wb","atom1_id":"5ldjlbbdf","atom2_id":"5svpdqqd2","order":1,"bondType":"covalent"},{"id":"klqyuy9eu","atom1_id":"njejrt0sn","atom2_id":"yrkzokq8r","order":1,"bondType":"covalent"},{"id":"lmnibqtuu","atom1_id":"i8fl2j8c3","atom2_id":"jc437em5f","order":1,"bondType":"covalent"},{"id":"nqqpv9zw4","atom1_id":"deijip6wx","atom2_id":"oczndiq52","order":1,"bondType":"covalent"},{"id":"6bjis89sq","atom1_id":"nudopxeu5","atom2_id":"dyufenkj4","order":1,"bondType":"covalent"},{"id":"p78xiq4c3","atom1_id":"nb2mdxlb6","atom2_id":"zucsjesvr","order":1,"bondType":"covalent"},{"id":"5v9o8ouxn","atom1_id":"zgwbtcehq","atom2_id":"zmm6ph3mx","order":1,"bondType":"covalent"},{"id":"tvyljlqu8","atom1_id":"rdr4nr6nm","atom2_id":"2xuyjty3h","order":1,"bondType":"covalent"},{"id":"706lwb4eu","atom1_id":"eoyi9a8bk","atom2_id":"hsupg55st","order":1,"bondType":"covalent"},{"id":"35jewiyz8","atom1_id":"uk5ozdscl","atom2_id":"xrevhjtln","order":1,"bondType":"covalent"},{"id":"kdzkctcf6","atom1_id":"lz4baugri","atom2_id":"wa3h5srr0","order":1,"bondType":"covalent"},{"id":"6gbin1rzl","atom1_id":"gy4xrb6p8","atom2_id":"2lynfu7bi","order":1,"bondType":"covalent"},{"id":"uyvtjnktw","atom1_id":"k3drqalz5","atom2_id":"2t4834del","order":1,"bondType":"covalent"},{"id":"j7h9rvwwe","atom1_id":"c14ic6kmz","atom2_id":"8y2n24gih","order":1,"bondType":"covalent"},{"id":"83y65zrhm","atom1_id":"gxyka4l4r","atom2_id":"78xwqlix1","order":1,"bondType":"covalent"},{"id":"yszh30es1","atom1_id":"oczndiq52","atom2_id":"hb41gwaqg","order":1,"bondType":"covalent"},{"id":"61jeypoii","atom1_id":"zucsjesvr","atom2_id":"djmtebc8y","order":1,"bondType":"covalent"},{"id":"u4jog867i","atom1_id":"2xuyjty3h","atom2_id":"meqfroro8","order":1,"bondType":"covalent"},{"id":"qxryazsq7","atom1_id":"xrevhjtln","atom2_id":"4orgapsiw","order":1,"bondType":"covalent"},{"id":"ervaxy2y4","atom1_id":"hsupg55st","atom2_id":"sq4648m75","order":1,"bondType":"covalent"},{"id":"7qto71a8c","atom1_id":"jc437em5f","atom2_id":"2v0sq4ujd","order":1,"bondType":"covalent"},{"id":"110m1yzpn","atom1_id":"yrkzokq8r","atom2_id":"lqyuxofvy","order":1,"bondType":"covalent"},{"id":"kia196jdz","atom1_id":"5svpdqqd2","atom2_id":"g7s9yg75d","order":1,"bondType":"covalent"},{"id":"lcik26f0d","atom1_id":"zp4t1m6av","atom2_id":"1grapqw1g","order":1,"bondType":"covalent"},{"id":"22q3clygy","atom1_id":"pkroa8s1j","atom2_id":"6yhdddpk2","order":1,"bondType":"covalent"},{"id":"6lf2ygz0h","atom1_id":"fg52w6u2t","atom2_id":"cw45w8lp1","order":1,"bondType":"covalent"},{"id":"f1alupzjh","atom1_id":"uwbwtnls1","atom2_id":"k0u818jyz","order":1,"bondType":"covalent"},{"id":"xuh5ic1bp","atom1_id":"9b8bg60xi","atom2_id":"54z319sil","order":1,"bondType":"covalent"},{"id":"b3c9dwzd2","atom1_id":"dyufenkj4","atom2_id":"fs883mmrt","order":1,"bondType":"covalent"},{"id":"f7aqaccj0","atom1_id":"zmm6ph3mx","atom2_id":"5nflj1q8q","order":1,"bondType":"covalent"},{"id":"cga6pu5gb","atom1_id":"wa3h5srr0","atom2_id":"ecic3399r","order":1,"bondType":"covalent"},{"id":"9ilucjalw","atom1_id":"onr3tll1q","atom2_id":"12ium2272","order":1,"bondType":"covalent"},{"id":"eaaniz9yu","atom1_id":"onr3tll1q","atom2_id":"vjctkm9w4","order":1,"bondType":"covalent"},{"id":"uohwuye5e","atom1_id":"f8eitss89","atom2_id":"48r8m125v","order":1,"bondType":"covalent"},{"id":"gds9e4uj9","atom1_id":"3fu8jgxwy","atom2_id":"k6x150lc2","order":1,"bondType":"covalent"},{"id":"co9pdh5zf","atom1_id":"t4xoe7dve","atom2_id":"o1sd1ws70","order":1,"bondType":"covalent"},{"id":"h7zs5cncv","atom1_id":"rqu8tkh4b","atom2_id":"gn6jye2o6","order":1,"bondType":"covalent"},{"id":"g3h0ke7yn","atom1_id":"5s79av8h2","atom2_id":"8p5t1yrp5","order":1,"bondType":"covalent"},{"id":"omb82fc14","atom1_id":"ijstoftpn","atom2_id":"0wbz9euwm","order":1,"bondType":"covalent"},{"id":"dgabmilst","atom1_id":"i1xrbo6js","atom2_id":"4z4fepu66","order":1,"bondType":"covalent"},{"id":"7jh88nr0v","atom1_id":"ijstoftpn","atom2_id":"lvaht9pe5","order":1,"bondType":"covalent"},{"id":"q1bns6y3t","atom1_id":"awfa3uxw2","atom2_id":"705j3blh4","order":1,"bondType":"covalent"},{"id":"fax0hki89","atom1_id":"povx0rtka","atom2_id":"1pp7azyw0","order":1,"bondType":"covalent"},{"id":"bmedfqws8","atom1_id":"5ldjlbbdf","atom2_id":"gpkd5yzx7","order":1,"bondType":"covalent"},{"id":"qf5sotk07","atom1_id":"5ldjlbbdf","atom2_id":"6pandtudk","order":1,"bondType":"covalent"},{"id":"8cjarf4ww","atom1_id":"zon8nqtue","atom2_id":"rjvhc92b2","order":1,"bondType":"covalent"},{"id":"mdoqr893a","atom1_id":"qx2a4eb6z","atom2_id":"jsvpkb9h8","order":1,"bondType":"covalent"},{"id":"b9ep01juq","atom1_id":"eoyi9a8bk","atom2_id":"frltloy9u","order":1,"bondType":"covalent"},{"id":"sews6pa8f","atom1_id":"eoyi9a8bk","atom2_id":"3gpey992s","order":1,"bondType":"covalent"},{"id":"x4gchj3em","atom1_id":"0sw1vl9z2","atom2_id":"b3l7or9ct","order":1,"bondType":"covalent"},{"id":"lgm48phg3","atom1_id":"ni62l8cq2","atom2_id":"03gor0ksc","order":1,"bondType":"covalent"},{"id":"a7wmcnjt6","atom1_id":"gy4xrb6p8","atom2_id":"yftyrz78a","order":1,"bondType":"covalent"},{"id":"k10ptiprf","atom1_id":"2lynfu7bi","atom2_id":"jtb63fi6v","order":1,"bondType":"covalent"},{"id":"1w1z9vjpb","atom1_id":"rdr4nr6nm","atom2_id":"8b23jk50c","order":1,"bondType":"covalent"},{"id":"31ru9cbgk","atom1_id":"jjkswjfk8","atom2_id":"synaxex8y","order":1,"bondType":"covalent"},{"id":"ulaubjey7","atom1_id":"9rm80da7a","atom2_id":"13nzdzbll","order":1,"bondType":"covalent"},{"id":"nfu5f34xr","atom1_id":"93kgs1z5t","atom2_id":"bjncjsi9t","order":1,"bondType":"covalent"},{"id":"fvktj6bzt","atom1_id":"mnzmyhq4g","atom2_id":"f36bh12e9","order":1,"bondType":"covalent"},{"id":"yf2thx3nb","atom1_id":"ah2gbz9oy","atom2_id":"tfk6s3kh5","order":1,"bondType":"covalent"},{"id":"qr7yj5p5r","atom1_id":"22vii98aj","atom2_id":"ng2s7g9lv","order":1,"bondType":"covalent"},{"id":"ylit6fde0","atom1_id":"ogwg36jmh","atom2_id":"cqwfpzx6c","order":1,"bondType":"covalent"},{"id":"rgw97l4b4","atom1_id":"nb2mdxlb6","atom2_id":"e1mo5dewj","order":1,"bondType":"covalent"},{"id":"ihy8ejuy9","atom1_id":"zgwbtcehq","atom2_id":"nfw5acwka","order":1,"bondType":"covalent"},{"id":"ve2ik6vqz","atom1_id":"9xfx759a4","atom2_id":"yw53lnefa","order":1,"bondType":"covalent"},{"id":"210uny7lb","atom1_id":"q2ghba07x","atom2_id":"xpwgp1foo","order":1,"bondType":"covalent"},{"id":"xznee9m27","atom1_id":"gy4xrb6p8","atom2_id":"255tv9q70","order":1,"bondType":"covalent"},{"id":"qln87ifcj","atom1_id":"jjkswjfk8","atom2_id":"hm433bln4","order":1,"bondType":"covalent"},{"id":"s86u06xbo","atom1_id":"deijip6wx","atom2_id":"fmmcna99f","order":1,"bondType":"covalent"},{"id":"1utb3m5tp","atom1_id":"nudopxeu5","atom2_id":"7zag73ruu","order":1,"bondType":"covalent"},{"id":"bd1vmps8p","atom1_id":"nb2mdxlb6","atom2_id":"zn0nwp4mk","order":1,"bondType":"covalent"},{"id":"1myvmcn4e","atom1_id":"lz4baugri","atom2_id":"ova2sy18y","order":1,"bondType":"covalent"},{"id":"gvgnzvseo","atom1_id":"uk5ozdscl","atom2_id":"odkimn0t5","order":1,"bondType":"covalent"},{"id":"r3xbeipjl","atom1_id":"i8fl2j8c3","atom2_id":"dqpmfi2c6","order":1,"bondType":"covalent"},{"id":"x9soi5kd6","atom1_id":"njejrt0sn","atom2_id":"0vjw2hjb4","order":1,"bondType":"covalent"},{"id":"qik3jyw9t","atom1_id":"csbfyviuu","atom2_id":"idzfjx0fn","order":1,"bondType":"covalent"},{"id":"b7g6jcuqv","atom1_id":"rhvtf361h","atom2_id":"h39vu5ahu","order":1,"bondType":"covalent"},{"id":"1lltse2xz","atom1_id":"g77pcxx0r","atom2_id":"0awmdtncr","order":1,"bondType":"covalent"},{"id":"5d0vteft4","atom1_id":"bza024g3s","atom2_id":"tmddm7nkn","order":1,"bondType":"covalent"},{"id":"fjdu866dq","atom1_id":"ya18y9r34","atom2_id":"v6acpu4os","order":1,"bondType":"covalent"},{"id":"3exxvkxes","atom1_id":"mguev5fob","atom2_id":"zaa3adpih","order":1,"bondType":"covalent"},{"id":"jfg4u6y0w","atom1_id":"x5a5m9dek","atom2_id":"sdgm80zri","order":1,"bondType":"covalent"},{"id":"y7qpsgdw1","atom1_id":"ohg76pc9d","atom2_id":"0ypoo27g4","order":1,"bondType":"covalent"},{"id":"al9o1upf8","atom1_id":"0ypoo27g4","atom2_id":"z6fma0ynq","order":1,"bondType":"covalent"},{"id":"bfre7na4k","atom1_id":"z6fma0ynq","atom2_id":"qjz5m4sch","order":1,"bondType":"covalent"},{"id":"9vw0no31v","atom1_id":"qjz5m4sch","atom2_id":"uopqg8j72","order":1,"bondType":"covalent"},{"id":"qd873byqq","atom1_id":"uopqg8j72","atom2_id":"wwfq5yd41","order":1,"bondType":"covalent"},{"id":"dysq22q2q","atom1_id":"uopqg8j72","atom2_id":"ig1a1tjy7","order":1,"bondType":"covalent"},{"id":"w0wozrb5t","atom1_id":"wwfq5yd41","atom2_id":"ihm6kmid9","order":1,"bondType":"covalent"},{"id":"lry9xlt41","atom1_id":"qjz5m4sch","atom2_id":"6tyesk7ru","order":1,"bondType":"covalent"},{"id":"hdzkr6vye","atom1_id":"z6fma0ynq","atom2_id":"kv92wwhfr","order":1,"bondType":"covalent"},{"id":"uctajatsw","atom1_id":"ohg76pc9d","atom2_id":"ig1a1tjy7","order":1,"bondType":"covalent"},{"id":"gsluowri5","atom1_id":"0ypoo27g4","atom2_id":"1ago0xyio","order":1,"bondType":"covalent"},{"id":"9fh58z0x8","atom1_id":"ihm6kmid9","atom2_id":"ctr34skvd","order":1,"bondType":"covalent"},{"id":"f29sz1ncx","atom1_id":"wwfq5yd41","atom2_id":"lf994es1m","order":1,"bondType":"covalent"},{"id":"hzrae3kg3","atom1_id":"wwfq5yd41","atom2_id":"ynftaxt1b","order":1,"bondType":"covalent"},{"id":"7ssiihqi6","atom1_id":"uopqg8j72","atom2_id":"xrwomuila","order":1,"bondType":"covalent"},{"id":"d5s252gu6","atom1_id":"qjz5m4sch","atom2_id":"bupp11bp8","order":1,"bondType":"covalent"},{"id":"wfl5g4cfe","atom1_id":"z6fma0ynq","atom2_id":"hz1vzf9yb","order":1,"bondType":"covalent"},{"id":"g1ugl11h1","atom1_id":"kv92wwhfr","atom2_id":"il5zsrbxk","order":1,"bondType":"covalent"},{"id":"rim30eaw7","atom1_id":"1ago0xyio","atom2_id":"ujg37r1kd","order":1,"bondType":"covalent"},{"id":"9zdl5xvtm","atom1_id":"0ypoo27g4","atom2_id":"ycjkaf7xi","order":1,"bondType":"covalent"},{"id":"irlzb1hbh","atom1_id":"ohg76pc9d","atom2_id":"ugn7cer7q","order":1,"bondType":"covalent"},{"id":"cro8w72aq","atom1_id":"6tyesk7ru","atom2_id":"6v70cwnyl","order":1,"bondType":"covalent"},{"id":"stie5zrup","atom1_id":"nllsk7xpr","atom2_id":"ln7vx117d","order":1,"bondType":"covalent"},{"id":"xmem7bbpn","atom1_id":"ln7vx117d","atom2_id":"q46mdl2va","order":1,"bondType":"covalent"},{"id":"nz51kqrzf","atom1_id":"q46mdl2va","atom2_id":"epytzi5ld","order":1,"bondType":"covalent"},{"id":"sjdn2xlq2","atom1_id":"epytzi5ld","atom2_id":"r70aa2mdt","order":1,"bondType":"covalent"},{"id":"vm2pomhdn","atom1_id":"r70aa2mdt","atom2_id":"02dxxas06","order":1,"bondType":"covalent"},{"id":"15nylgdsw","atom1_id":"r70aa2mdt","atom2_id":"7rcfqe9kz","order":1,"bondType":"covalent"},{"id":"8jl2b3hbd","atom1_id":"epytzi5ld","atom2_id":"hun0cyns5","order":1,"bondType":"covalent"},{"id":"p3uj10u6z","atom1_id":"q46mdl2va","atom2_id":"ss0f8c6bg","order":1,"bondType":"covalent"},{"id":"kyczoay1e","atom1_id":"ln7vx117d","atom2_id":"a88ibzs12","order":1,"bondType":"covalent"},{"id":"zyx0qaa8c","atom1_id":"02dxxas06","atom2_id":"44cfcl4lx","order":1,"bondType":"covalent"},{"id":"l1jky1dbt","atom1_id":"nllsk7xpr","atom2_id":"7rcfqe9kz","order":1,"bondType":"covalent"},{"id":"rhazujyuz","atom1_id":"44cfcl4lx","atom2_id":"nwyjfm4u9","order":1,"bondType":"covalent"},{"id":"nuoz08fbu","atom1_id":"r70aa2mdt","atom2_id":"cuzpeerfh","order":1,"bondType":"covalent"},{"id":"idbgos7bj","atom1_id":"hun0cyns5","atom2_id":"7whxu3nbj","order":1,"bondType":"covalent"},{"id":"afe17enog","atom1_id":"epytzi5ld","atom2_id":"e3iywzm1f","order":1,"bondType":"covalent"},{"id":"e7e3yt3wk","atom1_id":"q46mdl2va","atom2_id":"09oy4szlz","order":1,"bondType":"covalent"},{"id":"b764uradk","atom1_id":"ln7vx117d","atom2_id":"0u9v16y5u","order":1,"bondType":"covalent"},{"id":"fjfp78n6x","atom1_id":"a88ibzs12","atom2_id":"dl12tolaa","order":1,"bondType":"covalent"},{"id":"032myt77o","atom1_id":"ss0f8c6bg","atom2_id":"muu2drsjd","order":1,"bondType":"covalent"},{"id":"ketocx2uk","atom1_id":"nllsk7xpr","atom2_id":"rhwxd3vxg","order":1,"bondType":"covalent"},{"id":"s9slujryv","atom1_id":"02dxxas06","atom2_id":"z86r04nq7","order":1,"bondType":"covalent"},{"id":"au0ex52h3","atom1_id":"02dxxas06","atom2_id":"0w11lx5jj","order":1,"bondType":"covalent"},{"id":"n3x743cry","atom1_id":"ohg76pc9d","atom2_id":"ltt7x32vb","order":1,"bondType":"covalent"},{"id":"uf8wov4oe","atom1_id":"ltt7x32vb","atom2_id":"c543wha65","order":1,"bondType":"covalent"},{"id":"hb380qtj8","atom1_id":"nllsk7xpr","atom2_id":"us6qd5yuv","order":1,"bondType":"covalent"},{"id":"eb712f512","atom1_id":"us6qd5yuv","atom2_id":"cemlx7g90","order":1,"bondType":"covalent"}]},
+    thermo_thermoset: {"version":"1.0","atoms":[{"id":"9s5wgxpr6","element":"C","x":1.1404291828276665,"y":-4.680788375493249,"z":-0.9008022670793614},{"id":"75vloys5t","element":"C","x":-0.18525151822852548,"y":-5.060418544531964,"z":-1.1505134600762306},{"id":"ro0x1jgm3","element":"C","x":-1.9522438595128278,"y":-4.9215197323611966,"z":-1.002947390621114},{"id":"3vkin53l5","element":"C","x":-3.5565001371708647,"y":-5.022680106180113,"z":-1.0142278577084305},{"id":"djuml2mts","element":"C","x":-4.9498069425072595,"y":-5.22818030522964,"z":-1.1098542164017582},{"id":"z9esjrmqa","element":"C","x":-6.681633400124836,"y":-5.422796677007656,"z":-1.0318087693024314},{"id":"0yo8hq1oh","element":"C","x":-8.103148254511861,"y":-5.669231781461795,"z":-0.9925016175860213},{"id":"d8smh4cgj","element":"C","x":-9.74338403547867,"y":-6.21346116803259,"z":-1.1086216125871209},{"id":"3j8b7hsi3","element":"C","x":-11.052185446718326,"y":-6.181067103251698,"z":-0.8399818600709392},{"id":"8qyxjlcnz","element":"C","x":-12.486241911729202,"y":-5.637561485974748,"z":0.008083732321722437},{"id":"bbjxzer9x","element":"C","x":-13.185940309780728,"y":3.850736162513585,"z":4.319990994374146},{"id":"c7n3b65hq","element":"C","x":-11.485336973738814,"y":4.150778706151646,"z":3.992805415566378},{"id":"9ntbp9zcn","element":"C","x":-10.19331381103819,"y":4.180713162161736,"z":4.012573657487715},{"id":"wh39j78p5","element":"C","x":-8.376695201768273,"y":4.384981311621689,"z":3.748401022779741},{"id":"qvetyqwiw","element":"C","x":-6.957369463250456,"y":4.566831760167723,"z":3.5375620813498756},{"id":"an1txwqwj","element":"C","x":-5.185749945755028,"y":4.848267278873918,"z":3.2322382240374172},{"id":"62592mqhx","element":"C","x":-3.8684357814133654,"y":5.089588453804104,"z":2.954046106064496},{"id":"m4uszmi1r","element":"C","x":-2.1176860715635177,"y":5.443854786212016,"z":2.5514527295320635},{"id":"gk8msdtra","element":"C","x":-0.8376851333456186,"y":5.72935209599144,"z":2.1967882725921317},{"id":"zoszhw9cy","element":"C","x":0.8674424970497085,"y":6.035890383258275,"z":1.9700845588813112},{"id":"vmxbe0hsd","element":"C","x":2.716879572844083,"y":4.979035443577852,"z":0.10892598362256756},{"id":"lkmsw59bf","element":"C","x":1.7487983135713598,"y":4.093998569174232,"z":1.2668131091395458},{"id":"hm2zl3e2m","element":"C","x":0.7491362498039522,"y":3.7787075966338763,"z":2.050481025955933},{"id":"mbpospahx","element":"C","x":-0.7734908545513299,"y":3.19018031630922,"z":2.693969973270884},{"id":"rlwqefapa","element":"C","x":-1.9964468053036057,"y":2.658719357470959,"z":3.334913764183933},{"id":"6byp56hof","element":"C","x":-3.4967880734337657,"y":1.9864628514725133,"z":4.174925139042645},{"id":"hqqfruacg","element":"C","x":-4.667744771330646,"y":1.4503624002327715,"z":4.871459214403657},{"id":"b3p3s5xnd","element":"C","x":-5.938362466910011,"y":0.7373396618949499,"z":5.834186268726988},{"id":"c1y8hfysc","element":"C","x":-7.046842574132098,"y":0.36182844922126134,"z":6.403694052584826},{"id":"jtl2malow","element":"C","x":-8.783757052977675,"y":0.18394763243981416,"z":6.661813727197838},{"id":"zgr986o0l","element":"C","x":1.057203674326146,"y":-2.3241849691958305,"z":0.013515264831804912},{"id":"84zjz21gs","element":"C","x":-0.26847702673004603,"y":-2.703815138234546,"z":-0.23619592816506405},{"id":"kbkj8qy8r","element":"C","x":-2.0354693680143483,"y":-2.5649163260637793,"z":-0.08862985870994769},{"id":"orfywusuq","element":"C","x":-3.639725645672385,"y":-2.666076699882695,"z":-0.0999103257972643},{"id":"e4cvdrla5","element":"C","x":-5.03303245100878,"y":-2.8715768989322217,"z":-0.19553668449059172},{"id":"8rkmp4rpu","element":"C","x":-6.764858908626357,"y":-3.066193270710238,"z":-0.11749123739126517},{"id":"qcspg7fp8","element":"C","x":-8.186373763013382,"y":-3.312628375164377,"z":-0.07818408567485528},{"id":"t8yxrityp","element":"C","x":-9.82660954398019,"y":-3.8568577617351725,"z":-0.19430408067595484},{"id":"lh8oej6x2","element":"C","x":-11.135410955219847,"y":-3.8244636969542807,"z":0.07433567184022717},{"id":"rfym267c3","element":"C","x":-12.569467420230723,"y":-3.28095807967733,"z":0.9224012642328888},{"id":"byba0mrx6","element":"C","x":-11.77884800139426,"y":0.7608492394242645,"z":1.0683966881076166},{"id":"tccf9kyh9","element":"C","x":-10.078244665352347,"y":1.060891783062326,"z":0.7412111092998486},{"id":"c3ya1dmuq","element":"C","x":-8.786221502651722,"y":1.090826239072416,"z":0.7609793512211855},{"id":"2pknuu5gv","element":"C","x":-6.969602893381806,"y":1.2950943885323685,"z":0.49680671651321173},{"id":"0y85ztffj","element":"C","x":-5.550277154863989,"y":1.4769448370784022,"z":0.2859677750833463},{"id":"fk1e4ufdy","element":"C","x":-3.7786576373685605,"y":1.7583803557845976,"z":-0.019356082229112018},{"id":"136lcm1xn","element":"C","x":-2.4613434730268984,"y":1.9997015307147834,"z":-0.2975482002020337},{"id":"c4gtot4fa","element":"C","x":-0.7105937631770507,"y":2.3539678631226955,"z":-0.7001415767344661},{"id":"4ojsu8pm0","element":"C","x":0.5694071750408485,"y":2.6394651729021197,"z":-1.0548060336743978},{"id":"t4mt2l85i","element":"C","x":2.2745348054361756,"y":2.946003460168954,"z":-1.2815097473852182},{"id":"d7gzbzlsi","element":"C","x":3.9098767183063696,"y":0.03357673708941511,"z":0.3187476417491022},{"id":"v50ucse20","element":"C","x":2.541139713257209,"y":-0.6600575168640124,"z":1.1593454776960317},{"id":"t65zfpbf0","element":"C","x":1.330536043084865,"y":-0.7977614768156849,"z":1.6371994471546856},{"id":"c0itmj85h","element":"C","x":-0.38064360246404716,"y":-1.1319771315917766,"z":1.8346831190920487},{"id":"su4tabcuz","element":"C","x":-1.7976387722346834,"y":-1.4545562382570327,"z":2.112078793444425},{"id":"vze321zpa","element":"C","x":-3.5536727713486447,"y":-1.8686141092021709,"z":2.503834475046984},{"id":"hug7e25gb","element":"C","x":-4.9370294239928985,"y":-2.2017691101488333,"z":2.8488491373979605},{"id":"wd7it50sp","element":"C","x":-6.514211574253604,"y":-2.6864783664748533,"z":3.4209221542088892},{"id":"l69wjbm75","element":"C","x":-7.779312755608602,"y":-2.874264211196585,"z":3.6624411229913436},{"id":"ebn4s3417","element":"C","x":-9.52718119699728,"y":-2.782900903891679,"z":3.4349594404311903}],"bonds":[{"id":"3mvemt9un","atom1_id":"9s5wgxpr6","atom2_id":"75vloys5t","order":1,"bondType":"covalent"},{"id":"28ruk1hjw","atom1_id":"75vloys5t","atom2_id":"ro0x1jgm3","order":1,"bondType":"covalent"},{"id":"pafdmdaod","atom1_id":"ro0x1jgm3","atom2_id":"3vkin53l5","order":1,"bondType":"covalent"},{"id":"dvhj9pzv7","atom1_id":"3vkin53l5","atom2_id":"djuml2mts","order":1,"bondType":"covalent"},{"id":"p1velmjg0","atom1_id":"djuml2mts","atom2_id":"z9esjrmqa","order":1,"bondType":"covalent"},{"id":"z2hv8qcnh","atom1_id":"z9esjrmqa","atom2_id":"0yo8hq1oh","order":1,"bondType":"covalent"},{"id":"cpqvlv0ns","atom1_id":"0yo8hq1oh","atom2_id":"d8smh4cgj","order":1,"bondType":"covalent"},{"id":"2vd6di00k","atom1_id":"d8smh4cgj","atom2_id":"3j8b7hsi3","order":1,"bondType":"covalent"},{"id":"4s4cqlwsr","atom1_id":"3j8b7hsi3","atom2_id":"8qyxjlcnz","order":1,"bondType":"covalent"},{"id":"qhvnq98gd","atom1_id":"bbjxzer9x","atom2_id":"c7n3b65hq","order":1,"bondType":"covalent"},{"id":"40lqxiw1e","atom1_id":"c7n3b65hq","atom2_id":"9ntbp9zcn","order":1,"bondType":"covalent"},{"id":"vhnhqu7hk","atom1_id":"9ntbp9zcn","atom2_id":"wh39j78p5","order":1,"bondType":"covalent"},{"id":"8dnm6cqiy","atom1_id":"wh39j78p5","atom2_id":"qvetyqwiw","order":1,"bondType":"covalent"},{"id":"am4l9841e","atom1_id":"qvetyqwiw","atom2_id":"an1txwqwj","order":1,"bondType":"covalent"},{"id":"c63c4u94c","atom1_id":"an1txwqwj","atom2_id":"62592mqhx","order":1,"bondType":"covalent"},{"id":"3ynd49zvs","atom1_id":"62592mqhx","atom2_id":"m4uszmi1r","order":1,"bondType":"covalent"},{"id":"jsexia2bi","atom1_id":"m4uszmi1r","atom2_id":"gk8msdtra","order":1,"bondType":"covalent"},{"id":"3kq177ck4","atom1_id":"gk8msdtra","atom2_id":"zoszhw9cy","order":1,"bondType":"covalent"},{"id":"f1q7wugmp","atom1_id":"vmxbe0hsd","atom2_id":"lkmsw59bf","order":1,"bondType":"covalent"},{"id":"i2tf88qde","atom1_id":"lkmsw59bf","atom2_id":"hm2zl3e2m","order":1,"bondType":"covalent"},{"id":"td8i5zmub","atom1_id":"hm2zl3e2m","atom2_id":"mbpospahx","order":1,"bondType":"covalent"},{"id":"r4v3ancxd","atom1_id":"mbpospahx","atom2_id":"rlwqefapa","order":1,"bondType":"covalent"},{"id":"nsptiy1t7","atom1_id":"rlwqefapa","atom2_id":"6byp56hof","order":1,"bondType":"covalent"},{"id":"krsnfp3wj","atom1_id":"6byp56hof","atom2_id":"hqqfruacg","order":1,"bondType":"covalent"},{"id":"yf6micxti","atom1_id":"hqqfruacg","atom2_id":"b3p3s5xnd","order":1,"bondType":"covalent"},{"id":"57c4hefso","atom1_id":"b3p3s5xnd","atom2_id":"c1y8hfysc","order":1,"bondType":"covalent"},{"id":"safvrrxyk","atom1_id":"c1y8hfysc","atom2_id":"jtl2malow","order":1,"bondType":"covalent"},{"id":"1s3aueeeq","atom1_id":"zgr986o0l","atom2_id":"84zjz21gs","order":1,"bondType":"covalent"},{"id":"ug4sfoeht","atom1_id":"84zjz21gs","atom2_id":"kbkj8qy8r","order":1,"bondType":"covalent"},{"id":"nglq3cioa","atom1_id":"kbkj8qy8r","atom2_id":"orfywusuq","order":1,"bondType":"covalent"},{"id":"fxtrya89c","atom1_id":"orfywusuq","atom2_id":"e4cvdrla5","order":1,"bondType":"covalent"},{"id":"0ghrzkezi","atom1_id":"e4cvdrla5","atom2_id":"8rkmp4rpu","order":1,"bondType":"covalent"},{"id":"nj6jwnxzp","atom1_id":"8rkmp4rpu","atom2_id":"qcspg7fp8","order":1,"bondType":"covalent"},{"id":"f14t457lx","atom1_id":"qcspg7fp8","atom2_id":"t8yxrityp","order":1,"bondType":"covalent"},{"id":"cjpsw1s0e","atom1_id":"t8yxrityp","atom2_id":"lh8oej6x2","order":1,"bondType":"covalent"},{"id":"9lewm3m6h","atom1_id":"lh8oej6x2","atom2_id":"rfym267c3","order":1,"bondType":"covalent"},{"id":"tixt0xw89","atom1_id":"byba0mrx6","atom2_id":"tccf9kyh9","order":1,"bondType":"covalent"},{"id":"idnk8murv","atom1_id":"tccf9kyh9","atom2_id":"c3ya1dmuq","order":1,"bondType":"covalent"},{"id":"5m6rf2j4s","atom1_id":"c3ya1dmuq","atom2_id":"2pknuu5gv","order":1,"bondType":"covalent"},{"id":"3u3brcse8","atom1_id":"2pknuu5gv","atom2_id":"0y85ztffj","order":1,"bondType":"covalent"},{"id":"a6uk3pkw2","atom1_id":"0y85ztffj","atom2_id":"fk1e4ufdy","order":1,"bondType":"covalent"},{"id":"6cc4ig1ad","atom1_id":"fk1e4ufdy","atom2_id":"136lcm1xn","order":1,"bondType":"covalent"},{"id":"xvju4lvnk","atom1_id":"136lcm1xn","atom2_id":"c4gtot4fa","order":1,"bondType":"covalent"},{"id":"oeoon0ski","atom1_id":"c4gtot4fa","atom2_id":"4ojsu8pm0","order":1,"bondType":"covalent"},{"id":"mknxx0r10","atom1_id":"4ojsu8pm0","atom2_id":"t4mt2l85i","order":1,"bondType":"covalent"},{"id":"718yxui62","atom1_id":"d7gzbzlsi","atom2_id":"v50ucse20","order":1,"bondType":"covalent"},{"id":"bp5ydlnrq","atom1_id":"v50ucse20","atom2_id":"t65zfpbf0","order":1,"bondType":"covalent"},{"id":"nquoixucw","atom1_id":"t65zfpbf0","atom2_id":"c0itmj85h","order":1,"bondType":"covalent"},{"id":"9bb601a60","atom1_id":"c0itmj85h","atom2_id":"su4tabcuz","order":1,"bondType":"covalent"},{"id":"b7qhgksyz","atom1_id":"su4tabcuz","atom2_id":"vze321zpa","order":1,"bondType":"covalent"},{"id":"tnc9gqhyk","atom1_id":"vze321zpa","atom2_id":"hug7e25gb","order":1,"bondType":"covalent"},{"id":"k3u1n5jwq","atom1_id":"hug7e25gb","atom2_id":"wd7it50sp","order":1,"bondType":"covalent"},{"id":"nuwl0dqie","atom1_id":"wd7it50sp","atom2_id":"l69wjbm75","order":1,"bondType":"covalent"},{"id":"0z7csgtrx","atom1_id":"l69wjbm75","atom2_id":"ebn4s3417","order":1,"bondType":"covalent"},{"id":"7h8sryxfi","atom1_id":"kbkj8qy8r","atom2_id":"ro0x1jgm3","order":1,"bondType":"covalent"},{"id":"jtqlt7ai7","atom1_id":"zgr986o0l","atom2_id":"v50ucse20","order":1,"bondType":"covalent"},{"id":"aroeensye","atom1_id":"8rkmp4rpu","atom2_id":"vze321zpa","order":1,"bondType":"covalent"},{"id":"735dprcob","atom1_id":"e4cvdrla5","atom2_id":"z9esjrmqa","order":1,"bondType":"covalent"}]},
+    triglyceride: {"version":"1.0","atoms":[{"id":"inymb453c","element":"C","x":3.193733559497998,"y":1.2008938830948062,"z":-4.294884544720353},{"id":"kfjy8u380","element":"C","x":4.529225008877984,"y":1.5179247332191153,"z":-5.346552256837942},{"id":"jcxp9b5si","element":"C","x":6.043833764100946,"y":1.8099072014839583,"z":-6.287191265158905},{"id":"2dawtpal6","element":"C","x":7.067477220509523,"y":2.426996218245539,"z":-7.661706844975596},{"id":"2o60e3wfj","element":"C","x":0.8919962025634331,"y":0.27852048194375445,"z":-1.7296052760249285},{"id":"5awv9f48f","element":"C","x":-0.22712661734235734,"y":0.20198796411223605,"z":-0.12238988828663236},{"id":"c5t2aanwh","element":"C","x":-2.032482408633666,"y":-0.5744131279074368,"z":-0.006587519033031593},{"id":"kql84b7cf","element":"O","x":0.47394862050011244,"y":0.5054351229615468,"z":1.1977194831964717},{"id":"eqru4wz80","element":"O","x":1.9567351825205872,"y":0.7269100887905575,"z":-2.773466698658795},{"id":"rq2ufjy1m","element":"O","x":-3.5246007654501414,"y":-1.0981389820695158,"z":0.39744699211789253},{"id":"pyx6pqf6g","element":"H","x":-2.492721829038316,"y":-0.3044814689288824,"z":-1.0244532706013618},{"id":"k1sfnpe8m","element":"H","x":-0.6568051436683914,"y":1.3433217573960348,"z":-0.2738504747038065},{"id":"lnyiyrxc3","element":"H","x":0.1623066723507128,"y":0.004822568763531734,"z":-2.5703996861053593},{"id":"uzfodd4vk","element":"H","x":1.334372885982879,"y":-0.7698536839301531,"z":-1.6542491248005786},{"id":"d233a1hmr","element":"H","x":-1.7570926767303434,"y":-1.6630352245333777,"z":-0.19005334097269042},{"id":"h1lgdn5p9","element":"O","x":1.9509411936927703,"y":1.637737373554493,"z":-5.238747383232771},{"id":"eh8a70xqd","element":"H","x":4.26159059910479,"y":2.5766676901948116,"z":-5.661605141459671},{"id":"4sgfkwtif","element":"H","x":4.188443064583454,"y":0.9054559442052162,"z":-6.240577572183406},{"id":"hsfgfckk4","element":"H","x":6.98330430271923,"y":2.203522168365466,"z":-5.339597785024352},{"id":"3o8b6hpa8","element":"H","x":6.726966811830823,"y":0.5967890591385258,"z":-6.259959882942491},{"id":"1azwhekce","element":"H","x":8.148932424333012,"y":2.196892104884936,"z":-7.767957786271615},{"id":"ejjsd5iwc","element":"H","x":7.241665188940081,"y":3.4596316656724584,"z":-7.84116203706596},{"id":"wqy2y53ae","element":"H","x":6.887070658291119,"y":2.1662814902021723,"z":-8.663921124827537},{"id":"8f0xkxsmj","element":"C","x":1.359578701521909,"y":0.9925898492316539,"z":2.8715682369574798},{"id":"jfd6977fq","element":"C","x":2.304884785814398,"y":0.9107293472510061,"z":4.230504287243761},{"id":"tfjvkp8m9","element":"C","x":3.1179437158657892,"y":1.4281772223491795,"z":5.695122851691183},{"id":"8sygpxzzy","element":"C","x":4.235182431474003,"y":1.3829084289293603,"z":7.121426001892708},{"id":"tc655fojy","element":"H","x":4.171346009313907,"y":2.075064496402123,"z":8.007927956247254},{"id":"tt6insfva","element":"H","x":5.290738316936805,"y":1.5643618133306103,"z":7.072824208633557},{"id":"cpnv61pz5","element":"H","x":4.327052330809495,"y":0.5569976459123369,"z":7.774771108975663},{"id":"e426yqwj4","element":"H","x":3.432108745254414,"y":2.791262219421541,"z":5.523353554733765},{"id":"55amvj5k0","element":"H","x":2.1151447141853943,"y":1.940970066217086,"z":6.537435349658904},{"id":"3j46v64gl","element":"H","x":3.2657592280979735,"y":0.45215671309746885,"z":3.8874663492868082},{"id":"vd5tmn9w3","element":"H","x":1.96437443623679,"y":-0.029071510562318853,"z":4.752947871045704},{"id":"f6ojijeqj","element":"O","x":0.7128595260085172,"y":2.488949577233019,"z":3.0119979416263796},{"id":"c88aiz9n5","element":"C","x":-5.231636793979782,"y":-1.6363021401223175,"z":0.7491084386538293},{"id":"5q0hba1q1","element":"C","x":-6.882120800898643,"y":-2.7125542735019614,"z":1.2138548068825143},{"id":"ug9ovqsdc","element":"C","x":-8.352657253530257,"y":-3.153930766798403,"z":1.6912496821965755},{"id":"cbatcp4u0","element":"C","x":-9.688992813645351,"y":-4.351648410447496,"z":2.156081955286328},{"id":"fz9k64t0d","element":"O","x":-6.077006377104474,"y":-0.28554792222502423,"z":0.5475391121849067},{"id":"i1v3f6vkr","element":"H","x":-6.843561524797301,"y":-3.3158981069649562,"z":0.1582037712360429},{"id":"f2y55wd58","element":"H","x":-6.245224837559545,"y":-3.5675050948914406,"z":1.7681570551202115},{"id":"9x174z00p","element":"H","x":-9.194688670710448,"y":-2.4479638394510035,"z":0.9977267278108415},{"id":"rpnoc1to3","element":"H","x":-8.668076530408001,"y":-2.3685658418974573,"z":2.675646099064961},{"id":"1awr9861g","element":"H","x":-10.722127319010832,"y":-4.006559350214392,"z":2.4417242577297875},{"id":"d1jjnzhco","element":"H","x":-10.095685898951247,"y":-5.058358459631179,"z":1.4738487653523813},{"id":"tlqxjhp10","element":"H","x":-9.646908040459772,"y":-5.000036691527207,"z":2.9932660390619596}],"bonds":[{"id":"2x7x7calj","atom1_id":"inymb453c","atom2_id":"kfjy8u380","order":1,"bondType":"covalent"},{"id":"06fb6t5ez","atom1_id":"kfjy8u380","atom2_id":"jcxp9b5si","order":1,"bondType":"covalent"},{"id":"cuqzapppt","atom1_id":"jcxp9b5si","atom2_id":"2dawtpal6","order":1,"bondType":"covalent"},{"id":"5r7lxjscw","atom1_id":"2o60e3wfj","atom2_id":"5awv9f48f","order":1,"bondType":"covalent"},{"id":"lxlwmjzqv","atom1_id":"5awv9f48f","atom2_id":"c5t2aanwh","order":1,"bondType":"covalent"},{"id":"0lo6ps3lb","atom1_id":"eqru4wz80","atom2_id":"2o60e3wfj","order":1,"bondType":"covalent"},{"id":"s37ga6xjn","atom1_id":"kql84b7cf","atom2_id":"5awv9f48f","order":1,"bondType":"covalent"},{"id":"fdnvfz5ug","atom1_id":"rq2ufjy1m","atom2_id":"c5t2aanwh","order":1,"bondType":"covalent"},{"id":"7e5xca4yf","atom1_id":"c5t2aanwh","atom2_id":"pyx6pqf6g","order":1,"bondType":"covalent"},{"id":"nvq67dd84","atom1_id":"5awv9f48f","atom2_id":"k1sfnpe8m","order":1,"bondType":"covalent"},{"id":"p0tdyhd8n","atom1_id":"2o60e3wfj","atom2_id":"lnyiyrxc3","order":1,"bondType":"covalent"},{"id":"zbsqeoqsp","atom1_id":"2o60e3wfj","atom2_id":"uzfodd4vk","order":1,"bondType":"covalent"},{"id":"7u70sslt4","atom1_id":"c5t2aanwh","atom2_id":"d233a1hmr","order":1,"bondType":"covalent"},{"id":"voiizryrj","atom1_id":"inymb453c","atom2_id":"h1lgdn5p9","order":2,"bondType":"covalent"},{"id":"etulpsna8","atom1_id":"inymb453c","atom2_id":"eqru4wz80","order":1,"bondType":"covalent"},{"id":"17ers2bgh","atom1_id":"kfjy8u380","atom2_id":"eh8a70xqd","order":1,"bondType":"covalent"},{"id":"rr1uu3d11","atom1_id":"kfjy8u380","atom2_id":"4sgfkwtif","order":1,"bondType":"covalent"},{"id":"ftm1mfv52","atom1_id":"jcxp9b5si","atom2_id":"hsfgfckk4","order":1,"bondType":"covalent"},{"id":"czq4v8081","atom1_id":"jcxp9b5si","atom2_id":"3o8b6hpa8","order":1,"bondType":"covalent"},{"id":"yj70zbkwy","atom1_id":"2dawtpal6","atom2_id":"1azwhekce","order":1,"bondType":"covalent"},{"id":"ezzedgkgo","atom1_id":"2dawtpal6","atom2_id":"ejjsd5iwc","order":1,"bondType":"covalent"},{"id":"lb43gam5t","atom1_id":"2dawtpal6","atom2_id":"wqy2y53ae","order":1,"bondType":"covalent"},{"id":"ftsbxzylm","atom1_id":"8f0xkxsmj","atom2_id":"jfd6977fq","order":1,"bondType":"covalent"},{"id":"ssq84up3b","atom1_id":"jfd6977fq","atom2_id":"tfjvkp8m9","order":1,"bondType":"covalent"},{"id":"c3ht0wnj9","atom1_id":"tfjvkp8m9","atom2_id":"8sygpxzzy","order":1,"bondType":"covalent"},{"id":"adc80ety2","atom1_id":"8sygpxzzy","atom2_id":"tc655fojy","order":1,"bondType":"covalent"},{"id":"uo2xt8zlo","atom1_id":"8sygpxzzy","atom2_id":"tt6insfva","order":1,"bondType":"covalent"},{"id":"x1hcfeljp","atom1_id":"8sygpxzzy","atom2_id":"cpnv61pz5","order":1,"bondType":"covalent"},{"id":"hdma9od0l","atom1_id":"tfjvkp8m9","atom2_id":"e426yqwj4","order":1,"bondType":"covalent"},{"id":"4267pup2c","atom1_id":"tfjvkp8m9","atom2_id":"55amvj5k0","order":1,"bondType":"covalent"},{"id":"qu5bfusof","atom1_id":"jfd6977fq","atom2_id":"3j46v64gl","order":1,"bondType":"covalent"},{"id":"ig2henxhr","atom1_id":"jfd6977fq","atom2_id":"vd5tmn9w3","order":1,"bondType":"covalent"},{"id":"i6i1vioak","atom1_id":"kql84b7cf","atom2_id":"8f0xkxsmj","order":1,"bondType":"covalent"},{"id":"n5e4d7fz1","atom1_id":"8f0xkxsmj","atom2_id":"f6ojijeqj","order":2,"bondType":"covalent"},{"id":"hob0jnlwr","atom1_id":"rq2ufjy1m","atom2_id":"c88aiz9n5","order":1,"bondType":"covalent"},{"id":"83z52z686","atom1_id":"c88aiz9n5","atom2_id":"5q0hba1q1","order":1,"bondType":"covalent"},{"id":"ziue0sr73","atom1_id":"5q0hba1q1","atom2_id":"ug9ovqsdc","order":1,"bondType":"covalent"},{"id":"z6qqsa3nr","atom1_id":"ug9ovqsdc","atom2_id":"cbatcp4u0","order":1,"bondType":"covalent"},{"id":"4zegw3bkw","atom1_id":"c88aiz9n5","atom2_id":"fz9k64t0d","order":2,"bondType":"covalent"},{"id":"nciu3m3c4","atom1_id":"5q0hba1q1","atom2_id":"i1v3f6vkr","order":1,"bondType":"covalent"},{"id":"vltrq0t3r","atom1_id":"5q0hba1q1","atom2_id":"f2y55wd58","order":1,"bondType":"covalent"},{"id":"duwyplefo","atom1_id":"ug9ovqsdc","atom2_id":"9x174z00p","order":1,"bondType":"covalent"},{"id":"1h60n2ju0","atom1_id":"ug9ovqsdc","atom2_id":"rpnoc1to3","order":1,"bondType":"covalent"},{"id":"2lc13drs0","atom1_id":"cbatcp4u0","atom2_id":"1awr9861g","order":1,"bondType":"covalent"},{"id":"3r72hf4h5","atom1_id":"cbatcp4u0","atom2_id":"d1jjnzhco","order":1,"bondType":"covalent"},{"id":"ng9qhb4gn","atom1_id":"cbatcp4u0","atom2_id":"tlqxjhp10","order":1,"bondType":"covalent"}]}
+};
+
+function loadPreset(key) {
+    if (!key || !PRESETS[key]) return;
+    loadMCData(PRESETS[key], 'replace');
+    centerCamera();
+}
+
+// 拖曳匯入：合併模式
+function initDragDrop() {
+    const overlay = document.getElementById('drop-overlay');
+
+    // 顯示提示層
+    window.addEventListener('dragenter', e => {
+        if (e.dataTransfer.types.includes('Files')) {
+            overlay.style.display = 'flex';
+        }
+    });
+    window.addEventListener('dragover', e => {
+        e.preventDefault();
+        if (e.dataTransfer.types.includes('Files')) {
+            overlay.style.display = 'flex';
+        }
+    });
+    // 滑鼠離開視窗時隱藏提示
+    window.addEventListener('dragleave', e => {
+        // 只有真正離開視窗才隱藏（relatedTarget 為 null 代表移出視窗）
+        if (!e.relatedTarget) overlay.style.display = 'none';
+    });
+    window.addEventListener('drop', e => {
+        e.preventDefault();
+        overlay.style.display = 'none';
+        const file = Array.from(e.dataTransfer.files).find(f => f.name.endsWith('.mc'));
+        if (!file) { showToast("請拖曳 .mc 檔案"); return; }
+        let reader = new FileReader();
+        reader.onload = function(ev) {
+            try { loadMCData(JSON.parse(ev.target.result), 'merge'); }
+            catch(err) { showToast("❌ 檔案格式錯誤或不相容！"); }
+        };
+        reader.readAsText(file);
+    });
 }
 
 // --- 14. 系統循環 ---
