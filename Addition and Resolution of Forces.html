@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>互動物理：力的分解與合成</title>
+    <style>
+        :root {
+            --primary: #e74c3c;
+            --comp-1: #3498db;
+            --comp-2: #2ecc71;
+            --bg-color: #f8f9fa;
+            --panel-bg: #ffffff;
+            --border-color: #ced4da;
+            --text-main: #333333;
+        }
+
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            padding: 20px;
+        }
+
+        h2 {
+            margin-top: 0;
+            color: #2c3e50;
+            margin-bottom: 20px;
+        }
+
+        .main-container {
+            display: flex;
+            gap: 30px;
+            width: 100%;
+            max-width: 1000px;
+            justify-content: center;
+            align-items: flex-start;
+            flex-wrap: wrap;
+        }
+
+        .left-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            width: 100%;
+            max-width: 320px;
+        }
+
+        .right-panel {
+            flex: 1;
+            min-width: 320px;
+            display: flex;
+            justify-content: center;
+        }
+
+        /* 模式切換 Tabs */
+        .tabs {
+            display: flex;
+            gap: 5px;
+            background: #e9ecef;
+            padding: 5px;
+            border-radius: 10px;
+        }
+
+        .tab-btn {
+            flex: 1;
+            padding: 8px 5px;
+            border: none;
+            background: transparent;
+            border-radius: 6px;
+            font-size: 0.95rem;
+            font-weight: bold;
+            color: #6c757d;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .tab-btn.active {
+            background: white;
+            color: #2c3e50;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .canvas-container {
+            position: relative;
+            background-color: var(--panel-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+            overflow: hidden;
+            max-width: 100%;
+        }
+
+        canvas {
+            display: block;
+            cursor: crosshair;
+            touch-action: none; 
+            max-width: 100%;
+            height: auto;
+        }
+
+        .controls {
+            display: flex;
+            justify-content: center;
+            width: 100%;
+        }
+
+        button.action-btn {
+            padding: 12px 24px;
+            width: 100%;
+            font-size: 1.05rem;
+            font-weight: bold;
+            color: white;
+            background-color: #20bf6b;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+            outline: none;
+        }
+
+        button.action-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+        }
+
+        .data-panel {
+            padding: 15px;
+            background: var(--panel-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+            width: 100%;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .val-box { 
+            font-size: 1.1rem; 
+            font-weight: bold; 
+            background: #f1f2f6;
+            padding: 10px 12px;
+            border-radius: 8px;
+            display: flex;
+            justify-content: space-between; 
+            align-items: center;
+        }
+
+        /* 顏色標籤 */
+        .color-f { color: var(--primary); border-left: 5px solid var(--primary); } 
+        .color-c1 { color: var(--comp-1); border-left: 5px solid var(--comp-1); } 
+        .color-c2 { color: var(--comp-2); border-left: 5px solid var(--comp-2); } 
+        .color-angle { color: #576574; border-left: 5px solid #576574; }
+
+        input[type="number"] {
+            font-size: 1.1rem;
+            font-weight: bold;
+            background: white;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            width: 65px;
+            text-align: center;
+            padding: 2px 4px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .color-f input { color: var(--primary); }
+        .color-angle input { color: #576574; }
+        .color-c1 input { color: var(--comp-1); }
+        .color-c2 input { color: var(--comp-2); }
+
+        input[type="number"]:focus {
+            border-color: #3498db;
+            box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
+        }
+
+        .instruction {
+            font-size: 0.95rem;
+            color: #556061;
+            text-align: left;
+            line-height: 1.5;
+            padding: 15px;
+            background: #eaf2f8;
+            border-radius: 8px;
+            border-left: 4px solid #3498db;
+        }
+        
+        .divider {
+            height: 1px;
+            background: #dfe6e9;
+            margin: 5px 0;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+    </style>
+</head>
+<body>
+
+    <h2>力的分解與合成 (互動教學)</h2>
+    
+    <div class="main-container">
+        <!-- 左側面板：數據與控制 -->
+        <div class="left-panel">
+            
+            <!-- 模式切換 -->
+            <div class="tabs">
+                <button class="tab-btn active" id="tabRect">直角分解</button>
+                <button class="tab-btn" id="tabArb">任意分解</button>
+                <button class="tab-btn" id="tabAdd">二力合成</button>
+            </div>
+
+            <!-- 數值顯示面板 -->
+            <div class="data-panel">
+                <!-- 紅色：主作用力 / 合力 -->
+                <div class="val-box color-f">
+                    <span id="lblF">力 F =</span> 
+                    <input type="number" id="inF" value="10.0" step="1" min="0">
+                    <span id="outF" class="hidden">0.0</span>
+                </div>
+                <div class="val-box color-angle">
+                    <span id="lblFAng">方向 θ =</span> 
+                    <span id="wrapInFAng"><input type="number" id="inFAng" value="30.0" step="1"> °</span>
+                    <span id="outFAng" class="hidden">0.0 °</span>
+                </div>
+                
+                <div class="divider"></div>
+
+                <!-- 藍色：分力 1 / 作用力 1 -->
+                <div class="val-box color-c1">
+                    <span id="lblC1">分力 F_x =</span> 
+                    <span id="outC1">0.0</span>
+                    <input type="number" id="inC1" class="hidden" value="10.0" step="1" min="0">
+                </div>
+                <div class="val-box color-c1 hidden" id="rowC1Ang">
+                    <span id="lblC1Ang">軸 1 方位 α =</span> 
+                    <span id="wrapInC1Ang"><input type="number" id="inC1Ang" value="0.0" step="1"> °</span>
+                </div>
+
+                <!-- 綠色：分力 2 / 作用力 2 -->
+                <div class="val-box color-c2">
+                    <span id="lblC2">分力 F_y =</span> 
+                    <span id="outC2">0.0</span>
+                    <input type="number" id="inC2" class="hidden" value="10.0" step="1" min="0">
+                </div>
+                <div class="val-box color-c2 hidden" id="rowC2Ang">
+                    <span id="lblC2Ang">軸 2 方位 β =</span> 
+                    <span id="wrapInC2Ang"><input type="number" id="inC2Ang" value="90.0" step="1"> °</span>
+                </div>
+            </div>
+
+            <!-- 控制按鈕區 -->
+            <div class="controls">
+                <button id="btnToggleComponents" class="action-btn">顯示分力與輔助線</button>
+            </div>
+
+            <div class="instruction" id="instText">
+                👉 請拖曳 <strong>紅色箭頭</strong>，或直接輸入數值。
+            </div>
+        </div>
+
+        <!-- 右側面板：畫布 -->
+        <div class="right-panel">
+            <div class="canvas-container">
+                <canvas id="forceCanvas" width="600" height="500"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        window.onload = function() {
+            const canvas = document.getElementById('forceCanvas');
+            const ctx = canvas.getContext('2d');
+            
+            // DOM 元素 (按鈕與 UI 區塊)
+            const btnToggle = document.getElementById('btnToggleComponents');
+            const tabRect = document.getElementById('tabRect');
+            const tabArb = document.getElementById('tabArb');
+            const tabAdd = document.getElementById('tabAdd');
+            const instText = document.getElementById('instText');
+
+            // DOM 元素 (數值面板)
+            const inF = document.getElementById('inF');
+            const outF = document.getElementById('outF');
+            const lblF = document.getElementById('lblF');
+            
+            const inFAng = document.getElementById('inFAng');
+            const wrapInFAng = document.getElementById('wrapInFAng');
+            const outFAng = document.getElementById('outFAng');
+            const lblFAng = document.getElementById('lblFAng');
+            
+            const inC1 = document.getElementById('inC1');
+            const outC1 = document.getElementById('outC1');
+            const lblC1 = document.getElementById('lblC1');
+            const rowC1Ang = document.getElementById('rowC1Ang');
+            const inC1Ang = document.getElementById('inC1Ang');
+            const lblC1Ang = document.getElementById('lblC1Ang');
+            
+            const inC2 = document.getElementById('inC2');
+            const outC2 = document.getElementById('outC2');
+            const lblC2 = document.getElementById('lblC2');
+            const rowC2Ang = document.getElementById('rowC2Ang');
+            const inC2Ang = document.getElementById('inC2Ang');
+            const lblC2Ang = document.getElementById('lblC2Ang');
+
+            // 物理環境設定
+            const originX = canvas.width / 2;
+            const originY = canvas.height / 2;
+            const scale = 10; 
+
+            // 狀態變數
+            let mode = 'rect'; // 'rect', 'arb', or 'add'
+            let showComponents = false;
+            let dragTarget = null; 
+
+            // 座標與數值狀態
+            let targetX = originX + 100 * Math.cos(30 * Math.PI / 180);
+            let targetY = originY - 100 * Math.sin(30 * Math.PI / 180); 
+            let c1X = originX, c1Y = originY;
+            let c2X = originX, c2Y = originY;
+            
+            let alpha = 0; 
+            let beta = 90; 
+            let isSolvable = true;
+
+            // -- 模式切換邏輯 --
+            function setMode(newMode) {
+                mode = newMode;
+                
+                // 標籤樣式重置
+                tabRect.classList.remove('active');
+                tabArb.classList.remove('active');
+                tabAdd.classList.remove('active');
+
+                // 預設關閉顯示
+                showComponents = false;
+
+                if (mode === 'rect') {
+                    tabRect.classList.add('active');
+                    
+                    // UI 切換：F 為輸入，C1/C2 為純文字
+                    inF.classList.remove('hidden'); outF.classList.add('hidden');
+                    wrapInFAng.classList.remove('hidden'); outFAng.classList.add('hidden');
+                    inC1.classList.add('hidden'); outC1.classList.remove('hidden');
+                    inC2.classList.add('hidden'); outC2.classList.remove('hidden');
+                    rowC1Ang.classList.add('hidden'); rowC2Ang.classList.add('hidden');
+                    
+                    lblF.innerText = "力 F ="; lblFAng.innerText = "方向 θ =";
+                    lblC1.innerText = "分力 F_x ="; lblC2.innerText = "分力 F_y =";
+                    instText.innerHTML = "👉 拖曳 <strong>紅色箭頭</strong>，或直接輸入力與角度數值。";
+                    
+                    alpha = 0; beta = 90;
+                    inF.value = 10; inFAng.value = 30;
+                    updateForceFromInputs();
+
+                } else if (mode === 'arb') {
+                    tabArb.classList.add('active');
+                    
+                    // UI 切換：F 為輸入，C1/C2大小為文字，角度為輸入
+                    inF.classList.remove('hidden'); outF.classList.add('hidden');
+                    wrapInFAng.classList.remove('hidden'); outFAng.classList.add('hidden');
+                    inC1.classList.add('hidden'); outC1.classList.remove('hidden');
+                    inC2.classList.add('hidden'); outC2.classList.remove('hidden');
+                    rowC1Ang.classList.remove('hidden'); rowC2Ang.classList.remove('hidden');
+                    
+                    lblF.innerText = "力 F ="; lblFAng.innerText = "方向 θ =";
+                    lblC1.innerText = "分力 1 ="; lblC2.innerText = "分力 2 =";
+                    lblC1Ang.innerText = "軸 1 方位 α ="; lblC2Ang.innerText = "軸 2 方位 β =";
+                    instText.innerHTML = "👉 拖曳 <strong>紅色箭頭</strong> 改變力。<br>👉 拖曳 <strong>藍綠色圓點</strong> 改變分解軸線。";
+                    
+                    alpha = 0; beta = 90;
+                    inF.value = 10; inFAng.value = 30;
+                    updateForceFromInputs();
+
+                } else if (mode === 'add') {
+                    tabAdd.classList.add('active');
+                    
+                    // UI 切換：C1/C2 為輸入，F 為純文字 (主角對調)
+                    inF.classList.add('hidden'); outF.classList.remove('hidden');
+                    wrapInFAng.classList.add('hidden'); outFAng.classList.remove('hidden');
+                    inC1.classList.remove('hidden'); outC1.classList.add('hidden');
+                    inC2.classList.remove('hidden'); outC2.classList.add('hidden');
+                    rowC1Ang.classList.remove('hidden'); rowC2Ang.classList.remove('hidden');
+                    
+                    lblF.innerText = "合力 F ="; lblFAng.innerText = "方向 θ =";
+                    lblC1.innerText = "作用力 1 ="; lblC2.innerText = "作用力 2 =";
+                    lblC1Ang.innerText = "方向 α ="; lblC2Ang.innerText = "方向 β =";
+                    instText.innerHTML = "👉 拖曳 <strong>藍色與綠色箭頭</strong>，或輸入數值改變作用力。<br>👉 點擊按鈕查看合成結果。";
+                    
+                    // 預設為相背的兩個力： 0度(大小10) 與 180度(大小10)
+                    alpha = 0; beta = 180;
+                    inC1.value = 10; inC2.value = 10;
+                    inC1Ang.value = alpha; inC2Ang.value = beta;
+                    updateC1FromInputs();
+                    updateC2FromInputs();
+                }
+
+                updateToggleButton();
+                render();
+            }
+
+            tabRect.addEventListener('click', () => setMode('rect'));
+            tabArb.addEventListener('click', () => setMode('arb'));
+            tabAdd.addEventListener('click', () => setMode('add'));
+
+            // -- 切換顯示狀態 --
+            function updateToggleButton() {
+                const noun = mode === 'add' ? '合力' : '分力';
+                if (showComponents) {
+                    btnToggle.innerText = `隱藏${noun}與輔助線`;
+                    btnToggle.style.backgroundColor = '#4b6584';
+                } else {
+                    btnToggle.innerText = `顯示${noun}與輔助線`;
+                    btnToggle.style.backgroundColor = '#20bf6b';
+                }
+            }
+
+            btnToggle.addEventListener('click', () => {
+                showComponents = !showComponents;
+                updateToggleButton();
+                render(); 
+            });
+
+            // -- 數值輸入連動 --
+            function updateForceFromInputs() {
+                if (mode === 'add') return;
+                let newF = parseFloat(inF.value);
+                let newAngle = parseFloat(inFAng.value);
+                if (isNaN(newF) || newF < 0 || isNaN(newAngle)) return;
+                const rad = newAngle * (Math.PI / 180);
+                targetX = originX + (newF * scale) * Math.cos(rad);
+                targetY = originY - (newF * scale) * Math.sin(rad);
+                render();
+            }
+            inF.addEventListener('input', updateForceFromInputs);
+            inFAng.addEventListener('input', updateForceFromInputs);
+
+            function updateC1FromInputs() {
+                if (mode !== 'add') return;
+                let mag = parseFloat(inC1.value);
+                let ang = parseFloat(inC1Ang.value);
+                if (isNaN(mag) || mag < 0 || isNaN(ang)) return;
+                const rad = ang * (Math.PI / 180);
+                c1X = originX + (mag * scale) * Math.cos(rad);
+                c1Y = originY - (mag * scale) * Math.sin(rad);
+                render();
+            }
+            inC1.addEventListener('input', updateC1FromInputs);
+            
+            function updateC2FromInputs() {
+                if (mode !== 'add') return;
+                let mag = parseFloat(inC2.value);
+                let ang = parseFloat(inC2Ang.value);
+                if (isNaN(mag) || mag < 0 || isNaN(ang)) return;
+                const rad = ang * (Math.PI / 180);
+                c2X = originX + (mag * scale) * Math.cos(rad);
+                c2Y = originY - (mag * scale) * Math.sin(rad);
+                render();
+            }
+            inC2.addEventListener('input', updateC2FromInputs);
+
+            // 角度輸入框需要同時支援 arb 模式與 add 模式
+            inC1Ang.addEventListener('input', (e) => {
+                if (mode === 'arb') {
+                    let val = parseFloat(e.target.value);
+                    if (!isNaN(val)) { alpha = val; render(); }
+                } else if (mode === 'add') updateC1FromInputs();
+            });
+            inC2Ang.addEventListener('input', (e) => {
+                if (mode === 'arb') {
+                    let val = parseFloat(e.target.value);
+                    if (!isNaN(val)) { beta = val; render(); }
+                } else if (mode === 'add') updateC2FromInputs();
+            });
+
+
+            // -- 繪圖輔助函數 --
+            function drawArrow(fromx, fromy, tox, toy, color, lineWidth = 3, isDashed = false, label = null) {
+                const headlen = 15;
+                const dx = tox - fromx;
+                const dy = toy - fromy;
+                const angle = Math.atan2(dy, dx);
+                const len = Math.hypot(dx, dy);
+                
+                if (len < 1) return; // 太短不畫
+
+                ctx.beginPath();
+                ctx.strokeStyle = color;
+                ctx.lineWidth = lineWidth;
+                ctx.lineCap = 'round';
+                ctx.setLineDash(isDashed ? [6, 6] : []);
+                ctx.moveTo(fromx, fromy);
+                ctx.lineTo(tox, toy);
+                ctx.stroke();
+                
+                ctx.beginPath();
+                ctx.setLineDash([]);
+                ctx.fillStyle = color;
+                ctx.moveTo(tox, toy);
+                ctx.lineTo(tox - headlen * Math.cos(angle - Math.PI / 7), toy - headlen * Math.sin(angle - Math.PI / 7));
+                ctx.lineTo(tox - headlen * Math.cos(angle + Math.PI / 7), toy - headlen * Math.sin(angle + Math.PI / 7));
+                ctx.closePath();
+                ctx.fill();
+
+                if (label !== null) {
+                    const midX = (fromx + tox) / 2;
+                    const midY = (fromy + toy) / 2;
+                    let nx = -Math.sin(angle);
+                    let ny = Math.cos(angle);
+                    if (nx < 0 || (nx === 0 && ny > 0)) { nx = -nx; ny = -ny; }
+                    
+                    const offset = 22;
+                    const textX = midX + nx * offset;
+                    const textY = midY + ny * offset;
+
+                    ctx.font = 'bold 16px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    const textWidth = ctx.measureText(label).width;
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+                    ctx.fillRect(textX - textWidth / 2 - 4, textY - 10, textWidth + 8, 20);
+                    ctx.fillStyle = color;
+                    ctx.fillText(label, textX, textY);
+                }
+            }
+
+            function drawGrid() {
+                const step = 40; 
+                ctx.strokeStyle = '#ecf0f1';
+                ctx.lineWidth = 1;
+                ctx.setLineDash([]);
+                for (let x = originX % step; x <= canvas.width; x += step) {
+                    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
+                }
+                for (let y = originY % step; y <= canvas.height; y += step) {
+                    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
+                }
+                
+                ctx.strokeStyle = '#bdc3c7';
+                ctx.lineWidth = 2;
+                ctx.beginPath(); ctx.moveTo(0, originY); ctx.lineTo(canvas.width, originY); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(originX, 0); ctx.lineTo(originX, canvas.height); ctx.stroke();
+                
+                ctx.fillStyle = '#7f8c8d';
+                ctx.font = '14px Arial';
+                ctx.fillText('O', originX - 15, originY + 15);
+            }
+
+            // -- 主繪圖與核心邏輯 --
+            function render() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                drawGrid();
+
+                let Fx, Fy, valF, forceAngle;
+                let valC1, valC2;
+                
+                // 1. 核心物理運算
+                if (mode === 'rect' || mode === 'arb') {
+                    // 分解模式：紅力決定藍綠分力
+                    Fx = targetX - originX;
+                    Fy = originY - targetY; 
+                    valF = Math.hypot(Fx, Fy) / scale;
+                    forceAngle = Math.atan2(Fy, Fx) * (180 / Math.PI); if(forceAngle<0) forceAngle+=360; 
+
+                    const radA = alpha * Math.PI / 180;
+                    const radB = beta * Math.PI / 180;
+                    
+                    const det = Math.cos(radA) * Math.sin(radB) - Math.sin(radA) * Math.cos(radB);
+                    isSolvable = Math.abs(det) > 0.0001;
+
+                    if (isSolvable) {
+                        const Fa = (Fx * Math.sin(radB) - Fy * Math.cos(radB)) / det;
+                        const Fb = (Fy * Math.cos(radA) - Fx * Math.sin(radA)) / det;
+                        valC1 = Fa / scale; valC2 = Fb / scale;
+                        c1X = originX + Fa * Math.cos(radA); c1Y = originY - Fa * Math.sin(radA);
+                        c2X = originX + Fb * Math.cos(radB); c2Y = originY - Fb * Math.sin(radB);
+                    }
+                } else if (mode === 'add') {
+                    // 合成模式：藍綠作用力決定紅色合力
+                    const dx1 = c1X - originX; const dy1 = originY - c1Y;
+                    const dx2 = c2X - originX; const dy2 = originY - c2Y;
+                    
+                    valC1 = Math.hypot(dx1, dy1) / scale;
+                    alpha = Math.atan2(dy1, dx1) * (180 / Math.PI); if(alpha<0) alpha+=360;
+                    
+                    valC2 = Math.hypot(dx2, dy2) / scale;
+                    beta = Math.atan2(dy2, dx2) * (180 / Math.PI); if(beta<0) beta+=360;
+                    
+                    Fx = dx1 + dx2; Fy = dy1 + dy2;
+                    targetX = originX + Fx; targetY = originY - Fy;
+                    
+                    valF = Math.hypot(Fx, Fy) / scale;
+                    forceAngle = Math.atan2(Fy, Fx) * (180 / Math.PI); if(forceAngle<0) forceAngle+=360;
+                    isSolvable = true;
+                }
+
+                // 2. 畫面渲染
+                if (mode === 'rect' || mode === 'arb') {
+                    // 繪製軸線與手柄 (任意分解模式)
+                    let handleA_X = 0, handleA_Y = 0, handleB_X = 0, handleB_Y = 0;
+                    if (mode === 'arb' && showComponents) {
+                        const axisLen = Math.max(canvas.width, canvas.height) * 2;
+                        const radA = alpha * Math.PI / 180; const radB = beta * Math.PI / 180;
+                        
+                        ctx.setLineDash([4, 4]); ctx.lineWidth = 1;
+                        ctx.strokeStyle = 'rgba(52, 152, 219, 0.4)';
+                        ctx.beginPath(); ctx.moveTo(originX - axisLen * Math.cos(radA), originY + axisLen * Math.sin(radA)); ctx.lineTo(originX + axisLen * Math.cos(radA), originY - axisLen * Math.sin(radA)); ctx.stroke();
+                        ctx.strokeStyle = 'rgba(46, 204, 113, 0.4)';
+                        ctx.beginPath(); ctx.moveTo(originX - axisLen * Math.cos(radB), originY + axisLen * Math.sin(radB)); ctx.lineTo(originX + axisLen * Math.cos(radB), originY - axisLen * Math.sin(radB)); ctx.stroke();
+
+                        const R = 160;
+                        handleA_X = originX + R * Math.cos(radA); handleA_Y = originY - R * Math.sin(radA);
+                        handleB_X = originX + R * Math.cos(radB); handleB_Y = originY - R * Math.sin(radB);
+
+                        ctx.setLineDash([]);
+                        ctx.beginPath(); ctx.arc(handleA_X, handleA_Y, 8, 0, Math.PI*2); ctx.fillStyle = '#3498db'; ctx.fill(); ctx.stroke();
+                        ctx.beginPath(); ctx.arc(handleB_X, handleB_Y, 8, 0, Math.PI*2); ctx.fillStyle = '#2ecc71'; ctx.fill(); ctx.stroke();
+                        
+                        if (dragTarget === 'axis1') { ctx.beginPath(); ctx.arc(handleA_X, handleA_Y, 16, 0, Math.PI*2); ctx.fillStyle = 'rgba(52,152,219,0.3)'; ctx.fill(); }
+                        if (dragTarget === 'axis2') { ctx.beginPath(); ctx.arc(handleB_X, handleB_Y, 16, 0, Math.PI*2); ctx.fillStyle = 'rgba(46,204,113,0.3)'; ctx.fill(); }
+                        window.handleData = { handleA_X, handleA_Y, handleB_X, handleB_Y };
+                    }
+
+                    // 繪製平行四邊形與分力
+                    if (showComponents) {
+                        if (isSolvable) {
+                            ctx.beginPath(); ctx.strokeStyle = '#a4b0be'; ctx.lineWidth = 1.5; ctx.setLineDash([5, 5]);
+                            ctx.moveTo(c1X, c1Y); ctx.lineTo(targetX, targetY); ctx.moveTo(c2X, c2Y); ctx.lineTo(targetX, targetY); ctx.stroke();
+                            drawArrow(originX, originY, c1X, c1Y, '#3498db', 5, false, valC1.toFixed(1)); 
+                            drawArrow(originX, originY, c2X, c2Y, '#2ecc71', 5, false, valC2.toFixed(1)); 
+                        } else {
+                            ctx.fillStyle = '#e74c3c'; ctx.font = 'bold 20px Arial'; ctx.fillText('兩軸平行，無法唯一分解！', originX, 30);
+                        }
+                    }
+
+                    // 畫主作用力 (紅)
+                    drawArrow(originX, originY, targetX, targetY, '#e74c3c', 6, false, valF.toFixed(1));
+                    if (dragTarget === 'force') {
+                        ctx.beginPath(); ctx.arc(targetX, targetY, 16, 0, Math.PI * 2); ctx.fillStyle = 'rgba(231, 76, 60, 0.3)'; ctx.fill();
+                    }
+                } 
+                else if (mode === 'add') {
+                    // 畫分力 (總是顯示)
+                    drawArrow(originX, originY, c1X, c1Y, '#3498db', 5, false, valC1.toFixed(1)); 
+                    drawArrow(originX, originY, c2X, c2Y, '#2ecc71', 5, false, valC2.toFixed(1));
+                    
+                    if (dragTarget === 'c1') {
+                        ctx.beginPath(); ctx.arc(c1X, c1Y, 16, 0, Math.PI * 2); ctx.fillStyle = 'rgba(52, 152, 219, 0.3)'; ctx.fill();
+                    }
+                    if (dragTarget === 'c2') {
+                        ctx.beginPath(); ctx.arc(c2X, c2Y, 16, 0, Math.PI * 2); ctx.fillStyle = 'rgba(46, 204, 113, 0.3)'; ctx.fill();
+                    }
+
+                    // 畫合力與平行四邊形 (需要點擊顯示)
+                    if (showComponents) {
+                        ctx.beginPath(); ctx.strokeStyle = '#a4b0be'; ctx.lineWidth = 1.5; ctx.setLineDash([5, 5]);
+                        ctx.moveTo(c1X, c1Y); ctx.lineTo(targetX, targetY); ctx.moveTo(c2X, c2Y); ctx.lineTo(targetX, targetY); ctx.stroke();
+                        
+                        drawArrow(originX, originY, targetX, targetY, '#e74c3c', 6, false, valF.toFixed(1));
+                    }
+                }
+
+                // 3. 更新 UI 面板數值
+                if (mode === 'rect' || mode === 'arb') {
+                    if (!isSolvable && showComponents) {
+                        outC1.innerText = "無解"; outC2.innerText = "無解";
+                    } else {
+                        outC1.innerText = showComponents ? valC1.toFixed(1) : "?";
+                        outC2.innerText = showComponents ? valC2.toFixed(1) : "?";
+                    }
+                    if (document.activeElement !== inFAng) inFAng.value = forceAngle.toFixed(1);
+                    if (document.activeElement !== inF) inF.value = valF.toFixed(1);
+                    if (mode === 'arb') {
+                        if (document.activeElement !== inC1Ang) inC1Ang.value = (alpha % 360).toFixed(1);
+                        if (document.activeElement !== inC2Ang) inC2Ang.value = (beta % 360).toFixed(1);
+                    }
+                } else if (mode === 'add') {
+                    outF.innerText = showComponents ? valF.toFixed(1) : "?";
+                    outFAng.innerText = showComponents ? forceAngle.toFixed(1) + " °" : "? °";
+                    
+                    if (document.activeElement !== inC1) inC1.value = valC1.toFixed(1);
+                    if (document.activeElement !== inC1Ang) inC1Ang.value = alpha.toFixed(1);
+                    if (document.activeElement !== inC2) inC2.value = valC2.toFixed(1);
+                    if (document.activeElement !== inC2Ang) inC2Ang.value = beta.toFixed(1);
+                }
+            }
+
+            // -- 互動事件 (滑鼠/觸控) --
+            function getPointerPos(e) {
+                const rect = canvas.getBoundingClientRect();
+                const scaleX = canvas.width / rect.width;
+                const scaleY = canvas.height / rect.height;
+                const clientX = (e.touches && e.touches.length > 0) ? e.touches[0].clientX : e.clientX;
+                const clientY = (e.touches && e.touches.length > 0) ? e.touches[0].clientY : e.clientY;
+                return { x: (clientX - rect.left) * scaleX, y: (clientY - rect.top) * scaleY };
+            }
+
+            function onPointerDown(e) {
+                const pos = getPointerPos(e);
+                
+                if (mode === 'add') {
+                    // 合成模式下，優先判定是否點中兩個作用力
+                    if (Math.hypot(pos.x - c1X, pos.y - c1Y) < 30) { dragTarget = 'c1'; render(); return; }
+                    if (Math.hypot(pos.x - c2X, pos.y - c2Y) < 30) { dragTarget = 'c2'; render(); return; }
+                } else {
+                    // 分解模式下，優先判定是否點中主作用力
+                    if (Math.hypot(pos.x - targetX, pos.y - targetY) < 30) { dragTarget = 'force'; render(); return; }
+                    // 再判定是否點中軸線把手
+                    if (mode === 'arb' && showComponents && window.handleData) {
+                        const { handleA_X, handleA_Y, handleB_X, handleB_Y } = window.handleData;
+                        if (Math.hypot(pos.x - handleA_X, pos.y - handleA_Y) < 25) { dragTarget = 'axis1'; render(); return; }
+                        if (Math.hypot(pos.x - handleB_X, pos.y - handleB_Y) < 25) { dragTarget = 'axis2'; render(); return; }
+                    }
+                }
+            }
+
+            function onPointerMove(e) {
+                if (!dragTarget) return;
+                if (e.cancelable) e.preventDefault(); 
+                const pos = getPointerPos(e);
+                
+                if (dragTarget === 'force') { targetX = pos.x; targetY = pos.y; } 
+                else if (dragTarget === 'c1') { c1X = pos.x; c1Y = pos.y; }
+                else if (dragTarget === 'c2') { c2X = pos.x; c2Y = pos.y; }
+                else if (dragTarget === 'axis1' || dragTarget === 'axis2') {
+                    let newAng = Math.atan2(originY - pos.y, pos.x - originX) * (180 / Math.PI);
+                    if (newAng < 0) newAng += 360;
+                    if (dragTarget === 'axis1') alpha = newAng;
+                    if (dragTarget === 'axis2') beta = newAng;
+                }
+                render();
+            }
+
+            function onPointerUp() {
+                if (dragTarget) { dragTarget = null; render(); }
+            }
+
+            canvas.addEventListener('mousedown', onPointerDown);
+            window.addEventListener('mousemove', onPointerMove); 
+            window.addEventListener('mouseup', onPointerUp);
+            canvas.addEventListener('touchstart', onPointerDown, {passive: false});
+            window.addEventListener('touchmove', onPointerMove, {passive: false});
+            window.addEventListener('touchend', onPointerUp);
+
+            // 初始化 (載入時預設為直角分解)
+            setMode('rect');
+        }
+    </script>
+</body>
+</html>
