@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>摩擦力教學實驗</title>
+<title>摩擦力V6</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
 html,body{height:100%;font-family:system-ui,sans-serif;background:#eef0f3;color:#1d1d1f;}
@@ -175,6 +175,7 @@ select{font-size:var(--fs);border:1px solid #ddd;border-radius:6px;background:#f
           <div style="display:flex;gap:8px;margin-top:4px;flex-wrap:wrap">
             <label class="cr"><input type="checkbox" id="cf">拉力恆定</label>
             <label class="cr"><input type="checkbox" id="em">物體增減</label>
+            <label class="cr"><input type="checkbox" id="flip-mode">點選翻轉面</label>
             <label class="cr"><input type="checkbox" id="show-lines">繪製理論線</label>
             <label class="cr"><input type="checkbox" id="show-pt-detail">點選查看情境</label>
           </div>
@@ -280,7 +281,7 @@ let experiments=[{name:'實驗1',pts:[],col:EXP_COLS[0],stack:[],surf:'wood'}];
 let curExp=0;
 let hoverPt=null;
 let lt=null,lrt=0;
-let drag=null,applyDrag=null,hoverIdx=-1;
+let drag=null,applyDrag=null,hoverIdx=-1,flipMode=false;
 let fsOpen=false;
 let simFsOpen=false;
 let showPtDetail=false;
@@ -429,7 +430,8 @@ function drawSim(){
   if(editMode){
     sCtx.fillStyle='rgba(74,122,193,.04)'; sCtx.fillRect(0,0,W,gy);
     sCtx.font=`${fontSize}px system-ui`; sCtx.fillStyle='rgba(74,122,193,.5)'; sCtx.textAlign='center';
-    sCtx.fillText('✏️增減模式　拖入添加 | 拖到左側移除 | 單擊改順序 | 雙擊翻轉面',W/2,16); sCtx.textAlign='left';
+    const hint1='✏️增減模式　拖入添加 | 拖到左側移除 | 單擊改順序'+(flipMode?' | 單擊翻轉面':'');
+    sCtx.fillText(hint1,W/2,16); sCtx.textAlign='left';
   }
   if(!stack.length){
     sCtx.font=`${fontSize+1}px system-ui`; sCtx.fillStyle='rgba(128,128,128,.35)'; sCtx.textAlign='center';
@@ -1080,7 +1082,11 @@ function dropDrag(clientX, clientY){
         vel=0; moving=false; coasting=false;
       }
     } else {
-      if(drag.stackIdx !== stack.length-1){
+      // Tap (no move) on a stack block
+      if(flipMode){
+        stack[drag.stackIdx].face = stack[drag.stackIdx].face==='large'?'small':'large';
+        vel=0; moving=false; coasting=false;
+      } else if(drag.stackIdx !== stack.length-1){
         const it=stack.splice(drag.stackIdx,1)[0]; stack.push(it);
         vel=0; moving=false; coasting=false;
       }
@@ -1089,17 +1095,24 @@ function dropDrag(clientX, clientY){
   hoverIdx=-1; buildShelf(); clrG(); drag=null;
 }
 
+// dblclick: flip face on desktop (kept for mouse users)
 simC.addEventListener('dblclick',e=>{
   if(!editMode) return;
   const r=simC.getBoundingClientRect(), mx=e.clientX-r.left, my=e.clientY-r.top;
+  flipBlockAt(mx,my);
+});
+
+function flipBlockAt(mx,my){
   const bl=blocks();
   for(let i=bl.length-1;i>=0;i--){
     const b=bl[i];
     if(mx>=b.x&&mx<=b.x+b.w&&my>=b.y&&my<=b.y+b.h){
-      stack[b.idx].face=stack[b.idx].face==='large'?'small':'large'; return;
+      stack[b.idx].face=stack[b.idx].face==='large'?'small':'large';
+      vel=0; moving=false; coasting=false; return true;
     }
   }
-});
+  return false;
+}
 
 function apDown(e){if(editMode||replayData)return; applyDrag={sx:e.clientX,sf:F};}
 function apMove(e){
@@ -1294,7 +1307,15 @@ document.getElementById('sim-fs-close').addEventListener('click',closeSimFs);
 // Sim fullscreen interaction — same apply-force drag, different canvas
 const simFsWrap=document.getElementById('sim-fs-canvas-wrap');
 let simFsApplyDrag=null;
-simFsC.addEventListener('mousedown',e=>{if(!editMode)simFsApplyDrag={sx:e.clientX,sf:F};});
+simFsC.addEventListener('mousedown',e=>{
+  if(flipMode){
+    // convert to sim canvas coords roughly (same ox offset)
+    const r=simFsC.getBoundingClientRect();
+    // We'll just delegate — flipMode tap in fs closes fs and flips
+    return;
+  }
+  if(!editMode)simFsApplyDrag={sx:e.clientX,sf:F};
+});
 simFsC.addEventListener('mousemove',e=>{
   if(!simFsApplyDrag||editMode)return;
   F=Math.max(-60,Math.min(60,simFsApplyDrag.sf+(e.clientX-simFsApplyDrag.sx)*.55));
@@ -1510,6 +1531,19 @@ document.getElementById('em').addEventListener('change',e=>{
   editMode=e.target.checked; simC.className=editMode?'em':'';
   document.getElementById('eb').className=editMode?'eb v':'eb';
   drag=null;applyDrag=null;clrG();buildShelf();
+});
+document.getElementById('flip-mode').addEventListener('change',e=>{
+  flipMode=e.target.checked;
+  // flip-mode only makes sense in edit mode; auto-enable edit mode
+  if(flipMode && !editMode){
+    editMode=true;
+    document.getElementById('em').checked=true;
+    simC.className='em';
+    document.getElementById('eb').className='eb v';
+    buildShelf();
+  }
+  // Update canvas cursor hint
+  simC.style.cursor = flipMode ? 'pointer' : (editMode ? 'default' : replayData ? 'not-allowed' : 'ew-resize');
 });
 document.getElementById('show-lines').addEventListener('change',e=>{showLines=e.target.checked;});
 document.getElementById('ss').addEventListener('change',e=>{surf=e.target.value;vel=0;moving=false;coasting=false;});
