@@ -7,7 +7,7 @@
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
 html,body{height:100%;font-family:system-ui,sans-serif;background:#eef0f3;color:#1d1d1f;}
-:root{--fs:13px;}
+:root{--fs:17px;}
 #app{display:flex;flex-direction:column;height:100%;padding:8px;gap:0;}
 #top{display:flex;gap:8px;overflow:hidden;flex-shrink:0;min-height:0;align-items:stretch;}
 /* divider */
@@ -263,9 +263,9 @@ const EXP_COLS=['#4A7AC1','#E85D24','#4A9A5C','#9B59B6','#D08030'];
 const g=9.8;
 
 // Font size
-let fontSize=13;
+let fontSize=17;
 function setFontSize(v){
-  fontSize=Math.max(10,Math.min(22,v));
+  fontSize=Math.max(12,Math.min(28,v));
   document.documentElement.style.setProperty('--fs',fontSize+'px');
 }
 
@@ -280,7 +280,7 @@ let experiments=[{name:'實驗1',pts:[],col:EXP_COLS[0],stack:[],surf:'wood'}];
 let curExp=0;
 let hoverPt=null;
 let lt=null,lrt=0;
-let drag=null,applyDrag=null,hoverIdx=-1,moved=false;
+let drag=null,applyDrag=null,hoverIdx=-1;
 let fsOpen=false;
 let simFsOpen=false;
 let showPtDetail=false;
@@ -368,22 +368,27 @@ function drawBlk(ctx,x,y,w,h,key,face,alpha){
   gr.addColorStop(0,o.col); gr.addColorStop(1,o.colD);
   ctx.fillStyle=gr; ctx.beginPath();
   if(ctx.roundRect)ctx.roundRect(x,y,w,h,3);else ctx.rect(x,y,w,h);
-  ctx.fill(); ctx.strokeStyle='rgba(0,0,0,.15)'; ctx.lineWidth=.8; ctx.stroke();
+  ctx.fill(); ctx.strokeStyle='rgba(0,0,0,.2)'; ctx.lineWidth=1.2; ctx.stroke();
   ctx.fillStyle='#fff'; ctx.font=`bold ${Math.min(fontSize,h*.45)}px system-ui`;
   ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(o.label,x+w/2,y+h/2);
   if(face==='small'){ctx.fillStyle='rgba(255,255,255,.5)';ctx.font=Math.max(7,fontSize*0.6)+'px system-ui';ctx.textAlign='right';ctx.textBaseline='top';ctx.fillText('窄',x+w-2,y+2);}
   ctx.restore();
 }
 
-function arrow(ctx,x1,y1,x2,y2,col,lbl,side){
+function arrow(ctx,x1,y1,x2,y2,col,lbl,side,widthMult){
   const dx=x2-x1,dy=y2-y1,len=Math.sqrt(dx*dx+dy*dy);
   if(len<3)return;
-  ctx.save(); ctx.strokeStyle=col; ctx.fillStyle=col; ctx.lineWidth=2;
-  ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+  const arrowW=Math.max(2.5, fontSize*0.22)*(widthMult||1);
+  const headSz=Math.max(11, fontSize*1.0)*(widthMult||1);
   const a=Math.atan2(dy,dx);
+  // Line stops headSz before the tip so the arrowhead sits cleanly outside
+  const lx2=x2-headSz*Math.cos(a), ly2=y2-headSz*Math.sin(a);
+  ctx.save(); ctx.strokeStyle=col; ctx.fillStyle=col; ctx.lineWidth=arrowW;
+  ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(lx2,ly2); ctx.stroke();
+  // Arrowhead: tip at x2,y2
   ctx.beginPath(); ctx.moveTo(x2,y2);
-  ctx.lineTo(x2-9*Math.cos(a-.4),y2-9*Math.sin(a-.4));
-  ctx.lineTo(x2-9*Math.cos(a+.4),y2-9*Math.sin(a+.4));
+  ctx.lineTo(x2-headSz*Math.cos(a-.4),y2-headSz*Math.sin(a-.4));
+  ctx.lineTo(x2-headSz*Math.cos(a+.4),y2-headSz*Math.sin(a+.4));
   ctx.closePath(); ctx.fill();
   if(!lbl){ctx.restore();return;}
   ctx.font=`bold ${fontSize}px system-ui`;
@@ -419,7 +424,7 @@ function drawSim(){
   sCtx.fillStyle=s.col; sCtx.fillRect(0,gy,W,38);
   for(let x=0;x<W;x+=16){sCtx.fillStyle=s.stripe;sCtx.fillRect(x,gy,8,38);}
   sCtx.globalAlpha=.6; sCtx.fillStyle='#fff'; sCtx.font=`bold ${fontSize}px system-ui`; sCtx.fillText(s.label,5,gy+22); sCtx.globalAlpha=1;
-  sCtx.strokeStyle='rgba(128,128,128,.15)'; sCtx.lineWidth=1; sCtx.setLineDash([4,4]);
+  sCtx.strokeStyle='rgba(128,128,128,.25)'; sCtx.lineWidth=1.5; sCtx.setLineDash([5,5]);
   sCtx.beginPath(); sCtx.moveTo(W/2,gy-6); sCtx.lineTo(W/2,gy); sCtx.stroke(); sCtx.setLineDash([]);
   if(editMode){
     sCtx.fillStyle='rgba(74,122,193,.04)'; sCtx.fillRect(0,0,W,gy);
@@ -472,29 +477,31 @@ function drawSim(){
     sCtx.stroke(); sCtx.restore();
   }
   const fr=fric(),Nv=Nf(),midY=bot.y+(gy-bot.y)/2;
-  // Vertical: N upward from top of stack, W downward below ground (subtle)
-  arrow(sCtx,cx,top.y,cx,top.y-Math.max(36,Math.min(54,Nv*1.1)),'#3B8BD4',`N=${disp(Nv)}${unit()}`,'a');
-  arrow(sCtx,cx,gy,cx,gy+22,'rgba(120,80,180,.7)',`W=${disp(Nv)}${unit()}`,'b');
-  // Horizontal: attach at the leading/trailing edge, label appears beyond tip
-  // Ensure minimum arrow length = fontSize*5 so label has room outside tip
-  const minFL=fontSize*4.5;
+  // fScale: pixels per Newton — declared first so N/W arrows can use it too
+  const fScale=Math.max(2,(W*0.38)/60);
+  const minFL=fontSize*4.0;
+  // N and W share the same length so they look symmetric.
+  // Cap upward by available space above the top block (with margin),
+  // and cap downward by ground strip height so W stays visible.
+  const headSzNW = Math.max(11, fontSize*1.0)*2; // widthMult=2 for N/W
+  const spaceUp   = Math.max(headSzNW*1.5, top.y - 4); // never collapse to 0
+  const spaceDown = 34;
+  const nLenRaw = Math.max(fontSize*2.5, Nv*fScale*0.8);
+  const nLen = Math.min(nLenRaw, spaceUp, spaceDown);
+  arrow(sCtx,cx,top.y,cx,top.y-nLen,'#3B8BD4',`N=${disp(Nv)}${unit()}`,'a',2);
+  arrow(sCtx,cx,gy,cx,gy+nLen,'rgba(120,80,180,.7)',`W=${disp(Nv)}${unit()}`,'b',2);
   if(Math.abs(F)>.05){
     const d=Math.sign(F);
-    const fl=Math.max(minFL,Math.min(80,Math.abs(F)*1.6));
-    // F arrow: tip is on the far right/left, start from block edge
+    const fl=Math.max(minFL, Math.abs(F)*fScale);
     const fx1=cx+d*bot.w/2, fx2=cx+d*(bot.w/2+fl);
-    // Label row: slightly above midY so it doesn't clash with friction label
     arrow(sCtx,fx1,midY-4,fx2,midY-4,'#E85D24',`F=${disp(Math.abs(F))}${unit()}`,'a');
   }
   if(Math.abs(fr)>.05){
     const fd=Math.sign(fr);
-    const fl=Math.max(minFL,Math.min(80,Math.abs(fr)*1.6));
+    const fl=Math.max(minFL, Math.abs(fr)*fScale);
     const fc=(!moving&&!coasting)?'#4A9A5C':coasting?'#E08030':'#EF9F27';
     const tag=(!moving&&!coasting)?'fs':'fk';
-    // Friction acts at contact surface (bottom of lowest block = gy)
-    // Arrow starts from bottom-center, hugs the ground line
-    const contactY=gy;
-    arrow(sCtx,cx,contactY,cx+fd*fl,contactY,fc,`${tag}=${disp(Math.abs(fr))}${unit()}`,'a');
+    arrow(sCtx,cx,gy,cx+fd*fl,gy,fc,`${tag}=${disp(Math.abs(fr))}${unit()}`,'a');
   }
   if(coasting&&Math.abs(vel)>.05){sCtx.font=`${fontSize}px system-ui`;sCtx.fillStyle='#E08030';sCtx.textAlign='center';sCtx.fillText('慣性滑行',cx,top.y-10);sCtx.textAlign='left';}
 }
@@ -508,7 +515,7 @@ function drawFD(){
   const rng=mxM*2,mag=Math.pow(10,Math.floor(Math.log10(rng/4)));
   const gridStep=[1,2,5,10].map(x=>x*mag).find(s=>rng/s<=8&&rng/s>=3)||mag;
   fCtx.save();
-  fCtx.strokeStyle='rgba(180,180,180,.4)'; fCtx.lineWidth=.5; fCtx.setLineDash([2,3]);
+  fCtx.strokeStyle='rgba(160,160,160,.45)'; fCtx.lineWidth=.8; fCtx.setLineDash([3,4]);
   for(let v=gridStep;v<=mxM*1.3;v+=gridStep){
     const d=v*sc;
     [[0,cy-d,W,cy-d],[0,cy+d,W,cy+d],[cx-d,0,cx-d,H],[cx+d,0,cx+d,H]].forEach(([x1,y1,x2,y2])=>{
@@ -523,18 +530,19 @@ function drawFD(){
     if(cy-d>4){fCtx.textAlign='right';fCtx.fillText(lbl,cx-2,cy-d+fontSize*0.35);}
   }
   fCtx.restore();
-  fCtx.strokeStyle='rgba(100,100,100,.2)'; fCtx.lineWidth=.7;
+  fCtx.strokeStyle='rgba(80,80,80,.3)'; fCtx.lineWidth=1.2;
   fCtx.beginPath();fCtx.moveTo(0,cy);fCtx.lineTo(W,cy);fCtx.stroke();
   fCtx.beginPath();fCtx.moveTo(cx,0);fCtx.lineTo(cx,H);fCtx.stroke();
-  fCtx.beginPath(); fCtx.arc(cx,cy,2.5,0,2*Math.PI); fCtx.fillStyle='#bbb'; fCtx.fill();
+  fCtx.beginPath(); fCtx.arc(cx,cy,4,0,2*Math.PI); fCtx.fillStyle='#999'; fCtx.fill();
   const fa=(dx,dy,col,lbl)=>{
     if(Math.sqrt(dx*dx+dy*dy)<1)return;
-    fCtx.save(); fCtx.strokeStyle=col; fCtx.fillStyle=col; fCtx.lineWidth=2;
+    const fdW=Math.max(2,fontSize*0.18), fdH=Math.max(8,fontSize*0.8);
+    fCtx.save(); fCtx.strokeStyle=col; fCtx.fillStyle=col; fCtx.lineWidth=fdW;
     fCtx.beginPath(); fCtx.moveTo(cx,cy); fCtx.lineTo(cx+dx,cy+dy); fCtx.stroke();
     const a=Math.atan2(dy,dx);
     fCtx.beginPath(); fCtx.moveTo(cx+dx,cy+dy);
-    fCtx.lineTo(cx+dx-6*Math.cos(a-.45),cy+dy-6*Math.sin(a-.45));
-    fCtx.lineTo(cx+dx-6*Math.cos(a+.45),cy+dy-6*Math.sin(a+.45));
+    fCtx.lineTo(cx+dx-fdH*Math.cos(a-.45),cy+dy-fdH*Math.sin(a-.45));
+    fCtx.lineTo(cx+dx-fdH*Math.cos(a+.45),cy+dy-fdH*Math.sin(a+.45));
     fCtx.closePath(); fCtx.fill();
     fCtx.font=`bold ${fontSize}px system-ui`; fCtx.textAlign='center';
     fCtx.fillText(lbl,cx+dx+Math.cos(a)*16,cy+dy+Math.sin(a)*14);
@@ -648,7 +656,7 @@ function drawScatterOnCanvas(ctx,W,H,view,hovPt,isFs){
     exp.pts.forEach((p,pi)=>{
       const x=px(p.f),y=py(p.fr);
       const isH=hovPt&&hovPt.ei===ei&&hovPt.pi===pi;
-      ctx.beginPath(); ctx.arc(x,y,isH?6:4,0,2*Math.PI);
+      ctx.beginPath(); ctx.arc(x,y,isH?8:5,0,2*Math.PI);
       ctx.fillStyle=p.mv?exp.col+'cc':exp.col+'99';
       if(isH){ctx.fillStyle=exp.col;ctx.strokeStyle='#fff';ctx.lineWidth=1.5;ctx.fill();ctx.stroke();}
       else ctx.fill();
@@ -661,7 +669,7 @@ function drawScatterOnCanvas(ctx,W,H,view,hovPt,isFs){
     if(p){
       const x=px(p.f),y=py(p.fr);
       ctx.save();
-      ctx.beginPath();ctx.arc(x,y,isFs?9:7,0,2*Math.PI);
+      ctx.beginPath();ctx.arc(x,y,isFs?12:9,0,2*Math.PI);
       ctx.strokeStyle=exp.col;ctx.lineWidth=2.5;ctx.stroke();
       ctx.restore();
     }
@@ -671,7 +679,7 @@ function drawScatterOnCanvas(ctx,W,H,view,hovPt,isFs){
   const cF=Math.abs(F),cfr=Math.abs(fric());
   if(cF>.1&&stack.length){
     const x2=px(cF),y2=py(cfr);
-    ctx.beginPath(); ctx.arc(x2,y2,6,0,2*Math.PI);
+    ctx.beginPath(); ctx.arc(x2,y2,8,0,2*Math.PI);
     ctx.fillStyle=(moving||coasting)?'#EF9F27':'#4A9A5C';
     ctx.fill(); ctx.strokeStyle='#fff'; ctx.lineWidth=1.5; ctx.stroke();
   }
@@ -681,7 +689,7 @@ function drawScatterOnCanvas(ctx,W,H,view,hovPt,isFs){
     const exp=experiments[hovPt.ei],p=exp.pts[hovPt.pi];
     if(p){
       const x=px(p.f),y=py(p.fr);
-      ctx.strokeStyle=exp.col; ctx.lineWidth=1; ctx.setLineDash([3,3]); ctx.globalAlpha=.75;
+      ctx.strokeStyle=exp.col; ctx.lineWidth=2; ctx.setLineDash([4,4]); ctx.globalAlpha=.8;
       ctx.beginPath();ctx.moveTo(pad.l,y);ctx.lineTo(x,y);ctx.stroke();
       ctx.beginPath();ctx.moveTo(x,H-pad.b);ctx.lineTo(x,y);ctx.stroke();
       ctx.setLineDash([]); ctx.globalAlpha=1;
@@ -711,7 +719,7 @@ function drawScatterOnCanvas(ctx,W,H,view,hovPt,isFs){
   ctx.restore(); // end clip
 
   // Axes
-  ctx.strokeStyle='#bbb'; ctx.lineWidth=.8;
+  ctx.strokeStyle='#aaa'; ctx.lineWidth=1.2;
   ctx.beginPath();ctx.moveTo(pad.l,pad.t);ctx.lineTo(pad.l,H-pad.b);ctx.moveTo(pad.l,H-pad.b);ctx.lineTo(W-pad.r,H-pad.b);ctx.stroke();
 
   // Tick labels
@@ -1022,85 +1030,126 @@ function ghost(key,cx2,cy2,face){
 }
 function clrG(){oCtx.clearRect(0,0,ovC.width,ovC.height);}
 
-function startDS(e,key){drag={key,src:'shelf',face:'large',cx:e.clientX,cy:e.clientY};}
-function startDK(e,idx){const it=stack[idx];drag={key:it.key,src:'stack',stackIdx:idx,face:it.face};}
+// ── Drag state machine ────────────────────────────────────────────────────────
+const DRAG_THRESH = 6;
+
+function startDS(e, key){
+  drag = {src:'shelf', key, face:'large',
+          startX:e.clientX, startY:e.clientY, hasMoved:false};
+}
+function startDK(e, idx){
+  const it = stack[idx];
+  drag = {src:'stack', key:it.key, face:it.face, stackIdx:idx,
+          startX:e.clientX, startY:e.clientY, hasMoved:false};
+}
 
 function editMove(e){
-  if(!drag)return;
-  ghost(drag.key,e.clientX,e.clientY,drag.face);
-  const r=simC.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top;
-  const bl=blocks(); hoverIdx=-1;
-  for(let i=bl.length-1;i>=0;i--){const b=bl[i];if(mx>=b.x&&mx<=b.x+b.w&&my>=b.y&&my<=b.y+b.h){hoverIdx=i;break;}}
-}
-
-function editUp(e){
-  if(!drag){clrG();return;}
-  const sr=simC.getBoundingClientRect();
-  const over=e.clientX>=sr.left&&e.clientX<=sr.right&&e.clientY>=sr.top&&e.clientY<=sr.bottom;
-  if(over){
-    if(drag.src==='shelf'){stack.push({key:drag.key,face:'large'});vel=0;moving=false;coasting=false;}
-    else if(drag.src==='stack'&&drag.stackIdx!==stack.length-1){const it=stack.splice(drag.stackIdx,1)[0];stack.push(it);}
-  } else if(drag.src==='stack'){stack.splice(drag.stackIdx,1);vel=0;moving=false;coasting=false;}
-  hoverIdx=-1; buildShelf(); clrG(); drag=null;
-}
-
-function editClickStack(mx,my){
-  const bl=blocks();
-  for(let i=bl.length-1;i>=0;i--){
-    const b=bl[i];
-    if(mx>=b.x&&mx<=b.x+b.w&&my>=b.y&&my<=b.y+b.h){
-      const it=stack.splice(b.idx,1)[0]; stack.push(it);
-      vel=0;moving=false;coasting=false; return;
+  if(!drag) return;
+  const dx=e.clientX-drag.startX, dy=e.clientY-drag.startY;
+  if(!drag.hasMoved && Math.sqrt(dx*dx+dy*dy)>DRAG_THRESH) drag.hasMoved=true;
+  if(drag.hasMoved){
+    ghost(drag.key, e.clientX, e.clientY, drag.face);
+    const r=simC.getBoundingClientRect();
+    const mx=e.clientX-r.left, my=e.clientY-r.top;
+    const bl=blocks(); hoverIdx=-1;
+    for(let i=bl.length-1;i>=0;i--){
+      const b=bl[i];
+      if(mx>=b.x&&mx<=b.x+b.w&&my>=b.y&&my<=b.y+b.h){hoverIdx=i;break;}
     }
   }
 }
 
+function dropDrag(clientX, clientY){
+  if(!drag){ clrG(); return; }
+  const sr=simC.getBoundingClientRect();
+  const overSim = clientX>=sr.left && clientX<=sr.right &&
+                  clientY>=sr.top  && clientY<=sr.bottom;
+  if(drag.src==='shelf'){
+    if(overSim || !drag.hasMoved){
+      stack.push({key:drag.key, face:'large'});
+      vel=0; moving=false; coasting=false;
+    }
+  } else {
+    if(drag.hasMoved){
+      if(overSim){
+        if(drag.stackIdx !== stack.length-1){
+          const it=stack.splice(drag.stackIdx,1)[0]; stack.push(it);
+        }
+      } else {
+        stack.splice(drag.stackIdx,1);
+        vel=0; moving=false; coasting=false;
+      }
+    } else {
+      if(drag.stackIdx !== stack.length-1){
+        const it=stack.splice(drag.stackIdx,1)[0]; stack.push(it);
+        vel=0; moving=false; coasting=false;
+      }
+    }
+  }
+  hoverIdx=-1; buildShelf(); clrG(); drag=null;
+}
+
 simC.addEventListener('dblclick',e=>{
-  if(!editMode)return;
-  const r=simC.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top,bl=blocks();
-  for(let i=bl.length-1;i>=0;i--){const b=bl[i];if(mx>=b.x&&mx<=b.x+b.w&&my>=b.y&&my<=b.y+b.h){stack[b.idx].face=stack[b.idx].face==='large'?'small':'large';return;}}
+  if(!editMode) return;
+  const r=simC.getBoundingClientRect(), mx=e.clientX-r.left, my=e.clientY-r.top;
+  const bl=blocks();
+  for(let i=bl.length-1;i>=0;i--){
+    const b=bl[i];
+    if(mx>=b.x&&mx<=b.x+b.w&&my>=b.y&&my<=b.y+b.h){
+      stack[b.idx].face=stack[b.idx].face==='large'?'small':'large'; return;
+    }
+  }
 });
 
-function apDown(e){if(editMode||replayData)return;applyDrag={sx:e.clientX,sf:F};}
+function apDown(e){if(editMode||replayData)return; applyDrag={sx:e.clientX,sf:F};}
 function apMove(e){
-  if(!applyDrag||editMode)return;
+  if(!applyDrag||editMode) return;
   F=Math.max(-60,Math.min(60,applyDrag.sf+(e.clientX-applyDrag.sx)*.55));
   if(coasting&&Math.abs(F)>.1){coasting=false;moving=true;}
 }
 function apUp(){
-  if(!applyDrag)return; applyDrag=null;
-  if(!constF){if(moving&&Math.abs(vel)>.05){coasting=true;moving=false;}F=0;}
+  if(!applyDrag) return; applyDrag=null;
+  if(!constF){if(moving&&Math.abs(vel)>.05){coasting=true;moving=false;} F=0;}
 }
 
 simC.addEventListener('mousedown',e=>{
   if(editMode){
-    moved=false;
-    const r=simC.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top,bl=blocks();
-    for(let i=bl.length-1;i>=0;i--){const b=bl[i];if(mx>=b.x&&mx<=b.x+b.w&&my>=b.y&&my<=b.y+b.h){startDK(e,i);return;}}
-  } else apDown(e);
+    const r=simC.getBoundingClientRect(), mx=e.clientX-r.left, my=e.clientY-r.top;
+    const bl=blocks();
+    for(let i=bl.length-1;i>=0;i--){
+      const b=bl[i];
+      if(mx>=b.x&&mx<=b.x+b.w&&my>=b.y&&my<=b.y+b.h){ startDK(e,i); return; }
+    }
+  } else { apDown(e); }
 });
 simC.addEventListener('touchstart',e=>{
-  e.preventDefault(); moved=false; const t=e.touches[0];
+  e.preventDefault(); const t=e.touches[0];
   if(editMode){
-    const r=simC.getBoundingClientRect(),mx=t.clientX-r.left,my=t.clientY-r.top,bl=blocks();
-    for(let i=bl.length-1;i>=0;i--){const b=bl[i];if(mx>=b.x&&mx<=b.x+b.w&&my>=b.y&&my<=b.y+b.h){startDK(t,i);return;}}
-  } else apDown(t);
+    const r=simC.getBoundingClientRect(), mx=t.clientX-r.left, my=t.clientY-r.top;
+    const bl=blocks();
+    for(let i=bl.length-1;i>=0;i--){
+      const b=bl[i];
+      if(mx>=b.x&&mx<=b.x+b.w&&my>=b.y&&my<=b.y+b.h){ startDK(t,i); return; }
+    }
+  } else { apDown(t); }
 },{passive:false});
 
-window.addEventListener('mousemove',e=>{if(drag){moved=true;editMove(e);}else apMove(e);});
-window.addEventListener('mouseup',e=>{
-  if(drag){
-    if(!moved){const r=simC.getBoundingClientRect();editClickStack(e.clientX-r.left,e.clientY-r.top);clrG();drag=null;hoverIdx=-1;}
-    else editUp(e);
-  } else apUp();
-  moved=false;
+window.addEventListener('mousemove',e=>{
+  if(drag) editMove(e); else apMove(e);
 });
-window.addEventListener('touchmove',e=>{if(drag){moved=true;e.preventDefault();editMove(e.touches[0]);}else if(!fsOpen)apMove(e.touches[0]);},{passive:false});
-window.addEventListener('touchend',e=>{
-  if(drag){if(!moved){const r=simC.getBoundingClientRect();const t=e.changedTouches[0];editClickStack(t.clientX-r.left,t.clientY-r.top);clrG();drag=null;hoverIdx=-1;}else editUp(e.changedTouches[0]);}
+window.addEventListener('mouseup',e=>{
+  if(drag) dropDrag(e.clientX, e.clientY);
   else apUp();
-  moved=false;
+});
+window.addEventListener('touchmove',e=>{
+  if(drag){ e.preventDefault(); editMove(e.touches[0]); }
+  else if(!fsOpen) apMove(e.touches[0]);
 },{passive:false});
+window.addEventListener('touchend',e=>{
+  if(drag){ const t=e.changedTouches[0]; dropDrag(t.clientX, t.clientY); }
+  else apUp();
+},{passive:false});
+
 
 // Scatter hover (mini)
 function updateScatterHover(mx,my,W,H){
@@ -1200,18 +1249,21 @@ function drawSimFs(){
   // Arrows (reuse arrow function with fs canvas)
   const bot=fsBlocks[0],top=fsBlocks[fsBlocks.length-1];
   const fr=fric(),Nv=Nf(),midY=bot.y+(gy-bot.y)/2;
-  const minFL=(fontSize+4)*4;
+  const minFL=fontSize*4.5;
+  const fScaleFs=Math.max(2,(W*0.38)/60);  // px per N, same ratio as main canvas
   // Use the same arrow() which works on any ctx — temporarily swap target
   const savedCtx=sCtx; // we can't swap, just call arrow directly
-  function fsArrow(x1,y1,x2,y2,col,lbl,side){
+  function fsArrow(x1,y1,x2,y2,col,lbl,side,wm){
     const dx=x2-x1,dy=y2-y1,len=Math.sqrt(dx*dx+dy*dy);
     if(len<3)return;
-    simFsCtx.save(); simFsCtx.strokeStyle=col; simFsCtx.fillStyle=col; simFsCtx.lineWidth=2.5;
-    simFsCtx.beginPath(); simFsCtx.moveTo(x1,y1); simFsCtx.lineTo(x2,y2); simFsCtx.stroke();
     const a=Math.atan2(dy,dx);
+    const fsHd=Math.max(13,fontSize*1.1)*(wm||1);
+    const flx2=x2-fsHd*Math.cos(a), fly2=y2-fsHd*Math.sin(a);
+    simFsCtx.save(); simFsCtx.strokeStyle=col; simFsCtx.fillStyle=col; simFsCtx.lineWidth=Math.max(3,fontSize*0.24)*(wm||1);
+    simFsCtx.beginPath(); simFsCtx.moveTo(x1,y1); simFsCtx.lineTo(flx2,fly2); simFsCtx.stroke();
     simFsCtx.beginPath(); simFsCtx.moveTo(x2,y2);
-    simFsCtx.lineTo(x2-11*Math.cos(a-.4),y2-11*Math.sin(a-.4));
-    simFsCtx.lineTo(x2-11*Math.cos(a+.4),y2-11*Math.sin(a+.4));
+    simFsCtx.lineTo(x2-fsHd*Math.cos(a-.4),y2-fsHd*Math.sin(a-.4));
+    simFsCtx.lineTo(x2-fsHd*Math.cos(a+.4),y2-fsHd*Math.sin(a+.4));
     simFsCtx.closePath(); simFsCtx.fill();
     if(!lbl){simFsCtx.restore();return;}
     simFsCtx.font=`bold ${fontSize+2}px system-ui`;
@@ -1226,11 +1278,12 @@ function drawSimFs(){
     simFsCtx.fill(); simFsCtx.fillStyle=col; simFsCtx.textAlign=align; simFsCtx.fillText(lbl,tx,ty);
     simFsCtx.restore();
   }
-  const nLen=Math.max(44,Math.min(70,Nv*1.3));
-  fsArrow(cx,top.y,cx,top.y-nLen,'#3B8BD4',`N=${disp(Nv)}${unit()}`,'a');
-  fsArrow(cx,gy,cx,gy+28,'rgba(120,80,180,.7)',`W=${disp(Nv)}${unit()}`,'b');
-  if(Math.abs(F)>.05){const fl=Math.max(minFL,Math.min(100,Math.abs(F)*1.8)),d=Math.sign(F);fsArrow(cx+d*bot.w/2,midY-5,cx+d*(bot.w/2+fl),midY-5,'#E85D24',`F=${disp(Math.abs(F))}${unit()}`,'a');}
-  if(Math.abs(fr)>.05){const fl=Math.max(minFL,Math.min(100,Math.abs(fr)*1.8)),fd=Math.sign(fr);const fc=(!moving&&!coasting)?'#4A9A5C':coasting?'#E08030':'#EF9F27';// Friction at contact surface
+  const nLenRawFs=Math.max(fontSize*2.5, Nv*fScaleFs*0.8);
+  const nLen=Math.min(nLenRawFs, top.y-4, 48);
+  fsArrow(cx,top.y,cx,top.y-nLen,'#3B8BD4',`N=${disp(Nv)}${unit()}`,'a',2);
+  fsArrow(cx,gy,cx,gy+nLen,'rgba(120,80,180,.7)',`W=${disp(Nv)}${unit()}`,'b',2);
+  if(Math.abs(F)>.05){const fl=Math.max(minFL,Math.abs(F)*fScaleFs),d=Math.sign(F);fsArrow(cx+d*bot.w/2,midY-5,cx+d*(bot.w/2+fl),midY-5,'#E85D24',`F=${disp(Math.abs(F))}${unit()}`,'a');}
+  if(Math.abs(fr)>.05){const fl=Math.max(minFL,Math.abs(fr)*fScaleFs),fd=Math.sign(fr);const fc=(!moving&&!coasting)?'#4A9A5C':coasting?'#E08030':'#EF9F27';// Friction at contact surface
 fsArrow(cx,gy,cx+fd*fl,gy,fc,`${(!moving&&!coasting)?'fs':'fk'}=${disp(Math.abs(fr))}${unit()}`,'a');}
   if(coasting&&Math.abs(vel)>.05){simFsCtx.font=`${fontSize+1}px system-ui`;simFsCtx.fillStyle='#E08030';simFsCtx.textAlign='center';simFsCtx.fillText('慣性滑行',cx,top.y-14);simFsCtx.textAlign='left';}
   updateSimFsInfo();
@@ -1347,18 +1400,19 @@ function drawSimReplay(){
   // Arrows using recorded values
   const Nv=p.N||0, Fv=p.Fraw||0, frv=p.frRaw||0;
   const midY=bot.y+(gy-bot.y)/2;
-  const minFL=fontSize*4.5;
-  arrow(sCtx,cx,top.y,cx,top.y-Math.max(36,Math.min(54,Nv*1.1)),'#3B8BD4',`N=${disp(Nv)}${unit()}`,'a');
-  arrow(sCtx,cx,gy,cx,gy+22,'rgba(120,80,180,.7)',`W=${disp(Nv)}${unit()}`,'b');
+  const fScaleRp=Math.max(2,(W*0.38)/60);
+  const minFL=fontSize*4.0;
+  const nLenRp=Math.min(Math.max(fontSize*2.5,Nv*fScaleRp*0.8), top.y-4, 34);
+  arrow(sCtx,cx,top.y,cx,top.y-nLenRp,'#3B8BD4',`N=${disp(Nv)}${unit()}`,'a',2);
+  arrow(sCtx,cx,gy,cx,gy+nLenRp,'rgba(120,80,180,.7)',`W=${disp(Nv)}${unit()}`,'b',2);
   if(Math.abs(Fv)>.05){
-    const d=Math.sign(Fv), fl=Math.max(minFL,Math.min(80,Math.abs(Fv)*1.6));
+    const d=Math.sign(Fv), fl=Math.max(minFL,Math.abs(Fv)*fScaleRp);
     arrow(sCtx,cx+d*bot.w/2,midY-4,cx+d*(bot.w/2+fl),midY-4,'#E85D24',`F=${disp(Math.abs(Fv))}${unit()}`,'a');
   }
   if(Math.abs(frv)>.05){
-    const fd=Math.sign(frv), fl=Math.max(minFL,Math.min(80,Math.abs(frv)*1.6));
+    const fd=Math.sign(frv), fl=Math.max(minFL,Math.abs(frv)*fScaleRp);
     const fc=p.mv?'#EF9F27':'#4A9A5C';
     const tag=p.mv?'fk':'fs';
-    // Friction at contact surface
     arrow(sCtx,cx,gy,cx+fd*fl,gy,fc,`${tag}=${disp(Math.abs(frv))}${unit()}`,'a');
   }
 
@@ -1445,7 +1499,7 @@ fsC.addEventListener('touchmove',e=>{
 fsC.addEventListener('touchend',()=>{fsTouch=null;});
 
 // Controls
-document.getElementById('fa-btn').addEventListener('click',()=>setFontSize(fontSize+1));
+document.getElementById('fa-btn').addEventListener('click',()=>setFontSize(fontSize+2));
 document.getElementById('fs-btn2').addEventListener('click',()=>setFontSize(fontSize-1));
 document.getElementById('fs').addEventListener('input',e=>{F=parseFloat(e.target.value);if(coasting&&Math.abs(F)>.1){coasting=false;moving=true;}});
 document.getElementById('fs').addEventListener('change',()=>{if(!constF){if(moving&&Math.abs(vel)>.05){coasting=true;moving=false;}F=0;document.getElementById('fs').value=0;}});
@@ -1455,7 +1509,7 @@ document.getElementById('cf').addEventListener('change',e=>{constF=e.target.chec
 document.getElementById('em').addEventListener('change',e=>{
   editMode=e.target.checked; simC.className=editMode?'em':'';
   document.getElementById('eb').className=editMode?'eb v':'eb';
-  drag=null;applyDrag=null;clrG();buildShelf();moved=false;
+  drag=null;applyDrag=null;clrG();buildShelf();
 });
 document.getElementById('show-lines').addEventListener('change',e=>{showLines=e.target.checked;});
 document.getElementById('ss').addEventListener('change',e=>{surf=e.target.value;vel=0;moving=false;coasting=false;});
