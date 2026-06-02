@@ -105,7 +105,9 @@
 
         .controls {
             display: flex;
-            justify-content: center;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
             width: 100%;
         }
 
@@ -127,6 +129,24 @@
         button.action-btn:hover {
             transform: translateY(-1px);
             box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+        }
+
+        .snap-label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            font-size: 1rem;
+            color: #2c3e50;
+            font-weight: bold;
+            padding: 4px;
+            user-select: none;
+        }
+        
+        .snap-label input {
+            cursor: pointer;
+            width: 18px;
+            height: 18px;
         }
 
         .data-panel {
@@ -261,6 +281,9 @@
             <!-- 控制按鈕區 -->
             <div class="controls">
                 <button id="btnToggleComponents" class="action-btn">顯示分力與輔助線</button>
+                <label class="snap-label">
+                    <input type="checkbox" id="chkSnap" checked> 🧲 拖曳時貼齊整數網格
+                </label>
             </div>
 
             <div class="instruction" id="instText">
@@ -281,14 +304,14 @@
             const canvas = document.getElementById('forceCanvas');
             const ctx = canvas.getContext('2d');
             
-            // DOM 元素 (按鈕與 UI 區塊)
+            // DOM 元素
             const btnToggle = document.getElementById('btnToggleComponents');
+            const chkSnap = document.getElementById('chkSnap'); // 新增的貼齊開關
             const tabRect = document.getElementById('tabRect');
             const tabArb = document.getElementById('tabArb');
             const tabAdd = document.getElementById('tabAdd');
             const instText = document.getElementById('instText');
 
-            // DOM 元素 (數值面板)
             const inF = document.getElementById('inF');
             const outF = document.getElementById('outF');
             const lblF = document.getElementById('lblF');
@@ -318,7 +341,7 @@
             const scale = 10; 
 
             // 狀態變數
-            let mode = 'rect'; // 'rect', 'arb', or 'add'
+            let mode = 'rect'; 
             let showComponents = false;
             let dragTarget = null; 
 
@@ -335,19 +358,14 @@
             // -- 模式切換邏輯 --
             function setMode(newMode) {
                 mode = newMode;
-                
-                // 標籤樣式重置
                 tabRect.classList.remove('active');
                 tabArb.classList.remove('active');
                 tabAdd.classList.remove('active');
-
-                // 預設關閉顯示
                 showComponents = false;
 
                 if (mode === 'rect') {
                     tabRect.classList.add('active');
                     
-                    // UI 切換：F 為輸入，C1/C2 為純文字
                     inF.classList.remove('hidden'); outF.classList.add('hidden');
                     wrapInFAng.classList.remove('hidden'); outFAng.classList.add('hidden');
                     inC1.classList.add('hidden'); outC1.classList.remove('hidden');
@@ -365,7 +383,6 @@
                 } else if (mode === 'arb') {
                     tabArb.classList.add('active');
                     
-                    // UI 切換：F 為輸入，C1/C2大小為文字，角度為輸入
                     inF.classList.remove('hidden'); outF.classList.add('hidden');
                     wrapInFAng.classList.remove('hidden'); outFAng.classList.add('hidden');
                     inC1.classList.add('hidden'); outC1.classList.remove('hidden');
@@ -384,7 +401,6 @@
                 } else if (mode === 'add') {
                     tabAdd.classList.add('active');
                     
-                    // UI 切換：C1/C2 為輸入，F 為純文字 (主角對調)
                     inF.classList.add('hidden'); outF.classList.remove('hidden');
                     wrapInFAng.classList.add('hidden'); outFAng.classList.remove('hidden');
                     inC1.classList.remove('hidden'); outC1.classList.add('hidden');
@@ -396,14 +412,12 @@
                     lblC1Ang.innerText = "方向 α ="; lblC2Ang.innerText = "方向 β =";
                     instText.innerHTML = "👉 拖曳 <strong>藍色與綠色箭頭</strong>，或輸入數值改變作用力。<br>👉 點擊按鈕查看合成結果。";
                     
-                    // 預設為相背的兩個力： 0度(大小10) 與 180度(大小10)
                     alpha = 0; beta = 180;
                     inC1.value = 10; inC2.value = 10;
                     inC1Ang.value = alpha; inC2Ang.value = beta;
                     updateC1FromInputs();
                     updateC2FromInputs();
                 }
-
                 updateToggleButton();
                 render();
             }
@@ -412,7 +426,6 @@
             tabArb.addEventListener('click', () => setMode('arb'));
             tabAdd.addEventListener('click', () => setMode('add'));
 
-            // -- 切換顯示狀態 --
             function updateToggleButton() {
                 const noun = mode === 'add' ? '合力' : '分力';
                 if (showComponents) {
@@ -429,6 +442,8 @@
                 updateToggleButton();
                 render(); 
             });
+            
+            chkSnap.addEventListener('change', () => render());
 
             // -- 數值輸入連動 --
             function updateForceFromInputs() {
@@ -468,7 +483,6 @@
             }
             inC2.addEventListener('input', updateC2FromInputs);
 
-            // 角度輸入框需要同時支援 arb 模式與 add 模式
             inC1Ang.addEventListener('input', (e) => {
                 if (mode === 'arb') {
                     let val = parseFloat(e.target.value);
@@ -482,7 +496,6 @@
                 } else if (mode === 'add') updateC2FromInputs();
             });
 
-
             // -- 繪圖輔助函數 --
             function drawArrow(fromx, fromy, tox, toy, color, lineWidth = 3, isDashed = false, label = null) {
                 const headlen = 15;
@@ -491,15 +504,19 @@
                 const angle = Math.atan2(dy, dx);
                 const len = Math.hypot(dx, dy);
                 
-                if (len < 1) return; // 太短不畫
+                if (len < 1) return; 
+
+                const shorten = Math.min(headlen * 0.6, len * 0.5); 
+                const lineEndX = tox - Math.cos(angle) * shorten;
+                const lineEndY = toy - Math.sin(angle) * shorten;
 
                 ctx.beginPath();
                 ctx.strokeStyle = color;
                 ctx.lineWidth = lineWidth;
                 ctx.lineCap = 'round';
-                ctx.setLineDash(isDashed ? [6, 6] : []);
+                ctx.setLineDash(isDashed ? [5, 5] : []);
                 ctx.moveTo(fromx, fromy);
-                ctx.lineTo(tox, toy);
+                ctx.lineTo(lineEndX, lineEndY); 
                 ctx.stroke();
                 
                 ctx.beginPath();
@@ -534,17 +551,31 @@
             }
 
             function drawGrid() {
-                const step = 40; 
-                ctx.strokeStyle = '#ecf0f1';
+                const minorStep = 10; // 細線：每 1 單位 (10px)
+                const majorStep = 50; // 粗線：每 5 單位 (50px)
+                
+                // 畫 1 單位細線 (淡淡的，作為方格紙背景)
+                ctx.strokeStyle = '#f1f3f5'; 
                 ctx.lineWidth = 1;
                 ctx.setLineDash([]);
-                for (let x = originX % step; x <= canvas.width; x += step) {
+                for (let x = originX % minorStep; x <= canvas.width; x += minorStep) {
                     ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
                 }
-                for (let y = originY % step; y <= canvas.height; y += step) {
+                for (let y = originY % minorStep; y <= canvas.height; y += minorStep) {
                     ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
                 }
                 
+                // 畫 5 單位粗線
+                ctx.strokeStyle = '#dfe6e9'; 
+                ctx.lineWidth = 1.5;
+                for (let x = originX % majorStep; x <= canvas.width; x += majorStep) {
+                    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
+                }
+                for (let y = originY % majorStep; y <= canvas.height; y += majorStep) {
+                    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
+                }
+                
+                // 畫座標軸
                 ctx.strokeStyle = '#bdc3c7';
                 ctx.lineWidth = 2;
                 ctx.beginPath(); ctx.moveTo(0, originY); ctx.lineTo(canvas.width, originY); ctx.stroke();
@@ -563,9 +594,7 @@
                 let Fx, Fy, valF, forceAngle;
                 let valC1, valC2;
                 
-                // 1. 核心物理運算
                 if (mode === 'rect' || mode === 'arb') {
-                    // 分解模式：紅力決定藍綠分力
                     Fx = targetX - originX;
                     Fy = originY - targetY; 
                     valF = Math.hypot(Fx, Fy) / scale;
@@ -585,7 +614,6 @@
                         c2X = originX + Fb * Math.cos(radB); c2Y = originY - Fb * Math.sin(radB);
                     }
                 } else if (mode === 'add') {
-                    // 合成模式：藍綠作用力決定紅色合力
                     const dx1 = c1X - originX; const dy1 = originY - c1Y;
                     const dx2 = c2X - originX; const dy2 = originY - c2Y;
                     
@@ -603,9 +631,7 @@
                     isSolvable = true;
                 }
 
-                // 2. 畫面渲染
                 if (mode === 'rect' || mode === 'arb') {
-                    // 繪製軸線與手柄 (任意分解模式)
                     let handleA_X = 0, handleA_Y = 0, handleB_X = 0, handleB_Y = 0;
                     if (mode === 'arb' && showComponents) {
                         const axisLen = Math.max(canvas.width, canvas.height) * 2;
@@ -630,7 +656,6 @@
                         window.handleData = { handleA_X, handleA_Y, handleB_X, handleB_Y };
                     }
 
-                    // 繪製平行四邊形與分力
                     if (showComponents) {
                         if (isSolvable) {
                             ctx.beginPath(); ctx.strokeStyle = '#a4b0be'; ctx.lineWidth = 1.5; ctx.setLineDash([5, 5]);
@@ -642,14 +667,12 @@
                         }
                     }
 
-                    // 畫主作用力 (紅)
                     drawArrow(originX, originY, targetX, targetY, '#e74c3c', 6, false, valF.toFixed(1));
                     if (dragTarget === 'force') {
                         ctx.beginPath(); ctx.arc(targetX, targetY, 16, 0, Math.PI * 2); ctx.fillStyle = 'rgba(231, 76, 60, 0.3)'; ctx.fill();
                     }
                 } 
                 else if (mode === 'add') {
-                    // 畫分力 (總是顯示)
                     drawArrow(originX, originY, c1X, c1Y, '#3498db', 5, false, valC1.toFixed(1)); 
                     drawArrow(originX, originY, c2X, c2Y, '#2ecc71', 5, false, valC2.toFixed(1));
                     
@@ -660,16 +683,24 @@
                         ctx.beginPath(); ctx.arc(c2X, c2Y, 16, 0, Math.PI * 2); ctx.fillStyle = 'rgba(46, 204, 113, 0.3)'; ctx.fill();
                     }
 
-                    // 畫合力與平行四邊形 (需要點擊顯示)
                     if (showComponents) {
-                        ctx.beginPath(); ctx.strokeStyle = '#a4b0be'; ctx.lineWidth = 1.5; ctx.setLineDash([5, 5]);
+                        ctx.beginPath(); ctx.strokeStyle = 'rgba(52, 152, 219, 0.4)'; ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
+                        ctx.moveTo(c1X, c1Y); ctx.lineTo(c1X, originY); ctx.moveTo(c1X, c1Y); ctx.lineTo(originX, c1Y); ctx.stroke();
+                        if (Math.abs(c1X - originX) > 2) drawArrow(originX, originY, c1X, originY, 'rgba(52, 152, 219, 0.85)', 3, true);
+                        if (Math.abs(originY - c1Y) > 2) drawArrow(originX, originY, originX, c1Y, 'rgba(52, 152, 219, 0.85)', 3, true);
+
+                        ctx.beginPath(); ctx.strokeStyle = 'rgba(46, 204, 113, 0.4)'; ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
+                        ctx.moveTo(c2X, c2Y); ctx.lineTo(c2X, originY); ctx.moveTo(c2X, c2Y); ctx.lineTo(originX, c2Y); ctx.stroke();
+                        if (Math.abs(c2X - originX) > 2) drawArrow(originX, originY, c2X, originY, 'rgba(46, 204, 113, 0.85)', 3, true);
+                        if (Math.abs(originY - c2Y) > 2) drawArrow(originX, originY, originX, c2Y, 'rgba(46, 204, 113, 0.85)', 3, true);
+
+                        ctx.beginPath(); ctx.strokeStyle = '#95a5a6'; ctx.lineWidth = 1.5; ctx.setLineDash([5, 5]);
                         ctx.moveTo(c1X, c1Y); ctx.lineTo(targetX, targetY); ctx.moveTo(c2X, c2Y); ctx.lineTo(targetX, targetY); ctx.stroke();
                         
                         drawArrow(originX, originY, targetX, targetY, '#e74c3c', 6, false, valF.toFixed(1));
                     }
                 }
 
-                // 3. 更新 UI 面板數值
                 if (mode === 'rect' || mode === 'arb') {
                     if (!isSolvable && showComponents) {
                         outC1.innerText = "無解"; outC2.innerText = "無解";
@@ -694,7 +725,6 @@
                 }
             }
 
-            // -- 互動事件 (滑鼠/觸控) --
             function getPointerPos(e) {
                 const rect = canvas.getBoundingClientRect();
                 const scaleX = canvas.width / rect.width;
@@ -708,13 +738,10 @@
                 const pos = getPointerPos(e);
                 
                 if (mode === 'add') {
-                    // 合成模式下，優先判定是否點中兩個作用力
                     if (Math.hypot(pos.x - c1X, pos.y - c1Y) < 30) { dragTarget = 'c1'; render(); return; }
                     if (Math.hypot(pos.x - c2X, pos.y - c2Y) < 30) { dragTarget = 'c2'; render(); return; }
                 } else {
-                    // 分解模式下，優先判定是否點中主作用力
                     if (Math.hypot(pos.x - targetX, pos.y - targetY) < 30) { dragTarget = 'force'; render(); return; }
-                    // 再判定是否點中軸線把手
                     if (mode === 'arb' && showComponents && window.handleData) {
                         const { handleA_X, handleA_Y, handleB_X, handleB_Y } = window.handleData;
                         if (Math.hypot(pos.x - handleA_X, pos.y - handleA_Y) < 25) { dragTarget = 'axis1'; render(); return; }
@@ -726,14 +753,30 @@
             function onPointerMove(e) {
                 if (!dragTarget) return;
                 if (e.cancelable) e.preventDefault(); 
-                const pos = getPointerPos(e);
                 
+                let pos = getPointerPos(e);
+                
+                // 網格貼齊與角度貼齊邏輯
+                if (chkSnap.checked) {
+                    if (dragTarget === 'force' || dragTarget === 'c1' || dragTarget === 'c2') {
+                        // 座標貼齊每 10px (即 1 單位整數點)
+                        pos.x = originX + Math.round((pos.x - originX) / scale) * scale;
+                        pos.y = originY + Math.round((pos.y - originY) / scale) * scale;
+                    }
+                }
+
                 if (dragTarget === 'force') { targetX = pos.x; targetY = pos.y; } 
                 else if (dragTarget === 'c1') { c1X = pos.x; c1Y = pos.y; }
                 else if (dragTarget === 'c2') { c2X = pos.x; c2Y = pos.y; }
                 else if (dragTarget === 'axis1' || dragTarget === 'axis2') {
                     let newAng = Math.atan2(originY - pos.y, pos.x - originX) * (180 / Math.PI);
                     if (newAng < 0) newAng += 360;
+                    
+                    // 角度貼齊：若有勾選，就貼齊 5 度的倍數
+                    if (chkSnap.checked) {
+                        newAng = Math.round(newAng / 5) * 5;
+                    }
+
                     if (dragTarget === 'axis1') alpha = newAng;
                     if (dragTarget === 'axis2') beta = newAng;
                 }
@@ -751,7 +794,6 @@
             window.addEventListener('touchmove', onPointerMove, {passive: false});
             window.addEventListener('touchend', onPointerUp);
 
-            // 初始化 (載入時預設為直角分解)
             setMode('rect');
         }
     </script>
