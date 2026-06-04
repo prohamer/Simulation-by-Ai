@@ -125,6 +125,8 @@
         .data-table td { padding: 8px; text-align: center; border: 1px solid #ddd; }
         .data-table input { width: 100%; padding: 5px; border: none; text-align: center; background: transparent; }
         .data-table input:focus { background: #fff3e0; outline: 2px solid #ff9800; border-radius: 3px; }
+        .data-table tr:nth-child(2) input { background: #e8f4fd; font-weight: bold; }
+        .data-table tr:nth-child(2) input:focus { background: #bbdefb; outline: 2px solid #1976d2; }
         .editable-cell { cursor: pointer; padding: 8px; border-radius: 3px; transition: background-color 0.3s; border: 2px dashed transparent; color: black; font-weight: bold; }
         .editable-cell:hover { background-color: #e3f2fd; border-color: #2196f3; }
         .editable-cell-editing { background-color: #fff3e0; border-color: #ff9800; }
@@ -240,6 +242,35 @@
         .confirm-btns button:hover { opacity: 0.85; }
         .confirm-cancel { background: #e0e0e0; color: #333; }
         .confirm-ok { background: #e53935; color: white; }
+        /* 縮放區塊 */
+        .zoom-controls {
+            margin-top: 16px;
+            padding: 16px 18px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            border: 1px solid #dee2e6;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px 32px;
+        }
+        @media (max-width: 640px) { .zoom-controls { grid-template-columns: 1fr; } }
+        .zoom-row { display: flex; flex-direction: column; gap: 6px; }
+        .zoom-label { font-weight: bold; font-size: 13px; color: #444; margin-bottom: 2px; }
+        .zoom-slider-wrap { display: flex; gap: 6px; align-items: center; }
+        .zoom-slider-wrap input[type=range] {
+            flex: 1; height: 4px; cursor: pointer; accent-color: #1976d2; min-width: 0;
+        }
+        .zoom-inputs { display: flex; gap: 8px; align-items: center; margin-top: 2px; }
+        .zoom-inputs label { font-size: 12px; color: #666; white-space: nowrap; }
+        .zoom-input {
+            width: 80px; padding: 4px 6px; border: 1.5px solid #bdbdbd; border-radius: 5px;
+            font-size: 13px; text-align: center; transition: border-color 0.2s;
+        }
+        .zoom-input:focus { outline: none; border-color: #1976d2; }
+        .zoom-reset { padding: 3px 10px; border: 1.5px solid #bdbdbd; border-radius: 5px;
+            background: white; font-size: 12px; cursor: pointer; color: #555;
+            transition: all 0.2s; white-space: nowrap; }
+        .zoom-reset:hover { border-color: #1976d2; color: #1976d2; background: #e3f2fd; }
         /* 選擇刪除哪一組 */
         .pick-group-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px; max-height: 280px; overflow-y: auto; }
         .pick-group-item {
@@ -276,11 +307,11 @@
             </div>
             <div class="form-group">
                 <label for="xAxisMin">X軸最小值</label>
-                <input type="number" id="xAxisMin" value="0" onchange="updateChart()">
+                <input type="number" id="xAxisMin" value="0" onchange="onAxisBoundChange()">
             </div>
             <div class="form-group">
                 <label for="xAxisMax">X軸最大值</label>
-                <input type="number" id="xAxisMax" value="100" onchange="updateChart()">
+                <input type="number" id="xAxisMax" value="100" onchange="onAxisBoundChange()">
             </div>
         </div>
         <div class="form-grid-y-section">
@@ -290,18 +321,18 @@
             </div>
             <div class="form-group">
                 <label for="yAxisMin">Y軸最小值</label>
-                <input type="number" id="yAxisMin" value="0" onchange="updateChart()">
+                <input type="number" id="yAxisMin" value="0" onchange="onAxisBoundChange()">
             </div>
             <div class="form-group">
                 <label for="yAxisMax">Y軸最大值</label>
-                <input type="number" id="yAxisMax" value="100" onchange="updateChart()">
+                <input type="number" id="yAxisMax" value="100" onchange="onAxisBoundChange()">
             </div>
         </div>
     </div>
 
     <!-- 實驗組別管理 -->
     <div class="section experiment-section">
-        <div class="section-title">🧪 實驗組別管理</div>
+        <div class="section-title">🧪 實驗組別管理 <span style="font-size:14px;font-weight:normal;color:#888;margin-left:6px;">（應變變因）</span></div>
         <div class="undo-redo-bar">
             <button class="btn-undo-redo" id="undoBtn" onclick="doUndo()" disabled title="復原 (Ctrl+Z)">↩ 復原</button>
             <button class="btn-undo-redo" id="redoBtn" onclick="doRedo()" disabled title="重做 (Ctrl+Y)">↪ 重做</button>
@@ -358,6 +389,43 @@
         <div class="chart-container">
             <div class="chart-wrapper">
                 <canvas id="chart"></canvas>
+            </div>
+        </div>
+        <!-- 縮放區塊 -->
+        <div class="zoom-controls" id="zoomControls">
+            <!-- X 軸 -->
+            <div class="zoom-row">
+                <div style="display:flex;justify-content:space-between;align-items:center;">
+                    <span class="zoom-label">📐 X 軸範圍</span>
+                    <button class="zoom-reset" onclick="resetZoomAxis('x')">重設</button>
+                </div>
+                <div class="zoom-slider-wrap">
+                    <input type="range" id="xMinSlider" step="any" oninput="onZoomSlider('x','min')">
+                    <input type="range" id="xMaxSlider" step="any" oninput="onZoomSlider('x','max')">
+                </div>
+                <div class="zoom-inputs">
+                    <label>下限</label>
+                    <input type="number" class="zoom-input" id="xMinInput" onchange="onZoomInput('x')" step="any">
+                    <label>上限</label>
+                    <input type="number" class="zoom-input" id="xMaxInput" onchange="onZoomInput('x')" step="any">
+                </div>
+            </div>
+            <!-- Y 軸 -->
+            <div class="zoom-row">
+                <div style="display:flex;justify-content:space-between;align-items:center;">
+                    <span class="zoom-label">📐 Y 軸範圍</span>
+                    <button class="zoom-reset" onclick="resetZoomAxis('y')">重設</button>
+                </div>
+                <div class="zoom-slider-wrap">
+                    <input type="range" id="yMinSlider" step="any" oninput="onZoomSlider('y','min')">
+                    <input type="range" id="yMaxSlider" step="any" oninput="onZoomSlider('y','max')">
+                </div>
+                <div class="zoom-inputs">
+                    <label>下限</label>
+                    <input type="number" class="zoom-input" id="yMinInput" onchange="onZoomInput('y')" step="any">
+                    <label>上限</label>
+                    <input type="number" class="zoom-input" id="yMaxInput" onchange="onZoomInput('y')" step="any">
+                </div>
             </div>
         </div>
         <div id="formulaDisplay" class="formula-display" style="display:none;">
@@ -434,7 +502,7 @@ function restoreDraftIfExists() {
         showTrendLine = !!state.showTrendLine;
         showFormula = !!state.showFormula;
         showCoordinates = !!state.showCoordinates;
-        manipulatedVariableName = state.manipulatedVariableName || 'X軸數值(操縱變因，點擊更名)';
+        manipulatedVariableName = state.manipulatedVariableName || '操縱變因（點擊更名）';
         dataPoints = state.dataPoints || 5;
         experimentGroups = (state.experimentGroups || []).map(g => ({ ...g }));
         document.getElementById('trendLineToggle').classList.toggle('active', showTrendLine);
@@ -497,7 +565,6 @@ let redoStack = [];
 
 function captureSnapshot(desc) {
     // 先同步 DOM 數值到 experimentGroups.data
-    const xVals = readCurrentXValues();
     const grpVals = readCurrentGroupValues();
     experimentGroups.forEach((g, gi) => { g.data = grpVals[gi] ? [...grpVals[gi]] : []; });
 
@@ -514,7 +581,7 @@ function captureSnapshot(desc) {
         manipulatedVariableName,
         dataPoints,
         experimentGroups: experimentGroups.map(g => ({ ...g, data: [...g.data] })),
-        xValues:    [...xVals],
+        xValues:    experimentGroups.map((_, gi) => readCurrentXValues(gi)),
         groupValues: grpVals.map(arr => [...arr])
     };
     undoStack.push(snap);
@@ -551,7 +618,6 @@ function applySnapshot(snap) {
 function doUndo() {
     if (undoStack.length === 0) return;
     // 把目前狀態推進 redo
-    const xVals = readCurrentXValues();
     const grpVals = readCurrentGroupValues();
     experimentGroups.forEach((g, gi) => { g.data = grpVals[gi] ? [...grpVals[gi]] : []; });
     const current = {
@@ -565,7 +631,7 @@ function doUndo() {
         chartType, showTrendLine, showFormula, showCoordinates,
         manipulatedVariableName, dataPoints,
         experimentGroups: experimentGroups.map(g => ({ ...g, data: [...g.data] })),
-        xValues: [...xVals],
+        xValues: experimentGroups.map((_, gi) => readCurrentXValues(gi)),
         groupValues: grpVals.map(a => [...a])
     };
     redoStack.push(current);
@@ -577,7 +643,6 @@ function doUndo() {
 
 function doRedo() {
     if (redoStack.length === 0) return;
-    const xVals = readCurrentXValues();
     const grpVals = readCurrentGroupValues();
     experimentGroups.forEach((g, gi) => { g.data = grpVals[gi] ? [...grpVals[gi]] : []; });
     const current = {
@@ -591,7 +656,7 @@ function doRedo() {
         chartType, showTrendLine, showFormula, showCoordinates,
         manipulatedVariableName, dataPoints,
         experimentGroups: experimentGroups.map(g => ({ ...g, data: [...g.data] })),
-        xValues: [...xVals],
+        xValues: experimentGroups.map((_, gi) => readCurrentXValues(gi)),
         groupValues: grpVals.map(a => [...a])
     };
     undoStack.push(current);
@@ -653,13 +718,19 @@ const pointStyles = ['circle','rect','triangle','rectRot'];
 // 初始化
 // =============================================
 function init() {
-    experimentGroups = [];   // 完全空白，不預設任何組
+    experimentGroups = [{
+        id: Date.now(),
+        name: '實驗組 1',
+        color: colors[0],
+        pointStyle: pointStyles[0],
+        data: Array(5).fill('')
+    }];   // 預設一個實驗組
     dataPoints = 5;
     showTrendLine = false;
     showFormula = false;
     showCoordinates = false;
     chartType = 'linear';
-    manipulatedVariableName = 'X軸數值(操縱變因，點擊更名)';
+    manipulatedVariableName = '操縱變因（點擊更名）';
 
     document.getElementById('trendLineToggle').classList.remove('active');
     document.getElementById('formulaToggle').classList.remove('active');
@@ -685,21 +756,13 @@ function createCleanDataTable() {
     for (let i = 0; i < dataPoints; i++) {
         headerRow.insertCell().innerHTML = `<strong>數據點 ${i+1}</strong>`;
     }
-    // X 軸行
-    const xRow = table.insertRow();
-    const xHdr = xRow.insertCell();
-    xHdr.innerHTML = `<div class="editable-cell" onclick="startInlineEdit(this,0,'variable')">${manipulatedVariableName}</div>`;
-    xHdr.style.cursor = 'pointer';
-    for (let i = 0; i < dataPoints; i++) {
-        xRow.insertCell().innerHTML = `<input type="number" id="x_${i}" value="" placeholder="" onchange="updateChart()">`;
-    }
-    // 各實驗組行
+    // 各實驗組行（含 X 欄）
     experimentGroups.forEach((group, gi) => {
         appendGroupRow(table, group, gi);
     });
 }
 
-function appendGroupRow(table, group, gi) {
+function appendGroupRow(table, group, gi, savedX, savedY) {
     const row = table.insertRow();
     const nc = row.insertCell();
     nc.innerHTML = `<div class="editable-cell" onclick="startInlineEdit(this,${gi},'group')">${group.name}</div>`;
@@ -708,7 +771,13 @@ function appendGroupRow(table, group, gi) {
     nc.style.fontWeight = 'bold';
     nc.style.cursor = 'pointer';
     for (let i = 0; i < dataPoints; i++) {
-        row.insertCell().innerHTML = `<input type="number" id="y_${gi}_${i}" value="" placeholder="輸入數值" onchange="updateGroupData(${gi},${i},this.value)">`;
+        const xv = (savedX && savedX[i] !== undefined) ? savedX[i] : '';
+        const yv = (savedY && savedY[i] !== undefined) ? savedY[i] : '';
+        const cell = row.insertCell();
+        cell.innerHTML = `<div style="display:flex;flex-direction:column;gap:2px;">
+            <input type="number" id="x_${gi}_${i}" value="${xv}" placeholder="X值" style="width:100%;font-size:11px;color:#1565c0;background:#e8f4fd;border:1px solid #90caf9;border-radius:3px;padding:2px 4px;text-align:center;" onchange="updateChart()">
+            <input type="number" id="y_${gi}_${i}" value="${yv}" placeholder="Y值" style="width:100%;font-size:11px;padding:2px 4px;text-align:center;" onchange="updateGroupData(${gi},${i},this.value)">
+        </div>`;
     }
 }
 
@@ -721,41 +790,30 @@ function rebuildTableWithSavedData(savedX, savedGroups) {
     const headerRow = table.insertRow();
     headerRow.insertCell().innerHTML = '<strong>實驗組別</strong>';
     for (let i = 0; i < dataPoints; i++) {
-        headerRow.insertCell().innerHTML = `<strong>數據點 ${i+1}</strong>`;
-    }
-    const xRow = table.insertRow();
-    const xHdr = xRow.insertCell();
-    xHdr.innerHTML = `<div class="editable-cell" onclick="startInlineEdit(this,0,'variable')">${manipulatedVariableName}</div>`;
-    xHdr.style.cursor = 'pointer';
-    for (let i = 0; i < dataPoints; i++) {
-        const v = (i < savedX.length) ? savedX[i] : '';
-        xRow.insertCell().innerHTML = `<input type="number" id="x_${i}" value="${v}" placeholder="輸入數值" onchange="updateChart()">`;
+        const th = headerRow.insertCell();
+        th.innerHTML = `<div style="font-weight:bold;">數據點 ${i+1}</div><div style="display:flex;gap:4px;justify-content:center;margin-top:2px;"><span style="font-size:10px;color:#1565c0;flex:1;">X</span><span style="font-size:10px;color:#555;flex:1;">Y</span></div>`;
     }
     experimentGroups.forEach((group, gi) => {
-        const row = table.insertRow();
-        const nc = row.insertCell();
-        nc.innerHTML = `<div class="editable-cell" onclick="startInlineEdit(this,${gi},'group')">${group.name}</div>`;
-        nc.style.backgroundColor = group.color;
-        nc.style.color = 'white';
-        nc.style.fontWeight = 'bold';
-        nc.style.cursor = 'pointer';
-        for (let i = 0; i < dataPoints; i++) {
-            const v = (savedGroups[gi] && i < savedGroups[gi].length) ? savedGroups[gi][i] : '';
-            row.insertCell().innerHTML = `<input type="number" id="y_${gi}_${i}" value="${v}" placeholder="輸入數值" onchange="updateGroupData(${gi},${i},this.value)">`;
-        }
+        const gx = savedX || [];   // 共用 X（舊格式相容）
+        const gy = (savedGroups && savedGroups[gi]) ? savedGroups[gi] : [];
+        appendGroupRow(table, group, gi, gx, gy);
     });
 }
 
 // =============================================
 // 讀取目前 DOM 中的數值
 // =============================================
-function readCurrentXValues() {
+function readCurrentXValues(gi=0) {
+    // 讀取指定實驗組的 X 值（預設第 0 組，向下相容）
     const vals = [];
     for (let i = 0; i < dataPoints; i++) {
-        const el = document.getElementById(`x_${i}`);
+        const el = document.getElementById(`x_${gi}_${i}`);
         vals.push(el ? el.value : '');
     }
     return vals;
+}
+function readAllXValues() {
+    return experimentGroups.map((_, gi) => readCurrentXValues(gi));
 }
 function readCurrentGroupValues() {
     return experimentGroups.map((_, gi) => {
@@ -858,10 +916,11 @@ function showDeleteGroupPicker() {
                 `確定要刪除「${groupName}」嗎？`,
                 () => {
                     captureSnapshot(`刪除實驗組：${groupName}`);
-                    const savedX = readCurrentXValues();
+                    const savedX = experimentGroups.map((_, gi) => readCurrentXValues(gi));
                     const savedGrp = readCurrentGroupValues();
                     experimentGroups.splice(idx, 1);
                     savedGrp.splice(idx, 1);
+                    savedX.splice(idx, 1);
                     renderExperimentGroups();
                     rebuildTableWithSavedData(savedX, savedGrp);
                     generateChart();
@@ -880,7 +939,7 @@ function changeGroupColor(index) {
     inp.type = 'color';
     inp.value = experimentGroups[index].color;
     inp.onchange = function() {
-        const savedX = readCurrentXValues();
+        const savedX = experimentGroups.map((_, gi) => readCurrentXValues(gi));
         const savedGrp = readCurrentGroupValues();
         experimentGroups[index].color = this.value;
         renderExperimentGroups();
@@ -899,14 +958,14 @@ function changePointStyle(index, style) {
 // =============================================
 function addDataPoint() {
     captureSnapshot(`新增數據點（共 ${dataPoints + 1} 點）`);
-    const savedX = readCurrentXValues();
+    const savedX = experimentGroups.map((_, gi) => readCurrentXValues(gi));
     const savedGrp = readCurrentGroupValues();
     dataPoints++;
     experimentGroups.forEach((g, gi) => {
         g.data.push('');
         if (savedGrp[gi]) savedGrp[gi].push('');
+        if (savedX[gi]) savedX[gi].push('');
     });
-    savedX.push('');
     rebuildTableWithSavedData(savedX, savedGrp);
     generateChart();
 }
@@ -922,10 +981,11 @@ function removeLastGroup() {
         `確定要刪除「${groupName}」嗎？\n此操作可透過「↩ 復原」按鈕還原。`,
         () => {
             captureSnapshot(`刪除末組：${groupName}`);
-            const savedX = readCurrentXValues();
+            const savedX = experimentGroups.map((_, gi) => readCurrentXValues(gi));
             const savedGrp = readCurrentGroupValues();
             experimentGroups.pop();
             savedGrp.pop();
+            savedX.pop();
             renderExperimentGroups();
             rebuildTableWithSavedData(savedX, savedGrp);
             generateChart();
@@ -993,6 +1053,7 @@ function updateChart() { generateChart(); }
 // =============================================
 function changeChartType() {
     chartType = document.getElementById('chartType').value;
+    _zoomInitialized = false;   // 切換類型時重設縮放
     updateTrendLineLabel();
     generateChart();
 }
@@ -1042,7 +1103,7 @@ function generateChart() {
     experimentGroups.forEach((group, index) => {
         const xData = [], yData = [];
         for (let i = 0; i < dataPoints; i++) {
-            const xi = document.getElementById(`x_${i}`);
+            const xi = document.getElementById(`x_${index}_${i}`);
             const yi = document.getElementById(`y_${index}_${i}`);
             if (xi && yi && xi.value !== '' && yi.value !== '') {
                 let x = parseFloat(xi.value), y = parseFloat(yi.value);
@@ -1088,7 +1149,7 @@ function generateChart() {
 
         // 迴歸線（折線圖與散點圖共用，折線圖改用虛線疊加）
         if (showTrendLine && xData.length > 1) {
-            const trendData = buildTrendData(xData, yData, xMin, xMax);
+            const trendData = buildTrendData(xData, yData);
             if (trendData) {
                 datasets.push({
                     label: `${group.name} ${getTrendLineLabel()}`,
@@ -1106,8 +1167,31 @@ function generateChart() {
 
     if (chart) chart.destroy();
 
-    const xAxisCfg = buildAxisConfig(xAxisName, 'x', xMin, xMax);
-    const yAxisCfg = buildAxisConfig(yAxisName, 'y', yMin, yMax);
+    // ── 計算所有資料點的實際範圍（從最小值開始）──
+    const allX = datasets.flatMap(ds => ds.data.filter(p => !ds.borderDash).map(p => p.x)).filter(v => isFinite(v));
+    const allY = datasets.flatMap(ds => ds.data.filter(p => !ds.borderDash).map(p => p.y)).filter(v => isFinite(v));
+    const rawXMin = allX.length ? Math.min(...allX) : 0;
+    const rawXMax = allX.length ? Math.max(...allX) : 100;
+    const rawYMin = allY.length ? Math.min(...allY) : 0;
+    const rawYMax = allY.length ? Math.max(...allY) : 100;
+
+    // X 軸：從 0 開始；若有負值則延伸到最小值（再留 5% padding）
+    const xPad = (rawXMax - Math.min(0, rawXMin)) * 0.05 || 1;
+    const dataXMin = rawXMin < 0 ? rawXMin - xPad : 0;
+    const dataXMax = rawXMax + xPad;
+
+    // Y 軸：從 0 開始；若有負值則延伸到最小值（再留 5% padding）
+    const yPad = (rawYMax - Math.min(0, rawYMin)) * 0.05 || 1;
+    const dataYMin = rawYMin < 0 ? rawYMin - yPad : 0;
+    const dataYMax = rawYMax + yPad;
+
+    // 初始化滑桿（若滑桿尚未被使用者拖動，使用資料範圍；否則保留使用者設定）
+    initZoomSliders(dataXMin, dataXMax, dataYMin, dataYMax);
+
+    // 讀取滑桿目前值作為軸範圍
+    const zx = getZoomValues();
+    const xAxisCfg = buildAxisConfig(xAxisName, 'x', zx.xMin, zx.xMax);
+    const yAxisCfg = buildAxisConfig(yAxisName, 'y', zx.yMin, zx.yMax);
 
     const chartTitle = isLineChart ? `實驗數據折線圖` : `實驗數據散佈圖 - ${getChartTypeLabel()}`;
 
@@ -1116,6 +1200,7 @@ function generateChart() {
         data: { datasets },
         options: {
             responsive: true,
+            animation: false,
             plugins: {
                 title: { display: true, text: chartTitle, font: { size: 18, weight: 'bold' } },
                 legend: { display: true, position: 'top' }
@@ -1128,39 +1213,213 @@ function generateChart() {
     scheduleAutosave();
 }
 
-function buildAxisConfig(name, axis, min, max) {
-    const cfg = {
-        title: { display: true, text: name + ((axis==='x' && (chartType==='semilogx'||chartType==='loglog')) || (axis==='y' && (chartType==='semilogy'||chartType==='loglog')) ? ' (對數尺度)' : ''), font: { size: 14, weight: 'bold' } },
-        grid: { color: 'rgba(0,0,0,0.1)' }
-    };
-    const isLog = (axis==='x' && (chartType==='semilogx'||chartType==='loglog')) || (axis==='y' && (chartType==='semilogy'||chartType==='loglog'));
-    if (isLog) {
-        cfg.type = 'logarithmic';
-        cfg.min = Math.max(min, 0.1);
-        cfg.max = max;
-    } else {
-        cfg.min = min; cfg.max = max;
+// =============================================
+// 縮放區塊（滑桿 + 手動輸入 + 重設）
+// =============================================
+let _zoomInitialized = false;
+let _zoomDataRange = { xMin:0, xMax:100, yMin:0, yMax:100 };
+
+function initZoomSliders(xMin, xMax, yMin, yMax) {
+    _zoomDataRange = { xMin, xMax, yMin, yMax };
+    if (!document.getElementById('xMinSlider')) return;
+
+    const xSpan = (xMax - xMin) || 1;
+    const ySpan = (yMax - yMin) || 1;
+    const sXMin = round4(xMin - xSpan * 0.5);
+    const sXMax = round4(xMax + xSpan * 0.5);
+    const sYMin = round4(yMin - ySpan * 0.5);
+    const sYMax = round4(yMax + ySpan * 0.5);
+
+    const xMinS = document.getElementById('xMinSlider');
+    const xMaxS = document.getElementById('xMaxSlider');
+    const yMinS = document.getElementById('yMinSlider');
+    const yMaxS = document.getElementById('yMaxSlider');
+
+    const needReset = !_zoomInitialized
+        || Math.abs(parseFloat(xMinS.min) - sXMin) > Math.abs(sXMin) * 0.3 + 0.01
+        || Math.abs(parseFloat(xMaxS.max) - sXMax) > Math.abs(sXMax) * 0.3 + 0.01;
+
+    xMinS.min = xMaxS.min = sXMin;
+    xMinS.max = xMaxS.max = sXMax;
+    yMinS.min = yMaxS.min = sYMin;
+    yMinS.max = yMaxS.max = sYMax;
+
+    if (needReset) {
+        xMinS.value = round4(xMin); xMaxS.value = round4(xMax);
+        yMinS.value = round4(yMin); yMaxS.value = round4(yMax);
+        syncInputsFromSliders();
+        _zoomInitialized = true;
     }
+}
+
+function onZoomSlider(axis, which) {
+    const minS = document.getElementById(`${axis}MinSlider`);
+    const maxS = document.getElementById(`${axis}MaxSlider`);
+    if (parseFloat(minS.value) > parseFloat(maxS.value)) {
+        if (which === 'min') minS.value = maxS.value;
+        else maxS.value = minS.value;
+    }
+    syncInputsFromSliders();
+    applyZoomToChart();
+}
+
+function onZoomInput(axis) {
+    const minI = parseFloat(document.getElementById(`${axis}MinInput`).value);
+    const maxI = parseFloat(document.getElementById(`${axis}MaxInput`).value);
+    if (isNaN(minI) || isNaN(maxI) || minI >= maxI) return;
+    const minS = document.getElementById(`${axis}MinSlider`);
+    const maxS = document.getElementById(`${axis}MaxSlider`);
+    if (minI < parseFloat(minS.min)) { minS.min = round4(minI - 1); maxS.min = round4(minI - 1); }
+    if (maxI > parseFloat(maxS.max)) { minS.max = round4(maxI + 1); maxS.max = round4(maxI + 1); }
+    minS.value = round4(minI);
+    maxS.value = round4(maxI);
+    applyZoomToChart();
+}
+
+function syncInputsFromSliders() {
+    ['x','y'].forEach(axis => {
+        const minV = parseFloat(document.getElementById(`${axis}MinSlider`).value);
+        const maxV = parseFloat(document.getElementById(`${axis}MaxSlider`).value);
+        document.getElementById(`${axis}MinInput`).value = round4(minV);
+        document.getElementById(`${axis}MaxInput`).value = round4(maxV);
+    });
+}
+
+function getZoomValues() {
+    const el = document.getElementById('xMinInput');
+    if (!el) return { xMin:0, xMax:100, yMin:0, yMax:100 };
+    let xMin = parseFloat(el.value);
+    let xMax = parseFloat(document.getElementById('xMaxInput').value);
+    let yMin = parseFloat(document.getElementById('yMinInput').value);
+    let yMax = parseFloat(document.getElementById('yMaxInput').value);
+    if (isNaN(xMin)) xMin = _zoomDataRange.xMin;
+    if (isNaN(xMax)) xMax = _zoomDataRange.xMax;
+    if (isNaN(yMin)) yMin = _zoomDataRange.yMin;
+    if (isNaN(yMax)) yMax = _zoomDataRange.yMax;
+    if (xMin >= xMax) xMax = xMin + 0.01;
+    if (yMin >= yMax) yMax = yMin + 0.01;
+    return { xMin, xMax, yMin, yMax };
+}
+
+function applyZoomToChart() {
+    if (!chart) return;
+    const zx = getZoomValues();
+    chart.options.scales.x.min = zx.xMin;
+    chart.options.scales.x.max = zx.xMax;
+    chart.options.scales.y.min = zx.yMin;
+    chart.options.scales.y.max = zx.yMax;
+    chart.update('none');
+    // 同步回座標軸設定欄位
+    syncZoomToAxisInputs(zx);
+}
+
+// 縮放區塊 → 座標軸設定欄位
+function syncZoomToAxisInputs(zx) {
+    const xMinEl = document.getElementById('xAxisMin');
+    const xMaxEl = document.getElementById('xAxisMax');
+    const yMinEl = document.getElementById('yAxisMin');
+    const yMaxEl = document.getElementById('yAxisMax');
+    if (xMinEl) xMinEl.value = round4(zx.xMin);
+    if (xMaxEl) xMaxEl.value = round4(zx.xMax);
+    if (yMinEl) yMinEl.value = round4(zx.yMin);
+    if (yMaxEl) yMaxEl.value = round4(zx.yMax);
+}
+
+// 座標軸設定欄位 → 縮放區塊（並重繪圖）
+function onAxisBoundChange() {
+    const xMin = parseFloat(document.getElementById('xAxisMin').value);
+    const xMax = parseFloat(document.getElementById('xAxisMax').value);
+    const yMin = parseFloat(document.getElementById('yAxisMin').value);
+    const yMax = parseFloat(document.getElementById('yAxisMax').value);
+
+    // 同步到縮放輸入框
+    const xMinI = document.getElementById('xMinInput');
+    if (xMinI) {
+        document.getElementById('xMinInput').value = isNaN(xMin) ? '' : round4(xMin);
+        document.getElementById('xMaxInput').value = isNaN(xMax) ? '' : round4(xMax);
+        document.getElementById('yMinInput').value = isNaN(yMin) ? '' : round4(yMin);
+        document.getElementById('yMaxInput').value = isNaN(yMax) ? '' : round4(yMax);
+        // 同步滑桿（動態擴展範圍以防超出）
+        ['x','y'].forEach(axis => {
+            const minV = parseFloat(document.getElementById(`${axis}MinInput`).value);
+            const maxV = parseFloat(document.getElementById(`${axis}MaxInput`).value);
+            if (isNaN(minV) || isNaN(maxV)) return;
+            const minS = document.getElementById(`${axis}MinSlider`);
+            const maxS = document.getElementById(`${axis}MaxSlider`);
+            if (!minS) return;
+            if (minV < parseFloat(minS.min)) { minS.min = round4(minV - 1); maxS.min = round4(minV - 1); }
+            if (maxV > parseFloat(maxS.max)) { minS.max = round4(maxV + 1); maxS.max = round4(maxV + 1); }
+            minS.value = round4(minV);
+            maxS.value = round4(maxV);
+        });
+    }
+    // 直接套用到圖表（不觸發 syncZoomToAxisInputs 避免循環）
+    if (chart) {
+        if (!isNaN(xMin) && !isNaN(xMax) && xMin < xMax) {
+            chart.options.scales.x.min = xMin;
+            chart.options.scales.x.max = xMax;
+        }
+        if (!isNaN(yMin) && !isNaN(yMax) && yMin < yMax) {
+            chart.options.scales.y.min = yMin;
+            chart.options.scales.y.max = yMax;
+        }
+        chart.update('none');
+    }
+    scheduleAutosave();
+}
+
+function resetZoomAxis(axis) {
+    const r = _zoomDataRange;
+    document.getElementById(`${axis}MinSlider`).value = round4(r[`${axis}Min`]);
+    document.getElementById(`${axis}MaxSlider`).value = round4(r[`${axis}Max`]);
+    document.getElementById(`${axis}MinInput`).value  = round4(r[`${axis}Min`]);
+    document.getElementById(`${axis}MaxInput`).value  = round4(r[`${axis}Max`]);
+    applyZoomToChart();
+}
+
+function round4(v) { return Math.round(v * 10000) / 10000; }
+function fmt(v) {
+    if (!isFinite(v)) return '—';
+    return Math.abs(v) >= 1000 || (Math.abs(v) < 0.01 && v !== 0)
+        ? v.toExponential(2) : parseFloat(v.toFixed(3)).toString();
+}
+
+
+function buildAxisConfig(name, axis, explicitMin, explicitMax) {
+    const isLog = (axis==='x' && (chartType==='semilogx'||chartType==='loglog')) || (axis==='y' && (chartType==='semilogy'||chartType==='loglog'));
+    const cfg = {
+        title: { display: true, text: name + (isLog ? ' (對數尺度)' : ''), font: { size: 14, weight: 'bold' } },
+        grid: { color: 'rgba(0,0,0,0.1)' },
+        ticks: { padding: 8 },
+        // 過原點的軸線加粗加深
+        border: { color: '#333', width: 2 }
+    };
+    if (isLog) cfg.type = 'logarithmic';
+    if (explicitMin !== undefined) cfg.min = explicitMin;
+    if (explicitMax !== undefined) cfg.max = explicitMax;
     return cfg;
 }
 
-function buildTrendData(xData, yData, xMin, xMax) {
+function buildTrendData(xData, yData) {
     try {
-        if (chartType === 'linear') {
+        const xMin = Math.min(...xData), xMax = Math.max(...xData);
+        const pad = (xMax - xMin) * 0.1;
+        const x0 = xMin - pad, x1 = xMax + pad;
+        if (chartType === 'linear' || chartType === 'line') {
             const r = calculateLinearRegression(xData, yData);
-            return [{ x: xMin, y: r.slope*xMin + r.intercept }, { x: xMax, y: r.slope*xMax + r.intercept }];
+            return [{ x: x0, y: r.slope*x0 + r.intercept }, { x: x1, y: r.slope*x1 + r.intercept }];
         } else if (chartType === 'semilogx') {
             const r = calculateLinearRegression(xData.map(x => Math.log10(x)), yData);
             const xs = [];
-            for (let x = Math.max(xMin,0.1); x <= xMax; x *= 1.5) xs.push(x);
+            for (let x = Math.max(x0,0.01); x <= x1; x *= 1.3) xs.push(x);
             return xs.map(x => ({ x, y: r.slope*Math.log10(x) + r.intercept }));
         } else if (chartType === 'semilogy') {
             const r = calculateLinearRegression(xData, yData.map(y => Math.log10(y)));
-            return [{ x: xMin, y: Math.pow(10, r.slope*xMin + r.intercept) }, { x: xMax, y: Math.pow(10, r.slope*xMax + r.intercept) }];
+            return [{ x: x0, y: Math.pow(10, r.slope*x0 + r.intercept) }, { x: x1, y: Math.pow(10, r.slope*x1 + r.intercept) }];
         } else if (chartType === 'loglog') {
             const r = calculateLinearRegression(xData.map(x => Math.log10(x)), yData.map(y => Math.log10(y)));
             const xs = [];
-            for (let x = Math.max(xMin,0.1); x <= xMax; x *= 1.5) xs.push(x);
+            for (let x = Math.max(x0,0.01); x <= x1; x *= 1.3) xs.push(x);
             return xs.map(x => ({ x, y: Math.pow(10, r.slope*Math.log10(x) + r.intercept) }));
         }
     } catch(e) { return null; }
@@ -1205,6 +1464,7 @@ function calculateAndDisplayFormulas() {
     experimentGroups.forEach((group, index) => {
         const xData=[], yData=[];
         for (let i=0; i<dataPoints; i++) {
+            // 修正：X 軸 id 格式為 x_i（不含 index）
             const xi = document.getElementById(`x_${i}`);
             const yi = document.getElementById(`y_${index}_${i}`);
             if (xi && yi && xi.value!=='' && yi.value!=='') {
@@ -1214,9 +1474,17 @@ function calculateAndDisplayFormulas() {
                 xData.push(x); yData.push(y);
             }
         }
-        if (xData.length < 2) return;
+        if (xData.length < 2) {
+            // 資料不足時仍顯示提示
+            const d = document.createElement('div');
+            d.className = 'formula-group';
+            d.innerHTML = `<div style="color:${group.color};font-weight:bold;">${group.name}：</div>
+                <div style="color:#999;font-size:13px;">資料點不足（至少需 2 點）</div>`;
+            fc.appendChild(d);
+            return;
+        }
         let reg, formulaText='';
-        if (chartType==='linear') {
+        if (chartType==='linear'||chartType==='line') {
             reg = calculateLinearRegression(xData,yData);
             formulaText = `y = ${reg.slope.toFixed(4)}x + ${reg.intercept.toFixed(4)}`;
         } else if (chartType==='semilogx') {
@@ -1229,23 +1497,40 @@ function calculateAndDisplayFormulas() {
             reg = calculateLinearRegression(xData.map(x=>Math.log10(x)),yData.map(y=>Math.log10(y)));
             formulaText = `log(y) = ${reg.slope.toFixed(4)}log(x) + ${reg.intercept.toFixed(4)}`;
         }
-        allR2.push({ groupName: group.name, rSquared: reg.rSquared });
+        allR2.push({ groupName: group.name, color: group.color, rSquared: reg.rSquared });
         const q = reg.rSquared>=0.95?['極佳擬合','#4CAF50']:reg.rSquared>=0.9?['良好擬合','#8BC34A']:reg.rSquared>=0.8?['中等擬合','#FF9800']:reg.rSquared>=0.7?['較弱關係','#FF5722']:['擬合不佳','#F44336'];
         const d = document.createElement('div');
         d.className = 'formula-group';
-        d.innerHTML = `<div style="color:${group.color};font-weight:bold;">${group.name} (${getChartTypeLabel()}):</div><div><strong>${formulaText}</strong></div><div>R² = ${reg.rSquared.toFixed(4)} <span style="color:${q[1]};font-weight:bold;">(${q[0]})</span></div>`;
+        d.style.borderLeftColor = group.color;
+        d.innerHTML = `<div style="color:${group.color};font-weight:bold;">${group.name} (${getChartTypeLabel()})：</div>
+            <div><strong>${formulaText}</strong></div>
+            <div>R² = ${reg.rSquared.toFixed(4)} <span style="color:${q[1]};font-weight:bold;">(${q[0]})</span></div>`;
         fc.appendChild(d);
     });
+    // 分析摘要：列出每一組
     if (allR2.length > 0) {
         const maxR2 = Math.max(...allR2.map(i=>i.rSquared));
         const minR2 = Math.min(...allR2.map(i=>i.rSquared));
-        const best = allR2.find(i=>i.rSquared===maxR2);
+        const best  = allR2.find(i=>i.rSquared===maxR2);
+        const rows  = allR2.map(i=>`<tr>
+            <td style="padding:4px 10px;"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${i.color};margin-right:6px;"></span>${i.groupName}</td>
+            <td style="padding:4px 10px;font-weight:bold;">${i.rSquared.toFixed(4)}</td>
+            <td style="padding:4px 10px;color:${i.rSquared>=0.95?'#4CAF50':i.rSquared>=0.9?'#8BC34A':i.rSquared>=0.8?'#FF9800':i.rSquared>=0.7?'#FF5722':'#F44336'};font-weight:bold;">
+                ${i.rSquared>=0.95?'極佳':i.rSquared>=0.9?'良好':i.rSquared>=0.8?'中等':i.rSquared>=0.7?'較弱':'不佳'}
+            </td></tr>`).join('');
         const ad = document.createElement('div');
-        ad.style.cssText = 'margin-top:20px;padding:15px;background:#e3f2fd;border-radius:8px;border-left:4px solid #1976d2;';
+        ad.style.cssText = 'margin-top:16px;padding:15px;background:#e3f2fd;border-radius:8px;border-left:4px solid #1976d2;';
         ad.innerHTML = `<h4 style="color:#1976d2;margin-bottom:10px;">📊 分析摘要</h4>
-            ${allR2.length>1?`<p><strong>R²範圍：</strong>${minR2.toFixed(3)} - ${maxR2.toFixed(3)}</p><p><strong>最佳：</strong>${best.groupName} (R²=${maxR2.toFixed(3)})</p>`
-            :`<p><strong>模型 R²：</strong>${maxR2.toFixed(3)}</p>`}
-            <p><strong>建議：</strong>${maxR2>=0.9?'模型擬合良好，適合分析預測。':'建議嘗試其他圖表類型以找出最佳擬合。'}</p>`;
+            <table style="width:100%;border-collapse:collapse;font-size:14px;">
+                <thead><tr style="background:#bbdefb;">
+                    <th style="padding:5px 10px;text-align:left;">實驗組</th>
+                    <th style="padding:5px 10px;text-align:left;">R²</th>
+                    <th style="padding:5px 10px;text-align:left;">擬合評估</th>
+                </tr></thead>
+                <tbody>${rows}</tbody>
+            </table>
+            ${allR2.length>1?`<p style="margin-top:10px;"><strong>最佳擬合：</strong>${best.groupName}（R² = ${maxR2.toFixed(4)}）</p>`:''}
+            <p style="margin-top:6px;"><strong>建議：</strong>${maxR2>=0.9?'整體擬合良好，適合分析預測。':'建議嘗試其他圖表類型以找出最佳擬合。'}</p>`;
         fc.appendChild(ad);
     }
 }
@@ -1305,17 +1590,19 @@ async function exportFullReport() {
 // =============================================
 function exportCSV() {
     const xAxisName = document.getElementById('xAxisName').value || 'X軸';
+    const yAxisName = document.getElementById('yAxisName').value || 'Y軸';
     const rows = [];
-    // 標題行：X軸名稱，各組名稱
-    const header = [xAxisName, ...experimentGroups.map(g => g.name)];
+    // 標題行：各組 X 和 Y 交替
+    const header = ['數據點'];
+    experimentGroups.forEach(g => { header.push(`${g.name} X(${xAxisName})`); header.push(`${g.name} Y(${yAxisName})`); });
     rows.push(header.map(h => `"${h}"`).join(','));
     // 資料行
     for (let i = 0; i < dataPoints; i++) {
-        const xi = document.getElementById(`x_${i}`);
-        const xVal = xi ? xi.value : '';
-        const rowVals = [xVal];
+        const rowVals = [`數據點${i+1}`];
         experimentGroups.forEach((_, gi) => {
+            const xi = document.getElementById(`x_${gi}_${i}`);
             const yi = document.getElementById(`y_${gi}_${i}`);
+            rowVals.push(xi ? xi.value : '');
             rowVals.push(yi ? yi.value : '');
         });
         rows.push(rowVals.join(','));
@@ -1335,7 +1622,6 @@ function exportCSV() {
 // Local Storage — 儲存 / 載入 / 刪除
 // =============================================
 function getCurrentState() {
-    const xVals = readCurrentXValues();
     const grpVals = readCurrentGroupValues();
     // 將目前 DOM 的 y 值同步回 group.data
     experimentGroups.forEach((g, gi) => { g.data = grpVals[gi]; });
@@ -1355,7 +1641,7 @@ function getCurrentState() {
         manipulatedVariableName,
         dataPoints,
         experimentGroups: experimentGroups.map(g => ({ ...g })),
-        xValues: xVals,
+        xValues: experimentGroups.map((_, gi) => readCurrentXValues(gi)),
         groupValues: grpVals
     };
 }
@@ -1402,7 +1688,7 @@ function loadFromLocalStorage(key) {
         showTrendLine = !!state.showTrendLine;
         showFormula = !!state.showFormula;
         showCoordinates = !!state.showCoordinates;
-        manipulatedVariableName = state.manipulatedVariableName || 'X軸數值(操縱變因，點擊更名)';
+        manipulatedVariableName = state.manipulatedVariableName || '操縱變因（點擊更名）';
         dataPoints = state.dataPoints || 5;
         experimentGroups = (state.experimentGroups || []).map(g => ({ ...g }));
         document.getElementById('trendLineToggle').classList.toggle('active', showTrendLine);
@@ -1430,15 +1716,22 @@ function deleteFromLocalStorage(key) {
 }
 
 function confirmClearAll() {
-    if (!confirm('確定要清除所有存檔記錄（含自動草稿）嗎？此操作無法復原。')) return;
-    const index = getStorageIndex();
-    index.forEach(item => localStorage.removeItem(item.key));
-    localStorage.removeItem(LS_INDEX_KEY);
-    localStorage.removeItem(LS_DRAFT_KEY);
-    const el = document.getElementById('autosaveStatus');
-    if (el) { el.textContent = '⏳ 等待變動...'; el.style.color = ''; }
-    renderStorageList();
-    showToast('🗑 已清除全部記錄', '#757575');
+    showConfirm('🗑 清除全部記錄', '確定要清除所有存檔記錄（含自動草稿）並重置畫面嗎？此操作無法復原。', () => {
+        // 清除 localStorage
+        const index = getStorageIndex();
+        index.forEach(item => localStorage.removeItem(item.key));
+        localStorage.removeItem(LS_INDEX_KEY);
+        localStorage.removeItem(LS_DRAFT_KEY);
+        // 重置畫面狀態（含 Y 值）
+        _zoomInitialized = false;
+        undoStack = []; redoStack = [];
+        init();
+        const el = document.getElementById('autosaveStatus');
+        if (el) { el.textContent = '⏳ 等待變動...'; el.style.color = ''; }
+        renderStorageList();
+        updateHistoryUI();
+        showToast('🗑 已清除全部記錄並重置畫面', '#757575');
+    });
 }
 
 function renderStorageList() {
@@ -1517,11 +1810,17 @@ function hideLoading(el) { if (el && document.body.contains(el)) document.body.r
 // =============================================
 window.onload = function() {
     // 先做最基本的初始化（不呼叫 generateChart，避免覆蓋草稿）
-    experimentGroups = [];
+    experimentGroups = [{
+        id: Date.now(),
+        name: '實驗組 1',
+        color: colors[0],
+        pointStyle: pointStyles[0],
+        data: Array(5).fill('')
+    }];   // 預設一個實驗組
     dataPoints = 5;
     showTrendLine = false; showFormula = false; showCoordinates = false;
     chartType = 'linear';
-    manipulatedVariableName = 'X軸數值(操縱變因，點擊更名)';
+    manipulatedVariableName = '操縱變因（點擊更名）';
     document.getElementById('trendLineToggle').classList.remove('active');
     document.getElementById('formulaToggle').classList.remove('active');
     document.getElementById('coordinateToggle').classList.remove('active');
