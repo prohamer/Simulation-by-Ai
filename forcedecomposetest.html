@@ -2,8 +2,8 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>物理闖關：力的分解與合成</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>力的分解與合成練習</title>
     <style>
         :root {
             --primary: #e74c3c;
@@ -17,6 +17,17 @@
             --wrong: #c0392b;
         }
 
+        * {
+            user-select: none;
+            -webkit-user-select: none;
+            -moz-user-select: none;
+        }
+
+        input[type="number"] {
+            user-select: text;
+            -webkit-user-select: text;
+        }
+
         body {
             display: flex;
             flex-direction: column;
@@ -26,12 +37,13 @@
             color: var(--text-main);
             margin: 0;
             padding: 20px;
+            overflow-x: hidden;
         }
 
         h2 { margin-top: 0; margin-bottom: 20px; }
 
         .main-container {
-            display: flex; gap: 20px; width: 100%; max-width: 1100px;
+            display: flex; gap: 20px; width: 100%; max-width: 1200px;
             justify-content: center; align-items: flex-start; flex-wrap: wrap;
         }
 
@@ -86,20 +98,39 @@
             position: relative; background-color: var(--panel-bg);
             border: 1px solid var(--border-color); border-radius: 12px;
             box-shadow: 0 8px 24px rgba(0,0,0,0.08); overflow: hidden;
+            width: 100%;
+            height: 600px; 
         }
-        canvas { display: block; touch-action: none; cursor: crosshair; }
 
-        /* 答題回饋遮罩 */
+        .canvas-container:fullscreen {
+            width: 100vw; height: 100vh;
+            border-radius: 0; border: none;
+        }
+        .canvas-container:-webkit-full-screen {
+            width: 100vw; height: 100vh;
+            border-radius: 0; border: none;
+        }
+
+        canvas { display: block; touch-action: none; cursor: crosshair; width: 100%; height: 100%; }
+
+        .fullscreen-btn {
+            position: absolute; top: 10px; right: 10px;
+            background: rgba(255,255,255,0.8); border: 1px solid #bdc3c7;
+            border-radius: 8px; padding: 8px 12px; font-size: 1.2rem;
+            cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+            transition: 0.2s; z-index: 20;
+        }
+        .fullscreen-btn:hover { background: #fff; transform: scale(1.05); }
+
         .feedback-overlay {
             position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
             padding: 10px 30px; border-radius: 30px; font-size: 1.5rem; font-weight: bold;
             color: white; opacity: 0; pointer-events: none; transition: opacity 0.3s;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2); z-index: 10;
         }
         .feedback-overlay.correct { background-color: var(--correct); opacity: 1; }
         .feedback-overlay.wrong { background-color: var(--wrong); opacity: 1; }
 
-        /* 報告 Modal */
         .modal {
             display: none; position: fixed; z-index: 100; left: 0; top: 0;
             width: 100%; height: 100%; background-color: rgba(0,0,0,0.6);
@@ -141,9 +172,7 @@
                     <div class="score-item"><span>總作答數</span> <span id="uiTotal">0</span></div>
                 </div>
 
-                <div class="instruction" id="uiInstruction">
-                    <!-- 動態文字 -->
-                </div>
+                <div class="instruction" id="uiInstruction"></div>
 
                 <button class="btn-primary" id="btnSubmit" onclick="app.checkAnswer()">送出答案</button>
                 <button class="btn-primary btn-next" id="btnNext" onclick="app.generateQuestion()">下一題 ➔</button>
@@ -154,8 +183,9 @@
 
         <!-- 右側：畫布區 -->
         <div class="right-panel">
-            <div class="canvas-container">
-                <canvas id="quizCanvas" width="600" height="500"></canvas>
+            <div class="canvas-container" id="canvasContainer">
+                <button class="fullscreen-btn" id="btnFullscreen" title="全螢幕切換">⛶</button>
+                <canvas id="quizCanvas"></canvas>
             </div>
             <div id="uiFeedback" class="feedback-overlay"></div>
         </div>
@@ -165,28 +195,18 @@
     <div id="reportModal" class="modal">
         <div class="modal-content">
             <h3>📈 闖關測驗學習報告</h3>
-            <div class="report-section" id="reportBasicInfo">
-                <!-- 時間與基本資訊 -->
-            </div>
+            <div class="report-section" id="reportBasicInfo"></div>
             <div class="report-section">
                 <table class="report-table">
                     <thead>
-                        <tr>
-                            <th>關卡模式</th>
-                            <th>作答題數</th>
-                            <th>答對題數</th>
-                            <th>正確率</th>
-                        </tr>
+                        <tr><th>關卡模式</th><th>作答題數</th><th>答對題數</th><th>正確率</th></tr>
                     </thead>
-                    <tbody id="reportTableBody">
-                    </tbody>
+                    <tbody id="reportTableBody"></tbody>
                 </table>
             </div>
             <div class="report-section">
                 <h4>📝 錯誤題型紀錄分析</h4>
-                <div class="mistake-list" id="reportMistakes">
-                    <!-- 錯誤詳情 -->
-                </div>
+                <div class="mistake-list" id="reportMistakes"></div>
             </div>
             <button class="close-btn" onclick="document.getElementById('reportModal').style.display='none'">關閉報告，繼續練習</button>
         </div>
@@ -197,44 +217,96 @@
             canvas: document.getElementById('quizCanvas'),
             ctx: document.getElementById('quizCanvas').getContext('2d'),
             
-            // 物理環境與格線
-            originX: 300, originY: 250, scale: 10,
-            
-            // 系統狀態
-            mode: 'rect', // rect, arb, add
-            state: 'playing', // playing, answered
-            dragTarget: null,
-            dragOffset: { x: 0, y: 0 }, // 紀錄拖曳點與物件原點的相對距離
+            // 相機與世界轉換變數 (支援縮放與平移)
+            camera: { x: 0, y: 0, zoom: 1.2 }, 
+            gridAngle: 0, // 座標軸旋轉角度
+            scale: 15,    // 每一單位的基礎像素 (放大係數)
+
+            mode: 'rect', state: 'playing', 
+            dragTarget: null, dragAxisOffset: 0,
+            dragOffset: { x: 0, y: 0 },
+            lastPan: { x: 0, y: 0 },
+            initialPinchDist: null, initialZoom: null,
             startTime: new Date(),
             
-            // 統計數據
-            stats: {
-                rect: { attempted: 0, correct: 0, mistakes: [] },
-                arb: { attempted: 0, correct: 0, mistakes: [] },
-                add: { attempted: 0, correct: 0, mistakes: [] }
-            },
-
-            // 關卡向量 (以格點為單位，1單位 = 10px)
-            vectors: {
-                F: { x: 0, y: 0 },
-                C1: { x: 0, y: 0 },
-                C2: { x: 0, y: 0 }
-            },
-            // 正確答案的向量
-            targets: {
-                F: { x: 0, y: 0 },
-                C1: { x: 0, y: 0 },
-                C2: { x: 0, y: 0 }
-            },
-            // 儲存平移分身的狀態
-            ghosts: {
-                C1: { active: false, x: 0, y: 0 },
-                C2: { active: false, x: 0, y: 0 }
-            },
+            stats: { rect: { attempted: 0, correct: 0, mistakes: [] }, arb: { attempted: 0, correct: 0, mistakes: [] }, add: { attempted: 0, correct: 0, mistakes: [] } },
+            // 向量以「絕對世界空間」儲存
+            vectors: { F: { x: 0, y: 0 }, C1: { x: 0, y: 0 }, C2: { x: 0, y: 0 } },
+            targets: { F: { x: 0, y: 0 }, C1: { x: 0, y: 0 }, C2: { x: 0, y: 0 } },
+            ghosts: { C1: { active: false, x: 0, y: 0 }, C2: { active: false, x: 0, y: 0 } },
+            axisHandles: [], // 動態邊緣拖拉點
 
             init() {
+                this.resizeCanvas();
+                this.centerCamera();
                 this.bindEvents();
                 this.setMode('rect');
+
+                window.addEventListener('resize', () => this.resizeCanvas());
+                
+                // 全螢幕切換事件：延遲一小段時間確保佈局完成後，強制將原點置中
+                document.addEventListener('fullscreenchange', () => {
+                    setTimeout(() => {
+                        this.resizeCanvas();
+                        this.centerCamera();
+                    }, 100);
+                });
+                document.addEventListener('webkitfullscreenchange', () => {
+                    setTimeout(() => {
+                        this.resizeCanvas();
+                        this.centerCamera();
+                    }, 100);
+                });
+            },
+
+            centerCamera() {
+                this.camera.x = this.canvas.width / 2;
+                this.camera.y = this.canvas.height / 2;
+                this.render();
+            },
+
+            resizeCanvas() {
+                const container = this.canvas.parentElement;
+                const oldW = this.canvas.width || container.clientWidth;
+                const oldH = this.canvas.height || container.clientHeight;
+
+                this.canvas.width = container.clientWidth;
+                this.canvas.height = container.clientHeight;
+
+                // 隨畫布大小調整時，讓相機跟著平移以維持相對位置
+                if (oldW && oldH) {
+                    this.camera.x += (this.canvas.width - oldW) / 2;
+                    this.camera.y += (this.canvas.height - oldH) / 2;
+                }
+                this.render();
+            },
+
+            // --- 核心座標轉換 ---
+            absGridToScreen(v) {
+                let px = v.x * this.scale;
+                let py = -v.y * this.scale;
+                return {
+                    x: this.camera.x + px * this.camera.zoom,
+                    y: this.camera.y + py * this.camera.zoom
+                };
+            },
+
+            screenToAbsGrid(sx, sy) {
+                let px = (sx - this.camera.x) / this.camera.zoom;
+                let py = (sy - this.camera.y) / this.camera.zoom;
+                return { x: px / this.scale, y: -py / this.scale };
+            },
+
+            absToRotGrid(absG) {
+                let rx = absG.x * Math.cos(-this.gridAngle) - absG.y * Math.sin(-this.gridAngle);
+                let ry = absG.x * Math.sin(-this.gridAngle) + absG.y * Math.cos(-this.gridAngle);
+                return { x: rx, y: ry };
+            },
+
+            rotToAbsGrid(rotG) {
+                let ax = rotG.x * Math.cos(this.gridAngle) - rotG.y * Math.sin(this.gridAngle);
+                let ay = rotG.x * Math.sin(this.gridAngle) + rotG.y * Math.cos(this.gridAngle);
+                return { x: ax, y: ay };
             },
 
             bindEvents() {
@@ -242,19 +314,57 @@
                 cvs.addEventListener('mousedown', this.onPointerDown.bind(this));
                 window.addEventListener('mousemove', this.onPointerMove.bind(this));
                 window.addEventListener('mouseup', this.onPointerUp.bind(this));
-                cvs.addEventListener('touchstart', this.onPointerDown.bind(this), {passive: false});
-                window.addEventListener('touchmove', this.onPointerMove.bind(this), {passive: false});
+                
+                cvs.addEventListener('touchstart', this.onTouchStart.bind(this), {passive: false});
+                window.addEventListener('touchmove', this.onTouchMove.bind(this), {passive: false});
                 window.addEventListener('touchend', this.onPointerUp.bind(this));
+
+                // 滑鼠滾輪縮放 (送出答案後依然可縮放)
+                cvs.addEventListener('wheel', (e) => {
+                    e.preventDefault();
+                    const zoomDelta = e.deltaY > 0 ? 0.9 : 1.1;
+                    this.doZoom(e.clientX, e.clientY, zoomDelta);
+                }, {passive: false});
+
+                // 全螢幕按鈕
+                document.getElementById('btnFullscreen').addEventListener('click', () => {
+                    const container = document.getElementById('canvasContainer');
+                    if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+                        if(container.requestFullscreen) container.requestFullscreen().catch(err => console.log(err));
+                        else if(container.webkitRequestFullscreen) container.webkitRequestFullscreen();
+                    } else { 
+                        if(document.exitFullscreen) document.exitFullscreen();
+                        else if(document.webkitExitFullscreen) document.webkitExitFullscreen();
+                    }
+                });
+            },
+
+            doZoom(clientX, clientY, multiplier) {
+                const rect = this.canvas.getBoundingClientRect();
+                const mx = clientX - rect.left;
+                const my = clientY - rect.top;
+
+                const oldGridX = (mx - this.camera.x) / this.camera.zoom;
+                const oldGridY = (my - this.camera.y) / this.camera.zoom;
+
+                this.camera.zoom *= multiplier;
+                this.camera.zoom = Math.max(0.4, Math.min(4, this.camera.zoom));
+
+                this.camera.x = mx - oldGridX * this.camera.zoom;
+                this.camera.y = my - oldGridY * this.camera.zoom;
+                this.render();
             },
 
             setMode(newMode) {
                 this.mode = newMode;
                 document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
                 document.querySelector(`.tab-btn[onclick="app.setMode('${newMode}')"]`).classList.add('active');
+                
+                this.centerCamera();
+                this.camera.zoom = 1.2;
                 this.generateQuestion();
             },
 
-            // --- 數學輔助：點到線段的距離 ---
             distToSeg(p, a, b) {
                 const l2 = (b.x - a.x)**2 + (b.y - a.y)**2;
                 if (l2 === 0) return Math.hypot(p.x - a.x, p.y - a.y);
@@ -265,97 +375,83 @@
                 return Math.hypot(p.x - projX, p.y - projY);
             },
 
-            // --- 出題邏輯 ---
             generateQuestion() {
                 this.state = 'playing';
                 document.getElementById('btnSubmit').style.display = 'block';
                 document.getElementById('btnNext').style.display = 'none';
                 document.getElementById('uiFeedback').className = 'feedback-overlay';
-
-                // 重置分身
                 this.ghosts = { C1: { active: false, x: 0, y: 0 }, C2: { active: false, x: 0, y: 0 } };
 
-                // 隨機整數產生器
                 const randInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
                 const randNonZero = (min, max) => { let v = 0; while(v === 0) v = randInt(min, max); return v; };
 
-                if (this.mode === 'rect') {
-                    let fx = randNonZero(-15, 15);
-                    let fy = randNonZero(-15, 15);
-                    this.vectors.F = { x: fx, y: fy };
-                    
-                    this.vectors.C1 = { x: randInt(2, 5), y: randInt(2, 5) };
-                    this.vectors.C2 = { x: randInt(-5, -2), y: randInt(2, 5) };
+                // 初始座標軸一律正交(不旋轉)
+                this.gridAngle = 0;
 
-                    this.targets.C1 = { x: fx, y: 0 };
-                    this.targets.C2 = { x: 0, y: fy };
+                if (this.mode === 'rect') {
+                    let fx = randNonZero(-10, 10); let fy = randNonZero(-10, 10);
+                    
+                    let rotF = { x: fx, y: fy };
+                    this.vectors.F = this.rotToAbsGrid(rotF);
+
+                    let c1Rot = { x: randInt(2, 5), y: randInt(2, 5) };
+                    let c2Rot = { x: randInt(-5, -2), y: randInt(2, 5) };
+                    this.vectors.C1 = this.rotToAbsGrid(c1Rot);
+                    this.vectors.C2 = this.rotToAbsGrid(c2Rot);
 
                     document.getElementById('uiInstruction').innerHTML = 
-                        "🛠 <strong>任務：作圖求直角分力</strong><br>已給定紅色作用力 F。<br>👉 請拖曳 <strong>藍色與綠色箭頭</strong>，將它們變成正確的 X 與 Y 軸分力。";
-                
+                        "🛠 <strong>任務：直角分解</strong><br>👉 將紅色力 <strong>精準分解</strong> 到坐標軸上。<br>💡 <i>拖曳畫布空白處可平移；畫面邊緣四個 <strong>小灰點</strong> 可轉動網格！</i>";
                 } else if (this.mode === 'arb') {
-                    let c1x = randNonZero(-10, 10);
-                    let c1y = randNonZero(-10, 10);
-                    let c2x = randNonZero(-10, 10);
-                    let c2y = randNonZero(-10, 10);
-                    while(c1x*c2y === c1y*c2x) { c2x = randNonZero(-10, 10); }
-
-                    this.targets.C2 = { x: c2x, y: c2y };
+                    let c1x = randNonZero(-8, 8); let c1y = randNonZero(-8, 8);
+                    let c2x = randNonZero(-8, 8); let c2y = randNonZero(-8, 8);
+                    while(c1x*c2y === c1y*c2x) { c2x = randNonZero(-8, 8); }
                     this.vectors.C1 = { x: c1x, y: c1y };
                     this.vectors.F = { x: c1x + c2x, y: c1y + c2y };
-                    
                     this.vectors.C2 = { x: randInt(-5, 5), y: randInt(-5, 5) };
-
                     document.getElementById('uiInstruction').innerHTML = 
-                        "🛠 <strong>任務：求未知的分力</strong><br>紅色為合力 F，藍色為已知分力 1。<br>👉 根據平行四邊形法則，拖曳 <strong>綠色箭頭</strong> 畫出分力 2。";
-
+                        "🛠 <strong>任務：求未知的分力</strong><br>紅色為合力 F，藍色為已知分力 1。<br>👉 拖曳 <strong>綠色箭頭</strong> 畫出分力 2。<br>💡 <i>拖曳時，注意分力1尖端延伸出的虛線輔助。</i>";
                 } else if (this.mode === 'add') {
-                    let c1x = randNonZero(-10, 10); let c1y = randNonZero(-10, 10);
-                    let c2x = randNonZero(-10, 10); let c2y = randNonZero(-10, 10);
-                    
+                    let c1x = randNonZero(-8, 8); let c1y = randNonZero(-8, 8);
+                    let c2x = randNonZero(-8, 8); let c2y = randNonZero(-8, 8);
                     this.vectors.C1 = { x: c1x, y: c1y };
                     this.vectors.C2 = { x: c2x, y: c2y };
-                    this.targets.F = { x: c1x + c2x, y: c1y + c2y };
-
                     this.vectors.F = { x: randInt(-5, 5), y: randInt(5, 10) };
-
                     document.getElementById('uiInstruction').innerHTML = 
-                        "🛠 <strong>任務：作圖求合力</strong><br>已知兩作用力（藍、綠）。<br>👉 請拖曳 <strong>紅色箭頭</strong>，畫出它們的合力。<br>💡 <i>提示：拖曳藍、綠箭頭的「箭身」可產生<strong>平移分身</strong>，利用頭尾相接法找答案！</i>";
+                        "🛠 <strong>任務：作圖求合力</strong><br>👉 拖曳 <strong>紅色箭頭</strong>，畫出合力。<br>💡 <i>拖拉藍綠箭頭身體產生平移分身，頭尾相接找答案！</i>";
                 }
 
                 this.updateScoreBoard();
                 this.render();
             },
 
-            // --- 判斷答案邏輯 ---
             checkAnswer() {
                 if (this.state !== 'playing') return;
-                
-                let isCorrect = false;
-                let mistakeDetails = "";
-                // 允許容錯：0 個 grid 單位 (因為我們有 Snap to grid)
+                let isCorrect = false; let mistakeDetails = "";
                 const tol = 0.5; 
-
                 const dist = (v1, v2) => Math.hypot(v1.x - v2.x, v1.y - v2.y);
-                const formatVec = (v) => `(${v.x}, ${-v.y})`; // 配合數學慣例，Y向上為正
+                const formatVec = (v) => `(${v.x.toFixed(1)}, ${v.y.toFixed(1)})`; 
 
                 if (this.mode === 'rect') {
-                    // 判斷 C1, C2 是否對應了 Target (允許互換)
+                    let fRot = this.absToRotGrid(this.vectors.F);
+                    this.targets.C1 = this.rotToAbsGrid({ x: fRot.x, y: 0 });
+                    this.targets.C2 = this.rotToAbsGrid({ x: 0, y: fRot.y });
+
                     const match1 = dist(this.vectors.C1, this.targets.C1) < tol && dist(this.vectors.C2, this.targets.C2) < tol;
                     const match2 = dist(this.vectors.C1, this.targets.C2) < tol && dist(this.vectors.C2, this.targets.C1) < tol;
                     isCorrect = match1 || match2;
-                    if(!isCorrect) mistakeDetails = `目標力 F${formatVec(this.vectors.F)}。你的分力：${formatVec(this.vectors.C1)} 與 ${formatVec(this.vectors.C2)}。正確分力應為：${formatVec(this.targets.C1)} 與 ${formatVec(this.targets.C2)}。`;
+                    if(!isCorrect) mistakeDetails = `目標力${formatVec(this.vectors.F)}。你畫：${formatVec(this.vectors.C1)} 及 ${formatVec(this.vectors.C2)}。正解應落於當前坐標軸上：${formatVec(this.targets.C1)} / ${formatVec(this.targets.C2)}。`;
                 } 
                 else if (this.mode === 'arb') {
+                    this.targets.C2 = { x: this.vectors.F.x - this.vectors.C1.x, y: this.vectors.F.y - this.vectors.C1.y };
                     isCorrect = dist(this.vectors.C2, this.targets.C2) < tol;
-                    if(!isCorrect) mistakeDetails = `合力 F${formatVec(this.vectors.F)}, 已知分力${formatVec(this.vectors.C1)}。你畫的分力2為 ${formatVec(this.vectors.C2)}。正確應為 ${formatVec(this.targets.C2)}。`;
+                    if(!isCorrect) mistakeDetails = `合力 F${formatVec(this.vectors.F)}, 已知分力1${formatVec(this.vectors.C1)}。你畫的分力2為 ${formatVec(this.vectors.C2)}。正解：${formatVec(this.targets.C2)}。`;
                 }
                 else if (this.mode === 'add') {
+                    this.targets.F = { x: this.vectors.C1.x + this.vectors.C2.x, y: this.vectors.C1.y + this.vectors.C2.y };
                     isCorrect = dist(this.vectors.F, this.targets.F) < tol;
-                    if(!isCorrect) mistakeDetails = `作用力${formatVec(this.vectors.C1)}與${formatVec(this.vectors.C2)}。你畫的合力為 ${formatVec(this.vectors.F)}。正確應為 ${formatVec(this.targets.F)}。`;
+                    if(!isCorrect) mistakeDetails = `作用力${formatVec(this.vectors.C1)}與${formatVec(this.vectors.C2)}。你畫的合力為 ${formatVec(this.vectors.F)}。正解：${formatVec(this.targets.F)}。`;
                 }
 
-                // 更新統計
                 this.stats[this.mode].attempted++;
                 const fbUI = document.getElementById('uiFeedback');
                 
@@ -369,12 +465,11 @@
                     fbUI.className = 'feedback-overlay wrong';
                 }
 
+                // 狀態轉換為已答題 (鎖定平移功能)
                 this.state = 'answered';
                 this.updateScoreBoard();
-                
                 document.getElementById('btnSubmit').style.display = 'none';
                 document.getElementById('btnNext').style.display = 'block';
-
                 this.render();
             },
 
@@ -384,7 +479,6 @@
                 document.getElementById('uiTotal').innerText = s.attempted;
             },
 
-            // --- 產生報告 ---
             showReport() {
                 const modal = document.getElementById('reportModal');
                 const basicInfo = document.getElementById('reportBasicInfo');
@@ -404,139 +498,171 @@
                     <p><strong>⏱️ 總耗時：</strong> ${mins} 分 ${secs} 秒</p>
                 `;
 
-                tBody.innerHTML = '';
-                mList.innerHTML = '';
-                
+                tBody.innerHTML = ''; mList.innerHTML = '';
                 const modeNames = { rect: '直角分解', arb: '任意分解', add: '二力合成' };
                 let totalMistakes = 0;
 
                 for (let key in this.stats) {
                     const s = this.stats[key];
                     const acc = s.attempted === 0 ? "0%" : Math.round((s.correct / s.attempted) * 100) + "%";
-                    
-                    tBody.innerHTML += `
-                        <tr>
-                            <td>${modeNames[key]}</td>
-                            <td>${s.attempted}</td>
-                            <td>${s.correct}</td>
-                            <td>${acc}</td>
-                        </tr>
-                    `;
+                    tBody.innerHTML += `<tr><td>${modeNames[key]}</td><td>${s.attempted}</td><td>${s.correct}</td><td>${acc}</td></tr>`;
 
-                    s.mistakes.forEach((m, idx) => {
+                    s.mistakes.forEach((m) => {
                         totalMistakes++;
                         mList.innerHTML += `<div class="mistake-item"><strong>[${modeNames[key]}]</strong> ${m}</div>`;
                     });
                 }
-
                 if (totalMistakes === 0) {
                     mList.innerHTML = `<div style="color: green; text-align: center; font-weight: bold;">🎉 太棒了！您沒有任何答錯的紀錄！</div>`;
                 }
-
                 modal.style.display = 'flex';
             },
 
-            // --- 渲染與繪圖邏輯 ---
+            // --- 繪製 ---
             render() {
                 const ctx = this.ctx;
                 ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+                
                 this.drawGrid();
 
-                const cvtx = (v) => this.originX + v.x * this.scale;
-                const cvty = (v) => this.originY - v.y * this.scale;
+                const ptOrigin = this.absGridToScreen({x:0, y:0});
+                const ptF = this.absGridToScreen(this.vectors.F);
+                const ptC1 = this.absGridToScreen(this.vectors.C1);
+                const ptC2 = this.absGridToScreen(this.vectors.C2);
 
-                const ptF = { x: cvtx(this.vectors.F), y: cvty(this.vectors.F) };
-                const ptC1 = { x: cvtx(this.vectors.C1), y: cvty(this.vectors.C1) };
-                const ptC2 = { x: cvtx(this.vectors.C2), y: cvty(this.vectors.C2) };
+                // 繪製座標旋轉把手 (利用射線與螢幕邊界求交點，緊貼畫面邊緣)
+                const margin = 20; 
+                const left = margin, right = this.canvas.width - margin;
+                const top = margin, bottom = this.canvas.height - margin;
 
-                // 繪製背景輔助結構
+                this.axisHandles = [0, Math.PI/2, Math.PI, -Math.PI/2].map(ang => {
+                    const rayAng = this.gridAngle + ang;
+                    const cosA = Math.cos(rayAng);
+                    const sinA = Math.sin(rayAng);
+
+                    let t_min = -Infinity, t_max = Infinity;
+                    if (Math.abs(cosA) > 0.0001) {
+                        let t1 = (left - ptOrigin.x) / cosA;
+                        let t2 = (right - ptOrigin.x) / cosA;
+                        t_min = Math.max(t_min, Math.min(t1, t2));
+                        t_max = Math.min(t_max, Math.max(t1, t2));
+                    }
+                    if (Math.abs(sinA) > 0.0001) {
+                        let t1 = (top - ptOrigin.y) / sinA;
+                        let t2 = (bottom - ptOrigin.y) / sinA;
+                        t_min = Math.max(t_min, Math.min(t1, t2));
+                        t_max = Math.min(t_max, Math.max(t1, t2));
+                    }
+
+                    let t = t_max;
+                    if (t < 0 || t === Infinity) t = 30; // 備用長度
+
+                    return {
+                        x: ptOrigin.x + t * cosA,
+                        y: ptOrigin.y + t * sinA
+                    };
+                });
+
+                this.axisHandles.forEach(pt => {
+                    ctx.beginPath(); ctx.arc(pt.x, pt.y, 6, 0, Math.PI * 2); // 半徑縮小
+                    ctx.fillStyle = 'rgba(149, 165, 166, 0.5)'; ctx.fill(); // 灰色半透明
+                });
+
+                // 答題後的半透明解答
                 if (this.state === 'answered') {
                     ctx.beginPath(); ctx.strokeStyle = '#95a5a6'; ctx.lineWidth = 1.5; ctx.setLineDash([5, 5]);
-                    
                     if (this.mode === 'rect') {
-                        const tC1 = { x: cvtx(this.targets.C1), y: cvty(this.targets.C1) };
-                        const tC2 = { x: cvtx(this.targets.C2), y: cvty(this.targets.C2) };
+                        const tC1 = this.absGridToScreen(this.targets.C1);
+                        const tC2 = this.absGridToScreen(this.targets.C2);
                         ctx.moveTo(tC1.x, tC1.y); ctx.lineTo(ptF.x, ptF.y); ctx.moveTo(tC2.x, tC2.y); ctx.lineTo(ptF.x, ptF.y); ctx.stroke();
-                        this.drawArrow(this.originX, this.originY, tC1.x, tC1.y, 'rgba(52, 152, 219, 0.3)', 6);
-                        this.drawArrow(this.originX, this.originY, tC2.x, tC2.y, 'rgba(46, 204, 113, 0.3)', 6);
-                    } 
-                    else if (this.mode === 'arb') {
-                        const tC2 = { x: cvtx(this.targets.C2), y: cvty(this.targets.C2) };
+                        this.drawArrow(ptOrigin, tC1, 'rgba(52, 152, 219, 0.3)', 6);
+                        this.drawArrow(ptOrigin, tC2, 'rgba(46, 204, 113, 0.3)', 6);
+                    } else if (this.mode === 'arb') {
+                        const tC2 = this.absGridToScreen(this.targets.C2);
                         ctx.moveTo(ptC1.x, ptC1.y); ctx.lineTo(ptF.x, ptF.y); ctx.moveTo(tC2.x, tC2.y); ctx.lineTo(ptF.x, ptF.y); ctx.stroke();
-                        this.drawArrow(this.originX, this.originY, tC2.x, tC2.y, 'rgba(46, 204, 113, 0.3)', 6);
-                    }
-                    else if (this.mode === 'add') {
-                        const tF = { x: cvtx(this.targets.F), y: cvty(this.targets.F) };
+                        this.drawArrow(ptOrigin, tC2, 'rgba(46, 204, 113, 0.3)', 6);
+                    } else if (this.mode === 'add') {
+                        const tF = this.absGridToScreen(this.targets.F);
                         ctx.moveTo(ptC1.x, ptC1.y); ctx.lineTo(tF.x, tF.y); ctx.moveTo(ptC2.x, ptC2.y); ctx.lineTo(tF.x, tF.y); ctx.stroke();
-                        this.drawArrow(this.originX, this.originY, tF.x, tF.y, 'rgba(231, 76, 60, 0.3)', 8);
+                        this.drawArrow(ptOrigin, tF, 'rgba(231, 76, 60, 0.3)', 8);
                     }
                 }
 
-                // 繪製作答區的向量
                 if (this.mode === 'rect') {
-                    this.drawArrow(this.originX, this.originY, ptF.x, ptF.y, 'var(--primary)', 5, false, "F");
-                    this.drawArrow(this.originX, this.originY, ptC1.x, ptC1.y, 'var(--comp-1)', 4);
-                    this.drawArrow(this.originX, this.originY, ptC2.x, ptC2.y, 'var(--comp-2)', 4);
+                    this.drawArrow(ptOrigin, ptF, 'var(--primary)', 5, false, "F");
+                    this.drawArrow(ptOrigin, ptC1, 'var(--comp-1)', 4);
+                    this.drawArrow(ptOrigin, ptC2, 'var(--comp-2)', 4);
                     if(this.state === 'playing') { this.drawDragRing(ptC1); this.drawDragRing(ptC2); }
                 } 
                 else if (this.mode === 'arb') {
-                    this.drawArrow(this.originX, this.originY, ptF.x, ptF.y, 'var(--primary)', 5, false, "F");
-                    this.drawArrow(this.originX, this.originY, ptC1.x, ptC1.y, 'var(--comp-1)', 4, false, "分力1");
-                    this.drawArrow(this.originX, this.originY, ptC2.x, ptC2.y, 'var(--comp-2)', 4);
-                    if(this.state === 'playing') this.drawDragRing(ptC2);
+                    this.drawArrow(ptOrigin, ptF, 'var(--primary)', 5, false, "F");
+                    this.drawArrow(ptOrigin, ptC1, 'var(--comp-1)', 4, false, "分力1");
+                    this.drawArrow(ptOrigin, ptC2, 'var(--comp-2)', 4);
+                    
+                    if(this.state === 'playing') {
+                        this.drawDragRing(ptC2);
+                        if (this.dragTarget === 'C2') {
+                            const ghostEndAbs = { x: this.vectors.C1.x + this.vectors.C2.x, y: this.vectors.C1.y + this.vectors.C2.y };
+                            const ghostEndScreen = this.absGridToScreen(ghostEndAbs);
+                            this.drawArrow(ptC1, ghostEndScreen, 'rgba(46, 204, 113, 0.45)', 4, true);
+                        }
+                    }
                 } 
                 else if (this.mode === 'add') {
-                    // 畫出分身 (平移輔助)
                     if (this.ghosts.C1.active) {
-                        const startX = cvtx(this.ghosts.C1); const startY = cvty(this.ghosts.C1);
-                        const endX = cvtx({x: this.ghosts.C1.x + this.vectors.C1.x, y: this.ghosts.C1.y + this.vectors.C1.y});
-                        const endY = cvty({x: this.ghosts.C1.x + this.vectors.C1.x, y: this.ghosts.C1.y + this.vectors.C1.y});
-                        this.drawArrow(startX, startY, endX, endY, 'rgba(52, 152, 219, 0.45)', 4, true);
+                        const start = this.absGridToScreen(this.ghosts.C1);
+                        const end = this.absGridToScreen({x: this.ghosts.C1.x + this.vectors.C1.x, y: this.ghosts.C1.y + this.vectors.C1.y});
+                        this.drawArrow(start, end, 'rgba(52, 152, 219, 0.45)', 4, true);
                     }
                     if (this.ghosts.C2.active) {
-                        const startX = cvtx(this.ghosts.C2); const startY = cvty(this.ghosts.C2);
-                        const endX = cvtx({x: this.ghosts.C2.x + this.vectors.C2.x, y: this.ghosts.C2.y + this.vectors.C2.y});
-                        const endY = cvty({x: this.ghosts.C2.x + this.vectors.C2.x, y: this.ghosts.C2.y + this.vectors.C2.y});
-                        this.drawArrow(startX, startY, endX, endY, 'rgba(46, 204, 113, 0.45)', 4, true);
+                        const start = this.absGridToScreen(this.ghosts.C2);
+                        const end = this.absGridToScreen({x: this.ghosts.C2.x + this.vectors.C2.x, y: this.ghosts.C2.y + this.vectors.C2.y});
+                        this.drawArrow(start, end, 'rgba(46, 204, 113, 0.45)', 4, true);
                     }
 
-                    this.drawArrow(this.originX, this.originY, ptC1.x, ptC1.y, 'var(--comp-1)', 4, false, "力1");
-                    this.drawArrow(this.originX, this.originY, ptC2.x, ptC2.y, 'var(--comp-2)', 4, false, "力2");
-                    this.drawArrow(this.originX, this.originY, ptF.x, ptF.y, 'var(--primary)', 5);
+                    this.drawArrow(ptOrigin, ptC1, 'var(--comp-1)', 4, false, "力1");
+                    this.drawArrow(ptOrigin, ptC2, 'var(--comp-2)', 4, false, "力2");
+                    this.drawArrow(ptOrigin, ptF, 'var(--primary)', 5);
                     if(this.state === 'playing') this.drawDragRing(ptF);
+                }
+                
+                if (Math.abs(this.gridAngle) > 0.01) {
+                    ctx.font = '16px Arial'; ctx.fillStyle = '#95a5a6'; ctx.textAlign = 'left';
+                    const deg = (this.gridAngle * 180 / Math.PI).toFixed(1);
+                    ctx.fillText(`座標傾角: ${deg}°`, 20, this.canvas.height - 20);
                 }
             },
 
-            drawDragRing(pt) {
+            drawDragRing(pt, color = 'rgba(241, 196, 15, 0.6)') {
                 this.ctx.beginPath(); this.ctx.arc(pt.x, pt.y, 14, 0, Math.PI * 2);
-                this.ctx.fillStyle = 'rgba(241, 196, 15, 0.6)'; this.ctx.fill();
+                this.ctx.fillStyle = color; this.ctx.fill();
             },
 
-            drawArrow(fromx, fromy, tox, toy, color, lineWidth = 3, isDashed = false, label = null) {
+            drawArrow(start, end, color, lineWidth = 3, isDashed = false, label = null) {
                 const ctx = this.ctx;
-                const dx = tox - fromx; const dy = toy - fromy;
+                const dx = end.x - start.x; const dy = end.y - start.y;
                 const len = Math.hypot(dx, dy);
                 if (len < 1) return; 
 
                 const headlen = 15;
                 const angle = Math.atan2(dy, dx);
                 const shorten = Math.min(headlen * 0.6, len * 0.5); 
-                const endX = tox - Math.cos(angle) * shorten;
-                const endY = toy - Math.sin(angle) * shorten;
+                const lineEndX = end.x - Math.cos(angle) * shorten;
+                const lineEndY = end.y - Math.sin(angle) * shorten;
 
                 ctx.beginPath(); ctx.strokeStyle = color; ctx.lineWidth = lineWidth;
                 ctx.lineCap = 'round'; ctx.setLineDash(isDashed ? [5, 5] : []);
-                ctx.moveTo(fromx, fromy); ctx.lineTo(endX, endY); ctx.stroke();
+                ctx.moveTo(start.x, start.y); ctx.lineTo(lineEndX, lineEndY); ctx.stroke();
                 
                 ctx.beginPath(); ctx.setLineDash([]); ctx.fillStyle = color;
-                ctx.moveTo(tox, toy);
-                ctx.lineTo(tox - headlen * Math.cos(angle - Math.PI / 7), toy - headlen * Math.sin(angle - Math.PI / 7));
-                ctx.lineTo(tox - headlen * Math.cos(angle + Math.PI / 7), toy - headlen * Math.sin(angle + Math.PI / 7));
+                ctx.moveTo(end.x, end.y);
+                ctx.lineTo(end.x - headlen * Math.cos(angle - Math.PI / 7), end.y - headlen * Math.sin(angle - Math.PI / 7));
+                ctx.lineTo(end.x - headlen * Math.cos(angle + Math.PI / 7), end.y - headlen * Math.sin(angle + Math.PI / 7));
                 ctx.closePath(); ctx.fill();
 
                 if (label) {
-                    const textX = tox + Math.cos(angle) * 15;
-                    const textY = toy + Math.sin(angle) * 15;
+                    const textX = end.x + Math.cos(angle) * 15;
+                    const textY = end.y + Math.sin(angle) * 15;
                     ctx.font = 'bold 16px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
                     const textWidth = ctx.measureText(label).width;
                     ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
@@ -548,121 +674,202 @@
 
             drawGrid() {
                 const ctx = this.ctx;
-                const mStep = 10; const bStep = 50; 
-                ctx.lineWidth = 1; ctx.setLineDash([]);
-                for (let x = this.originX % mStep; x <= this.canvas.width; x += mStep) {
-                    ctx.strokeStyle = (x - this.originX) % bStep === 0 ? '#dfe6e9' : '#f1f3f5';
-                    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, this.canvas.height); ctx.stroke();
+                ctx.save();
+                ctx.translate(this.camera.x, this.camera.y);
+                ctx.scale(this.camera.zoom, this.camera.zoom);
+                ctx.rotate(this.gridAngle);
+
+                const mStep = this.scale; 
+                const bStep = this.scale * 5; 
+                const limit = 3000; 
+
+                ctx.lineWidth = 1 / this.camera.zoom; 
+                ctx.setLineDash([]);
+                
+                ctx.beginPath();
+                for (let i = -limit; i <= limit; i += mStep) {
+                    ctx.moveTo(i, -limit); ctx.lineTo(i, limit);
+                    ctx.moveTo(-limit, i); ctx.lineTo(limit, i);
                 }
-                for (let y = this.originY % mStep; y <= this.canvas.height; y += mStep) {
-                    ctx.strokeStyle = (y - this.originY) % bStep === 0 ? '#dfe6e9' : '#f1f3f5';
-                    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(this.canvas.width, y); ctx.stroke();
+                ctx.strokeStyle = '#f1f3f5'; ctx.stroke();
+
+                ctx.beginPath();
+                ctx.lineWidth = 1.5 / this.camera.zoom;
+                for (let i = -limit; i <= limit; i += bStep) {
+                    ctx.moveTo(i, -limit); ctx.lineTo(i, limit);
+                    ctx.moveTo(-limit, i); ctx.lineTo(limit, i);
                 }
-                ctx.strokeStyle = '#bdc3c7'; ctx.lineWidth = 2;
-                ctx.beginPath(); ctx.moveTo(0, this.originY); ctx.lineTo(this.canvas.width, this.originY); ctx.stroke();
-                ctx.beginPath(); ctx.moveTo(this.originX, 0); ctx.lineTo(this.originX, this.canvas.height); ctx.stroke();
-                ctx.fillStyle = '#7f8c8d'; ctx.font = '14px Arial'; ctx.fillText('O', this.originX - 15, this.originY + 15);
+                ctx.strokeStyle = '#dfe6e9'; ctx.stroke();
+                
+                ctx.beginPath();
+                ctx.lineWidth = 2.5 / this.camera.zoom;
+                ctx.moveTo(-limit, 0); ctx.lineTo(limit, 0); 
+                ctx.moveTo(0, -limit); ctx.lineTo(0, limit); 
+                ctx.strokeStyle = '#bdc3c7'; ctx.stroke();
+                
+                ctx.save();
+                ctx.rotate(-this.gridAngle);
+                ctx.scale(1/this.camera.zoom, 1/this.camera.zoom);
+                ctx.fillStyle = '#7f8c8d'; ctx.font = '14px Arial'; ctx.fillText('O', -15, 15);
+                ctx.restore();
+
+                ctx.restore();
             },
 
-            // --- 拖曳互動 ---
-            getPointerPos(e) {
-                const rect = this.canvas.getBoundingClientRect();
-                const scaleX = this.canvas.width / rect.width;
-                const scaleY = this.canvas.height / rect.height;
-                const cx = (e.touches && e.touches.length > 0) ? e.touches[0].clientX : e.clientX;
-                const cy = (e.touches && e.touches.length > 0) ? e.touches[0].clientY : e.clientY;
-                // 轉換為 grid vector
-                const px = (cx - rect.left) * scaleX;
-                const py = (cy - rect.top) * scaleY;
-                return { x: Math.round((px - this.originX) / this.scale), y: Math.round((this.originY - py) / this.scale) };
+            // --- 觸控與縮放互動 ---
+            onTouchStart(e) {
+                if (e.touches.length === 2) {
+                    e.preventDefault();
+                    this.initialPinchDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+                    this.initialZoom = this.camera.zoom;
+                    return;
+                }
+                this.onPointerDown(e);
+            },
+
+            onTouchMove(e) {
+                if (e.touches.length === 2) {
+                    e.preventDefault();
+                    if (!this.initialPinchDist) return;
+                    const dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+                    
+                    const ratio = dist / this.initialPinchDist;
+                    this.camera.zoom = Math.max(0.4, Math.min(4, this.initialZoom * ratio));
+                    this.render();
+                    return;
+                }
+                this.onPointerMove(e);
             },
 
             onPointerDown(e) {
-                if (this.state !== 'playing') return;
-                const v = this.getPointerPos(e); // 格點座標
-                const dist = (v1, v2) => Math.hypot(v1.x - v2.x, v1.y - v2.y);
-                const tol = 3; // 判定半徑 (格數)
+                // 如果已經送出答案，直接 return (這會完全阻擋畫布平移與向量拖拉，但保留上方的縮放功能)
+                if (this.state !== 'playing' || e.touches?.length > 1) return;
+                
+                const rect = this.canvas.getBoundingClientRect();
+                const sx = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
+                const sy = (e.touches ? e.touches[0].clientY : e.clientY) - rect.top;
+                
+                const distScreen = (p1, p2) => Math.hypot(p1.x - p2.x, p1.y - p2.y);
+                const clickPos = { x: sx, y: sy };
+                const hitRadius = 30; 
+
+                for(let pt of this.axisHandles) {
+                    if (distScreen(clickPos, pt) < 25) {
+                        this.dragTarget = 'axisRotate';
+                        const ptOrigin = this.absGridToScreen({x:0, y:0});
+                        this.dragAxisOffset = this.gridAngle - Math.atan2(sy - ptOrigin.y, sx - ptOrigin.x);
+                        return;
+                    }
+                }
+
+                const ptF = this.absGridToScreen(this.vectors.F);
+                const ptC1 = this.absGridToScreen(this.vectors.C1);
+                const ptC2 = this.absGridToScreen(this.vectors.C2);
+                const ptOrigin = this.absGridToScreen({x:0, y:0});
 
                 if (this.mode === 'rect') {
-                    if (dist(v, this.vectors.C1) < tol) this.dragTarget = 'C1';
-                    else if (dist(v, this.vectors.C2) < tol) this.dragTarget = 'C2';
+                    if (distScreen(clickPos, ptC1) < hitRadius) { this.dragTarget = 'C1'; return; }
+                    if (distScreen(clickPos, ptC2) < hitRadius) { this.dragTarget = 'C2'; return; }
                 } else if (this.mode === 'arb') {
-                    if (dist(v, this.vectors.C2) < tol) this.dragTarget = 'C2';
+                    if (distScreen(clickPos, ptC2) < hitRadius) { this.dragTarget = 'C2'; return; }
                 } else if (this.mode === 'add') {
-                    // 優先判定是否拉動主角合力 F
-                    if (dist(v, this.vectors.F) < tol) { 
-                        this.dragTarget = 'F'; return; 
-                    }
+                    if (distScreen(clickPos, ptF) < hitRadius) { this.dragTarget = 'F'; return; }
 
-                    // 判定是否正在拉動已經產生的「分身」
                     if (this.ghosts.C1.active) {
-                        const endC1 = { x: this.ghosts.C1.x + this.vectors.C1.x, y: this.ghosts.C1.y + this.vectors.C1.y };
-                        if (this.distToSeg(v, this.ghosts.C1, endC1) < 2) {
+                        const ptG1End = this.absGridToScreen({x: this.ghosts.C1.x + this.vectors.C1.x, y: this.ghosts.C1.y + this.vectors.C1.y});
+                        const ptG1Start = this.absGridToScreen(this.ghosts.C1);
+                        if (this.distToSeg(clickPos, ptG1Start, ptG1End) < 20) {
                             this.dragTarget = 'ghostC1';
-                            this.dragOffset = { x: this.ghosts.C1.x - v.x, y: this.ghosts.C1.y - v.y };
+                            const gGrid = this.screenToAbsGrid(sx, sy);
+                            this.dragOffset = { x: this.ghosts.C1.x - gGrid.x, y: this.ghosts.C1.y - gGrid.y };
                             return;
                         }
                     }
                     if (this.ghosts.C2.active) {
-                        const endC2 = { x: this.ghosts.C2.x + this.vectors.C2.x, y: this.ghosts.C2.y + this.vectors.C2.y };
-                        if (this.distToSeg(v, this.ghosts.C2, endC2) < 2) {
+                        const ptG2End = this.absGridToScreen({x: this.ghosts.C2.x + this.vectors.C2.x, y: this.ghosts.C2.y + this.vectors.C2.y});
+                        const ptG2Start = this.absGridToScreen(this.ghosts.C2);
+                        if (this.distToSeg(clickPos, ptG2Start, ptG2End) < 20) {
                             this.dragTarget = 'ghostC2';
-                            this.dragOffset = { x: this.ghosts.C2.x - v.x, y: this.ghosts.C2.y - v.y };
+                            const gGrid = this.screenToAbsGrid(sx, sy);
+                            this.dragOffset = { x: this.ghosts.C2.x - gGrid.x, y: this.ghosts.C2.y - gGrid.y };
                             return;
                         }
                     }
 
-                    // 判定是否從原本的力的身體拉出「新分身」
-                    const origin = { x: 0, y: 0 };
-                    if (this.distToSeg(v, origin, this.vectors.C1) < 2) {
-                        this.dragTarget = 'ghostC1';
-                        this.ghosts.C1.active = true;
+                    if (this.distToSeg(clickPos, ptOrigin, ptC1) < 20) {
+                        this.dragTarget = 'ghostC1'; this.ghosts.C1.active = true;
                         this.ghosts.C1.x = 0; this.ghosts.C1.y = 0;
-                        this.dragOffset = { x: -v.x, y: -v.y };
-                        return;
+                        const gGrid = this.screenToAbsGrid(sx, sy);
+                        this.dragOffset = { x: -gGrid.x, y: -gGrid.y }; return;
                     }
-                    if (this.distToSeg(v, origin, this.vectors.C2) < 2) {
-                        this.dragTarget = 'ghostC2';
-                        this.ghosts.C2.active = true;
+                    if (this.distToSeg(clickPos, ptOrigin, ptC2) < 20) {
+                        this.dragTarget = 'ghostC2'; this.ghosts.C2.active = true;
                         this.ghosts.C2.x = 0; this.ghosts.C2.y = 0;
-                        this.dragOffset = { x: -v.x, y: -v.y };
-                        return;
+                        const gGrid = this.screenToAbsGrid(sx, sy);
+                        this.dragOffset = { x: -gGrid.x, y: -gGrid.y }; return;
                     }
                 }
+
+                // 若在答題階段且都沒點到把手，進入平移畫布模式 (Pan)
+                this.dragTarget = 'pan';
+                this.lastPan = { x: sx, y: sy };
             },
 
             onPointerMove(e) {
                 if (!this.dragTarget) return;
                 if (e.cancelable) e.preventDefault(); 
-                const v = this.getPointerPos(e);
+                
+                const rect = this.canvas.getBoundingClientRect();
+                const sx = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
+                const sy = (e.touches ? e.touches[0].clientY : e.clientY) - rect.top;
+
+                if (this.dragTarget === 'pan') {
+                    this.camera.x += (sx - this.lastPan.x);
+                    this.camera.y += (sy - this.lastPan.y);
+                    this.lastPan = { x: sx, y: sy };
+                    this.render();
+                    return;
+                }
+
+                if (this.dragTarget === 'axisRotate') {
+                    const ptOrigin = this.absGridToScreen({x:0, y:0});
+                    let newAng = Math.atan2(sy - ptOrigin.y, sx - ptOrigin.x) + this.dragAxisOffset;
+                    const snapDeg = 15;
+                    const radSnap = snapDeg * Math.PI / 180;
+                    this.gridAngle = Math.round(newAng / radSnap) * radSnap;
+                    this.render();
+                    return;
+                }
+
+                let absV = this.screenToAbsGrid(sx, sy);
                 
                 if (this.dragTarget.startsWith('ghost')) {
-                    // 分身平移邏輯
-                    let gx = v.x + this.dragOffset.x;
-                    let gy = v.y + this.dragOffset.y;
+                    let gx_abs = absV.x + this.dragOffset.x;
+                    let gy_abs = absV.y + this.dragOffset.y;
                     
-                    gx = Math.max(-25, Math.min(25, gx));
-                    gy = Math.max(-20, Math.min(20, gy));
+                    let rotV = this.absToRotGrid({x: gx_abs, y: gy_abs});
+                    rotV.x = Math.round(rotV.x); rotV.y = Math.round(rotV.y);
+                    let finalAbs = this.rotToAbsGrid(rotV);
 
-                    if (this.dragTarget === 'ghostC1') {
-                        this.ghosts.C1.x = gx; this.ghosts.C1.y = gy;
-                    } else {
-                        this.ghosts.C2.x = gx; this.ghosts.C2.y = gy;
-                    }
+                    if (this.dragTarget === 'ghostC1') { this.ghosts.C1.x = finalAbs.x; this.ghosts.C1.y = finalAbs.y; } 
+                    else { this.ghosts.C2.x = finalAbs.x; this.ghosts.C2.y = finalAbs.y; }
                 } else {
-                    // 一般箭頭拖曳邏輯
-                    v.x = Math.max(-25, Math.min(25, v.x));
-                    v.y = Math.max(-20, Math.min(20, v.y));
-                    this.vectors[this.dragTarget] = v;
+                    let rotV = this.absToRotGrid(absV);
+                    rotV.x = Math.round(rotV.x); rotV.y = Math.round(rotV.y);
+                    rotV.x = Math.max(-100, Math.min(100, rotV.x));
+                    rotV.y = Math.max(-100, Math.min(100, rotV.y));
+                    this.vectors[this.dragTarget] = this.rotToAbsGrid(rotV);
                 }
                 
                 this.render();
             },
 
-            onPointerUp() { this.dragTarget = null; }
+            onPointerUp() { 
+                this.dragTarget = null; 
+                this.initialPinchDist = null;
+            }
         };
 
-        // 啟動應用
         app.init();
     </script>
 </body>
