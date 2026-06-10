@@ -57,11 +57,11 @@
             position: relative;
         }
 
-        .tabs { display: flex; gap: 5px; background: #e9ecef; padding: 5px; border-radius: 10px; }
+        .tabs { display: flex; gap: 5px; background: #e9ecef; padding: 5px; border-radius: 10px; flex-wrap: wrap;}
         .tab-btn {
-            flex: 1; padding: 10px 5px; border: none; background: transparent;
-            border-radius: 6px; font-size: 1rem; font-weight: bold; color: #6c757d;
-            cursor: pointer; transition: all 0.2s;
+            flex: 1 1 30%; padding: 8px 5px; border: none; background: transparent;
+            border-radius: 6px; font-size: 0.95rem; font-weight: bold; color: #6c757d;
+            cursor: pointer; transition: all 0.2s; 
         }
         .tab-btn.active { background: white; color: #2c3e50; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
 
@@ -162,8 +162,10 @@
         <div class="left-panel">
             <div class="tabs">
                 <button class="tab-btn active" onclick="app.setMode('rect')">直角分解</button>
-                <button class="tab-btn" onclick="app.setMode('arb')">任意分解</button>
-                <button class="tab-btn" onclick="app.setMode('add')">力的合成</button>
+                <button class="tab-btn" onclick="app.setMode('arb')">幾何分解</button>
+                <button class="tab-btn" onclick="app.setMode('bar')">代數分解</button>
+                <button class="tab-btn" onclick="app.setMode('add')">幾何合成</button>
+                <button class="tab-btn" onclick="app.setMode('barAdd')">代數合成</button>
             </div>
 
             <div class="dashboard">
@@ -217,24 +219,30 @@
             canvas: document.getElementById('quizCanvas'),
             ctx: document.getElementById('quizCanvas').getContext('2d'),
             
-            // 相機與世界轉換變數 (支援縮放與平移)
+            // 相機與世界轉換變數 
             camera: { x: 0, y: 0, zoom: 1.2 }, 
-            gridAngle: 0, // 座標軸旋轉角度
-            scale: 15,    // 每一單位的基礎像素 (放大係數)
+            gridAngle: 0, 
+            scale: 15,    
 
-            mode: 'rect', state: 'playing', 
+            mode: 'rect', // rect, arb, bar, add, barAdd
+            state: 'playing', 
             dragTarget: null, dragAxisOffset: 0,
             dragOffset: { x: 0, y: 0 },
             lastPan: { x: 0, y: 0 },
             initialPinchDist: null, initialZoom: null,
             startTime: new Date(),
             
-            stats: { rect: { attempted: 0, correct: 0, mistakes: [] }, arb: { attempted: 0, correct: 0, mistakes: [] }, add: { attempted: 0, correct: 0, mistakes: [] } },
-            // 向量以「絕對世界空間」儲存
+            stats: { 
+                rect: { attempted: 0, correct: 0, mistakes: [] }, 
+                arb: { attempted: 0, correct: 0, mistakes: [] }, 
+                bar: { attempted: 0, correct: 0, mistakes: [] }, 
+                add: { attempted: 0, correct: 0, mistakes: [] },
+                barAdd: { attempted: 0, correct: 0, mistakes: [] } 
+            },
             vectors: { F: { x: 0, y: 0 }, C1: { x: 0, y: 0 }, C2: { x: 0, y: 0 } },
             targets: { F: { x: 0, y: 0 }, C1: { x: 0, y: 0 }, C2: { x: 0, y: 0 } },
             ghosts: { C1: { active: false, x: 0, y: 0 }, C2: { active: false, x: 0, y: 0 } },
-            axisHandles: [], // 動態邊緣拖拉點
+            axisHandles: [], 
 
             init() {
                 this.resizeCanvas();
@@ -243,20 +251,8 @@
                 this.setMode('rect');
 
                 window.addEventListener('resize', () => this.resizeCanvas());
-                
-                // 全螢幕切換事件：延遲一小段時間確保佈局完成後，強制將原點置中
-                document.addEventListener('fullscreenchange', () => {
-                    setTimeout(() => {
-                        this.resizeCanvas();
-                        this.centerCamera();
-                    }, 100);
-                });
-                document.addEventListener('webkitfullscreenchange', () => {
-                    setTimeout(() => {
-                        this.resizeCanvas();
-                        this.centerCamera();
-                    }, 100);
-                });
+                document.addEventListener('fullscreenchange', () => { setTimeout(() => { this.resizeCanvas(); this.centerCamera(); }, 100); });
+                document.addEventListener('webkitfullscreenchange', () => { setTimeout(() => { this.resizeCanvas(); this.centerCamera(); }, 100); });
             },
 
             centerCamera() {
@@ -269,11 +265,8 @@
                 const container = this.canvas.parentElement;
                 const oldW = this.canvas.width || container.clientWidth;
                 const oldH = this.canvas.height || container.clientHeight;
-
                 this.canvas.width = container.clientWidth;
                 this.canvas.height = container.clientHeight;
-
-                // 隨畫布大小調整時，讓相機跟著平移以維持相對位置
                 if (oldW && oldH) {
                     this.camera.x += (this.canvas.width - oldW) / 2;
                     this.camera.y += (this.canvas.height - oldH) / 2;
@@ -281,19 +274,13 @@
                 this.render();
             },
 
-            // --- 核心座標轉換 ---
             absGridToScreen(v) {
-                let px = v.x * this.scale;
-                let py = -v.y * this.scale;
-                return {
-                    x: this.camera.x + px * this.camera.zoom,
-                    y: this.camera.y + py * this.camera.zoom
-                };
+                let px = v.x * this.scale; let py = -v.y * this.scale;
+                return { x: this.camera.x + px * this.camera.zoom, y: this.camera.y + py * this.camera.zoom };
             },
 
             screenToAbsGrid(sx, sy) {
-                let px = (sx - this.camera.x) / this.camera.zoom;
-                let py = (sy - this.camera.y) / this.camera.zoom;
+                let px = (sx - this.camera.x) / this.camera.zoom; let py = (sy - this.camera.y) / this.camera.zoom;
                 return { x: px / this.scale, y: -py / this.scale };
             },
 
@@ -314,19 +301,15 @@
                 cvs.addEventListener('mousedown', this.onPointerDown.bind(this));
                 window.addEventListener('mousemove', this.onPointerMove.bind(this));
                 window.addEventListener('mouseup', this.onPointerUp.bind(this));
-                
                 cvs.addEventListener('touchstart', this.onTouchStart.bind(this), {passive: false});
                 window.addEventListener('touchmove', this.onTouchMove.bind(this), {passive: false});
                 window.addEventListener('touchend', this.onPointerUp.bind(this));
 
-                // 滑鼠滾輪縮放 (送出答案後依然可縮放)
                 cvs.addEventListener('wheel', (e) => {
                     e.preventDefault();
-                    const zoomDelta = e.deltaY > 0 ? 0.9 : 1.1;
-                    this.doZoom(e.clientX, e.clientY, zoomDelta);
+                    this.doZoom(e.clientX, e.clientY, e.deltaY > 0 ? 0.9 : 1.1);
                 }, {passive: false});
 
-                // 全螢幕按鈕
                 document.getElementById('btnFullscreen').addEventListener('click', () => {
                     const container = document.getElementById('canvasContainer');
                     if (!document.fullscreenElement && !document.webkitFullscreenElement) {
@@ -341,15 +324,11 @@
 
             doZoom(clientX, clientY, multiplier) {
                 const rect = this.canvas.getBoundingClientRect();
-                const mx = clientX - rect.left;
-                const my = clientY - rect.top;
-
+                const mx = clientX - rect.left; const my = clientY - rect.top;
                 const oldGridX = (mx - this.camera.x) / this.camera.zoom;
                 const oldGridY = (my - this.camera.y) / this.camera.zoom;
-
                 this.camera.zoom *= multiplier;
                 this.camera.zoom = Math.max(0.4, Math.min(4, this.camera.zoom));
-
                 this.camera.x = mx - oldGridX * this.camera.zoom;
                 this.camera.y = my - oldGridY * this.camera.zoom;
                 this.render();
@@ -359,7 +338,6 @@
                 this.mode = newMode;
                 document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
                 document.querySelector(`.tab-btn[onclick="app.setMode('${newMode}')"]`).classList.add('active');
-                
                 this.centerCamera();
                 this.camera.zoom = 1.2;
                 this.generateQuestion();
@@ -385,10 +363,7 @@
                 const randInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
                 const randNonZero = (min, max) => { let v = 0; while(v === 0) v = randInt(min, max); return v; };
 
-                // 初始座標軸一律正交(不旋轉)
                 this.gridAngle = 0;
-
-                // 【新增】進入下一題時，回復相機預設位置與縮放比例
                 this.camera.zoom = 1.2;
                 if (this.canvas.width > 0 && this.canvas.height > 0) {
                     this.camera.x = this.canvas.width / 2;
@@ -397,17 +372,11 @@
 
                 if (this.mode === 'rect') {
                     let fx = randNonZero(-10, 10); let fy = randNonZero(-10, 10);
-                    
-                    let rotF = { x: fx, y: fy };
-                    this.vectors.F = this.rotToAbsGrid(rotF);
-
-                    let c1Rot = { x: randInt(2, 5), y: randInt(2, 5) };
-                    let c2Rot = { x: randInt(-5, -2), y: randInt(2, 5) };
-                    this.vectors.C1 = this.rotToAbsGrid(c1Rot);
-                    this.vectors.C2 = this.rotToAbsGrid(c2Rot);
-
+                    this.vectors.F = { x: fx, y: fy };
+                    this.vectors.C1 = { x: randInt(2, 5), y: randInt(2, 5) };
+                    this.vectors.C2 = { x: randInt(-5, -2), y: randInt(2, 5) };
                     document.getElementById('uiInstruction').innerHTML = 
-                        "🛠 <strong>任務：直角分解</strong><br>👉 將紅色力 <strong>精準分解</strong> 到坐標軸上。<br>💡 <i>拖曳畫布空白處可平移；畫面邊緣四個 <strong>小灰點</strong> 可轉動網格！</i>";
+                        "🛠 <strong>任務：直角分解</strong><br>👉 將紅色力 <strong>精準分解</strong> 到坐標軸上。<br>💡 <i>畫面邊緣的 <strong>小灰點</strong> 可轉動網格來模擬斜面！</i>";
                 } else if (this.mode === 'arb') {
                     let c1x = randNonZero(-8, 8); let c1y = randNonZero(-8, 8);
                     let c2x = randNonZero(-8, 8); let c2y = randNonZero(-8, 8);
@@ -416,7 +385,16 @@
                     this.vectors.F = { x: c1x + c2x, y: c1y + c2y };
                     this.vectors.C2 = { x: randInt(-5, 5), y: randInt(-5, 5) };
                     document.getElementById('uiInstruction').innerHTML = 
-                        "🛠 <strong>任務：求未知的分力</strong><br>紅色為合力 F，藍色為已知分力 1。<br>👉 拖曳 <strong>綠色箭頭</strong> 畫出分力 2。<br>💡 <i>拖曳時，注意分力1尖端延伸出的虛線輔助。</i>";
+                        "🛠 <strong>任務：幾何分解</strong><br>紅色為合力，藍色為已知分力 1。<br>👉 拖曳 <strong>綠色箭頭</strong> 畫出分力 2。<br>💡 <i>拖曳時，注意分力1尖端延伸出的虛線輔助喔。</i>";
+                } else if (this.mode === 'bar') {
+                    let c1x = randNonZero(-8, 8); let c1y = randNonZero(-8, 8);
+                    let c2x = randNonZero(-8, 8); let c2y = randNonZero(-8, 8);
+                    while(c1x*c2y === c1y*c2x) { c2x = randNonZero(-8, 8); }
+                    this.vectors.C1 = { x: c1x, y: c1y };
+                    this.vectors.F = { x: c1x + c2x, y: c1y + c2y };
+                    this.vectors.C2 = { x: randInt(-5, 5), y: randInt(-5, 5) };
+                    document.getElementById('uiInstruction').innerHTML = 
+                        "🛠 <strong>任務：代數分解 (數值版)</strong><br>紅色為合力，藍色為分力 1。<br>👉 請不看輔助線，直接利用畫布邊緣的 <strong>分量柱狀圖</strong>，確保分量 X 與 Y 完美相加！";
                 } else if (this.mode === 'add') {
                     let c1x = randNonZero(-8, 8); let c1y = randNonZero(-8, 8);
                     let c2x = randNonZero(-8, 8); let c2y = randNonZero(-8, 8);
@@ -424,7 +402,16 @@
                     this.vectors.C2 = { x: c2x, y: c2y };
                     this.vectors.F = { x: randInt(-5, 5), y: randInt(5, 10) };
                     document.getElementById('uiInstruction').innerHTML = 
-                        "🛠 <strong>任務：作圖求合力</strong><br>👉 拖曳 <strong>紅色箭頭</strong>，畫出合力。<br>💡 <i>拖拉藍綠箭頭身體產生平移分身，頭尾相接找答案！</i>";
+                        "🛠 <strong>任務：幾何合成 (作圖版)</strong><br>👉 拖曳 <strong>紅色箭頭</strong>，畫出合力。<br>💡 <i>拖拉藍綠箭頭身體產生平移分身，頭尾相接找答案！</i>";
+                } else if (this.mode === 'barAdd') {
+                    let c1x = randNonZero(-8, 8); let c1y = randNonZero(-8, 8);
+                    let c2x = randNonZero(-8, 8); let c2y = randNonZero(-8, 8);
+                    this.vectors.C1 = { x: c1x, y: c1y };
+                    this.vectors.C2 = { x: c2x, y: c2y };
+                    this.targets.F = { x: c1x + c2x, y: c1y + c2y };
+                    this.vectors.F = { x: randInt(-5, 5), y: randInt(5, 10) };
+                    document.getElementById('uiInstruction').innerHTML = 
+                        "🛠 <strong>任務：代數合成 (數值版)</strong><br>藍、綠色為已知作用力。<br>👉 請不看輔助線，直接利用畫布邊緣的 <strong>分量柱狀圖</strong>，拖曳 <strong>紅色箭頭</strong> 找出合力！";
                 }
 
                 this.updateScoreBoard();
@@ -446,17 +433,17 @@
                     const match1 = dist(this.vectors.C1, this.targets.C1) < tol && dist(this.vectors.C2, this.targets.C2) < tol;
                     const match2 = dist(this.vectors.C1, this.targets.C2) < tol && dist(this.vectors.C2, this.targets.C1) < tol;
                     isCorrect = match1 || match2;
-                    if(!isCorrect) mistakeDetails = `目標力${formatVec(this.vectors.F)}。你畫：${formatVec(this.vectors.C1)} 及 ${formatVec(this.vectors.C2)}。正解應落於當前坐標軸上：${formatVec(this.targets.C1)} / ${formatVec(this.targets.C2)}。`;
+                    if(!isCorrect) mistakeDetails = `目標力${formatVec(this.vectors.F)}。你畫：${formatVec(this.vectors.C1)} / ${formatVec(this.vectors.C2)}。正解應為：${formatVec(this.targets.C1)} / ${formatVec(this.targets.C2)}。`;
                 } 
-                else if (this.mode === 'arb') {
+                else if (this.mode === 'arb' || this.mode === 'bar') {
                     this.targets.C2 = { x: this.vectors.F.x - this.vectors.C1.x, y: this.vectors.F.y - this.vectors.C1.y };
                     isCorrect = dist(this.vectors.C2, this.targets.C2) < tol;
-                    if(!isCorrect) mistakeDetails = `合力 F${formatVec(this.vectors.F)}, 已知分力1${formatVec(this.vectors.C1)}。你畫的分力2為 ${formatVec(this.vectors.C2)}。正解：${formatVec(this.targets.C2)}。`;
+                    if(!isCorrect) mistakeDetails = `合力 F${formatVec(this.vectors.F)}, 分力1${formatVec(this.vectors.C1)}。你畫的：${formatVec(this.vectors.C2)}。正解：${formatVec(this.targets.C2)}。`;
                 }
-                else if (this.mode === 'add') {
+                else if (this.mode === 'add' || this.mode === 'barAdd') {
                     this.targets.F = { x: this.vectors.C1.x + this.vectors.C2.x, y: this.vectors.C1.y + this.vectors.C2.y };
                     isCorrect = dist(this.vectors.F, this.targets.F) < tol;
-                    if(!isCorrect) mistakeDetails = `作用力${formatVec(this.vectors.C1)}與${formatVec(this.vectors.C2)}。你畫的合力為 ${formatVec(this.vectors.F)}。正解：${formatVec(this.targets.F)}。`;
+                    if(!isCorrect) mistakeDetails = `作用力${formatVec(this.vectors.C1)}與${formatVec(this.vectors.C2)}。你畫的：${formatVec(this.vectors.F)}。正解：${formatVec(this.targets.F)}。`;
                 }
 
                 this.stats[this.mode].attempted++;
@@ -472,7 +459,6 @@
                     fbUI.className = 'feedback-overlay wrong';
                 }
 
-                // 狀態轉換為已答題 (鎖定平移功能)
                 this.state = 'answered';
                 this.updateScoreBoard();
                 document.getElementById('btnSubmit').style.display = 'none';
@@ -506,7 +492,7 @@
                 `;
 
                 tBody.innerHTML = ''; mList.innerHTML = '';
-                const modeNames = { rect: '直角分解', arb: '任意分解', add: '二力合成' };
+                const modeNames = { rect: '直角分解', arb: '幾何分解', bar: '代數分解', add: '幾何合成', barAdd: '代數合成' };
                 let totalMistakes = 0;
 
                 for (let key in this.stats) {
@@ -525,7 +511,97 @@
                 modal.style.display = 'flex';
             },
 
-            // --- 繪製 ---
+            drawBarCharts() {
+                if (this.mode !== 'bar' && this.mode !== 'barAdd') return;
+                const ctx = this.ctx;
+                ctx.save();
+                ctx.setTransform(1, 0, 0, 1, 0, 0); 
+
+                const vF = this.vectors.F;
+                const vC1 = this.vectors.C1;
+                const vC2 = this.vectors.C2;
+                
+                const colF = '#e74c3c'; const colC1 = '#3498db'; const colC2 = '#2ecc71';
+                const barW = 12; const gapH = 26; const gapV = 45; const barScale = 5; 
+
+                const getTextColor = (color) => {
+                    if (color === colF) return '#c0392b';
+                    if (color === colC1) return '#2980b9';
+                    if (color === colC2) return '#27ae60';
+                    return color;
+                };
+
+                const pBoxW = 340; const pBoxH = 105;
+                const cx = this.canvas.width / 2;
+                const cyBase = this.canvas.height - pBoxH + 30;
+                
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+                ctx.strokeStyle = '#bdc3c7'; ctx.lineWidth = 1;
+                ctx.fillRect(cx - pBoxW/2, this.canvas.height - pBoxH - 10, pBoxW, pBoxH);
+                ctx.strokeRect(cx - pBoxW/2, this.canvas.height - pBoxH - 10, pBoxW, pBoxH);
+
+                ctx.fillStyle = '#2c3e50'; ctx.font = '13px Arial'; ctx.textAlign = 'center';
+                const labelX = this.mode === 'barAdd' ? 'X 分量 (合力 Fx = 力 1x + 力 2x)' : 'X 分量 (合力 Fx = 分力 1x + 分力 2x)';
+                ctx.fillText(labelX, cx, this.canvas.height - pBoxH + 10);
+
+                ctx.beginPath(); ctx.moveTo(cx, cyBase - 10); ctx.lineTo(cx, cyBase + gapH*2 + barW + 10); ctx.strokeStyle = '#95a5a6'; ctx.stroke();
+
+                const drawHBar = (val, yOffset, color, name) => {
+                    const pxLen = val * barScale;
+                    ctx.fillStyle = color; ctx.fillRect(cx, cyBase + yOffset, pxLen, barW);
+                    ctx.fillStyle = getTextColor(color); ctx.textAlign = val >= 0 ? 'left' : 'right'; ctx.textBaseline = 'middle';
+                    ctx.font = 'bold 12px Arial';
+                    ctx.fillText(`${name}: ${val.toFixed(1)}`, cx + pxLen + (val >= 0 ? 8 : -8), cyBase + yOffset + barW/2);
+                };
+                
+                const nameF = '合力 Fx';
+                const nameC1 = this.mode === 'barAdd' ? '力 1x' : '分力 1x';
+                const nameC2 = this.mode === 'barAdd' ? '力 2x' : '分力 2x';
+
+                drawHBar(vF.x, 0, colF, nameF);
+                drawHBar(vC1.x, gapH, colC1, nameC1);
+                drawHBar(vC2.x, gapH*2, colC2, nameC2);
+
+                const pBoxW_L = 170; const pBoxH_L = 340;
+                const lyCenter = this.canvas.height / 2;
+                const lxBase = 25;
+
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+                ctx.fillRect(10, lyCenter - pBoxH_L/2, pBoxW_L, pBoxH_L);
+                ctx.strokeRect(10, lyCenter - pBoxH_L/2, pBoxW_L, pBoxH_L);
+
+                ctx.save();
+                ctx.translate(10 + pBoxW_L/2, lyCenter - pBoxH_L/2 + 20);
+                ctx.fillStyle = '#2c3e50'; ctx.font = '13px Arial'; ctx.textAlign = 'center';
+                const labelY2 = this.mode === 'barAdd' ? '合力 Fy = 力 1y + 力 2y' : '合力 Fy = 分力 1y + 分力 2y';
+                ctx.fillText('Y 分量', 0, 0); 
+                ctx.fillText(labelY2, 0, 18);
+                ctx.restore();
+
+                ctx.beginPath(); ctx.moveTo(lxBase - 10, lyCenter); ctx.lineTo(lxBase + gapV*2 + barW + 10, lyCenter); ctx.stroke();
+
+                const drawVBar = (val, xOffset, color, name) => {
+                    const pxLen = val * barScale;
+                    ctx.fillStyle = color;
+                    ctx.fillRect(lxBase + xOffset, lyCenter, barW, -pxLen);
+                    ctx.fillStyle = getTextColor(color); ctx.textAlign = 'center'; ctx.textBaseline = val >= 0 ? 'bottom' : 'top';
+                    ctx.font = 'bold 12px Arial';
+                    const txtY = lyCenter - pxLen + (val >= 0 ? -5 : 5);
+                    ctx.fillText(name, lxBase + xOffset + barW/2, txtY - (val>=0?14:-14));
+                    ctx.fillText(val.toFixed(1), lxBase + xOffset + barW/2, txtY);
+                };
+                
+                const nameFy = '合力 Fy';
+                const nameC1y = this.mode === 'barAdd' ? '力 1y' : '分力 1y';
+                const nameC2y = this.mode === 'barAdd' ? '力 2y' : '分力 2y';
+
+                drawVBar(vF.y, 0, colF, nameFy);
+                drawVBar(vC1.y, gapV, colC1, nameC1y);
+                drawVBar(vC2.y, gapV*2, colC2, nameC2y);
+
+                ctx.restore();
+            },
+
             render() {
                 const ctx = this.ctx;
                 ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
@@ -537,45 +613,33 @@
                 const ptC1 = this.absGridToScreen(this.vectors.C1);
                 const ptC2 = this.absGridToScreen(this.vectors.C2);
 
-                // 繪製座標旋轉把手 (利用射線與螢幕邊界求交點，緊貼畫面邊緣)
                 const margin = 20; 
                 const left = margin, right = this.canvas.width - margin;
                 const top = margin, bottom = this.canvas.height - margin;
 
                 this.axisHandles = [0, Math.PI/2, Math.PI, -Math.PI/2].map(ang => {
                     const rayAng = this.gridAngle + ang;
-                    const cosA = Math.cos(rayAng);
-                    const sinA = Math.sin(rayAng);
-
+                    const cosA = Math.cos(rayAng); const sinA = Math.sin(rayAng);
                     let t_min = -Infinity, t_max = Infinity;
                     if (Math.abs(cosA) > 0.0001) {
-                        let t1 = (left - ptOrigin.x) / cosA;
-                        let t2 = (right - ptOrigin.x) / cosA;
-                        t_min = Math.max(t_min, Math.min(t1, t2));
-                        t_max = Math.min(t_max, Math.max(t1, t2));
+                        let t1 = (left - ptOrigin.x) / cosA; let t2 = (right - ptOrigin.x) / cosA;
+                        t_min = Math.max(t_min, Math.min(t1, t2)); t_max = Math.min(t_max, Math.max(t1, t2));
                     }
                     if (Math.abs(sinA) > 0.0001) {
-                        let t1 = (top - ptOrigin.y) / sinA;
-                        let t2 = (bottom - ptOrigin.y) / sinA;
-                        t_min = Math.max(t_min, Math.min(t1, t2));
-                        t_max = Math.min(t_max, Math.max(t1, t2));
+                        let t1 = (top - ptOrigin.y) / sinA; let t2 = (bottom - ptOrigin.y) / sinA;
+                        t_min = Math.max(t_min, Math.min(t1, t2)); t_max = Math.min(t_max, Math.max(t1, t2));
                     }
-
-                    let t = t_max;
-                    if (t < 0 || t === Infinity) t = 30; // 備用長度
-
-                    return {
-                        x: ptOrigin.x + t * cosA,
-                        y: ptOrigin.y + t * sinA
-                    };
+                    let t = t_max; if (t < 0 || t === Infinity) t = 30; 
+                    return { x: ptOrigin.x + t * cosA, y: ptOrigin.y + t * sinA };
                 });
 
-                this.axisHandles.forEach(pt => {
-                    ctx.beginPath(); ctx.arc(pt.x, pt.y, 6, 0, Math.PI * 2); // 半徑縮小
-                    ctx.fillStyle = 'rgba(149, 165, 166, 0.5)'; ctx.fill(); // 灰色半透明
-                });
+                if (this.mode !== 'bar' && this.mode !== 'barAdd') {
+                    this.axisHandles.forEach(pt => {
+                        ctx.beginPath(); ctx.arc(pt.x, pt.y, 6, 0, Math.PI * 2); 
+                        ctx.fillStyle = 'rgba(149, 165, 166, 0.5)'; ctx.fill(); 
+                    });
+                }
 
-                // 答題後的半透明解答
                 if (this.state === 'answered') {
                     ctx.beginPath(); ctx.strokeStyle = '#95a5a6'; ctx.lineWidth = 1.5; ctx.setLineDash([5, 5]);
                     if (this.mode === 'rect') {
@@ -584,11 +648,11 @@
                         ctx.moveTo(tC1.x, tC1.y); ctx.lineTo(ptF.x, ptF.y); ctx.moveTo(tC2.x, tC2.y); ctx.lineTo(ptF.x, ptF.y); ctx.stroke();
                         this.drawArrow(ptOrigin, tC1, 'rgba(52, 152, 219, 0.3)', 6);
                         this.drawArrow(ptOrigin, tC2, 'rgba(46, 204, 113, 0.3)', 6);
-                    } else if (this.mode === 'arb') {
+                    } else if (this.mode === 'arb' || this.mode === 'bar') {
                         const tC2 = this.absGridToScreen(this.targets.C2);
                         ctx.moveTo(ptC1.x, ptC1.y); ctx.lineTo(ptF.x, ptF.y); ctx.moveTo(tC2.x, tC2.y); ctx.lineTo(ptF.x, ptF.y); ctx.stroke();
                         this.drawArrow(ptOrigin, tC2, 'rgba(46, 204, 113, 0.3)', 6);
-                    } else if (this.mode === 'add') {
+                    } else if (this.mode === 'add' || this.mode === 'barAdd') {
                         const tF = this.absGridToScreen(this.targets.F);
                         ctx.moveTo(ptC1.x, ptC1.y); ctx.lineTo(tF.x, tF.y); ctx.moveTo(ptC2.x, ptC2.y); ctx.lineTo(tF.x, tF.y); ctx.stroke();
                         this.drawArrow(ptOrigin, tF, 'rgba(231, 76, 60, 0.3)', 8);
@@ -596,40 +660,42 @@
                 }
 
                 if (this.mode === 'rect') {
-                    this.drawArrow(ptOrigin, ptF, 'var(--primary)', 5, false, "F");
-                    this.drawArrow(ptOrigin, ptC1, 'var(--comp-1)', 4);
-                    this.drawArrow(ptOrigin, ptC2, 'var(--comp-2)', 4);
+                    this.drawArrow(ptOrigin, ptF, '#e74c3c', 5, false, "合力 F");
+                    this.drawArrow(ptOrigin, ptC1, '#3498db', 4, false, "分力 1");
+                    this.drawArrow(ptOrigin, ptC2, '#2ecc71', 4, false, "分力 2");
                     if(this.state === 'playing') { this.drawDragRing(ptC1); this.drawDragRing(ptC2); }
                 } 
-                else if (this.mode === 'arb') {
-                    this.drawArrow(ptOrigin, ptF, 'var(--primary)', 5, false, "F");
-                    this.drawArrow(ptOrigin, ptC1, 'var(--comp-1)', 4, false, "分力1");
-                    this.drawArrow(ptOrigin, ptC2, 'var(--comp-2)', 4);
+                else if (this.mode === 'arb' || this.mode === 'bar') {
+                    this.drawArrow(ptOrigin, ptF, '#e74c3c', 5, false, "合力 F");
+                    this.drawArrow(ptOrigin, ptC1, '#3498db', 4, false, "分力 1");
+                    this.drawArrow(ptOrigin, ptC2, '#2ecc71', 4, false, "分力 2");
                     
                     if(this.state === 'playing') {
                         this.drawDragRing(ptC2);
-                        if (this.dragTarget === 'C2') {
+                        if (this.mode === 'arb' && this.dragTarget === 'C2') {
                             const ghostEndAbs = { x: this.vectors.C1.x + this.vectors.C2.x, y: this.vectors.C1.y + this.vectors.C2.y };
                             const ghostEndScreen = this.absGridToScreen(ghostEndAbs);
                             this.drawArrow(ptC1, ghostEndScreen, 'rgba(46, 204, 113, 0.45)', 4, true);
                         }
                     }
                 } 
-                else if (this.mode === 'add') {
-                    if (this.ghosts.C1.active) {
-                        const start = this.absGridToScreen(this.ghosts.C1);
-                        const end = this.absGridToScreen({x: this.ghosts.C1.x + this.vectors.C1.x, y: this.ghosts.C1.y + this.vectors.C1.y});
-                        this.drawArrow(start, end, 'rgba(52, 152, 219, 0.45)', 4, true);
-                    }
-                    if (this.ghosts.C2.active) {
-                        const start = this.absGridToScreen(this.ghosts.C2);
-                        const end = this.absGridToScreen({x: this.ghosts.C2.x + this.vectors.C2.x, y: this.ghosts.C2.y + this.vectors.C2.y});
-                        this.drawArrow(start, end, 'rgba(46, 204, 113, 0.45)', 4, true);
+                else if (this.mode === 'add' || this.mode === 'barAdd') {
+                    if (this.mode === 'add') {
+                        if (this.ghosts.C1.active) {
+                            const start = this.absGridToScreen(this.ghosts.C1);
+                            const end = this.absGridToScreen({x: this.ghosts.C1.x + this.vectors.C1.x, y: this.ghosts.C1.y + this.vectors.C1.y});
+                            this.drawArrow(start, end, 'rgba(52, 152, 219, 0.45)', 4, true);
+                        }
+                        if (this.ghosts.C2.active) {
+                            const start = this.absGridToScreen(this.ghosts.C2);
+                            const end = this.absGridToScreen({x: this.ghosts.C2.x + this.vectors.C2.x, y: this.ghosts.C2.y + this.vectors.C2.y});
+                            this.drawArrow(start, end, 'rgba(46, 204, 113, 0.45)', 4, true);
+                        }
                     }
 
-                    this.drawArrow(ptOrigin, ptC1, 'var(--comp-1)', 4, false, "力1");
-                    this.drawArrow(ptOrigin, ptC2, 'var(--comp-2)', 4, false, "力2");
-                    this.drawArrow(ptOrigin, ptF, 'var(--primary)', 5);
+                    this.drawArrow(ptOrigin, ptC1, '#3498db', 4, false, "力 1");
+                    this.drawArrow(ptOrigin, ptC2, '#2ecc71', 4, false, "力 2");
+                    this.drawArrow(ptOrigin, ptF, '#e74c3c', 5, false, "合力 F");
                     if(this.state === 'playing') this.drawDragRing(ptF);
                 }
                 
@@ -638,9 +704,13 @@
                     const deg = (this.gridAngle * 180 / Math.PI).toFixed(1);
                     ctx.fillText(`座標傾角: ${deg}°`, 20, this.canvas.height - 20);
                 }
+
+                if (this.mode === 'bar' || this.mode === 'barAdd') {
+                    this.drawBarCharts();
+                }
             },
 
-            drawDragRing(pt, color = 'rgba(241, 196, 15, 0.6)') {
+            drawDragRing(pt, color = 'rgba(241, 196, 15, 0.4)') {
                 this.ctx.beginPath(); this.ctx.arc(pt.x, pt.y, 14, 0, Math.PI * 2);
                 this.ctx.fillStyle = color; this.ctx.fill();
             },
@@ -668,13 +738,27 @@
                 ctx.closePath(); ctx.fill();
 
                 if (label) {
-                    const textX = end.x + Math.cos(angle) * 15;
-                    const textY = end.y + Math.sin(angle) * 15;
                     ctx.font = 'bold 16px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
                     const textWidth = ctx.measureText(label).width;
+                    
+                    const gap = 12; 
+                    const boxHalfW = textWidth / 2 + 2; 
+                    const boxHalfH = 8; 
+                    const projRadius = boxHalfW * Math.abs(Math.cos(angle)) + boxHalfH * Math.abs(Math.sin(angle));
+                    const totalOffset = gap + projRadius;
+
+                    const textX = end.x + Math.cos(angle) * totalOffset;
+                    const textY = end.y + Math.sin(angle) * totalOffset;
+
                     ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
                     ctx.fillRect(textX - textWidth / 2 - 2, textY - 8, textWidth + 4, 16);
-                    ctx.fillStyle = color.startsWith('var') ? (color.includes('primary')?'#c0392b':'#2980b9') : color;
+                    
+                    let textColor = color;
+                    if (color === '#e74c3c') textColor = '#c0392b';
+                    else if (color === '#3498db') textColor = '#2980b9';
+                    else if (color === '#2ecc71') textColor = '#27ae60';
+                    
+                    ctx.fillStyle = textColor;
                     ctx.fillText(label, textX, textY);
                 }
             },
@@ -723,7 +807,6 @@
                 ctx.restore();
             },
 
-            // --- 觸控與縮放互動 ---
             onTouchStart(e) {
                 if (e.touches.length === 2) {
                     e.preventDefault();
@@ -739,7 +822,6 @@
                     e.preventDefault();
                     if (!this.initialPinchDist) return;
                     const dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
-                    
                     const ratio = dist / this.initialPinchDist;
                     this.camera.zoom = Math.max(0.4, Math.min(4, this.initialZoom * ratio));
                     this.render();
@@ -749,7 +831,6 @@
             },
 
             onPointerDown(e) {
-                // 如果已經送出答案，直接 return (這會完全阻擋畫布平移與向量拖拉，但保留上方的縮放功能)
                 if (this.state !== 'playing' || e.touches?.length > 1) return;
                 
                 const rect = this.canvas.getBoundingClientRect();
@@ -760,12 +841,14 @@
                 const clickPos = { x: sx, y: sy };
                 const hitRadius = 30; 
 
-                for(let pt of this.axisHandles) {
-                    if (distScreen(clickPos, pt) < 25) {
-                        this.dragTarget = 'axisRotate';
-                        const ptOrigin = this.absGridToScreen({x:0, y:0});
-                        this.dragAxisOffset = this.gridAngle - Math.atan2(sy - ptOrigin.y, sx - ptOrigin.x);
-                        return;
+                if (this.mode !== 'bar' && this.mode !== 'barAdd') {
+                    for(let pt of this.axisHandles) {
+                        if (distScreen(clickPos, pt) < 25) {
+                            this.dragTarget = 'axisRotate';
+                            const ptOrigin = this.absGridToScreen({x:0, y:0});
+                            this.dragAxisOffset = this.gridAngle - Math.atan2(sy - ptOrigin.y, sx - ptOrigin.x);
+                            return;
+                        }
                     }
                 }
 
@@ -777,47 +860,48 @@
                 if (this.mode === 'rect') {
                     if (distScreen(clickPos, ptC1) < hitRadius) { this.dragTarget = 'C1'; return; }
                     if (distScreen(clickPos, ptC2) < hitRadius) { this.dragTarget = 'C2'; return; }
-                } else if (this.mode === 'arb') {
+                } else if (this.mode === 'arb' || this.mode === 'bar') {
                     if (distScreen(clickPos, ptC2) < hitRadius) { this.dragTarget = 'C2'; return; }
-                } else if (this.mode === 'add') {
+                } else if (this.mode === 'add' || this.mode === 'barAdd') {
                     if (distScreen(clickPos, ptF) < hitRadius) { this.dragTarget = 'F'; return; }
 
-                    if (this.ghosts.C1.active) {
-                        const ptG1End = this.absGridToScreen({x: this.ghosts.C1.x + this.vectors.C1.x, y: this.ghosts.C1.y + this.vectors.C1.y});
-                        const ptG1Start = this.absGridToScreen(this.ghosts.C1);
-                        if (this.distToSeg(clickPos, ptG1Start, ptG1End) < 20) {
-                            this.dragTarget = 'ghostC1';
-                            const gGrid = this.screenToAbsGrid(sx, sy);
-                            this.dragOffset = { x: this.ghosts.C1.x - gGrid.x, y: this.ghosts.C1.y - gGrid.y };
-                            return;
+                    if (this.mode === 'add') {
+                        if (this.ghosts.C1.active) {
+                            const ptG1End = this.absGridToScreen({x: this.ghosts.C1.x + this.vectors.C1.x, y: this.ghosts.C1.y + this.vectors.C1.y});
+                            const ptG1Start = this.absGridToScreen(this.ghosts.C1);
+                            if (this.distToSeg(clickPos, ptG1Start, ptG1End) < 20) {
+                                this.dragTarget = 'ghostC1';
+                                const gGrid = this.screenToAbsGrid(sx, sy);
+                                this.dragOffset = { x: this.ghosts.C1.x - gGrid.x, y: this.ghosts.C1.y - gGrid.y };
+                                return;
+                            }
                         }
-                    }
-                    if (this.ghosts.C2.active) {
-                        const ptG2End = this.absGridToScreen({x: this.ghosts.C2.x + this.vectors.C2.x, y: this.ghosts.C2.y + this.vectors.C2.y});
-                        const ptG2Start = this.absGridToScreen(this.ghosts.C2);
-                        if (this.distToSeg(clickPos, ptG2Start, ptG2End) < 20) {
-                            this.dragTarget = 'ghostC2';
-                            const gGrid = this.screenToAbsGrid(sx, sy);
-                            this.dragOffset = { x: this.ghosts.C2.x - gGrid.x, y: this.ghosts.C2.y - gGrid.y };
-                            return;
+                        if (this.ghosts.C2.active) {
+                            const ptG2End = this.absGridToScreen({x: this.ghosts.C2.x + this.vectors.C2.x, y: this.ghosts.C2.y + this.vectors.C2.y});
+                            const ptG2Start = this.absGridToScreen(this.ghosts.C2);
+                            if (this.distToSeg(clickPos, ptG2Start, ptG2End) < 20) {
+                                this.dragTarget = 'ghostC2';
+                                const gGrid = this.screenToAbsGrid(sx, sy);
+                                this.dragOffset = { x: this.ghosts.C2.x - gGrid.x, y: this.ghosts.C2.y - gGrid.y };
+                                return;
+                            }
                         }
-                    }
 
-                    if (this.distToSeg(clickPos, ptOrigin, ptC1) < 20) {
-                        this.dragTarget = 'ghostC1'; this.ghosts.C1.active = true;
-                        this.ghosts.C1.x = 0; this.ghosts.C1.y = 0;
-                        const gGrid = this.screenToAbsGrid(sx, sy);
-                        this.dragOffset = { x: -gGrid.x, y: -gGrid.y }; return;
-                    }
-                    if (this.distToSeg(clickPos, ptOrigin, ptC2) < 20) {
-                        this.dragTarget = 'ghostC2'; this.ghosts.C2.active = true;
-                        this.ghosts.C2.x = 0; this.ghosts.C2.y = 0;
-                        const gGrid = this.screenToAbsGrid(sx, sy);
-                        this.dragOffset = { x: -gGrid.x, y: -gGrid.y }; return;
+                        if (this.distToSeg(clickPos, ptOrigin, ptC1) < 20) {
+                            this.dragTarget = 'ghostC1'; this.ghosts.C1.active = true;
+                            this.ghosts.C1.x = 0; this.ghosts.C1.y = 0;
+                            const gGrid = this.screenToAbsGrid(sx, sy);
+                            this.dragOffset = { x: -gGrid.x, y: -gGrid.y }; return;
+                        }
+                        if (this.distToSeg(clickPos, ptOrigin, ptC2) < 20) {
+                            this.dragTarget = 'ghostC2'; this.ghosts.C2.active = true;
+                            this.ghosts.C2.x = 0; this.ghosts.C2.y = 0;
+                            const gGrid = this.screenToAbsGrid(sx, sy);
+                            this.dragOffset = { x: -gGrid.x, y: -gGrid.y }; return;
+                        }
                     }
                 }
 
-                // 若在答題階段且都沒點到把手，進入平移畫布模式 (Pan)
                 this.dragTarget = 'pan';
                 this.lastPan = { x: sx, y: sy };
             },
