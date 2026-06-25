@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>阿基米德浮力沙盒 3D 版</title>
+<title>浮力教學</title>
 <style>
   :root {
     --blue: #1d4ed8;
@@ -38,6 +38,9 @@
 
   .mainGrid { display: grid; grid-template-columns: 1fr 190px; gap: 8px; }
   .canvasCard { position: relative; overflow: hidden; }
+  .sideCol { display: flex; flex-direction: column; gap: 8px; }
+  .quickBtnGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .toggleBtn.small { min-height: 26px; padding: 3px 4px; font-size: 0.72rem; }
   svg#mainSvg { display: block; width: 100%; height: 100%; min-height: 336px; background: #f8fafc; cursor: ew-resize; touch-action: none; }
 
   .dataPanel { background: #1e293b; color: #f1f5f9; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
@@ -47,6 +50,12 @@
   .unitSeg button { font-size: 0.66rem; padding: 3px 0; min-height: 24px; background: #334155; color: #cbd5e1; border-right-color: #475569; }
   .unitSeg button.active { background: #facc15; color: #1e293b; }
   .dataRow { display: flex; justify-content: space-between; font-size: 0.95rem; padding: 2px 0; }
+  .dataRow.reveal {
+    width: 100%; border: none; background: transparent; font-family: inherit; cursor: pointer;
+    border-radius: 6px; color: #fff; font-size: inherit;
+  }
+  .dataRow.reveal:hover { background: rgba(255,255,255,0.08); }
+  .dataRow.reveal .hidden-hint { color: #94a3b8; font-weight: 700; font-style: normal; font-family: -apple-system, sans-serif; }
   .dataRow.sep { border-top: 1px solid #475569; padding-top: 6px; margin-top: 2px; }
   .dataRow .green { color: #4ade80; font-family: monospace; font-weight: 700; }
   .dataRow .red { color: #f87171; font-family: monospace; font-weight: 700; }
@@ -54,6 +63,14 @@
 
   /* ===== 下方控制區：寬度縮減、緊湊排列，避免把畫面往下推造成捲動 ===== */
   .controls { padding: 10px 14px; display: flex; flex-direction: column; gap: 10px; }
+  .collapseBtn {
+    display: flex; align-items: center; gap: 6px; width: 100%; text-align: left;
+    border: none; background: transparent; padding: 4px 0; font-size: 0.85rem; font-weight: 700;
+    color: #475569; cursor: pointer;
+  }
+  #collapseArrow { display: inline-block; transition: transform 0.15s; font-size: 0.75rem; }
+  .controlsBody { display: flex; flex-direction: column; gap: 10px; }
+  .controlsBody.collapsed { display: none; }
   .controlsRow { display: flex; flex-wrap: wrap; gap: 10px; align-items: start; }
   .field { flex: 0 1 250px; max-width: 270px; min-width: 215px; }
   .field label { display: flex; align-items: center; justify-content: space-between; gap: 6px; font-size: 0.78rem; font-weight: 700; margin-bottom: 3px; }
@@ -82,7 +99,7 @@
   .segGroup { display: flex; border: 1px solid var(--slate-border); border-radius: 8px; overflow: hidden; }
   .segGroup button {
     flex: 1; border: none; background: #fff; color: #64748b; font-weight: 700; font-size: 0.75rem;
-    cursor: pointer; border-right: 1px solid var(--slate-border); padding: 5px 0; min-height: 30px;
+    cursor: pointer; border-right: 1px solid var(--slate-border); padding: 3px 0; min-height: 26px;
   }
   .segGroup button:last-child { border-right: none; }
   .segGroup button.active { background: var(--purple); color: #fff; }
@@ -104,8 +121,8 @@
 
   .toggleRow { display: flex; flex-wrap: wrap; gap: 8px; flex: 1 1 100%; }
   .toggleBtn {
-    flex: 1 1 120px; padding: 8px 6px; border-radius: 9px; font-size: 0.82rem; font-weight: 700;
-    border: 1px solid var(--slate-border); background: var(--slate-bg); color: #64748b; cursor: pointer; min-height: 38px;
+    flex: 1 1 120px; padding: 5px 6px; border-radius: 9px; font-size: 0.82rem; font-weight: 700;
+    border: 1px solid var(--slate-border); background: var(--slate-bg); color: #64748b; cursor: pointer; min-height: 30px;
   }
   .toggleBtn.active.forces { background: #e0e7ff; color: #4338ca; border-color: #c7d2fe; }
   .toggleBtn.active.pressure { background: #e0f2fe; color: #0369a1; border-color: #bae6fd; }
@@ -129,30 +146,40 @@
       <svg id="mainSvg" viewBox="0 0 800 400"></svg>
     </div>
 
-    <div class="card dataPanel">
-      <div class="dataPanelHead">
-        <h3>受力數據</h3>
-        <div class="segGroup unitSeg" id="unitSeg">
-          <button data-unit="N">N</button>
-          <button data-unit="kgw">kgw</button>
-        </div>
+    <div class="sideCol">
+      <div class="quickBtnGrid">
+        <button id="btnPause" class="toggleBtn small">⏸ 暫停</button>
+        <button id="btnForces" class="toggleBtn small">受力箭頭</button>
+        <button id="btnPressure" class="toggleBtn small">液壓箭頭</button>
+        <button id="btnTeach" class="toggleBtn small">📺 教學</button>
       </div>
-      <div class="dataRow"><span>A 水中體積</span><span class="cyan" id="submergedVolA"></span></div>
-      <div class="dataRow"><span>A 浮力</span><span class="green" id="buoyancyA"></span></div>
-      <div class="dataRow"><span>A 重力</span><span class="red" id="gravityA"></span></div>
-      <div class="dataRow sep"><span>B 水中體積</span><span class="cyan" id="submergedVolB"></span></div>
-      <div class="dataRow"><span>B 浮力</span><span class="green" id="buoyancyB"></span></div>
-      <div class="dataRow"><span>B 重力</span><span class="red" id="gravityB"></span></div>
+      <div class="card dataPanel">
+        <div class="dataPanelHead">
+          <h3>受力數據</h3>
+          <div class="segGroup unitSeg" id="unitSeg">
+            <button data-unit="N">N</button>
+            <button data-unit="kgw">kgw</button>
+          </div>
+        </div>
+        <div class="dataRow"><span>A 水中體積</span><span class="cyan" id="submergedVolA"></span></div>
+        <button class="dataRow reveal" id="buoyancyABtn"><span>A 浮力</span><span class="green" id="buoyancyA"></span></button>
+        <div class="dataRow"><span>A 重力</span><span class="red" id="gravityA"></span></div>
+        <div class="dataRow sep"><span>B 水中體積</span><span class="cyan" id="submergedVolB"></span></div>
+        <button class="dataRow reveal" id="buoyancyBBtn"><span>B 浮力</span><span class="green" id="buoyancyB"></span></button>
+        <div class="dataRow"><span>B 重力</span><span class="red" id="gravityB"></span></div>
+      </div>
     </div>
   </div>
 
   <div class="card controls">
+    <button id="btnCollapseControls" class="collapseBtn"><span id="collapseArrow">▾</span> 控制面板</button>
+    <div class="controlsBody" id="controlsBody">
     <div class="controlsRow">
       <div class="field fluid">
         <label>外圍液體</label>
         <select id="fluidSelect"></select>
         <div class="microRow">
-          <input id="fluidDensitySlider" type="range" min="0.5" max="2.0" step="0.01">
+          <input id="fluidDensitySlider" type="range" min="0.5" max="14" step="0.01">
           <span class="microLabel" id="fluidDensityLabel"></span>
         </div>
       </div>
@@ -169,7 +196,7 @@
           <div class="quickGroup" data-target="A" data-kind="weight">
             <button data-val="1">1</button><button data-val="2">2</button><button data-val="3">3</button>
           </div>
-          <input id="blockAWeightInput" type="number" step="0.01" min="0.01">
+          <input id="blockAWeightInput" type="number" step="0.0001" min="0.0001">
           <span class="unitTag" id="blockAWeightUnit"></span>
         </div>
         <div class="numRow">
@@ -194,7 +221,7 @@
           <div class="quickGroup" data-target="B" data-kind="weight">
             <button data-val="1">1</button><button data-val="2">2</button><button data-val="3">3</button>
           </div>
-          <input id="blockBWeightInput" type="number" step="0.01" min="0.01">
+          <input id="blockBWeightInput" type="number" step="0.0001" min="0.0001">
           <span class="unitTag" id="blockBWeightUnit"></span>
         </div>
         <div class="numRow">
@@ -207,14 +234,6 @@
         </div>
       </div>
     </div>
-
-    <div class="controlsRow">
-      <div class="toggleRow">
-        <button id="btnForces" class="toggleBtn">受力箭頭</button>
-        <button id="btnPressure" class="toggleBtn">液壓箭頭</button>
-        <button id="btnPause" class="toggleBtn">⏸ 暫停模擬</button>
-        <button id="btnTeach" class="toggleBtn">📺 教學模式</button>
-      </div>
     </div>
   </div>
 
@@ -230,10 +249,13 @@
     { name: '海水', density: 1.03 },
     { name: '死海鹽水', density: 1.24 },
     { name: '食用油', density: 0.92 },
-    { name: '甘油', density: 1.26 }
+    { name: '甘油', density: 1.26 },
+    { name: '酒精', density: 0.79 },
+    { name: '水銀', density: 13.6 }
   ];
   const LIQUID_COLORS = {
-    '純水': '#38bdf8', '海水': '#0ea5e9', '死海鹽水': '#2dd4bf', '食用油': '#fbbf24', '甘油': '#a78bfa'
+    '純水': '#38bdf8', '海水': '#0ea5e9', '死海鹽水': '#2dd4bf', '食用油': '#fbbf24', '甘油': '#a78bfa',
+    '酒精': '#cffafe', '水銀': '#94a3b8'
   };
   // 與外部液體即時連動的特殊選項（用於示範「水方塊」恆等於環境密度的阿基米德思考實驗）
   const LINKED_OPTION = { name: '與外部液體相同（即時連動）', density: -1 };
@@ -250,7 +272,7 @@
 
   // 各固體材質貼近實際外觀的顏色
   const MATERIAL_COLORS = {
-    '保麗龍': '#f8fafc', // 保麗龍：近白色
+    '保麗龍': '#d1d5db', // 保麗龍：淺灰色
     '軟木塞': '#c89666', // 軟木塞：淺棕色
     '松木塊': '#dcb182', // 松木：淺木紋黃褐色
     '冰塊': '#cfe9f7',   // 冰塊：淡淡的冰藍白
@@ -267,7 +289,7 @@
     medium: { w: 560, h: 304, d: 192 },
     large:  { w: 700, h: 352, d: 232 }
   };
-  const WATER_LEVEL_RATIO = 0.21; // 水面距容器頂部的留空比例
+  const WATER_LEVEL_RATIO = 0.368; // 水面距容器頂部的留空比例（水位高度已減少1/5：水深從79%縮減為約63%）
   const GRAVITY = 0.6, MAX_VELOCITY = 20;
 
   // ===== 真實物理量換算 =====
@@ -314,6 +336,9 @@
     showPressure: false,
     teachingMode: false,
     paused: false,
+    controlsCollapsed: false, // 控制面板預設展開
+    revealBuoyancyA: false, // 浮力數據預設隱藏，點擊面板上的按鈕才會顯示，適合探究式教學
+    revealBuoyancyB: false,
     forceUnit: 'kgw', // 預設用「公斤重」，比牛頓更貼近學生生活經驗
     showContainerA: false,
     showContainerB: false,
@@ -342,13 +367,17 @@
   }
 
   // 把物體排出的水量換算成水位上升高度（阿基米德原理：排出體積 ÷ 水槽水面面積 = 水位上升高度）
+  // ★ 水位用平滑趨近（而不是每帧直接跳到計算值），避免「物體位置→排水體積→水位→浮力」形成瞬時回授迴路，
+  //   導致大體積物體（或雙物體同時存在）時水位跟物體互相劇烈震盪、畫面看起來在晃動。
   function updateWaterLevel() {
     const tankAreaCm2 = (TANK_W / PX_PER_CM) * (TANK_D / PX_PER_CM);
     const totalSubmergedCm3 =
       (state.showContainerA ? lastSubmergedVolumeA : 0) +
       (state.showContainerB ? lastSubmergedVolumeB : 0);
     const risePx = tankAreaCm2 > 0 ? (totalSubmergedCm3 / tankAreaCm2) * PX_PER_CM : 0;
-    WATER_LEVEL = clamp(BASE_WATER_LEVEL - risePx, TANK_Y + 5, TANK_BOTTOM - 5); // 水位上升 = y 座標變小（往畫面上方移動），並夾在水槽範圍內
+    const targetWaterLevel = clamp(BASE_WATER_LEVEL - risePx, TANK_Y + 5, TANK_BOTTOM - 5);
+    if (WATER_LEVEL === undefined) { WATER_LEVEL = targetWaterLevel; return; }
+    WATER_LEVEL += (targetWaterLevel - WATER_LEVEL) * 0.12;
   }
 
   function getBlockSize(id) {
@@ -381,6 +410,13 @@
   const btnPressure = document.getElementById('btnPressure');
   const btnTeach = document.getElementById('btnTeach');
   const btnPause = document.getElementById('btnPause');
+  const btnCollapseControls = document.getElementById('btnCollapseControls');
+  const buoyancyABtn = document.getElementById('buoyancyABtn');
+  const buoyancyBBtn = document.getElementById('buoyancyBBtn');
+  const buoyancyASpan = document.getElementById('buoyancyA');
+  const buoyancyBSpan = document.getElementById('buoyancyB');
+  const controlsBody = document.getElementById('controlsBody');
+  const collapseArrow = document.getElementById('collapseArrow');
   const btnShowA = document.getElementById('btnShowA');
   const btnShowB = document.getElementById('btnShowB');
   const fluidDensitySlider = document.getElementById('fluidDensitySlider');
@@ -487,19 +523,24 @@
   btnPressure.addEventListener('click', () => { state.showPressure = !state.showPressure; });
   btnTeach.addEventListener('click', () => { state.teachingMode = !state.teachingMode; });
   btnPause.addEventListener('click', () => { state.paused = !state.paused; });
+  btnCollapseControls.addEventListener('click', () => { state.controlsCollapsed = !state.controlsCollapsed; });
+  buoyancyABtn.addEventListener('click', () => { state.revealBuoyancyA = !state.revealBuoyancyA; });
+  buoyancyBBtn.addEventListener('click', () => { state.revealBuoyancyB = !state.revealBuoyancyB; });
   btnShowA.addEventListener('click', () => setContainerVisible('A', !state.showContainerA));
   btnShowB.addEventListener('click', () => setContainerVisible('B', !state.showContainerB));
+
+  const MAX_VOLUME_CM3 = 8000; // 體積上限，超過自動限制回這個值（也對應畫面方塊視覺大小的上限）
 
   function setVolumeFromWeightInput(id, typedValue) {
     if (!isFinite(typedValue) || typedValue <= 0) return;
     const grams = weightInputToGrams(typedValue);
     const density = Math.max(0.01, id === 'A' ? state.blockADensity : state.blockBDensity);
-    const volume = clamp(grams / density, 1, 1000000);
+    const volume = clamp(grams / density, 1, MAX_VOLUME_CM3);
     if (id === 'A') state.blockAVolume = volume; else state.blockBVolume = volume;
   }
   function setVolumeFromVolumeInput(id, typedValue) {
     if (!isFinite(typedValue) || typedValue <= 0) return;
-    const volume = clamp(typedValue, 1, 1000000);
+    const volume = clamp(typedValue, 1, MAX_VOLUME_CM3);
     if (id === 'A') state.blockAVolume = volume; else state.blockBVolume = volume;
   }
 
@@ -639,6 +680,12 @@
 
     let dragCoef = 0.03;
     if (submergedRatio > 0) dragCoef += 0.08 * submergedRatio;
+    // 密度遠小於外圍液體時（例如保麗龍 0.05 vs 水 1.0），回復力會被「密度倒數」放大非常多倍，
+    // 原本的阻尼吃不住，會一直跳、收斂很慢。這裡額外按密度比例補強阻尼，密度差越大、補強越多。
+    if (density > 0) {
+      const stiffnessFactor = state.fluidDensity / density;
+      dragCoef += Math.min(0.35, 0.015 * stiffnessFactor);
+    }
 
     block.vy += accY;
     block.vy -= block.vy * dragCoef;
@@ -837,12 +884,18 @@
     s += `<text x="${tp.x}" y="${tp.y}" fill="${labelColor}" font-size="${titleSize}" font-weight="800" text-anchor="middle" dominant-baseline="middle">${title}</text>`;
 
     if (state.showForces) {
+      const revealed = id === 'A' ? state.revealBuoyancyA : state.revealBuoyancyB;
       const gravityLabel = `重力 ${formatForce(block.mass, PANEL_DECIMALS)}`;
-      const buoyancyLabel = `浮力 ${formatForce(block.buoyancy, PANEL_DECIMALS)}`;
       const gravityArrowLen = clamp(block.mass * 0.05, 15, 140);
-      const buoyancyArrowLen = clamp(block.buoyancy * 0.05, 15, 140);
       s += arrowSVG(block.x + blockSize/2, block.y + blockSize/2, blockZ + blockSize/2, 0, gravityArrowLen, '#ef4444', gravityLabel);
-      s += arrowSVG(block.x + blockSize/2, block.y + blockSize/2, blockZ + blockSize/2, 0, -buoyancyArrowLen, '#22c55e', buoyancyLabel);
+      if (revealed) {
+        const buoyancyLabel = `浮力 ${formatForce(block.buoyancy, PANEL_DECIMALS)}`;
+        const buoyancyArrowLen = clamp(block.buoyancy * 0.05, 15, 140);
+        s += arrowSVG(block.x + blockSize/2, block.y + blockSize/2, blockZ + blockSize/2, 0, -buoyancyArrowLen, '#22c55e', buoyancyLabel);
+      } else {
+        // 浮力尚未揭露：只畫一個固定長度的箭頭表示方向，不洩漏數值大小與文字
+        s += arrowSVG(block.x + blockSize/2, block.y + blockSize/2, blockZ + blockSize/2, 0, -32, '#22c55e', '浮力 👁');
+      }
     }
     s += pressureSVG(block, blockSize, blockZ);
     s += `</g></g>`;
@@ -934,8 +987,30 @@
 
     document.getElementById('submergedVolA').textContent = state.showContainerA ? roundTo(blockA.submergedRatio * blockA.volume, PANEL_DECIMALS) + ' cm³' : '–';
     document.getElementById('submergedVolB').textContent = state.showContainerB ? roundTo(blockB.submergedRatio * blockB.volume, PANEL_DECIMALS) + ' cm³' : '–';
-    document.getElementById('buoyancyA').textContent = state.showContainerA ? formatForce(blockA.buoyancy, PANEL_DECIMALS) : '–';
-    document.getElementById('buoyancyB').textContent = state.showContainerB ? formatForce(blockB.buoyancy, PANEL_DECIMALS) : '–';
+    if (!state.showContainerA) {
+      buoyancyASpan.textContent = '–';
+      buoyancyASpan.classList.remove('green', 'hidden-hint');
+    } else if (!state.revealBuoyancyA) {
+      buoyancyASpan.textContent = '👁 點擊查看';
+      buoyancyASpan.classList.remove('green');
+      buoyancyASpan.classList.add('hidden-hint');
+    } else {
+      buoyancyASpan.textContent = formatForce(blockA.buoyancy, PANEL_DECIMALS);
+      buoyancyASpan.classList.remove('hidden-hint');
+      buoyancyASpan.classList.add('green');
+    }
+    if (!state.showContainerB) {
+      buoyancyBSpan.textContent = '–';
+      buoyancyBSpan.classList.remove('green', 'hidden-hint');
+    } else if (!state.revealBuoyancyB) {
+      buoyancyBSpan.textContent = '👁 點擊查看';
+      buoyancyBSpan.classList.remove('green');
+      buoyancyBSpan.classList.add('hidden-hint');
+    } else {
+      buoyancyBSpan.textContent = formatForce(blockB.buoyancy, PANEL_DECIMALS);
+      buoyancyBSpan.classList.remove('hidden-hint');
+      buoyancyBSpan.classList.add('green');
+    }
     document.getElementById('gravityA').textContent = state.showContainerA ? formatForce(blockA.mass, PANEL_DECIMALS) : '–';
     document.getElementById('gravityB').textContent = state.showContainerB ? formatForce(blockB.mass, PANEL_DECIMALS) : '–';
 
@@ -947,20 +1022,22 @@
     btnTeach.classList.add('teach');
     btnPause.classList.toggle('active', state.paused);
     btnPause.classList.add('pause');
-    btnPause.textContent = state.paused ? '▶ 繼續模擬' : '⏸ 暫停模擬';
+    btnPause.textContent = state.paused ? '▶ 繼續' : '⏸ 暫停';
+    controlsBody.classList.toggle('collapsed', state.controlsCollapsed);
+    collapseArrow.textContent = state.controlsCollapsed ? '▸' : '▾';
     btnShowA.classList.toggle('active', state.showContainerA);
     btnShowA.textContent = state.showContainerA ? '隱藏' : '顯示';
     btnShowB.classList.toggle('active', state.showContainerB);
     btnShowB.textContent = state.showContainerB ? '隱藏' : '顯示';
 
     if (document.activeElement !== blockAWeightInput) {
-      blockAWeightInput.value = roundTo(gramsToWeightInputValue(blockA.mass), DISPLAY_DECIMALS);
+      blockAWeightInput.value = roundTo(gramsToWeightInputValue(blockA.mass), PANEL_DECIMALS);
     }
     if (document.activeElement !== blockAVolumeInput) {
       blockAVolumeInput.value = roundTo(state.blockAVolume, DISPLAY_DECIMALS);
     }
     if (document.activeElement !== blockBWeightInput) {
-      blockBWeightInput.value = roundTo(gramsToWeightInputValue(blockB.mass), DISPLAY_DECIMALS);
+      blockBWeightInput.value = roundTo(gramsToWeightInputValue(blockB.mass), PANEL_DECIMALS);
     }
     if (document.activeElement !== blockBVolumeInput) {
       blockBVolumeInput.value = roundTo(state.blockBVolume, DISPLAY_DECIMALS);
@@ -974,7 +1051,7 @@
       let current;
       if (kind === 'weight') {
         const mass = target === 'A' ? blockA.mass : blockB.mass;
-        current = roundTo(gramsToWeightInputValue(mass), DISPLAY_DECIMALS);
+        current = roundTo(gramsToWeightInputValue(mass), PANEL_DECIMALS);
       } else {
         current = roundTo(target === 'A' ? state.blockAVolume : state.blockBVolume, DISPLAY_DECIMALS);
       }
