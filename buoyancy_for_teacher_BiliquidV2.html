@@ -1181,29 +1181,58 @@
           else { lastSubmergedVolumeB = totalRatio * volumeCm3; lastSubmergedVolumeLowerB = ratioLower * volumeCm3; }
         }
       }
-    } else if (hollowEnabled && !state.secondLiquidEnabled) {
-      // 中空容器（單液體）浮體平衡校正：平衡浸沒比例 = 有效重量 ÷ (有效排水體積 × 液體密度)。
-      // 只在「開口未淹沒（或關蓋）」的浮體狀態套用——這時有效排水體積=完整體積、填充狀態穩定，吸附才安全；
-      // 若開蓋且開口已淹沒，填充狀態會隨深度二元跳變，不適合吸附，留給阻尼自然收斂。
+    } else if (hollowEnabled) {
+      // 中空容器浮體平衡校正。只在「開口未淹沒（或關蓋）」時套用——這時有效排水體積=完整體積、填充穩定，吸附才安全。
       const lidOpen = state['lidOpen' + id];
       const openingSubmerged = lidOpen && state['fillRatio' + id] > 0.5;
       if (!openingSubmerged) {
         const effWeight = getEffectiveWeightGrams(id, volumeCm3, density);
         const effBuoyVol = getEffectiveBuoyancyVolume(id, volumeCm3);
-        const equilibriumRatio = effWeight / (effBuoyVol * state.fluidDensity);
-        if (equilibriumRatio > 0 && equilibriumRatio < 1) {
-          // 浮體的定義是「部分露出水面」(submergedRatio<1)，這才是該吸附到液面的情況；
-          // 深處隨遇平衡的物體是完全沒入(submergedRatio≈1)，不該吸附。用 submergedRatio<0.995 區分。
-          const isFloating = submergedRatio < 0.995;
-          const closeEnough = isFloating && Math.abs(submergedRatio - equilibriumRatio) < 0.03 && Math.abs(block.vy) < 0.05;
-          if (closeEnough) {
-            block.y = WATER_LEVEL - blockSize * (1 - equilibriumRatio);
-            block.vy = 0;
-            block.vx *= 0.9;
-            ratioUpper = equilibriumRatio; ratioLower = 0;
-            // 注意：lastSubmergedVolume 要用有效排水體積，不是完整體積
-            if (id === 'A') lastSubmergedVolumeA = equilibriumRatio * effBuoyVol;
-            else lastSubmergedVolumeB = equilibriumRatio * effBuoyVol;
+        const effDensity = effWeight / effBuoyVol; // 中空容器的等效平均密度
+
+        if (!state.secondLiquidEnabled) {
+          // 單液體：平衡浸沒比例 = 有效密度 / 液體密度
+          const equilibriumRatio = effDensity / state.fluidDensity;
+          if (equilibriumRatio > 0 && equilibriumRatio < 1) {
+            const isFloating = submergedRatio < 0.995;
+            const closeEnough = isFloating && Math.abs(submergedRatio - equilibriumRatio) < 0.03 && Math.abs(block.vy) < 0.05;
+            if (closeEnough) {
+              block.y = WATER_LEVEL - blockSize * (1 - equilibriumRatio);
+              block.vy = 0; block.vx *= 0.9;
+              ratioUpper = equilibriumRatio; ratioLower = 0;
+              if (id === 'A') lastSubmergedVolumeA = equilibriumRatio * effBuoyVol;
+              else lastSubmergedVolumeB = equilibriumRatio * effBuoyVol;
+            }
+          }
+        } else if (effDensity > 0 && effDensity < upperDensity) {
+          // 雙液體、有效密度比上層液體還小：完全浮在上層液面（跟單液體公式一樣，用上層密度）
+          const equilibriumRatio = effDensity / upperDensity;
+          if (equilibriumRatio > 0 && equilibriumRatio < 1) {
+            const isFloating = (ratioUpper + ratioLower) < 0.995;
+            const closeEnough = isFloating && Math.abs(ratioUpper - equilibriumRatio) < 0.03 && ratioLower < 0.005 && Math.abs(block.vy) < 0.05;
+            if (closeEnough) {
+              block.y = WATER_LEVEL - blockSize * (1 - equilibriumRatio);
+              block.vy = 0; block.vx *= 0.9;
+              ratioUpper = equilibriumRatio; ratioLower = 0;
+              if (id === 'A') lastSubmergedVolumeA = equilibriumRatio * effBuoyVol;
+              else lastSubmergedVolumeB = equilibriumRatio * effBuoyVol;
+            }
+          }
+        } else if (effDensity >= upperDensity && effDensity <= lowerDensity && lowerDensity > upperDensity) {
+          // 雙液體、有效密度介於兩層之間：浮在兩液交界面，跨界比例 r 解 (1-r)*upper + r*lower = effDensity
+          const r = (effDensity - upperDensity) / (lowerDensity - upperDensity);
+          if (r >= 0 && r <= 1) {
+            const centerNearInterface = Math.abs((block.y + blockSize / 2) - LIQUID2_TOP_Y) < blockSize * 0.6;
+            const spansFully = Math.abs(ratioUpper + ratioLower - 1) < 0.03;
+            const closeEnough = centerNearInterface && spansFully && Math.abs(ratioLower - r) < 0.03 && Math.abs(block.vy) < 0.05;
+            if (closeEnough) {
+              block.y = LIQUID2_TOP_Y - blockSize * (1 - r);
+              block.vy = 0; block.vx *= 0.9;
+              ratioLower = r; ratioUpper = 1 - r;
+              const totalRatio = ratioUpper + ratioLower;
+              if (id === 'A') { lastSubmergedVolumeA = totalRatio * effBuoyVol; lastSubmergedVolumeLowerA = ratioLower * effBuoyVol; }
+              else { lastSubmergedVolumeB = totalRatio * effBuoyVol; lastSubmergedVolumeLowerB = ratioLower * effBuoyVol; }
+            }
           }
         }
       }
@@ -1873,6 +1902,25 @@
   matASelect.value = state.materialASelection;
   matBSelect.value = state.materialBSelection;
   requestAnimationFrame(loop);
+
+  // ===== 除錯：在瀏覽器 Console 輸入 checkBalance() 就能看到目前 A/B 的浮力、重力原始數值與差值 =====
+  window.checkBalance = function () {
+    ['A', 'B'].forEach((id) => {
+      const show = id === 'A' ? state.showContainerA : state.showContainerB;
+      if (!show) { console.log(`物體${id}: 未顯示`); return; }
+      const density = id === 'A' ? state.blockADensity : state.blockBDensity;
+      const data = calculateBlockData(id, density);
+      const diff = data.buoyancy - data.mass;
+      const block = state.physics[id];
+      console.log(
+        `物體${id}: 浮力=${data.buoyancy.toFixed(4)}g 重力=${data.mass.toFixed(4)}g ` +
+        `差值=${diff.toFixed(4)}g | 沉沒比例=${data.submergedRatio.toFixed(4)} ` +
+        `vy=${block.vy.toFixed(4)} 中空=${state['hollowEnabled' + id]} ` +
+        `開蓋=${state['lidOpen' + id]} 填充=${state['fillRatio' + id].toFixed(2)}`
+      );
+    });
+    return '若差值不是0，請把這行複製給我';
+  };
 
   // ===== 兩側欄高度同步畫布：讓左右兩欄跟著畫布等高，內容超出時內部捲動，且不會反過來撐高畫布 =====
   // （畫布用 aspect-ratio 決定高度，純 CSS 無法把這個動態高度傳給側欄，所以用 ResizeObserver 同步最可靠）
