@@ -1,0 +1,1967 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>阿基米德浮力沙盒 3D 版</title>
+<style>
+  :root {
+    --blue: #1d4ed8;
+    --blue-bg: #eff6ff;
+    --blue-border: #bfdbfe;
+    --teal: #0f766e;
+    --teal-bg: #f0fdfa;
+    --teal-border: #99f6e4;
+    --orange: #c2410c;
+    --orange-bg: #fff7ed;
+    --orange-border: #fed7aa;
+    --purple: #7e22ce;
+    --slate-bg: #f1f5f9;
+    --slate-border: #e2e8f0;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none; user-select: none;
+    -webkit-touch-callout: none;
+  }
+  body {
+    margin: 0;
+    touch-action: manipulation; /* 允許正常點擊/拖曳，但禁止雙擊放大與雙指縮放 */
+    background: var(--slate-bg);
+    font-family: -apple-system, "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif;
+    color: #1e293b;
+    padding: 8px;
+    font-size: 16px;
+  }
+  .wrap { max-width: 1500px; margin: 0 auto; display: flex; flex-direction: column; gap: 8px; }
+  .card { background: #fff; border-radius: 14px; border: 1px solid var(--slate-border); box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+
+  .mainGrid { display: flex; gap: 8px; align-items: stretch; }
+  .canvasCard { position: relative; overflow: hidden; flex: 1; min-width: 0; }
+  .sideCol { display: flex; flex-direction: column; gap: 8px; width: 190px; flex-shrink: 0; min-height: 0; }
+  .quickBtnGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .toggleBtn.small { min-height: 26px; padding: 3px 4px; font-size: 0.72rem; }
+  svg#mainSvg { display: block; width: 100%; height: 100%; aspect-ratio: 800 / 550; min-height: 462px; background: #f8fafc; touch-action: none; }
+
+  .dataPanel { background: #1e293b; color: #f1f5f9; padding: 12px; display: flex; flex-direction: column; gap: 8px; flex: 1; min-height: 0; overflow-y: auto; }
+  .dataPanel h3 { margin: 0; font-size: 0.78rem; font-weight: 700; color: #cbd5e1; }
+  .dataPanelHead { display: flex; align-items: center; justify-content: space-between; gap: 6px; border-bottom: 1px solid #475569; padding-bottom: 6px; margin-bottom: 2px; }
+  .unitSeg { width: 70px; flex-shrink: 0; border-color: #475569; }
+  .unitSeg button { font-size: 0.66rem; padding: 3px 0; min-height: 24px; background: #334155; color: #cbd5e1; border-right-color: #475569; }
+  .unitSeg button.active { background: #facc15; color: #1e293b; }
+  .dataRow { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; font-size: 0.95rem; padding: 2px 0; flex-wrap: nowrap; }
+  .dataRow > span:first-child { flex-shrink: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dataRow.reveal {
+    width: 100%; border: none; background: transparent; font-family: inherit; cursor: pointer;
+    border-radius: 6px; color: #fff; font-size: inherit;
+  }
+  .dataRow.reveal:hover { background: rgba(255,255,255,0.08); }
+  .dataRow.reveal .hidden-hint { color: #94a3b8; font-weight: 700; font-style: normal; font-family: -apple-system, sans-serif; }
+  .dataRow.sep { border-top: 1px solid #475569; padding-top: 6px; margin-top: 2px; }
+  .dataRow .green { color: #4ade80; font-family: monospace; font-weight: 700; white-space: nowrap; flex-shrink: 0; }
+  .dataRow .red { color: #f87171; font-family: monospace; font-weight: 700; white-space: nowrap; flex-shrink: 0; }
+  .dataRow .cyan { color: #67e8f9; font-family: monospace; font-weight: 700; white-space: nowrap; flex-shrink: 0; }
+  .liquid2Row { display: none; }
+  .liquid2Row.show { display: flex; }
+
+  /* ===== 左側控制面板：固定獨立欄位，不疊在畫布上，預設展開，可收闔成窄條 ===== */
+  .controlsCol {
+    width: 250px; flex-shrink: 0; overflow-y: auto; padding: 8px 10px; min-height: 0;
+    transition: width 0.15s; display: flex; flex-direction: column;
+  }
+  .controlsCol.is-collapsed { width: 0; padding: 0; margin: 0; border: none; overflow: hidden; }
+  .expandTab {
+    display: none; position: absolute; top: 10px; left: 10px; z-index: 30;
+    width: 32px; height: 32px; border-radius: 50%; border: 1px solid var(--slate-border);
+    background: rgba(255,255,255,0.92); color: #475569; font-size: 0.95rem; font-weight: 700;
+    cursor: pointer; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+  }
+  .expandTab.show { display: flex; }
+  .controlsHeadRow { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .collapseBtn {
+    display: flex; align-items: center; gap: 6px; text-align: left;
+    border: none; background: transparent; padding: 4px 0; font-size: 0.85rem; font-weight: 700;
+    color: #475569; cursor: pointer;
+  }
+  #collapseArrow { display: inline-block; transition: transform 0.15s; font-size: 0.75rem; }
+  .helpBtn {
+    width: 24px; height: 24px; min-width: 24px; border-radius: 50%; border: 1px solid var(--slate-border);
+    background: #fff; color: #475569; font-size: 0.72rem; font-weight: 700; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+  .helpBtn:hover { background: var(--blue-bg); color: var(--blue); border-color: var(--blue-border); }
+  .helpOverlay {
+    position: fixed; inset: 0; background: rgba(15,23,42,0.55); display: none;
+    align-items: center; justify-content: center; z-index: 1000; padding: 16px;
+  }
+  .helpOverlay.open { display: flex; }
+  .helpBox {
+    background: #fff; border-radius: 16px; max-width: 600px; width: 100%; max-height: 85vh;
+    overflow-y: auto; padding: 22px 24px; position: relative; box-shadow: 0 10px 40px rgba(0,0,0,0.25);
+  }
+  .helpBox h2 { font-size: 0.95rem; margin: 18px 0 8px; color: var(--blue); }
+  .helpBox h2:first-child { margin-top: 0; }
+  .helpBox ul, .helpBox ol { margin: 0 0 4px; padding-left: 20px; font-size: 0.82rem; line-height: 1.65; color: #334155; }
+  .helpBox li { margin-bottom: 8px; }
+  .helpClose {
+    position: absolute; top: 12px; right: 12px; width: 30px; height: 30px; border-radius: 50%;
+    border: none; background: #f1f5f9; color: #475569; cursor: pointer; font-size: 0.9rem;
+  }
+  .controlsBody { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
+  .controlsBody.collapsed { display: none; }
+  .controlsRow { display: flex; flex-direction: column; gap: 12px; }
+  .field { width: 100%; }
+  .field.fluid2 label { display: flex; align-items: center; gap: 5px; color: var(--purple); font-size: 0.74rem; }
+  .field.fluid2 label input[type=checkbox] { width: 14px; height: 14px; flex-shrink: 0; }
+  .field.fluid2 select { border-color: #e9d5ff; background: var(--purple-bg, #faf5ff); }
+  .field.fluid2.disabled select, .field.fluid2.disabled .microNumInput, .field.fluid2.disabled input[type=range] { opacity: 0.45; }
+  .field label { display: flex; align-items: center; justify-content: space-between; gap: 6px; font-size: 0.78rem; font-weight: 700; margin-bottom: 3px; }
+  .field select {
+    width: 100%; padding: 6px 8px; border-radius: 8px; font-size: 0.8rem;
+    border: 1px solid var(--slate-border); background: #fff; min-height: 32px;
+  }
+  .field.fluid label { color: var(--blue); }
+  .field.fluid select { border-color: var(--blue-border); background: var(--blue-bg); }
+  .field.matA label { color: var(--teal); }
+  .field.matA select { border-color: var(--teal-border); background: var(--teal-bg); }
+  .field.matB label { color: var(--orange); }
+  .field.matB select { border-color: var(--orange-border); background: var(--orange-bg); }
+
+  .microRow { display: flex; align-items: center; gap: 6px; margin-top: 5px; }
+  .microRow input[type=range] { flex: 1; height: 22px; }
+  .microRow .unitTag { font-size: 0.6rem; color: #64748b; font-weight: 700; white-space: nowrap; flex-shrink: 0; }
+  .microLabel { font-size: 0.7rem; color: #64748b; font-weight: 700; white-space: nowrap; min-width: 58px; text-align: right; }
+  .microNumInput {
+    width: 44px; flex-shrink: 0; padding: 2px 3px; border-radius: 6px;
+    border: 1px solid var(--slate-border); font-size: 0.72rem; min-height: 22px; background: #fff; text-align: right;
+  }
+
+  .visBtn {
+    border: 1px solid var(--slate-border); background: #fff; border-radius: 6px;
+    font-size: 0.68rem; font-weight: 700; padding: 2px 7px; cursor: pointer; color: #64748b;
+  }
+  .visBtn.active.teal { background: #ccfbf1; color: var(--teal); border-color: var(--teal-border); }
+  .visBtn.active.orange { background: #ffedd5; color: var(--orange); border-color: var(--orange-border); }
+
+  .segGroup { display: flex; border: 1px solid var(--slate-border); border-radius: 8px; overflow: hidden; }
+  .segGroup button {
+    flex: 1; border: none; background: #fff; color: #64748b; font-weight: 700; font-size: 0.75rem;
+    cursor: pointer; border-right: 1px solid var(--slate-border); padding: 3px 0; min-height: 26px;
+  }
+  .segGroup button:last-child { border-right: none; }
+  .segGroup button.active { background: var(--purple); color: #fff; }
+
+  .numRow { display: flex; align-items: center; gap: 4px; margin-top: 5px; flex-wrap: nowrap; }
+  .numRow .numLabel { font-size: 0.7rem; font-weight: 700; color: #475569; width: 28px; flex-shrink: 0; }
+  .numRow input[type=number] {
+    flex: 1; width: 100%; min-width: 0; padding: 4px 5px; border-radius: 6px;
+    border: 1px solid var(--slate-border); font-size: 0.78rem; min-height: 28px; background: #fff;
+  }
+  .numRow .unitTag { font-size: 0.65rem; color: #64748b; font-weight: 700; white-space: nowrap; min-width: 26px; }
+  .hollowToggleLabel { display: flex; align-items: center; gap: 5px; font-size: 0.74rem; font-weight: 700; color: var(--purple); cursor: pointer; }
+  .hollowToggleLabel input[type=checkbox] { width: 14px; height: 14px; flex-shrink: 0; }
+  .hollowRow { display: none; }
+  .hollowRow.show { display: flex; }
+  .hollowRow .numLabel { width: auto; white-space: nowrap; flex-shrink: 0; }
+  .hollowRow input[type=range] { flex: 1; min-width: 40px; height: 22px; }
+  .hollowRow input[type=number] { flex: 0 0 50px; width: 50px; min-width: 50px; text-align: right; padding: 4px 5px; min-height: 26px; }
+
+  .quickGroup { display: flex; gap: 2px; flex-shrink: 0; }
+  .quickGroup button {
+    width: 22px; height: 28px; border-radius: 5px; border: 1px solid var(--slate-border);
+    background: #fff; color: #64748b; font-size: 0.66rem; font-weight: 700; cursor: pointer; padding: 0;
+  }
+  .quickGroup button.active { background: var(--purple); color: #fff; border-color: var(--purple); }
+
+  .toggleRow { display: flex; flex-wrap: wrap; gap: 8px; flex: 1 1 100%; }
+  .toggleBtn {
+    flex: 1 1 120px; padding: 5px 6px; border-radius: 9px; font-size: 0.82rem; font-weight: 700;
+    border: 1px solid var(--slate-border); background: var(--slate-bg); color: #64748b; cursor: pointer; min-height: 30px;
+  }
+  .toggleBtn.active.forces { background: #e0e7ff; color: #4338ca; border-color: #c7d2fe; }
+  .toggleBtn.active.pressure { background: #e0f2fe; color: #0369a1; border-color: #bae6fd; }
+  .toggleBtn.active.teach { background: #fef9c3; color: #854d0e; border-color: #fde68a; }
+  .toggleBtn.active.pause { background: #fee2e2; color: #b91c1c; border-color: #fecaca; }
+
+  /* ===== 教學模式：放大關鍵數據，適合教室觸控電視遠距離觀看 ===== */
+  body.teaching-mode .dataRow { font-size: 1.4rem; padding: 6px 0; }
+  body.teaching-mode .dataPanel h3 { font-size: 1rem; }
+
+  @media (max-width: 900px) {
+    .mainGrid { flex-direction: column; }
+    .controlsCol { width: 100%; }
+    .controlsCol.is-collapsed { width: 0; height: 0; padding: 0; margin: 0; border: none; }
+    .sideCol { width: 100%; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="mainGrid">
+    <div class="card controlsCol" id="controlsCol">
+      <div class="controlsHeadRow" id="controlsHeadRow">
+        <button id="btnCollapseControls" class="collapseBtn"><span id="collapseArrow">▾</span> <span class="label-text">控制面板（可收合）</span></button>
+        <button id="btnHelp" class="helpBtn" title="操作說明與教學建議">？</button>
+      </div>
+      <div class="controlsBody" id="controlsBody">
+      <div class="controlsRow">
+        <div class="field fluid">
+          <label>外圍液體（液體1）</label>
+          <select id="fluidSelect"></select>
+          <div class="microRow">
+            <input id="fluidDensitySlider" type="range" min="0.5" max="14" step="0.01">
+            <input id="fluidDensityInput" type="number" step="0.01" min="0.01" class="microNumInput">
+              <span class="unitTag">g/cm³</span>
+            </div>
+          </div>
+
+          <div class="field fluid2">
+            <label><input type="checkbox" id="secondLiquidToggle"> 第二液體（與第一液不互溶）</label>
+            <select id="fluid2Select" disabled></select>
+            <div class="microRow">
+              <input id="fluid2DensitySlider" type="range" min="0.5" max="14" step="0.01" disabled>
+              <input id="fluid2DensityInput" type="number" step="0.01" min="0.01" class="microNumInput" disabled>
+              <span class="unitTag">g/cm³</span>
+            </div>
+          </div>
+
+          <div class="field matA">
+            <label>物體 A <button id="btnShowA" class="visBtn teal">顯示</button></label>
+            <select id="matASelect"></select>
+            <div class="microRow">
+              <input id="blockADensitySlider" type="range" min="0.05" max="8.0" step="0.05">
+              <input id="blockADensityInput" type="number" step="0.01" min="0.01" class="microNumInput">
+              <span class="unitTag">g/cm³</span>
+            </div>
+            <div class="numRow">
+              <span class="numLabel">重量</span>
+              <div class="quickGroup" data-target="A" data-kind="weight">
+                <button data-val="1">1</button><button data-val="2">2</button><button data-val="3">3</button>
+              </div>
+              <input id="blockAWeightInput" type="number" step="0.0001" min="0.0001">
+              <span class="unitTag" id="blockAWeightUnit"></span>
+            </div>
+            <div class="numRow">
+              <span class="numLabel">體積</span>
+              <div class="quickGroup" data-target="A" data-kind="volume">
+                <button data-val="1000">小</button><button data-val="2000">中</button><button data-val="3000">大</button>
+              </div>
+              <input id="blockAVolumeInput" type="number" step="1" min="1">
+              <span class="unitTag">cm³</span>
+            </div>
+            <div class="numRow">
+              <label class="hollowToggleLabel"><input type="checkbox" id="hollowToggleA"> 中空容器</label>
+            </div>
+            <div class="numRow hollowRow" id="hollowRowA">
+              <span class="numLabel">中空比</span>
+              <input id="hollowRatioASlider" type="range" min="0" max="0.95" step="0.01">
+              <input id="hollowRatioAInput" type="number" step="1" min="0" max="95">
+              <span class="unitTag">%</span>
+            </div>
+          </div>
+
+          <div class="field matB">
+            <label>物體 B <button id="btnShowB" class="visBtn orange">顯示</button></label>
+            <select id="matBSelect"></select>
+            <div class="microRow">
+              <input id="blockBDensitySlider" type="range" min="0.05" max="8.0" step="0.05">
+              <input id="blockBDensityInput" type="number" step="0.01" min="0.01" class="microNumInput">
+              <span class="unitTag">g/cm³</span>
+            </div>
+            <div class="numRow">
+              <span class="numLabel">重量</span>
+              <div class="quickGroup" data-target="B" data-kind="weight">
+                <button data-val="1">1</button><button data-val="2">2</button><button data-val="3">3</button>
+              </div>
+              <input id="blockBWeightInput" type="number" step="0.0001" min="0.0001">
+              <span class="unitTag" id="blockBWeightUnit"></span>
+            </div>
+            <div class="numRow">
+              <span class="numLabel">體積</span>
+              <div class="quickGroup" data-target="B" data-kind="volume">
+                <button data-val="1000">小</button><button data-val="2000">中</button><button data-val="3000">大</button>
+              </div>
+              <input id="blockBVolumeInput" type="number" step="1" min="1">
+              <span class="unitTag">cm³</span>
+            </div>
+            <div class="numRow">
+              <label class="hollowToggleLabel"><input type="checkbox" id="hollowToggleB"> 中空容器</label>
+            </div>
+            <div class="numRow hollowRow" id="hollowRowB">
+              <span class="numLabel">中空比</span>
+              <input id="hollowRatioBSlider" type="range" min="0" max="0.95" step="0.01">
+              <input id="hollowRatioBInput" type="number" step="1" min="0" max="95">
+              <span class="unitTag">%</span>
+            </div>
+          </div>
+        </div>
+        </div>
+      </div>
+
+    <div class="card canvasCard">
+      <svg id="mainSvg" viewBox="0 0 800 550"></svg>
+      <button id="btnExpandControls" class="expandTab" title="展開控制面板">▸</button>
+    </div>
+
+    <div class="sideCol">
+      <div class="quickBtnGrid">
+        <button id="btnPause" class="toggleBtn small">⏸ 暫停</button>
+        <button id="btnForces" class="toggleBtn small">受力箭頭</button>
+        <button id="btnPressure" class="toggleBtn small">液壓箭頭</button>
+        <button id="btnTeach" class="toggleBtn small">📺 教學</button>
+      </div>
+      <div class="card dataPanel">
+        <div class="dataPanelHead">
+          <h3>受力數據</h3>
+          <div class="segGroup unitSeg" id="unitSeg">
+            <button data-unit="N">N</button>
+            <button data-unit="kgw">kgw</button>
+          </div>
+        </div>
+        <div class="dataRow"><span id="submergedVolALabel">A 液中體積</span><span class="cyan" id="submergedVolA"></span></div>
+        <button class="dataRow reveal" id="buoyancyABtn"><span id="buoyancyALabel">A 浮力</span><span class="green" id="buoyancyA"></span></button>
+        <div class="dataRow"><span>A 重力</span><span class="red" id="gravityA"></span></div>
+        <div class="dataRow liquid2Row" id="submergedVolLowerARow"><span>A 第二液體中體積</span><span class="cyan" id="submergedVolLowerA"></span></div>
+        <div class="dataRow liquid2Row" id="buoyancyLowerARow"><span>A 第二液體浮力</span><span class="green" id="buoyancyLowerA"></span></div>
+        <div class="dataRow sep"><span id="submergedVolBLabel">B 液中體積</span><span class="cyan" id="submergedVolB"></span></div>
+        <button class="dataRow reveal" id="buoyancyBBtn"><span id="buoyancyBLabel">B 浮力</span><span class="green" id="buoyancyB"></span></button>
+        <div class="dataRow"><span>B 重力</span><span class="red" id="gravityB"></span></div>
+        <div class="dataRow liquid2Row" id="submergedVolLowerBRow"><span>B 第二液體中體積</span><span class="cyan" id="submergedVolLowerB"></span></div>
+        <div class="dataRow liquid2Row" id="buoyancyLowerBRow"><span>B 第二液體浮力</span><span class="green" id="buoyancyLowerB"></span></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="helpOverlay" id="helpOverlay">
+  <div class="helpBox">
+    <button class="helpClose" id="btnHelpClose">✕</button>
+
+    <h2>📖 操作說明</h2>
+    <ul>
+      <li><b>拖曳方塊</b>：直接拖曳物體 A／B 可以移動位置；拖曳背景空白處可以左右旋轉視角（最多 ±90°），上下小幅拖曳則是傾斜視角（±15°），傾斜後可以看到方塊的頂面或底面。</li>
+      <li><b>右上 2×2 按鈕</b>：「暫停」會凍結所有物體的位置（拖曳跟旋轉仍可操作），方便停下來講解；「受力箭頭」「液壓箭頭」分別開關重力浮力箭頭跟水壓箭頭；「教學模式」會放大數字字級，適合大螢幕遠距離觀看。</li>
+      <li><b>受力數據面板</b>：右上角可切換 N／kgw 單位；「浮力」這行預設用「👁 點擊查看」隱藏起來，點一下才會顯示數值跟畫面上的浮力箭頭文字，適合讓學生先預測再核對答案。</li>
+      <li><b>外圍液體</b>：可選純水、海水、酒精、水銀等預設液體，也能拖滑桿自訂密度。</li>
+      <li><b>物體 A／物體 B</b>：先按「顯示」才會出現在畫面上；材質選單分三類——「與外部液體連動」會即時跟著外圍液體變動、「液體（固定密度）」選了之後密度就固定不再跟著外圍液體變、「固體材質」是一般物質。重量跟體積會互相換算（密度固定時，改一個另一個自動更新），可以用快捷按鈕（重量1/2/3、體積小/中/大）快速設定，也能直接輸入小數自訂。體積上限是 8000 cm³。</li>
+      <li><b>液壓箭頭</b>：開啟後會在方塊側面跟底面畫出水壓箭頭，底面同時會比較「外部水壓（向上）」跟「物體自身重量造成的壓力（向下）」——物體浮到平衡時，這兩個箭頭長度會剛好相等。</li>
+    </ul>
+
+    <h2>🎓 教學步驟建議：從阿基米德的「水積木」概念切入</h2>
+    <ol>
+      <li><b>先別顯示任何物體。</b>問學生：「如果我在這缸水裡，憑空『框』出一塊跟周圍一樣都是水的方塊，它會浮起來、沉下去，還是停在原地？」讓學生先猜猜看、說出理由。</li>
+      <li><b>按下「顯示」物體 A</b>（材質預設就是「純水」，跟外圍液體一樣）。學生會看到它就停在原地不動，不浮不沉。這正是阿基米德原理的起點：一塊跟周圍液體完全相同的「水」，所受的浮力剛好等於自己的重力，所以靜止不動。</li>
+      <li><b>保持物體 A 的「重量」數字不變</b>，把材質切換成食用油或保麗龍等其他物質。引導學生討論：為什麼現在它會浮起來？（密度比周圍液體小，同樣重量需要更大的體積才能達到平衡）</li>
+      <li><b>善用浮力的隱藏機制</b>：請學生先用公式「浮力＝液體密度×排出體積」計算預測值，再按下「👁 點擊查看」核對答案，培養先預測、後驗證的探究習慣。</li>
+      <li><b>開啟液壓箭頭</b>，請學生觀察方塊底部那組「向上」（外部水壓）跟「向下」（物體自身重量造成的壓力）箭頭——浮到平衡時兩者一樣長，提供浮力的另一種理解角度（壓力差），而不只是「排出體積」這一種說法。</li>
+      <li><b>用物體 A、B 做對照</b>：把兩者的「重量」都用快捷按鈕設成一樣（例如都按「1」kgw），但材質選不同的物質，比較兩者體積差多少。討論「等重不同密度」的關係——密度越小，要達到相同重量所需的體積就越大。</li>
+      <li><b>換外圍液體</b>（海水、酒精、水銀），觀察同一個物體在不同液體中浮沉狀態的變化。水銀密度極高，可以讓學生看到幾乎任何物體都會浮起來，藉此討論「物體浮沉只跟兩者密度的相對大小有關」這個核心概念。</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  // ===== 預設液體（外圍溶液 + 物體A/B 可選擇的固定密度液體）=====
+  const FLUID_PRESETS = [
+    { name: '純水', density: 1.0 },
+    { name: '海水', density: 1.03 },
+    { name: '死海鹽水', density: 1.24 },
+    { name: '食用油', density: 0.92 },
+    { name: '甘油', density: 1.26 },
+    { name: '酒精', density: 0.79 },
+    { name: '水銀', density: 13.6 }
+  ];
+  const LIQUID_COLORS = {
+    '純水': '#38bdf8', '海水': '#0ea5e9', '死海鹽水': '#2dd4bf', '食用油': '#fbbf24', '甘油': '#a78bfa',
+    '酒精': '#cffafe', '水銀': '#94a3b8'
+  };
+  // 與外部液體即時連動的特殊選項（用於示範「水方塊」恆等於環境密度的阿基米德思考實驗）
+  const LINKED_OPTION = { name: '與外部液體相同（即時連動）', density: -1 };
+
+  const MATERIAL_SOLIDS = [
+    { name: '保麗龍', density: 0.05 },
+    { name: '軟木塞', density: 0.24 },
+    { name: '松木塊', density: 0.5 },
+    { name: '冰塊', density: 0.92 },
+    { name: '塑膠', density: 1.2 },
+    { name: '鋁塊', density: 2.7 },
+    { name: '鐵塊', density: 7.8 }
+  ];
+
+  // 各固體材質貼近實際外觀的顏色
+  const MATERIAL_COLORS = {
+    '保麗龍': '#d1d5db', // 保麗龍：淺灰色
+    '軟木塞': '#c89666', // 軟木塞：淺棕色
+    '松木塊': '#dcb182', // 松木：淺木紋黃褐色
+    '冰塊': '#cfe9f7',   // 冰塊：淡淡的冰藍白
+    '塑膠': '#e8eaed',   // 塑膠：米白/淺灰
+    '鋁塊': '#b8c0c8',   // 鋁塊：金屬淺銀灰
+    '鐵塊': '#4b5563'    // 鐵塊：深鐵灰
+  };
+
+  // ===== 畫布常數（容器深度已加深，原本控制面板佔用的垂直空間挪來給畫布用）=====
+  const CANVAS_WIDTH = 800, CANVAS_HEIGHT = 550;
+  const TANK_BOTTOM_FIXED = 506;
+  const TANK_PRESETS = {
+    small:  { w: 380, h: 286, d: 187 },
+    medium: { w: 560, h: 418, d: 264 },
+    large:  { w: 700, h: 484, d: 320 }
+  };
+  const WATER_LEVEL_RATIO = 0.368; // 水面距容器頂部的留空比例（水位高度已減少1/5：水深從79%縮減為約63%）
+  const GRAVITY = 0.6, MAX_VELOCITY = 20;
+
+  // ===== 真實物理量換算 =====
+  // 物體的「體積」是真實的 cm³（密度單位本來就是 g/cm³），重量＝密度×體積（克）
+  const PX_PER_CM = 9;          // 水槽本身的視覺校正：1 公分 = 9 像素（用於水位上升等計算）
+  const BLOCK_PX_PER_CM = PX_PER_CM * 0.5; // 水積木畫面顯示大小縮小為原本的50%（只影響畫面呈現，體積數字不變）
+  const MIN_BLOCK_PX = 20, MAX_BLOCK_PX = 90; // 同步縮小視覺夾擠範圍
+  function volumeToPx(volumeCm3) {
+    const edgeCm = Math.cbrt(Math.max(0.001, volumeCm3));
+    return clamp(BLOCK_PX_PER_CM * edgeCm, MIN_BLOCK_PX, MAX_BLOCK_PX);
+  }
+
+  function roundTo(v, decimals) {
+    const f = 10 ** decimals;
+    return Math.round(v * f) / f;
+  }
+  const DISPLAY_DECIMALS = 1; // 體積、重量輸入框、畫面上箭頭標籤統一用這個位數
+  const PANEL_DECIMALS = 4;   // 受力數據面板的浮力/重力用更高精度，方便跟體積對得上
+  function formatForce(valueGrams, decimals) {
+    if (decimals === undefined) decimals = DISPLAY_DECIMALS;
+    if (state.forceUnit === 'kgw') return roundTo(valueGrams / 1000, decimals) + ' kgw';
+    return roundTo(valueGrams * 9.8 / 1000, decimals) + ' N';
+  }
+  // 重量輸入框：把使用者輸入的數值（目前單位）換算成「克」
+  function weightInputToGrams(typedValue) {
+    return state.forceUnit === 'kgw' ? typedValue * 1000 : (typedValue * 1000) / 9.8;
+  }
+  // 把「克」換算回目前單位下，重量輸入框該顯示的數值
+  function gramsToWeightInputValue(grams) {
+    return state.forceUnit === 'kgw' ? grams / 1000 : (grams * 9.8) / 1000;
+  }
+
+  let TANK_X, TANK_Y, TANK_W, TANK_H, TANK_D, TANK_BOTTOM, WATER_LEVEL, BASE_WATER_LEVEL, LIQUID2_TOP_Y;
+  let lastSubmergedVolumeA = 0, lastSubmergedVolumeB = 0; // 上一帧沉入水中的真實體積（cm³，雙液體時為兩層合計），用來推算這一帧的水位
+  let lastSubmergedVolumeLowerA = 0, lastSubmergedVolumeLowerB = 0; // 上一帧沉入「物理下層」的真實體積（cm³），哪個液體在下層由密度比較決定
+  // 液池總量（cm³）：真實剩餘的液體體積，會被中空容器的「進液/排液」動作實際增減（跟displacement不同，那個只是暫時排擠不會改變總量）
+  let liquid1PoolVolume, liquid2PoolVolume;
+  let poolInitializedForMode = null; // 記錄液池是否已依目前單/雙液體模式初始化過
+
+  // ===== 狀態 =====
+  const state = {
+    fluidDensity: 1.0,
+    blockADensity: 1.0,
+    blockBDensity: 1.0,
+    blockAVolume: 1000, // cm³，數字維持原本的1000，畫面大小改用獨立的視覺縮放係數調整
+    blockBVolume: 1000,
+    showForces: true,
+    showPressure: false,
+    teachingMode: false,
+    paused: false,
+    controlsCollapsed: false, // 控制面板預設展開
+    showHelp: false, // 操作說明彈窗預設關閉
+    revealBuoyancyA: false, // 浮力數據預設隱藏，點擊面板上的按鈕才會顯示，適合探究式教學
+    revealBuoyancyB: false,
+    forceUnit: 'kgw', // 預設用「公斤重」，比牛頓更貼近學生生活經驗
+    showContainerA: false,
+    showContainerB: false,
+    tankPreset: 'large', // 容器固定使用最大尺寸，不再提供切換
+    camera: { angle: 0, tilt: 0 }, // angle: -1..1 對應左右 -90°~+90°；tilt: -1..1 對應上下 -15°~+15°，0 = 完全正面 2D
+    fluidSelection: '純水',
+    materialASelection: '純水',
+    materialBSelection: '純水',
+    secondLiquidEnabled: false, // 第二液體（與液體1不互溶，誰在上層/下層由密度大小決定）
+    secondLiquidDensity: 1.0,
+    secondLiquidSelection: '純水',
+    densityLabelPos: null, // 液體密度標籤的拖曳位置（畫面座標），null = 使用預設位置（容器右下角）
+    // ===== 中空容器（壓艙艙）=====
+    hollowEnabledA: false, hollowEnabledB: false,
+    hollowRatioA: 0.8, hollowRatioB: 0.8, // 中空部分佔總體積比例
+    lidOpenA: false, lidOpenB: false, // 蓋子預設關閉（密封，進排液按鈕才有效）
+    fillRatioA: 0, fillRatioB: 0, // 中空部分目前裝填比例（0~1，相對於中空體積）
+    fillLiquidA: null, fillLiquidB: null, // 目前裝的是哪個液體：'1' / '2' / null（空氣）
+    physics: {
+      A: { x: 0, y: 0, vx: 0, vy: 0 },
+      B: { x: 0, y: 0, vx: 0, vy: 0 }
+    },
+    draggingUI: null
+  };
+  const dragState = { type: null, id: null, offsetX: 0, offsetY: 0, startAngle: 0, startTilt: 0, startMouseX: 0, startMouseY: 0 };
+
+  const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+
+  function getTankAreaCm2() {
+    return (TANK_W / PX_PER_CM) * (TANK_D / PX_PER_CM);
+  }
+
+  // 液池初始化：依目前單/雙液體模式給一個預設「滿水位」的總量基準。
+  // 切換單/雙液體模式時會重新初始化（避免模式切換時殘留不合理的舊數值）。
+  function ensurePoolsInitialized() {
+    const mode = state.secondLiquidEnabled ? 'double' : 'single';
+    if (poolInitializedForMode === mode) return;
+    const tankAreaCm2 = getTankAreaCm2();
+    // 起始水量湊整到最接近的千位，讓一開始的讀數是乾淨整數（例如 93990 → 93000）
+    const roundToThousand = (v) => Math.round(v / 1000) * 1000;
+    if (mode === 'single') {
+      const heightCm = (TANK_H * (1 - WATER_LEVEL_RATIO)) / PX_PER_CM;
+      liquid1PoolVolume = roundToThousand(tankAreaCm2 * heightCm);
+      liquid2PoolVolume = 0;
+    } else {
+      const heightCm = (TANK_H * 0.35) / PX_PER_CM;
+      liquid1PoolVolume = roundToThousand(tankAreaCm2 * heightCm);
+      liquid2PoolVolume = roundToThousand(tankAreaCm2 * heightCm);
+    }
+    poolInitializedForMode = mode;
+  }
+
+  function applyTankGeometry() {
+    const p = TANK_PRESETS[state.tankPreset] || TANK_PRESETS.medium;
+    TANK_W = p.w; TANK_H = p.h; TANK_D = p.d;
+    TANK_BOTTOM = TANK_BOTTOM_FIXED;
+    TANK_Y = TANK_BOTTOM - TANK_H;
+    TANK_X = (CANVAS_WIDTH - TANK_W) / 2;
+    BASE_WATER_LEVEL = TANK_Y + TANK_H * WATER_LEVEL_RATIO; // 沒有任何物體沉入時的水位（僅單液體模式參考用）
+    ensurePoolsInitialized();
+  }
+
+  // 把物體排出的水量換算成水位上升高度（阿基米德原理：排出體積 ÷ 水槽水面面積 = 水位上升高度）
+  // ★ 水位用平滑趨近（而不是每帧直接跳到計算值），避免「物體位置→排水體積→水位→浮力」形成瞬時回授迴路，
+  //   導致大體積物體（或雙物體同時存在）時水位跟物體互相劇烈震盪、畫面看起來在晃動。
+  // ★ 啟用第二液體時：兩液體各佔基準35%高度，密度較大的那個會沉到物理下層（不論是液體1還是液體2，由密度比較決定）。
+  // ★ 水位基準不再是固定比例，改用「實際液池總量」換算——這樣中空容器排液/進液造成的真實液體增減，
+  //   才會正確反映在水位高低上（跟物體displacement暫時排擠水位是兩件獨立的事，這裡兩者加總一起算）。
+  function updateWaterLevel() {
+    const tankAreaCm2 = getTankAreaCm2();
+
+    if (!state.secondLiquidEnabled) {
+      const baseLevel = clamp(TANK_BOTTOM - (liquid1PoolVolume / tankAreaCm2) * PX_PER_CM, TANK_Y, TANK_BOTTOM);
+      const totalSubmergedCm3 =
+        (state.showContainerA ? lastSubmergedVolumeA : 0) +
+        (state.showContainerB ? lastSubmergedVolumeB : 0);
+      const risePx = tankAreaCm2 > 0 ? (totalSubmergedCm3 / tankAreaCm2) * PX_PER_CM : 0;
+      const targetWaterLevel = clamp(baseLevel - risePx, TANK_Y + 5, TANK_BOTTOM - 5);
+      if (WATER_LEVEL === undefined) WATER_LEVEL = targetWaterLevel;
+      else WATER_LEVEL += (targetWaterLevel - WATER_LEVEL) * 0.12;
+      LIQUID2_TOP_Y = TANK_BOTTOM; // 沒有第二液體時，下層厚度視為0
+      return;
+    }
+
+    const baseLiquid2Top = clamp(TANK_BOTTOM - (liquid2PoolVolume / tankAreaCm2) * PX_PER_CM, TANK_Y, TANK_BOTTOM);
+    const baseLiquid1Top = clamp(TANK_BOTTOM - ((liquid1PoolVolume + liquid2PoolVolume) / tankAreaCm2) * PX_PER_CM, TANK_Y, TANK_BOTTOM);
+
+    const lowerSubmergedCm3 =
+      (state.showContainerA ? lastSubmergedVolumeLowerA : 0) +
+      (state.showContainerB ? lastSubmergedVolumeLowerB : 0);
+    const totalSubmergedCm3 =
+      (state.showContainerA ? lastSubmergedVolumeA : 0) +
+      (state.showContainerB ? lastSubmergedVolumeB : 0);
+
+    const liquid2RisePx = tankAreaCm2 > 0 ? (lowerSubmergedCm3 / tankAreaCm2) * PX_PER_CM : 0;
+    const totalRisePx = tankAreaCm2 > 0 ? (totalSubmergedCm3 / tankAreaCm2) * PX_PER_CM : 0;
+
+    const targetLiquid2Top = clamp(baseLiquid2Top - liquid2RisePx, TANK_Y + 15, TANK_BOTTOM - 5);
+    const targetLiquid1Top = clamp(baseLiquid1Top - totalRisePx, TANK_Y + 5, targetLiquid2Top - 5);
+
+    if (LIQUID2_TOP_Y === undefined) { LIQUID2_TOP_Y = targetLiquid2Top; WATER_LEVEL = targetLiquid1Top; }
+    else {
+      LIQUID2_TOP_Y += (targetLiquid2Top - LIQUID2_TOP_Y) * 0.12;
+      WATER_LEVEL += (targetLiquid1Top - WATER_LEVEL) * 0.12;
+    }
+  }
+
+  // 計算物體在「液體1（或唯一液體）」與「液體2（下層）」中各自佔多少比例（0~1，相對於物體自身高度）
+  function computeLayerRatios(blockY, blockSizePx) {
+    const top = blockY, bottom = blockY + blockSizePx;
+    if (!state.secondLiquidEnabled) {
+      let ratio = 0;
+      if (bottom <= WATER_LEVEL) ratio = 0;
+      else if (top >= WATER_LEVEL) ratio = 1;
+      else ratio = (bottom - WATER_LEVEL) / blockSizePx;
+      return { ratioUpper: ratio, ratioLower: 0 };
+    }
+    const overlapUpper = clamp(Math.min(bottom, LIQUID2_TOP_Y) - Math.max(top, WATER_LEVEL), 0, blockSizePx);
+    const overlapLower = clamp(Math.min(bottom, TANK_BOTTOM) - Math.max(top, LIQUID2_TOP_Y), 0, blockSizePx);
+    return { ratioUpper: overlapUpper / blockSizePx, ratioLower: overlapLower / blockSizePx };
+  }
+
+  // 物理上層／下層的密度：密度較大的液體永遠在下層（不論是液體1還是液體2），由密度比較決定，不是固定液體2在下
+  function getPhysicalLayerDensities() {
+    if (!state.secondLiquidEnabled) return { upperDensity: state.fluidDensity, lowerDensity: state.fluidDensity };
+    return {
+      upperDensity: Math.min(state.fluidDensity, state.secondLiquidDensity),
+      lowerDensity: Math.max(state.fluidDensity, state.secondLiquidDensity)
+    };
+  }
+  // 「液體2」目前實際上是物理下層嗎？（密度較大的那個才會沉到下層）
+  function isLiquid2OnBottom() {
+    return state.secondLiquidDensity >= state.fluidDensity;
+  }
+
+  // 查詢「某個 y 深度」目前是空氣還是哪個液體（給中空容器的開蓋被動填充、關蓋手動進排液用）。
+  // 回傳 null 代表在空氣中；否則回傳 { liquidId: '1'|'2', density }。
+  function getLiquidIdentityAtDepth(y) {
+    if (y < WATER_LEVEL) return null;
+    if (!state.secondLiquidEnabled) return { liquidId: '1', density: state.fluidDensity };
+    const liquid2OnBottom = isLiquid2OnBottom();
+    if (y < LIQUID2_TOP_Y) {
+      // 在物理上層
+      return liquid2OnBottom ? { liquidId: '1', density: state.fluidDensity } : { liquidId: '2', density: state.secondLiquidDensity };
+    }
+    // 在物理下層
+    return liquid2OnBottom ? { liquidId: '2', density: state.secondLiquidDensity } : { liquidId: '1', density: state.fluidDensity };
+  }
+
+  function getBlockSize(id) {
+    const volume = id === 'A' ? state.blockAVolume : state.blockBVolume;
+    return volumeToPx(volume);
+  }
+
+  function resetBlockPosition(id) {
+    const blockSize = getBlockSize(id);
+    const frac = id === 'A' ? 0.3 : 0.7;
+    let x = TANK_X + TANK_W * frac - blockSize / 2;
+    x = clamp(x, TANK_X, TANK_X + TANK_W - blockSize);
+    state.physics[id].x = x;
+    state.physics[id].y = WATER_LEVEL + 20;
+    state.physics[id].vx = 0;
+    state.physics[id].vy = 0;
+  }
+
+  function setContainerVisible(id, visible) {
+    state['showContainer' + id] = visible;
+    if (visible) resetBlockPosition(id);
+  }
+
+  // ===== DOM 參照 =====
+  const svg = document.getElementById('mainSvg');
+  const fluidSelect = document.getElementById('fluidSelect');
+  const matASelect = document.getElementById('matASelect');
+  const matBSelect = document.getElementById('matBSelect');
+  const btnForces = document.getElementById('btnForces');
+  const btnPressure = document.getElementById('btnPressure');
+  const btnTeach = document.getElementById('btnTeach');
+  const btnPause = document.getElementById('btnPause');
+  const btnCollapseControls = document.getElementById('btnCollapseControls');
+  const btnHelp = document.getElementById('btnHelp');
+  const btnHelpClose = document.getElementById('btnHelpClose');
+  const helpOverlay = document.getElementById('helpOverlay');
+  const buoyancyABtn = document.getElementById('buoyancyABtn');
+  const buoyancyBBtn = document.getElementById('buoyancyBBtn');
+  const buoyancyASpan = document.getElementById('buoyancyA');
+  const buoyancyBSpan = document.getElementById('buoyancyB');
+  const controlsBody = document.getElementById('controlsBody');
+  const controlsCol = document.getElementById('controlsCol');
+  const btnExpandControls = document.getElementById('btnExpandControls');
+  const collapseArrow = document.getElementById('collapseArrow');
+  const btnShowA = document.getElementById('btnShowA');
+  const btnShowB = document.getElementById('btnShowB');
+  const fluidDensitySlider = document.getElementById('fluidDensitySlider');
+  const fluidDensityInput = document.getElementById('fluidDensityInput');
+  const blockADensitySlider = document.getElementById('blockADensitySlider');
+  const blockADensityInput = document.getElementById('blockADensityInput');
+  const blockBDensitySlider = document.getElementById('blockBDensitySlider');
+  const blockBDensityInput = document.getElementById('blockBDensityInput');
+  const blockAWeightInput = document.getElementById('blockAWeightInput');
+  const blockAVolumeInput = document.getElementById('blockAVolumeInput');
+  const blockAWeightUnit = document.getElementById('blockAWeightUnit');
+  const blockBWeightInput = document.getElementById('blockBWeightInput');
+  const blockBVolumeInput = document.getElementById('blockBVolumeInput');
+  const blockBWeightUnit = document.getElementById('blockBWeightUnit');
+  const unitSegButtons = Array.from(document.querySelectorAll('#unitSeg button'));
+  const secondLiquidToggle = document.getElementById('secondLiquidToggle');
+  const fluid2Select = document.getElementById('fluid2Select');
+  const fluid2DensitySlider = document.getElementById('fluid2DensitySlider');
+  const fluid2DensityInput = document.getElementById('fluid2DensityInput');
+  const fluid2Field = document.querySelector('.field.fluid2');
+  const liquid2Rows = Array.from(document.querySelectorAll('.liquid2Row'));
+  const hollowToggleA = document.getElementById('hollowToggleA');
+  const hollowToggleB = document.getElementById('hollowToggleB');
+  const hollowRatioASlider = document.getElementById('hollowRatioASlider');
+  const hollowRatioAInput = document.getElementById('hollowRatioAInput');
+  const hollowRatioBSlider = document.getElementById('hollowRatioBSlider');
+  const hollowRatioBInput = document.getElementById('hollowRatioBInput');
+  const hollowRowA = document.getElementById('hollowRowA');
+  const hollowRowB = document.getElementById('hollowRowB');
+
+  // ===== 下拉選單初始化 =====
+  function fillFluidSelect(selectEl) {
+    selectEl.innerHTML = '';
+    const customOpt = document.createElement('option');
+    customOpt.value = '自訂'; customOpt.textContent = '--- 自訂密度 ---'; customOpt.disabled = true;
+    selectEl.appendChild(customOpt);
+    FLUID_PRESETS.forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p.name; opt.textContent = `${p.name} (${p.density})`;
+      selectEl.appendChild(opt);
+    });
+  }
+
+  // 第二液體選單：選項一律顯示「第二液體 (密度)」這種通用名稱，不顯示真實物質名稱（純水/海水/酒精...），
+  // 因為這些真實物質彼此本來就可能互溶（例如純水跟海水），標示成具名液體會暗示錯誤的物理關係。
+  // value 仍對應原本 FLUID_PRESETS 的名稱，密度查找邏輯不受影響，只是顯示文字改成通用代號。
+  function fillFluid2Select(selectEl) {
+    selectEl.innerHTML = '';
+    const customOpt = document.createElement('option');
+    customOpt.value = '自訂'; customOpt.textContent = '--- 自訂密度 ---'; customOpt.disabled = true;
+    selectEl.appendChild(customOpt);
+    FLUID_PRESETS.forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p.name; opt.textContent = `第二液體 (${p.density})`;
+      selectEl.appendChild(opt);
+    });
+  }
+
+  // 物體 A / B 共用：可選「與外部液體連動」、固定密度的液體、或固體材質
+  function fillContainerSelect(selectEl) {
+    selectEl.innerHTML = '';
+    const customOpt = document.createElement('option');
+    customOpt.value = '自訂'; customOpt.textContent = '--- 自訂密度 ---'; customOpt.disabled = true;
+    selectEl.appendChild(customOpt);
+
+    const gLink = document.createElement('optgroup'); gLink.label = '連動';
+    const linkOpt = document.createElement('option');
+    linkOpt.value = LINKED_OPTION.name; linkOpt.textContent = LINKED_OPTION.name;
+    gLink.appendChild(linkOpt);
+    selectEl.appendChild(gLink);
+
+    const gLiquid = document.createElement('optgroup'); gLiquid.label = '液體（固定密度，可與外部液體不同）';
+    FLUID_PRESETS.forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p.name; opt.textContent = `${p.name} (${p.density})`;
+      gLiquid.appendChild(opt);
+    });
+    selectEl.appendChild(gLiquid);
+
+    const gSolid = document.createElement('optgroup'); gSolid.label = '固體材質';
+    MATERIAL_SOLIDS.forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p.name; opt.textContent = `${p.name} (${p.density})`;
+      gSolid.appendChild(opt);
+    });
+    selectEl.appendChild(gSolid);
+  }
+
+  fillFluidSelect(fluidSelect);
+  fillFluid2Select(fluid2Select);
+  fillContainerSelect(matASelect);
+  fillContainerSelect(matBSelect);
+
+  function resolveDensity(name) {
+    if (name === LINKED_OPTION.name) return state.fluidDensity;
+    const f = FLUID_PRESETS.find(p => p.name === name);
+    if (f) return f.density;
+    const s = MATERIAL_SOLIDS.find(p => p.name === name);
+    if (s) return s.density;
+    return null;
+  }
+  function isLiquidSelection(name) {
+    return name === LINKED_OPTION.name || FLUID_PRESETS.some(p => p.name === name);
+  }
+  function getLiquidColor(name) {
+    if (name === LINKED_OPTION.name) return LIQUID_COLORS[state.fluidSelection] || '#38bdf8';
+    return LIQUID_COLORS[name] || '#38bdf8';
+  }
+
+  // ===== 控制項事件（單一狀態來源，選單與滑桿永遠同步）=====
+  fluidSelect.addEventListener('change', (e) => {
+    const val = e.target.value;
+    state.fluidSelection = val;
+    if (val !== '自訂') {
+      const preset = FLUID_PRESETS.find(p => p.name === val);
+      if (preset) state.fluidDensity = preset.density;
+    }
+  });
+  secondLiquidToggle.addEventListener('change', (e) => { state.secondLiquidEnabled = e.target.checked; });
+
+  hollowToggleA.addEventListener('change', (e) => { state.hollowEnabledA = e.target.checked; });
+  hollowToggleB.addEventListener('change', (e) => { state.hollowEnabledB = e.target.checked; });
+  hollowRatioASlider.addEventListener('input', (e) => { resetHollowFill('A'); state.hollowRatioA = parseFloat(e.target.value); });
+  hollowRatioBSlider.addEventListener('input', (e) => { resetHollowFill('B'); state.hollowRatioB = parseFloat(e.target.value); });
+  hollowRatioAInput.addEventListener('input', (e) => {
+    const val = parseFloat(e.target.value);
+    if (!isFinite(val) || val < 0) return;
+    resetHollowFill('A');
+    state.hollowRatioA = clamp(val / 100, 0, 0.95);
+  });
+  hollowRatioBInput.addEventListener('input', (e) => {
+    const val = parseFloat(e.target.value);
+    if (!isFinite(val) || val < 0) return;
+    resetHollowFill('B');
+    state.hollowRatioB = clamp(val / 100, 0, 0.95);
+  });
+  fluid2Select.addEventListener('change', (e) => {
+    const val = e.target.value;
+    state.secondLiquidSelection = val;
+    if (val !== '自訂') {
+      const preset = FLUID_PRESETS.find(p => p.name === val);
+      if (preset) state.secondLiquidDensity = preset.density;
+    }
+  });
+  matASelect.addEventListener('change', (e) => {
+    const val = e.target.value;
+    state.materialASelection = val;
+    if (val !== '自訂') {
+      const d = resolveDensity(val);
+      if (d !== null) state.blockADensity = d;
+    }
+  });
+  matBSelect.addEventListener('change', (e) => {
+    const val = e.target.value;
+    state.materialBSelection = val;
+    if (val !== '自訂') {
+      const d = resolveDensity(val);
+      if (d !== null) state.blockBDensity = d;
+    }
+  });
+
+  btnForces.addEventListener('click', () => { state.showForces = !state.showForces; });
+  btnPressure.addEventListener('click', () => { state.showPressure = !state.showPressure; });
+  btnTeach.addEventListener('click', () => { state.teachingMode = !state.teachingMode; });
+  btnPause.addEventListener('click', () => { state.paused = !state.paused; });
+  btnCollapseControls.addEventListener('click', () => { state.controlsCollapsed = !state.controlsCollapsed; });
+  btnExpandControls.addEventListener('click', () => { state.controlsCollapsed = false; });
+  btnHelp.addEventListener('click', () => { state.showHelp = true; });
+  btnHelpClose.addEventListener('click', () => { state.showHelp = false; });
+  helpOverlay.addEventListener('click', (e) => { if (e.target === helpOverlay) state.showHelp = false; });
+  buoyancyABtn.addEventListener('click', () => { state.revealBuoyancyA = !state.revealBuoyancyA; });
+  buoyancyBBtn.addEventListener('click', () => { state.revealBuoyancyB = !state.revealBuoyancyB; });
+  btnShowA.addEventListener('click', () => setContainerVisible('A', !state.showContainerA));
+  btnShowB.addEventListener('click', () => setContainerVisible('B', !state.showContainerB));
+
+  const MAX_VOLUME_CM3 = 8000; // 體積上限，超過自動限制回這個值（也對應畫面方塊視覺大小的上限）
+
+  function resetHollowFill(id) {
+    if (state['hollowEnabled' + id] && !state['lidOpen' + id]) {
+      // 關蓋時，目前填充的內容已經從液池扣除（封存狀態），體積改變前要先歸還，避免液體憑空消失
+      const oldVolumeCm3 = id === 'A' ? state.blockAVolume : state.blockBVolume;
+      const sealedVolume = state['fillRatio' + id] * oldVolumeCm3 * state['hollowRatio' + id];
+      const fillLiquidId = state['fillLiquid' + id];
+      if (fillLiquidId === '1') liquid1PoolVolume += sealedVolume;
+      else if (fillLiquidId === '2') liquid2PoolVolume += sealedVolume;
+    }
+    state['fillRatio' + id] = 0;
+    state['fillLiquid' + id] = null;
+  }
+
+  function setVolumeFromWeightInput(id, typedValue) {
+    if (!isFinite(typedValue) || typedValue <= 0) return;
+    resetHollowFill(id); // 必須在更新體積之前呼叫，才能用「舊」體積正確歸還液池
+    const grams = weightInputToGrams(typedValue);
+    const density = Math.max(0.01, id === 'A' ? state.blockADensity : state.blockBDensity);
+    const volume = clamp(grams / density, 1, MAX_VOLUME_CM3);
+    if (id === 'A') state.blockAVolume = volume; else state.blockBVolume = volume;
+  }
+  function setVolumeFromVolumeInput(id, typedValue) {
+    if (!isFinite(typedValue) || typedValue <= 0) return;
+    resetHollowFill(id); // 必須在更新體積之前呼叫，才能用「舊」體積正確歸還液池
+    const volume = clamp(typedValue, 1, MAX_VOLUME_CM3);
+    if (id === 'A') state.blockAVolume = volume; else state.blockBVolume = volume;
+  }
+
+  blockAWeightInput.addEventListener('input', (e) => setVolumeFromWeightInput('A', parseFloat(e.target.value)));
+  blockAVolumeInput.addEventListener('input', (e) => setVolumeFromVolumeInput('A', parseFloat(e.target.value)));
+  blockBWeightInput.addEventListener('input', (e) => setVolumeFromWeightInput('B', parseFloat(e.target.value)));
+  blockBVolumeInput.addEventListener('input', (e) => setVolumeFromVolumeInput('B', parseFloat(e.target.value)));
+
+  const quickGroups = Array.from(document.querySelectorAll('.quickGroup'));
+  quickGroups.forEach((group) => {
+    const target = group.getAttribute('data-target'); // 'A' 或 'B'
+    const kind = group.getAttribute('data-kind'); // 'weight' 或 'volume'
+    Array.from(group.querySelectorAll('button')).forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const val = parseFloat(btn.getAttribute('data-val'));
+        if (kind === 'weight') setVolumeFromWeightInput(target, val);
+        else setVolumeFromVolumeInput(target, val);
+      });
+    });
+  });
+
+  unitSegButtons.forEach((btn) => {
+    btn.addEventListener('click', () => { state.forceUnit = btn.getAttribute('data-unit'); });
+  });
+
+  fluidDensitySlider.addEventListener('input', (e) => {
+    state.fluidDensity = parseFloat(e.target.value);
+    state.fluidSelection = '自訂';
+  });
+  fluidDensityInput.addEventListener('input', (e) => {
+    const val = parseFloat(e.target.value);
+    if (!isFinite(val) || val <= 0) return;
+    state.fluidDensity = val;
+    state.fluidSelection = '自訂';
+  });
+  fluid2DensitySlider.addEventListener('input', (e) => {
+    state.secondLiquidDensity = parseFloat(e.target.value);
+    state.secondLiquidSelection = '自訂';
+  });
+  fluid2DensityInput.addEventListener('input', (e) => {
+    const val = parseFloat(e.target.value);
+    if (!isFinite(val) || val <= 0) return;
+    state.secondLiquidDensity = val;
+    state.secondLiquidSelection = '自訂';
+  });
+  blockADensitySlider.addEventListener('input', (e) => {
+    state.blockADensity = parseFloat(e.target.value);
+    state.materialASelection = '自訂';
+  });
+  blockADensityInput.addEventListener('input', (e) => {
+    const val = parseFloat(e.target.value);
+    if (!isFinite(val) || val <= 0) return;
+    state.blockADensity = val;
+    state.materialASelection = '自訂';
+  });
+  blockBDensitySlider.addEventListener('input', (e) => {
+    state.blockBDensity = parseFloat(e.target.value);
+    state.materialBSelection = '自訂';
+  });
+  blockBDensityInput.addEventListener('input', (e) => {
+    const val = parseFloat(e.target.value);
+    if (!isFinite(val) || val <= 0) return;
+    state.blockBDensity = val;
+    state.materialBSelection = '自訂';
+  });
+
+  // ===== 拖曳（方塊移動 / 攝影機左右旋轉）=====
+  function getPointerPos(e) {
+    const ctm = svg.getScreenCTM();
+    return { x: (e.clientX - ctm.e) / ctm.a, y: (e.clientY - ctm.f) / ctm.d };
+  }
+
+  svg.addEventListener('pointerdown', (e) => {
+    // 中空容器按鈕：在 pointerdown 當下立即觸發。
+    // （SVG 每帧用 innerHTML 整個重畫，按鈕節點會被不斷重建，導致需要「同一節點上 down+up」的 click 幾乎無法完成，
+    //   所以改用單一的 pointerdown 立即處理，最穩定可靠。）
+    const actionEl = e.target.closest('[data-action]');
+    if (actionEl) {
+      e.preventDefault();
+      const action = actionEl.getAttribute('data-action');
+      const id = actionEl.getAttribute('data-action-id');
+      if (action === 'toggleLid') toggleLid(id);
+      else if (action === 'intake') intakeLiquid(id);
+      else if (action === 'release') releaseLiquid(id);
+      return; // 不啟動任何拖曳
+    }
+    const dragEl = e.target.closest('[data-drag]');
+    if (!dragEl) return;
+    e.preventDefault();
+    try { svg.setPointerCapture(e.pointerId); } catch (err) {}
+    const pos = getPointerPos(e);
+    const dragId = dragEl.getAttribute('data-drag');
+
+    if (dragId === 'A' || dragId === 'B') {
+      const block = state.physics[dragId];
+      dragState.type = 'block'; dragState.id = dragId;
+      dragState.offsetX = pos.x - block.x; dragState.offsetY = pos.y - block.y;
+      state.draggingUI = dragId;
+    } else if (dragId === 'densityLabel') {
+      dragState.type = 'densityLabel';
+      const current = getDensityLabelPos();
+      dragState.offsetX = pos.x - current.x;
+      dragState.offsetY = pos.y - current.y;
+    } else {
+      dragState.type = 'camera';
+      dragState.startAngle = state.camera.angle;
+      dragState.startTilt = state.camera.tilt;
+      dragState.startMouseX = pos.x;
+      dragState.startMouseY = pos.y;
+      state.draggingUI = 'camera';
+    }
+  });
+
+  svg.addEventListener('pointermove', (e) => {
+    if (!dragState.type) return;
+    e.preventDefault();
+    const pos = getPointerPos(e);
+
+    if (dragState.type === 'camera') {
+      // 水平拖曳：左右旋轉視角（±90°）；垂直拖曳：上下小幅傾斜（±15°），讓水積木的立體感更明顯
+      let angle = dragState.startAngle + (pos.x - dragState.startMouseX) * 0.004;
+      state.camera.angle = clamp(angle, -1, 1);
+      let tilt = dragState.startTilt + (pos.y - dragState.startMouseY) * 0.004;
+      state.camera.tilt = clamp(tilt, -1, 1);
+    } else if (dragState.type === 'block') {
+      const id = dragState.id;
+      const blockSize = getBlockSize(id);
+      let nx = pos.x - dragState.offsetX;
+      let ny = pos.y - dragState.offsetY;
+      nx = clamp(nx, TANK_X, TANK_X + TANK_W - blockSize);
+      ny = Math.min(ny, TANK_BOTTOM - blockSize);
+      state.physics[id].x = nx;
+      state.physics[id].y = ny;
+      state.physics[id].vx = 0;
+      state.physics[id].vy = 0;
+    } else if (dragState.type === 'densityLabel') {
+      state.densityLabelPos = { x: pos.x - dragState.offsetX, y: pos.y - dragState.offsetY };
+    }
+  });
+
+  function endDrag(e) {
+    dragState.type = null; dragState.id = null;
+    state.draggingUI = null;
+    try { svg.releasePointerCapture(e.pointerId); } catch (err) {}
+  }
+  svg.addEventListener('pointerup', endDrag);
+  svg.addEventListener('pointercancel', endDrag);
+
+  // ===== 物理運算 =====
+  // 中空容器的有效重量（克）＝殼體積×殼密度 + 中空體積×填充比例×填充液體密度。
+  // 浮力完全不受影響（still 只看外觀排出體積），這裡只影響「重力/有效重量」這一側。
+  function getEffectiveWeightGrams(id, volumeCm3, shellDensity) {
+    if (!state['hollowEnabled' + id]) return volumeCm3 * shellDensity;
+    const hollowRatio = state['hollowRatio' + id];
+    const shellVolume = volumeCm3 * (1 - hollowRatio);
+    const hollowVolume = volumeCm3 * hollowRatio;
+
+    // ★ 開蓋且開口已淹沒：殼內的水跟外面是「連通的同一份水」，它的重量是由水池（最終由容器底）承受，
+    //   不是掛在物體上、要靠浮力去抬的，所以物重只算殼本身（跟浮力體積一樣只算殼，兩邊自洽）。
+    //   進水的船會沉，不是因為「水變重了」，而是因為殼內不再排水、浮力大幅減少，殼自重撐不住。
+    const lidOpen = state['lidOpen' + id];
+    const openingFlooded = lidOpen && state['fillRatio' + id] > 0.5;
+    if (openingFlooded) return shellVolume * shellDensity;
+
+    // 關蓋封存、或開蓋未淹沒：內容物確實隨物體一起、是它的一部分（密封空氣或封存液體），才計入重量。
+    const fillRatio = state['fillRatio' + id];
+    const fillLiquidId = state['fillLiquid' + id];
+    let fillDensity = 0;
+    if (fillLiquidId === '1') fillDensity = state.fluidDensity;
+    else if (fillLiquidId === '2') fillDensity = state.secondLiquidDensity;
+    return shellVolume * shellDensity + hollowVolume * fillRatio * fillDensity;
+  }
+
+  // 中空容器的「有效排水體積」（用於浮力/液中體積計算，不是用於畫面尺寸）：
+  // ・未中空、或關蓋：永遠用完整體積（殼整體把水排開，跟裡面裝什麼無關）。
+  // ・開蓋但開口還沒被淹沒：水進不去（水只能從開口進來），中空部分等同密封空氣，比照關蓋，用完整體積。
+  // ・開蓋且開口已被淹沒（已灌水）：灌進去的水跟外面是同一份水、自由流通，並沒有真正被排擠掉，
+  //   所以真正排開水的體積只剩殼本身——這也是為什麼一旦開始進水，浮力會驟降、加速下沉的原因。
+  function getEffectiveBuoyancyVolume(id, volumeCm3) {
+    if (!state['hollowEnabled' + id]) return volumeCm3;
+    if (!state['lidOpen' + id]) return volumeCm3;
+    const isFlooded = state['fillRatio' + id] > 0.5; // fillRatio在開蓋時是二元的(0或1)，0.5當門檻即可
+    if (!isFlooded) return volumeCm3;
+    return volumeCm3 * (1 - state['hollowRatio' + id]);
+  }
+
+  // 開蓋／關蓋切換：關蓋時把目前被動填充的內容「封存」起來，從對應液池扣除（代表這部分液體被密封、不再跟外界自由交換）；
+  // 開蓋時把封存的內容歸還給液池（之後該帧物理會立刻依新深度重新被動計算填充狀態）。
+  // 這樣設計可以避免「開蓋被動進水時沒有扣液池，但關蓋後排液卻把它加回液池」造成的不對稱重複計算問題。
+  function toggleLid(id) {
+    if (!state['hollowEnabled' + id]) return;
+    const volumeCm3 = id === 'A' ? state.blockAVolume : state.blockBVolume;
+    const hollowVolume = volumeCm3 * state['hollowRatio' + id];
+    const sealedVolume = state['fillRatio' + id] * hollowVolume;
+    const fillLiquidId = state['fillLiquid' + id];
+    const wasOpen = state['lidOpen' + id];
+    if (wasOpen) {
+      // 關蓋：封存目前內容，從液池扣除
+      if (fillLiquidId === '1') liquid1PoolVolume = Math.max(0, liquid1PoolVolume - sealedVolume);
+      else if (fillLiquidId === '2') liquid2PoolVolume = Math.max(0, liquid2PoolVolume - sealedVolume);
+    } else {
+      // 開蓋：歸還封存的內容給液池（下一帧物理會立刻重新依深度被動計算）
+      if (fillLiquidId === '1') liquid1PoolVolume += sealedVolume;
+      else if (fillLiquidId === '2') liquid2PoolVolume += sealedVolume;
+    }
+    state['lidOpen' + id] = !wasOpen;
+  }
+
+  const HOLLOW_STEP = 0.1; // 每次按進液/排液按鈕改變的比例
+
+  // 關蓋時手動進液：以容器「底部」目前接觸的液體為主（跟開蓋被動填充看「開口/頂部」不同）
+  function intakeLiquid(id) {
+    if (!state['hollowEnabled' + id] || state['lidOpen' + id]) return;
+    const block = state.physics[id];
+    const blockSize = getBlockSize(id);
+    const liquidInfo = getLiquidIdentityAtDepth(block.y + blockSize);
+    if (!liquidInfo) return; // 底部目前在空氣中，沒有液體可以抽
+    const volumeCm3 = id === 'A' ? state.blockAVolume : state.blockBVolume;
+    const hollowVolume = volumeCm3 * state['hollowRatio' + id];
+    const oldRatio = state['fillRatio' + id];
+    const newRatio = clamp(oldRatio + HOLLOW_STEP, 0, 1);
+    const addedVolume = (newRatio - oldRatio) * hollowVolume;
+    state['fillRatio' + id] = newRatio;
+    state['fillLiquid' + id] = liquidInfo.liquidId; // 取代式記錄（不做混合/對流模擬），符合簡化設計
+    if (liquidInfo.liquidId === '1') liquid1PoolVolume = Math.max(0, liquid1PoolVolume - addedVolume);
+    else liquid2PoolVolume = Math.max(0, liquid2PoolVolume - addedVolume);
+  }
+
+  // 關蓋時手動排液：把目前裝的內容排出去還給原本的液池（密度不變，純粹減少裝填比例）
+  function releaseLiquid(id) {
+    if (!state['hollowEnabled' + id] || state['lidOpen' + id]) return;
+    const fillLiquidId = state['fillLiquid' + id];
+    const oldRatio = state['fillRatio' + id];
+    if (!fillLiquidId || oldRatio <= 0) return; // 裡面是空的，沒有東西可以排
+    const volumeCm3 = id === 'A' ? state.blockAVolume : state.blockBVolume;
+    const hollowVolume = volumeCm3 * state['hollowRatio' + id];
+    const newRatio = clamp(oldRatio - HOLLOW_STEP, 0, 1);
+    const removedVolume = (oldRatio - newRatio) * hollowVolume;
+    state['fillRatio' + id] = newRatio;
+    if (fillLiquidId === '1') liquid1PoolVolume += removedVolume;
+    else liquid2PoolVolume += removedVolume;
+    if (newRatio <= 0) state['fillLiquid' + id] = null;
+  }
+
+  function updateOneBlock(id) {
+    const block = state.physics[id];
+    const density = id === 'A' ? state.blockADensity : state.blockBDensity;
+    const blockSize = getBlockSize(id);
+    const volumeCm3 = id === 'A' ? state.blockAVolume : state.blockBVolume;
+
+    let { ratioUpper, ratioLower } = computeLayerRatios(block.y, blockSize);
+    const submergedRatio = ratioUpper + ratioLower; // 總沉入比例（不分層）
+
+    // 中空容器：開蓋時被動更新填充狀態（依「開口」(物體頂部) 目前所在液體決定，二元判斷：開口浸入液體就整個灌滿，否則排空）
+    const hollowEnabled = state['hollowEnabled' + id];
+    if (hollowEnabled && state['lidOpen' + id]) {
+      const liquidInfo = getLiquidIdentityAtDepth(block.y);
+      if (liquidInfo) { state['fillRatio' + id] = 1; state['fillLiquid' + id] = liquidInfo.liquidId; }
+      else { state['fillRatio' + id] = 0; state['fillLiquid' + id] = null; }
+    }
+
+    // 即時記錄目前沉入各層的「有效排水體積」（中空容器已淹沒時只算殼，因為灌進去的水沒有真正被排擠掉）
+    const trackedBuoyancyVolume = getEffectiveBuoyancyVolume(id, volumeCm3);
+    if (id === 'A') { lastSubmergedVolumeA = submergedRatio * trackedBuoyancyVolume; lastSubmergedVolumeLowerA = ratioLower * trackedBuoyancyVolume; }
+    else { lastSubmergedVolumeB = submergedRatio * trackedBuoyancyVolume; lastSubmergedVolumeLowerB = ratioLower * trackedBuoyancyVolume; }
+
+    if (dragState.id === id) { block.vx = 0; block.vy = 0; return; }
+
+    const { upperDensity, lowerDensity } = getPhysicalLayerDensities();
+    // ★ 平衡點精確校正：一旦速度與目前比例都已經非常接近理論平衡值，就直接「吸附」過去，消除阻尼造成的殘留誤差，
+    // 讓浮力跟重力在畫面上完全相等，而不是差一點點。中空容器因為開關蓋會動態改變有效密度，精確公式較複雜，
+    // 先不套用這個校正，靠阻尼自然收斂（仍會收斂得很接近，只是不到完全相等的精確度）。
+    if (!hollowEnabled && !state.secondLiquidEnabled) {
+      const equilibriumRatio = density / state.fluidDensity;
+      if (equilibriumRatio > 0 && equilibriumRatio < 1) {
+        // 只有「物體頂部確實在液面附近」才吸附到液面——否則接近隨遇平衡(密度≈液體)、又沉在深處的物體，
+        // 會因為 submergedRatio≈1≈equilibriumRatio 被誤判而硬拉到液面（造成「跳上去」）。
+        const topNearSurface = Math.abs(block.y - WATER_LEVEL) < blockSize * 0.5;
+        const closeEnough = topNearSurface && Math.abs(submergedRatio - equilibriumRatio) < 0.03 && Math.abs(block.vy) < 0.05;
+        if (closeEnough) {
+          block.y = WATER_LEVEL - blockSize * (1 - equilibriumRatio);
+          block.vy = 0;
+          block.vx *= 0.9;
+          ratioUpper = equilibriumRatio; ratioLower = 0;
+          if (id === 'A') lastSubmergedVolumeA = equilibriumRatio * volumeCm3;
+          else lastSubmergedVolumeB = equilibriumRatio * volumeCm3;
+        }
+      }
+    } else if (!hollowEnabled && density > 0 && density < upperDensity) {
+      // 密度比上層液體還小：完全浮在上層液體裡，跟單液體公式一樣，只是用上層液體密度
+      const equilibriumRatio = density / upperDensity;
+      if (equilibriumRatio > 0 && equilibriumRatio < 1) {
+        const topNearSurface = Math.abs(block.y - WATER_LEVEL) < blockSize * 0.5;
+        const closeEnough = topNearSurface && Math.abs(ratioUpper - equilibriumRatio) < 0.03 && ratioLower < 0.005 && Math.abs(block.vy) < 0.05;
+        if (closeEnough) {
+          block.y = WATER_LEVEL - blockSize * (1 - equilibriumRatio);
+          block.vy = 0;
+          block.vx *= 0.9;
+          ratioUpper = equilibriumRatio; ratioLower = 0;
+          if (id === 'A') lastSubmergedVolumeA = equilibriumRatio * volumeCm3;
+          else lastSubmergedVolumeB = equilibriumRatio * volumeCm3;
+        }
+      }
+    } else if (!hollowEnabled && density >= upperDensity && density <= lowerDensity && lowerDensity > upperDensity) {
+      // 密度介於兩層液體之間：物體會跨過交界線，部分在上層、部分在下層，兩層浮力加總剛好等於重力。
+      // 解方程式 (1-r)*upperDensity + r*lowerDensity = density，r 就是「下層應佔的比例」。
+      const r = (density - upperDensity) / (lowerDensity - upperDensity);
+      if (r >= 0 && r <= 1) {
+        // 只有物體確實跨在交界線附近（中心接近交界線）才吸附，避免深處/隨遇平衡物體被誤拉到交界線
+        const centerNearInterface = Math.abs((block.y + blockSize / 2) - LIQUID2_TOP_Y) < blockSize * 0.6;
+        const spansFully = Math.abs(ratioUpper + ratioLower - 1) < 0.03; // 確認物體沒有露出液面上方
+        const closeEnough = centerNearInterface && spansFully && Math.abs(ratioLower - r) < 0.03 && Math.abs(block.vy) < 0.05;
+        if (closeEnough) {
+          block.y = LIQUID2_TOP_Y - blockSize * (1 - r);
+          block.vy = 0;
+          block.vx *= 0.9;
+          ratioLower = r; ratioUpper = 1 - r;
+          const totalRatio = ratioUpper + ratioLower;
+          if (id === 'A') { lastSubmergedVolumeA = totalRatio * volumeCm3; lastSubmergedVolumeLowerA = ratioLower * volumeCm3; }
+          else { lastSubmergedVolumeB = totalRatio * volumeCm3; lastSubmergedVolumeLowerB = ratioLower * volumeCm3; }
+        }
+      }
+    } else if (hollowEnabled && !state.secondLiquidEnabled) {
+      // 中空容器（單液體）浮體平衡校正：平衡浸沒比例 = 有效重量 ÷ (有效排水體積 × 液體密度)。
+      // 只在「開口未淹沒（或關蓋）」的浮體狀態套用——這時有效排水體積=完整體積、填充狀態穩定，吸附才安全；
+      // 若開蓋且開口已淹沒，填充狀態會隨深度二元跳變，不適合吸附，留給阻尼自然收斂。
+      const lidOpen = state['lidOpen' + id];
+      const openingSubmerged = lidOpen && state['fillRatio' + id] > 0.5;
+      if (!openingSubmerged) {
+        const effWeight = getEffectiveWeightGrams(id, volumeCm3, density);
+        const effBuoyVol = getEffectiveBuoyancyVolume(id, volumeCm3);
+        const equilibriumRatio = effWeight / (effBuoyVol * state.fluidDensity);
+        if (equilibriumRatio > 0 && equilibriumRatio < 1) {
+          const topNearSurface = Math.abs(block.y - WATER_LEVEL) < blockSize * 0.5;
+          const closeEnough = topNearSurface && Math.abs(submergedRatio - equilibriumRatio) < 0.03 && Math.abs(block.vy) < 0.05;
+          if (closeEnough) {
+            block.y = WATER_LEVEL - blockSize * (1 - equilibriumRatio);
+            block.vy = 0;
+            block.vx *= 0.9;
+            ratioUpper = equilibriumRatio; ratioLower = 0;
+            // 注意：lastSubmergedVolume 要用有效排水體積，不是完整體積
+            if (id === 'A') lastSubmergedVolumeA = equilibriumRatio * effBuoyVol;
+            else lastSubmergedVolumeB = equilibriumRatio * effBuoyVol;
+          }
+        }
+      }
+    }
+
+    // 浮力（克）＝上層液體貢獻 + 下層液體貢獻；重力（有效重量，克）＝殼+填充內容。兩者比例決定加速度方向。
+    // （當只有單一液體、非中空時，這個公式跟原本的 GRAVITY*(1 - fluidDensity*submergedRatio/density) 完全等價）
+    const buoyancyVolume = getEffectiveBuoyancyVolume(id, volumeCm3);
+    const buoyancyGrams = ratioUpper * buoyancyVolume * upperDensity + ratioLower * buoyancyVolume * lowerDensity;
+    const weightGrams = getEffectiveWeightGrams(id, volumeCm3, density);
+    let accY = 0;
+    if (weightGrams > 0) accY = GRAVITY * (1 - buoyancyGrams / weightGrams);
+
+    let dragCoef = 0.03;
+    if (submergedRatio > 0) dragCoef += 0.08 * submergedRatio;
+    // 密度遠小於周圍液體時（例如保麗龍 0.05 vs 水 1.0），回復力會被「密度倒數」放大非常多倍，
+    // 原本的阻尼吃不住，會一直跳、收斂很慢。這裡額外按密度比例補強阻尼，密度差越大、補強越多。
+    // 雙液體時用「較重的那層」估算，確保補強足夠。
+    if (weightGrams > 0) {
+      const effectiveDensity = weightGrams / volumeCm3;
+      const denserOfTwo = Math.max(upperDensity, lowerDensity);
+      const stiffnessFactor = denserOfTwo / effectiveDensity;
+      dragCoef += Math.min(0.35, 0.015 * stiffnessFactor);
+    }
+
+    block.vy += accY;
+    block.vy -= block.vy * dragCoef;
+    block.vx -= block.vx * dragCoef;
+    block.vy = clamp(block.vy, -MAX_VELOCITY, MAX_VELOCITY);
+
+    if (Math.abs(block.vy) > 0.01 || Math.abs(block.vx) > 0.01) {
+      block.y += block.vy; block.x += block.vx;
+    }
+
+    if (block.y + blockSize >= TANK_BOTTOM) { block.y = TANK_BOTTOM - blockSize; block.vy *= -0.3; block.vx *= 0.8; }
+    if (block.x <= TANK_X) { block.x = TANK_X; block.vx *= -0.5; }
+    if (block.x + blockSize >= TANK_X + TANK_W) { block.x = TANK_X + TANK_W - blockSize; block.vx *= -0.5; }
+    // ★ 不再限制頂部：非常輕、體積很大的浮體允許浮到超出畫布上緣，不會被卡在 y=0
+  }
+
+  function updatePhysics() {
+    if (state.materialASelection === LINKED_OPTION.name) state.blockADensity = state.fluidDensity;
+    if (state.materialBSelection === LINKED_OPTION.name) state.blockBDensity = state.fluidDensity;
+
+    // 暫停時完全跳過位置更新：拖曳完放手後會停在原地，方便老師講解各項受力，不會立刻浮走或沉下去
+    if (state.paused) return;
+
+    if (state.showContainerA) updateOneBlock('A');
+    if (state.showContainerB) updateOneBlock('B');
+  }
+
+  // ===== 3D 投影（先繞垂直軸左右旋轉±90°，再繞水平軸上下傾斜±15°，預設角度0/0時=完全正面2D）=====
+  const MAX_TILT_DEG = 15;
+  function project(x, y, z) {
+    const cx = TANK_X + TANK_W / 2;
+    const cz = TANK_D / 2;
+    const theta = state.camera.angle * (Math.PI / 2);
+    const phi = state.camera.tilt * (MAX_TILT_DEG * Math.PI / 180);
+    const dx = x - cx;
+    const dz = z - cz;
+    const rx = dx * Math.cos(theta) + dz * Math.sin(theta);
+    const rz = -dx * Math.sin(theta) + dz * Math.cos(theta);
+    const sy = y * Math.cos(phi) - rz * Math.sin(phi);
+    return { x: cx + rx, y: sy };
+  }
+
+  function calculateBlockData(id, density) {
+    const block = state.physics[id];
+    const volumeCm3 = id === 'A' ? state.blockAVolume : state.blockBVolume;
+    const blockSize = volumeToPx(volumeCm3); // 畫面上的像素邊長（純視覺，與真實體積透過立方根校正）
+    const mass = getEffectiveWeightGrams(id, volumeCm3, density); // 真實重量（克，含中空容器的殼+填充內容）
+
+    const { ratioUpper, ratioLower } = computeLayerRatios(block.y, blockSize);
+    const submergedRatio = ratioUpper + ratioLower;
+
+    const { upperDensity, lowerDensity } = getPhysicalLayerDensities();
+    const buoyancyVolume = getEffectiveBuoyancyVolume(id, volumeCm3);
+    const buoyancyUpper = ratioUpper * buoyancyVolume * upperDensity;
+    const buoyancyLower = ratioLower * buoyancyVolume * lowerDensity;
+    const buoyancy = buoyancyUpper + buoyancyLower; // 真實總浮力（克）
+
+    // 「液體2」實際是物理上層還是下層，取決於密度比較（密度大的在下），這裡換算成依液體2身分追蹤的數值，供面板顯示
+    // 單液體模式明確特例處理：液體1就是唯一液體，比例直接等於總沉入比例，不依賴isLiquid2OnBottom()
+    // （該函式只在雙液體模式下有意義；單液體時 state.secondLiquidDensity 可能殘留之前調過的舊值，比較結果不可靠）
+    const liquid2OnBottom = isLiquid2OnBottom();
+    const ratioInLiquid2 = state.secondLiquidEnabled ? (liquid2OnBottom ? ratioLower : ratioUpper) : 0;
+    const ratioInLiquid1 = state.secondLiquidEnabled ? (liquid2OnBottom ? ratioUpper : ratioLower) : submergedRatio;
+    const volumeInLiquid1 = ratioInLiquid1 * buoyancyVolume;
+    const volumeInLiquid2 = ratioInLiquid2 * buoyancyVolume;
+    const buoyancyFromLiquid1 = state.secondLiquidEnabled ? (liquid2OnBottom ? buoyancyUpper : buoyancyLower) : buoyancy;
+    const buoyancyFromLiquid2 = state.secondLiquidEnabled ? (liquid2OnBottom ? buoyancyLower : buoyancyUpper) : 0;
+
+    return {
+      x: block.x, y: block.y, volume: volumeCm3, mass, buoyancy, density, submergedRatio,
+      volumeInLiquid1, buoyancyLiquid1: buoyancyFromLiquid1,
+      volumeInLower: volumeInLiquid2, buoyancyLower: buoyancyFromLiquid2
+    };
+  }
+
+  function arrowSVG(x, y, z, dx, dy, color, label, opts) {
+    opts = opts || {};
+    const strokeWidth = opts.strokeWidth || (state.teachingMode ? 5 : 3);
+    const fontSize = opts.fontSize || (state.teachingMode ? 22 : 15);
+    const arrowSize = opts.arrowSize || (state.teachingMode ? 13 : 8);
+
+    const p1 = project(x, y, z);
+    const p2 = project(x + dx, y + dy, z);
+    const len = Math.sqrt((p2.x - p1.x) ** 2 + (p2.y - p1.y) ** 2);
+    if (len < 1) return '';
+    const nx = (p2.x - p1.x) / len, ny = (p2.y - p1.y) / len;
+    const a = arrowSize;
+    let s = `<g stroke="${color}" fill="${color}" stroke-width="${strokeWidth}" style="pointer-events:none">`;
+    s += `<line x1="${p1.x}" y1="${p1.y}" x2="${p2.x}" y2="${p2.y}"/>`;
+    s += `<polygon points="${p2.x},${p2.y} ${p2.x - ny*a - nx*a*1.5},${p2.y + nx*a - ny*a*1.5} ${p2.x + ny*a - nx*a*1.5},${p2.y - nx*a - ny*a*1.5}" stroke-linejoin="round"/>`;
+    if (label) s += `<text x="${p2.x + nx*15}" y="${p2.y + ny*15 + 5}" fill="${color}" stroke="none" font-size="${fontSize}" text-anchor="middle" font-weight="800">${label}</text>`;
+    s += `</g>`;
+    return s;
+  }
+
+  function cubeSVG(x, y, z, w, h, d, baseColor, opacity) {
+    if (h <= 0) return '';
+    const p0 = project(x, y, z), p1 = project(x+w, y, z);
+    const p2 = project(x+w, y+h, z), p3 = project(x, y+h, z);
+    const p4 = project(x, y, z+d), p5 = project(x+w, y, z+d);
+    const p6 = project(x+w, y+h, z+d), p7 = project(x, y+h, z+d);
+
+    let s = '';
+    if (state.camera.tilt > 0.05) {
+      s += `<g opacity="${opacity}">`;
+      s += `<path d="M${p4.x},${p4.y} L${p5.x},${p5.y} L${p1.x},${p1.y} L${p0.x},${p0.y} Z" fill="${baseColor}" stroke-linejoin="round"/>`;
+      s += `<path d="M${p4.x},${p4.y} L${p5.x},${p5.y} L${p1.x},${p1.y} L${p0.x},${p0.y} Z" fill="#fff" opacity="0.3"/>`;
+      s += `</g>`;
+    }
+    if (state.camera.tilt < -0.05) {
+      s += `<g opacity="${opacity}">`;
+      s += `<path d="M${p7.x},${p7.y} L${p6.x},${p6.y} L${p2.x},${p2.y} L${p3.x},${p3.y} Z" fill="${baseColor}" stroke-linejoin="round"/>`;
+      s += `<path d="M${p7.x},${p7.y} L${p6.x},${p6.y} L${p2.x},${p2.y} L${p3.x},${p3.y} Z" fill="#000" opacity="0.2"/>`;
+      s += `</g>`;
+    }
+    if (state.camera.angle < 0) {
+      s += `<g opacity="${opacity}">`;
+      s += `<path d="M${p4.x},${p4.y} L${p0.x},${p0.y} L${p3.x},${p3.y} L${p7.x},${p7.y} Z" fill="${baseColor}" stroke-linejoin="round"/>`;
+      s += `<path d="M${p4.x},${p4.y} L${p0.x},${p0.y} L${p3.x},${p3.y} L${p7.x},${p7.y} Z" fill="#000" opacity="0.25"/>`;
+      s += `</g>`;
+    }
+    if (state.camera.angle > 0) {
+      s += `<g opacity="${opacity}">`;
+      s += `<path d="M${p1.x},${p1.y} L${p5.x},${p5.y} L${p6.x},${p6.y} L${p2.x},${p2.y} Z" fill="${baseColor}" stroke-linejoin="round"/>`;
+      s += `<path d="M${p1.x},${p1.y} L${p5.x},${p5.y} L${p6.x},${p6.y} L${p2.x},${p2.y} Z" fill="#000" opacity="0.15"/>`;
+      s += `</g>`;
+    }
+    s += `<path d="M${p0.x},${p0.y} L${p1.x},${p1.y} L${p2.x},${p2.y} L${p3.x},${p3.y} Z" fill="${baseColor}" opacity="${opacity}" stroke-linejoin="round"/>`;
+    return s;
+  }
+
+  function getBlockStyle(selectionName, density) {
+    if (isLiquidSelection(selectionName)) {
+      return { color: getLiquidColor(selectionName), opacity: 0.55 };
+    }
+    if (MATERIAL_COLORS[selectionName]) {
+      return { color: MATERIAL_COLORS[selectionName], opacity: 1 };
+    }
+    // 自訂密度（沒有對應到具名材質）時，用密度區間給一個合理的預設顏色
+    let color;
+    if (density < 0.8) color = '#d97706';
+    else if (density < 1.2) color = '#6b7280';
+    else if (density < 3) color = '#94a3b8';
+    else color = '#3f3f46';
+    return { color, opacity: 1 };
+  }
+
+  const PRESSURE_SCALE = 0.16; // 壓力箭頭長度比例（已加倍，原本是0.08）
+
+  function pressureSVG(block, blockSize, blockZ) {
+    if (!state.showPressure || block.y + blockSize <= WATER_LEVEL) return '';
+    let s = '';
+    const scale = PRESSURE_SCALE, step = 30;
+    const centerZ = blockZ + blockSize / 2;
+    const popts = { strokeWidth: state.teachingMode ? 4 : 2, arrowSize: state.teachingMode ? 10 : 6 };
+
+    if (block.y > WATER_LEVEL) {
+      const pTop = (block.y - WATER_LEVEL) * state.fluidDensity * scale;
+      for (let px = block.x + step/2; px < block.x + blockSize; px += step) {
+        s += arrowSVG(px, block.y - pTop, centerZ, 0, pTop, '#0369a1', null, popts);
+      }
+    }
+    const bottomY = block.y + blockSize;
+    if (bottomY > WATER_LEVEL) {
+      // 外部水壓：在水積木底面向上推（深度愈深、外部液體密度愈大，箭頭愈長）
+      const pBottom = (bottomY - WATER_LEVEL) * state.fluidDensity * scale;
+      for (let px = block.x + step/2; px < block.x + blockSize; px += step) {
+        s += arrowSVG(px, bottomY + pBottom, centerZ, 0, -pBottom, '#0284c7', null, popts);
+      }
+      // 水積木自身：由方塊自己的密度＋整個方塊高度，在底面產生的「向下」壓力。
+      // 平衡漂浮時，這個向下箭頭會剛好跟上面外部水壓的向上箭頭一樣長——這就是漂浮平衡的視覺判準。
+      const pSelf = blockSize * block.density * scale;
+      for (let px = block.x + step/2; px < block.x + blockSize; px += step) {
+        s += arrowSVG(px, bottomY - pSelf, centerZ, 0, pSelf, '#f97316', null, popts);
+      }
+    }
+    const startY = Math.max(WATER_LEVEL, block.y);
+    for (let py = startY + step/2; py < bottomY; py += step) {
+      const pSide = (py - WATER_LEVEL) * state.fluidDensity * scale;
+      s += arrowSVG(block.x - pSide, py, centerZ, pSide, 0, '#0ea5e9', null, popts);
+      s += arrowSVG(block.x + blockSize + pSide, py, centerZ, -pSide, 0, '#0ea5e9', null, popts);
+    }
+    return s;
+  }
+
+  function svgActionButton(x, y, label, color, action, id, opacity) {
+    const w = 56, h = 22;
+    return `<g style="cursor:pointer" data-action="${action}" data-action-id="${id}" opacity="${opacity === undefined ? 1 : opacity}">
+      <rect x="${x - w/2}" y="${y - h/2}" width="${w}" height="${h}" rx="6" fill="${color}"/>
+      <text x="${x}" y="${y + 4}" font-size="11" font-weight="800" fill="#fff" text-anchor="middle" style="pointer-events:none">${label}</text>
+    </g>`;
+  }
+
+  // 中空容器的控制按鈕：統一貼在物體左側、垂直排列，加上方向符號讓功能更好辨識
+  function hollowControlsSVG(id, block, blockSize, blockZ) {
+    if (!state['hollowEnabled' + id]) return '';
+    const lidOpen = state['lidOpen' + id];
+    const cz = blockZ + blockSize / 2;
+    const cy = block.y + blockSize / 2;
+    const leftX = block.x - 52; // 往左拉開，避免跟物體重疊
+
+    const pLid = project(leftX, cy - 30, cz);
+    const pIntake = project(leftX, cy, cz);
+    const pRelease = project(leftX, cy + 30, cz);
+
+    let s = '';
+    // 開蓋▲(蓋子掀起) / 閉蓋▼(蓋子蓋上)
+    s += svgActionButton(pLid.x, pLid.y, lidOpen ? '閉蓋 ▼' : '開蓋 ▲', '#0369a1', 'toggleLid', id);
+    const pumpOpacity = lidOpen ? 0.4 : 1;
+    s += svgActionButton(pIntake.x, pIntake.y, '進液 ↓', '#16a34a', 'intake', id, pumpOpacity);
+    s += svgActionButton(pRelease.x, pRelease.y, '排液 ↑', '#dc2626', 'release', id, pumpOpacity);
+    return s;
+  }
+
+  // 中空容器渲染：外殼（半透明，看得到內部）+ 內部填充液體 + 蓋子線。
+  // 內部空間佔中空比例，填充液體從底部往上堆到 fillRatio 的高度，上方是空氣（淺色）。
+  function hollowCubeSVG(id, block, blockSize, blockZ, style) {
+    const hollowRatio = state['hollowRatio' + id];
+    const wallThicknessRatio = (1 - hollowRatio) / 2; // 殼的相對厚度（上下左右各留一半）
+    const wallPx = blockSize * Math.min(0.25, wallThicknessRatio); // 視覺殼厚（限制上限避免太厚看不到內部）
+    const innerX = block.x + wallPx;
+    const innerY = block.y + wallPx;
+    const innerSize = blockSize - wallPx * 2;
+    const innerZ = blockZ + wallPx;
+    const innerDepth = blockSize - wallPx * 2;
+
+    let s = '';
+    // 1) 內部空間底色（空氣，淺灰）
+    s += cubeSVG(innerX, innerY, innerZ, innerSize, innerSize, innerDepth, '#eef2f7', 0.5);
+
+    // 2) 內部填充液體（從底部往上堆到 fillRatio 高度）
+    const fillRatio = state['fillRatio' + id];
+    const fillLiquidId = state['fillLiquid' + id];
+    if (fillRatio > 0 && fillLiquidId) {
+      const fillColor = fillLiquidId === '1'
+        ? (LIQUID_COLORS[state.fluidSelection] || '#38bdf8')
+        : (LIQUID_COLORS[state.secondLiquidSelection] || '#38bdf8');
+      const fillH = innerSize * fillRatio;
+      const fillY = innerY + innerSize - fillH;
+      s += cubeSVG(innerX, fillY, innerZ, innerSize, fillH, innerDepth, fillColor, 0.75);
+    }
+
+    // 3) 外殼（半透明，疊在最外層，看得到內部）
+    s += cubeSVG(block.x, block.y, blockZ, blockSize, blockSize, blockSize, style.color, 0.32);
+
+    // 4) 殼的外框線，讓邊界清楚
+    const f0 = project(block.x, block.y, blockZ), f1 = project(block.x+blockSize, block.y, blockZ);
+    const f2 = project(block.x+blockSize, block.y+blockSize, blockZ), f3 = project(block.x, block.y+blockSize, blockZ);
+    s += `<path d="M${f0.x},${f0.y} L${f1.x},${f1.y} L${f2.x},${f2.y} L${f3.x},${f3.y} Z" fill="none" stroke="${style.color}" stroke-width="2" opacity="0.85"/>`;
+
+    // 5) 蓋子線：畫在容器頂部，開蓋用黃色虛線（表示開口可進液），關蓋用深色實線（密封）
+    const lidOpen = state['lidOpen' + id];
+    const l0 = project(block.x, block.y, blockZ), l1 = project(block.x+blockSize, block.y, blockZ);
+    const l0b = project(block.x, block.y, blockZ+blockSize), l1b = project(block.x+blockSize, block.y, blockZ+blockSize);
+    if (lidOpen) {
+      s += `<path d="M${l0.x},${l0.y} L${l1.x},${l1.y} L${l1b.x},${l1b.y} L${l0b.x},${l0b.y} Z" fill="none" stroke="#f59e0b" stroke-width="2.5" stroke-dasharray="5,4"/>`;
+    } else {
+      s += `<path d="M${l0.x},${l0.y} L${l1.x},${l1.y} L${l1b.x},${l1b.y} L${l0b.x},${l0b.y} Z" fill="#475569" opacity="0.75" stroke="#334155" stroke-width="2"/>`;
+    }
+    return s;
+  }
+
+  function blockGroupSVG(block, id, title, labelColor, selectionName) {
+    const blockSize = getBlockSize(id);
+    const isDragging = state.draggingUI === id;
+    const style = getBlockStyle(selectionName, block.density);
+    const blockZ = (TANK_D - blockSize) / 2;
+
+    const yAbove = block.y;
+    const hAbove = Math.max(0, Math.min(blockSize, WATER_LEVEL - block.y));
+    const ySub = Math.max(block.y, WATER_LEVEL);
+    const hSub = blockSize - hAbove;
+
+    const c1 = project(block.x-20, block.y-20, blockZ), c2 = project(block.x+blockSize+20, block.y-20, blockZ);
+    const c3 = project(block.x+blockSize+20, block.y+blockSize+20, blockZ), c4 = project(block.x-20, block.y+blockSize+20, blockZ);
+
+    let s = `<g>`;
+    s += `<path data-drag="${id}" d="M${c1.x},${c1.y} L${c2.x},${c2.y} L${c3.x},${c3.y} L${c4.x},${c4.y} Z" fill="transparent" style="cursor:${isDragging ? 'grabbing' : 'grab'}"/>`;
+    s += `<g style="pointer-events:none">`;
+    if (state['hollowEnabled' + id]) {
+      s += hollowCubeSVG(id, block, blockSize, blockZ, style);
+    } else {
+      if (hSub > 0) s += cubeSVG(block.x, ySub, blockZ, blockSize, hSub, blockSize, style.color, style.opacity);
+      if (hAbove > 0) s += cubeSVG(block.x, yAbove, blockZ, blockSize, hAbove, blockSize, style.color, style.opacity);
+    }
+
+    if (isDragging) {
+      const o0 = project(block.x, block.y, blockZ), o1 = project(block.x+blockSize, block.y, blockZ);
+      const o2 = project(block.x+blockSize, block.y+blockSize, blockZ), o3 = project(block.x, block.y+blockSize, blockZ);
+      s += `<path d="M${o0.x},${o0.y} L${o1.x},${o1.y} L${o2.x},${o2.y} L${o3.x},${o3.y} Z" fill="none" stroke="#facc15" stroke-width="3"/>`;
+    }
+
+    const titleSize = state.teachingMode ? 22 : 16;
+    const tp = project(block.x + blockSize/2, block.y + blockSize/2, blockZ);
+    s += `<text x="${tp.x}" y="${tp.y}" fill="${labelColor}" font-size="${titleSize}" font-weight="800" text-anchor="middle" dominant-baseline="middle">${title}</text>`;
+
+    if (state.showForces) {
+      const revealed = id === 'A' ? state.revealBuoyancyA : state.revealBuoyancyB;
+      const fontSize = state.teachingMode ? 22 : 15;
+      const labelX = block.x + blockSize + 12; // 固定在物體右側，不隨箭頭長度變動，避免畫面看起來在跳動
+      const gravityLabelY = block.y + blockSize / 2 + 16;
+      const buoyancyLabelY = block.y + blockSize / 2 - 16;
+      const pG = project(labelX, gravityLabelY, blockZ + blockSize / 2);
+      const pB = project(labelX, buoyancyLabelY, blockZ + blockSize / 2);
+
+      const gravityLabel = `重力 ${formatForce(block.mass, PANEL_DECIMALS)}`;
+      const gravityArrowLen = clamp(block.mass * 0.05, 15, 140);
+      s += arrowSVG(block.x + blockSize/2, block.y + blockSize/2, blockZ + blockSize/2, 0, gravityArrowLen, '#ef4444', null);
+      s += `<text x="${pG.x}" y="${pG.y}" fill="#ef4444" font-size="${fontSize}" font-weight="800" text-anchor="start" style="pointer-events:none">${gravityLabel}</text>`;
+      if (revealed) {
+        const buoyancyLabel = `浮力 ${formatForce(block.buoyancy, PANEL_DECIMALS)}`;
+        const buoyancyArrowLen = clamp(block.buoyancy * 0.05, 15, 140);
+        s += arrowSVG(block.x + blockSize/2, block.y + blockSize/2, blockZ + blockSize/2, 0, -buoyancyArrowLen, '#22c55e', null);
+        s += `<text x="${pB.x}" y="${pB.y}" fill="#22c55e" font-size="${fontSize}" font-weight="800" text-anchor="start" style="pointer-events:none">${buoyancyLabel}</text>`;
+      } else {
+        // 浮力尚未揭露：只畫一個固定長度的箭頭表示方向，不洩漏數值大小與文字
+        s += arrowSVG(block.x + blockSize/2, block.y + blockSize/2, blockZ + blockSize/2, 0, -32, '#22c55e', null);
+        s += `<text x="${pB.x}" y="${pB.y}" fill="#22c55e" font-size="${fontSize}" font-weight="800" text-anchor="start" style="pointer-events:none">浮力 👁</text>`;
+      }
+    }
+    s += pressureSVG(block, blockSize, blockZ);
+    s += `</g>`;
+    s += `<g>` + hollowControlsSVG(id, block, blockSize, blockZ) + `</g>`;
+    s += `</g>`;
+    return s;
+  }
+
+  function tankBackSVG() {
+    const p4 = project(TANK_X, TANK_Y, TANK_D), p5 = project(TANK_X+TANK_W, TANK_Y, TANK_D);
+    const p6 = project(TANK_X+TANK_W, TANK_BOTTOM, TANK_D), p7 = project(TANK_X, TANK_BOTTOM, TANK_D);
+    const p2 = project(TANK_X+TANK_W, TANK_BOTTOM, 0), p3 = project(TANK_X, TANK_BOTTOM, 0);
+    const p0 = project(TANK_X, TANK_Y, 0), p1 = project(TANK_X+TANK_W, TANK_Y, 0);
+    let s = `<g style="pointer-events:none">`;
+    s += `<path d="M${p4.x},${p4.y} L${p5.x},${p5.y} L${p6.x},${p6.y} L${p7.x},${p7.y} Z" fill="#f8fafc"/>`;
+    s += `<path d="M${p3.x},${p3.y} L${p2.x},${p2.y} L${p6.x},${p6.y} L${p7.x},${p7.y} Z" fill="#e2e8f0"/>`;
+    if (state.camera.angle > 0) s += `<path d="M${p0.x},${p0.y} L${p4.x},${p4.y} L${p7.x},${p7.y} L${p3.x},${p3.y} Z" fill="#e2e8f0" opacity="0.6"/>`;
+    if (state.camera.angle < 0) s += `<path d="M${p1.x},${p1.y} L${p5.x},${p5.y} L${p6.x},${p6.y} L${p2.x},${p2.y} Z" fill="#e2e8f0" opacity="0.6"/>`;
+    s += `</g>`;
+    return s;
+  }
+
+  function waterBackSVG(topY, bottomY, color, baseOpacity) {
+    const p4 = project(TANK_X, topY, TANK_D), p5 = project(TANK_X+TANK_W, topY, TANK_D);
+    const p6 = project(TANK_X+TANK_W, bottomY, TANK_D), p7 = project(TANK_X, bottomY, TANK_D);
+    const p2 = project(TANK_X+TANK_W, bottomY, 0), p3 = project(TANK_X, bottomY, 0);
+    const p0 = project(TANK_X, topY, 0), p1 = project(TANK_X+TANK_W, topY, 0);
+    let s = `<g style="pointer-events:none">`;
+    s += `<path d="M${p4.x},${p4.y} L${p5.x},${p5.y} L${p6.x},${p6.y} L${p7.x},${p7.y} Z" fill="${color}" opacity="${baseOpacity}"/>`;
+    s += `<path d="M${p3.x},${p3.y} L${p2.x},${p2.y} L${p6.x},${p6.y} L${p7.x},${p7.y} Z" fill="${color}" opacity="${baseOpacity * 1.3}"/>`;
+    if (state.camera.angle > 0) s += `<path d="M${p0.x},${p0.y} L${p4.x},${p4.y} L${p7.x},${p7.y} L${p3.x},${p3.y} Z" fill="${color}" opacity="${baseOpacity * 1.3}"/>`;
+    if (state.camera.angle < 0) s += `<path d="M${p1.x},${p1.y} L${p5.x},${p5.y} L${p6.x},${p6.y} L${p2.x},${p2.y} Z" fill="${color}" opacity="${baseOpacity * 1.3}"/>`;
+    s += `</g>`;
+    return s;
+  }
+
+  function waterFrontAndTopSVG(topY, bottomY, color, surfaceColor) {
+    const p0 = project(TANK_X, topY, 0), p1 = project(TANK_X+TANK_W, topY, 0);
+    const p2 = project(TANK_X+TANK_W, bottomY, 0), p3 = project(TANK_X, bottomY, 0);
+    const p4 = project(TANK_X, topY, TANK_D), p5 = project(TANK_X+TANK_W, topY, TANK_D);
+    let s = `<g style="pointer-events:none">`;
+    s += `<path d="M${p0.x},${p0.y} L${p1.x},${p1.y} L${p5.x},${p5.y} L${p4.x},${p4.y} Z" fill="${surfaceColor}" opacity="0.5"/>`;
+    s += `<path d="M${p0.x},${p0.y} L${p1.x},${p1.y} L${p2.x},${p2.y} L${p3.x},${p3.y} Z" fill="${color}" opacity="0.25"/>`;
+    s += `</g>`;
+    return s;
+  }
+
+  function tankFrontFrameSVG() {
+    const p0 = project(TANK_X, TANK_Y, 0), p1 = project(TANK_X+TANK_W, TANK_Y, 0);
+    const p2 = project(TANK_X+TANK_W, TANK_BOTTOM, 0), p3 = project(TANK_X, TANK_BOTTOM, 0);
+    const p4 = project(TANK_X, TANK_Y, TANK_D), p5 = project(TANK_X+TANK_W, TANK_Y, TANK_D);
+    let s = `<g style="pointer-events:none">`;
+    s += `<path d="M${p0.x},${p0.y} L${p1.x},${p1.y} L${p2.x},${p2.y} L${p3.x},${p3.y} Z" fill="none" stroke="#cbd5e1" stroke-width="3"/>`;
+    s += `<line x1="${p0.x}" y1="${p0.y}" x2="${p4.x}" y2="${p4.y}" stroke="#cbd5e1" stroke-width="3"/>`;
+    s += `<line x1="${p1.x}" y1="${p1.y}" x2="${p5.x}" y2="${p5.y}" stroke="#cbd5e1" stroke-width="3"/>`;
+    s += `</g>`;
+    return s;
+  }
+
+  // 液面刻度尺：貼在容器右側，畫出刻度線跟目前實際液體總量（讀的是 liquid1PoolVolume / liquid2PoolVolume
+  // 這兩個背景追蹤值——這樣中空容器排出/抽入不同液體後，總量增減都看得到，不用真的模擬液體對流）
+  function liquidGaugeSVG() {
+    const gaugeX = TANK_X + TANK_W - 14; // 移到容器內側（右牆內側一點）
+    const fontSize = state.teachingMode ? 13 : 10;
+    const tankAreaCm2 = getTankAreaCm2();
+    let s = `<g style="pointer-events:none">`;
+    const pTop = project(gaugeX, TANK_Y, TANK_D / 2);
+    const pBottom = project(gaugeX, TANK_BOTTOM, TANK_D / 2);
+    s += `<line x1="${pTop.x}" y1="${pTop.y}" x2="${pBottom.x}" y2="${pBottom.y}" stroke="#94a3b8" stroke-width="1.5" opacity="0.7"/>`;
+    for (let i = 0; i <= 10; i++) {
+      const y = TANK_Y + (TANK_BOTTOM - TANK_Y) * i / 10;
+      const p1 = project(gaugeX - 4, y, TANK_D / 2);
+      const p2 = project(gaugeX + 4, y, TANK_D / 2);
+      s += `<line x1="${p1.x}" y1="${p1.y}" x2="${p2.x}" y2="${p2.y}" stroke="#94a3b8" stroke-width="1" opacity="0.7"/>`;
+    }
+    // 標記箭頭朝右指向刻度線，文字在箭頭左邊（落在容器內），加白底襯托避免跟液體顏色混在一起看不清
+    function marker(y, color, text) {
+      const p = project(gaugeX, y, TANK_D / 2);
+      const textW = text.length * (fontSize * 0.62) + 10;
+      let m = `<polygon points="${p.x+6},${p.y} ${p.x-8},${p.y-5} ${p.x-8},${p.y+5}" fill="${color}"/>`;
+      m += `<rect x="${p.x - 11 - textW}" y="${p.y - fontSize/2 - 3}" width="${textW}" height="${fontSize + 6}" rx="4" fill="#ffffff" opacity="0.82"/>`;
+      m += `<text x="${p.x - 13}" y="${p.y + 4}" font-size="${fontSize}" font-weight="800" fill="${color}" text-anchor="end">${text}</text>`;
+      return m;
+    }
+    // 讀數 = 目前「液面高度」對應的視在液體體積（液面越高、讀數越大）。
+    // = 從容器底到該液面之間的容積 = 面積 × 高度。這個高度會因為物體排水而被頂高，
+    //   所以物體沉入時讀數會即時跟著上升，跟畫面液面移動一致（而不是只顯示靜態的液池量）。
+    function apparentVolumeAt(levelY) {
+      const heightCm = (TANK_BOTTOM - levelY) / PX_PER_CM;
+      return tankAreaCm2 * heightCm;
+    }
+    if (!state.secondLiquidEnabled) {
+      s += marker(WATER_LEVEL, '#0369a1', `${Math.round(apparentVolumeAt(WATER_LEVEL))}cm³`);
+    } else {
+      s += marker(WATER_LEVEL, '#0369a1', `總 ${Math.round(apparentVolumeAt(WATER_LEVEL))}cm³`);
+      s += marker(LIQUID2_TOP_Y, '#7c3aed', `液2 ${Math.round(apparentVolumeAt(LIQUID2_TOP_Y))}cm³`);
+    }
+    s += `</g>`;
+    return s;
+  }
+
+  // ===== 主渲染函式 =====
+  function getDensityLabelDefaultPos() {
+    const corner = project(TANK_X + TANK_W, TANK_BOTTOM, TANK_D / 2);
+    return { x: corner.x - 175, y: corner.y - 16 };
+  }
+  function getDensityLabelPos() {
+    return state.densityLabelPos || getDensityLabelDefaultPos();
+  }
+
+  function render() {
+    const blockA = calculateBlockData('A', state.blockADensity);
+    const blockB = calculateBlockData('B', state.blockBDensity);
+
+    let markup = ``;
+    markup += tankBackSVG();
+
+    const color1 = LIQUID_COLORS[state.fluidSelection] || '#38bdf8';
+    const color2 = LIQUID_COLORS[state.secondLiquidSelection] || '#38bdf8';
+    // 密度較大的液體沉在物理下層，不論它是液體1還是液體2
+    const liquid2OnBottomForRender = state.secondLiquidEnabled && isLiquid2OnBottom();
+    const physicalUpperColor = liquid2OnBottomForRender ? color1 : color2;
+    const physicalLowerColor = liquid2OnBottomForRender ? color2 : color1;
+
+    if (!state.secondLiquidEnabled) {
+      markup += waterBackSVG(WATER_LEVEL, TANK_BOTTOM, color1, 0.15);
+    } else {
+      markup += waterBackSVG(WATER_LEVEL, LIQUID2_TOP_Y, physicalUpperColor, 0.18);
+      markup += waterBackSVG(LIQUID2_TOP_Y, TANK_BOTTOM, physicalLowerColor, 0.3);
+    }
+
+    if (state.showContainerA) {
+      const labelColor = isLiquidSelection(state.materialASelection) ? '#0c4a6e' : '#fff';
+      markup += blockGroupSVG(blockA, 'A', '物體 A', labelColor, state.materialASelection);
+    }
+    if (state.showContainerB) {
+      const labelColor = isLiquidSelection(state.materialBSelection) ? '#0c4a6e' : '#fff';
+      markup += blockGroupSVG(blockB, 'B', '物體 B', labelColor, state.materialBSelection);
+    }
+
+    if (!state.secondLiquidEnabled) {
+      markup += waterFrontAndTopSVG(WATER_LEVEL, TANK_BOTTOM, color1, '#7dd3fc');
+    } else {
+      markup += waterFrontAndTopSVG(WATER_LEVEL, LIQUID2_TOP_Y, physicalUpperColor, '#7dd3fc');
+      markup += waterFrontAndTopSVG(LIQUID2_TOP_Y, TANK_BOTTOM, physicalLowerColor, physicalLowerColor);
+    }
+    markup += tankFrontFrameSVG();
+    markup += liquidGaugeSVG();
+
+    // 視角旋轉把手：半透明圓鈕，固定在容器底部中央外側。按住它拖曳才會旋轉視角，
+    // 這樣畫布其他地方的點擊（尤其是中空容器按鈕）就不會被「整片視角感應層」攔截。
+    const pivot = project(TANK_X + TANK_W / 2, TANK_BOTTOM + 24, TANK_D / 2);
+    markup += `<g data-drag="camera" style="cursor:grab">
+      <circle cx="${pivot.x}" cy="${pivot.y}" r="15" fill="#475569" opacity="0.35"/>
+      <circle cx="${pivot.x}" cy="${pivot.y}" r="15" fill="none" stroke="#475569" stroke-width="1.5" opacity="0.6"/>
+      <text x="${pivot.x}" y="${pivot.y + 4}" font-size="14" text-anchor="middle" fill="#1e293b" opacity="0.7" style="pointer-events:none">⟲</text>
+    </g>`;
+
+    // 液體密度標籤：可拖曳，預設在容器右下角
+    const labelPos = getDensityLabelPos();
+    const densityText = state.secondLiquidEnabled
+      ? `液體1密度 ${roundTo(state.fluidDensity, 2)} ／ 液體2密度 ${roundTo(state.secondLiquidDensity, 2)} g/cm³`
+      : `液體密度 ${roundTo(state.fluidDensity, 2)} g/cm³`;
+    const densityFontSize = state.teachingMode ? 18 : 13;
+    const densityTextWidth = 16 + densityText.length * (densityFontSize * 0.55);
+    markup += `<g style="cursor:grab"><rect data-drag="densityLabel" x="${labelPos.x - 6}" y="${labelPos.y - densityFontSize - 2}" width="${densityTextWidth}" height="${densityFontSize + 10}" rx="6" fill="#ffffff" opacity="0.85" stroke="#cbd5e1"/><text x="${labelPos.x + 2}" y="${labelPos.y}" font-size="${densityFontSize}" font-weight="800" fill="#0369a1" style="pointer-events:none">${densityText}</text></g>`;
+    svg.innerHTML = markup;
+
+    // 同步下拉選單與滑桿（單一狀態來源，永遠保持一致）
+    fluidSelect.value = state.fluidSelection;
+    matASelect.value = state.materialASelection;
+    matBSelect.value = state.materialBSelection;
+    fluidDensitySlider.value = state.fluidDensity;
+    blockADensitySlider.value = state.blockADensity;
+    blockBDensitySlider.value = state.blockBDensity;
+    if (document.activeElement !== fluidDensityInput) {
+      fluidDensityInput.value = roundTo(state.fluidDensity, 2);
+    }
+
+    secondLiquidToggle.checked = state.secondLiquidEnabled;
+    fluid2Field.classList.toggle('disabled', !state.secondLiquidEnabled);
+    fluid2Select.disabled = !state.secondLiquidEnabled;
+    fluid2DensitySlider.disabled = !state.secondLiquidEnabled;
+    fluid2DensityInput.disabled = !state.secondLiquidEnabled;
+    fluid2Select.value = state.secondLiquidSelection;
+    fluid2DensitySlider.value = state.secondLiquidDensity;
+    if (document.activeElement !== fluid2DensityInput) {
+      fluid2DensityInput.value = roundTo(state.secondLiquidDensity, 2);
+    }
+    liquid2Rows.forEach((row) => row.classList.toggle('show', state.secondLiquidEnabled));
+
+    hollowToggleA.checked = state.hollowEnabledA;
+    hollowToggleB.checked = state.hollowEnabledB;
+    hollowRowA.classList.toggle('show', state.hollowEnabledA);
+    hollowRowB.classList.toggle('show', state.hollowEnabledB);
+    hollowRatioASlider.value = state.hollowRatioA;
+    hollowRatioBSlider.value = state.hollowRatioB;
+    if (document.activeElement !== hollowRatioAInput) {
+      hollowRatioAInput.value = Math.round(state.hollowRatioA * 100);
+    }
+    if (document.activeElement !== hollowRatioBInput) {
+      hollowRatioBInput.value = Math.round(state.hollowRatioB * 100);
+    }
+
+    if (document.activeElement !== blockADensityInput) {
+      blockADensityInput.value = roundTo(state.blockADensity, 2);
+    }
+    if (document.activeElement !== blockBDensityInput) {
+      blockBDensityInput.value = roundTo(state.blockBDensity, 2);
+    }
+
+    document.getElementById('submergedVolALabel').textContent = state.secondLiquidEnabled ? 'A 第一液中體積' : 'A 液中體積';
+    document.getElementById('submergedVolBLabel').textContent = state.secondLiquidEnabled ? 'B 第一液中體積' : 'B 液中體積';
+    const vol1A = blockA.volumeInLiquid1;
+    const vol1B = blockB.volumeInLiquid1;
+    document.getElementById('submergedVolA').textContent = state.showContainerA ? roundTo(vol1A, PANEL_DECIMALS) + ' cm³' : '–';
+    document.getElementById('submergedVolB').textContent = state.showContainerB ? roundTo(vol1B, PANEL_DECIMALS) + ' cm³' : '–';
+    document.getElementById('submergedVolLowerA').textContent = state.showContainerA ? roundTo(blockA.volumeInLower, PANEL_DECIMALS) + ' cm³' : '–';
+    document.getElementById('submergedVolLowerB').textContent = state.showContainerB ? roundTo(blockB.volumeInLower, PANEL_DECIMALS) + ' cm³' : '–';
+    document.getElementById('buoyancyLowerA').textContent = state.showContainerA ? formatForce(blockA.buoyancyLower, PANEL_DECIMALS) : '–';
+    document.getElementById('buoyancyLowerB').textContent = state.showContainerB ? formatForce(blockB.buoyancyLower, PANEL_DECIMALS) : '–';
+    document.getElementById('buoyancyALabel').textContent = state.secondLiquidEnabled ? 'A 第一液浮力' : 'A 浮力';
+    document.getElementById('buoyancyBLabel').textContent = state.secondLiquidEnabled ? 'B 第一液浮力' : 'B 浮力';
+    const buoyancyDisplayA = blockA.buoyancyLiquid1;
+    const buoyancyDisplayB = blockB.buoyancyLiquid1;
+    if (!state.showContainerA) {
+      buoyancyASpan.textContent = '–';
+      buoyancyASpan.classList.remove('green', 'hidden-hint');
+    } else if (!state.revealBuoyancyA) {
+      buoyancyASpan.textContent = '👁 點擊查看';
+      buoyancyASpan.classList.remove('green');
+      buoyancyASpan.classList.add('hidden-hint');
+    } else {
+      buoyancyASpan.textContent = formatForce(buoyancyDisplayA, PANEL_DECIMALS);
+      buoyancyASpan.classList.remove('hidden-hint');
+      buoyancyASpan.classList.add('green');
+    }
+    if (!state.showContainerB) {
+      buoyancyBSpan.textContent = '–';
+      buoyancyBSpan.classList.remove('green', 'hidden-hint');
+    } else if (!state.revealBuoyancyB) {
+      buoyancyBSpan.textContent = '👁 點擊查看';
+      buoyancyBSpan.classList.remove('green');
+      buoyancyBSpan.classList.add('hidden-hint');
+    } else {
+      buoyancyBSpan.textContent = formatForce(buoyancyDisplayB, PANEL_DECIMALS);
+      buoyancyBSpan.classList.remove('hidden-hint');
+      buoyancyBSpan.classList.add('green');
+    }
+    document.getElementById('gravityA').textContent = state.showContainerA ? formatForce(blockA.mass, PANEL_DECIMALS) : '–';
+    document.getElementById('gravityB').textContent = state.showContainerB ? formatForce(blockB.mass, PANEL_DECIMALS) : '–';
+
+    btnForces.classList.toggle('active', state.showForces);
+    btnForces.classList.add('forces');
+    btnPressure.classList.toggle('active', state.showPressure);
+    btnPressure.classList.add('pressure');
+    btnTeach.classList.toggle('active', state.teachingMode);
+    btnTeach.classList.add('teach');
+    btnPause.classList.toggle('active', state.paused);
+    btnPause.classList.add('pause');
+    btnPause.textContent = state.paused ? '▶ 繼續' : '⏸ 暫停';
+    controlsBody.classList.toggle('collapsed', state.controlsCollapsed);
+    controlsCol.classList.toggle('is-collapsed', state.controlsCollapsed);
+    btnExpandControls.classList.toggle('show', state.controlsCollapsed);
+    collapseArrow.textContent = state.controlsCollapsed ? '▸' : '▾';
+    helpOverlay.classList.toggle('open', state.showHelp);
+    btnShowA.classList.toggle('active', state.showContainerA);
+    btnShowA.textContent = state.showContainerA ? '隱藏' : '顯示';
+    btnShowB.classList.toggle('active', state.showContainerB);
+    btnShowB.textContent = state.showContainerB ? '隱藏' : '顯示';
+
+    if (document.activeElement !== blockAWeightInput) {
+      blockAWeightInput.value = roundTo(gramsToWeightInputValue(blockA.mass), PANEL_DECIMALS);
+    }
+    if (document.activeElement !== blockAVolumeInput) {
+      blockAVolumeInput.value = roundTo(state.blockAVolume, DISPLAY_DECIMALS);
+    }
+    if (document.activeElement !== blockBWeightInput) {
+      blockBWeightInput.value = roundTo(gramsToWeightInputValue(blockB.mass), PANEL_DECIMALS);
+    }
+    if (document.activeElement !== blockBVolumeInput) {
+      blockBVolumeInput.value = roundTo(state.blockBVolume, DISPLAY_DECIMALS);
+    }
+    blockAWeightUnit.textContent = state.forceUnit;
+    blockBWeightUnit.textContent = state.forceUnit;
+
+    quickGroups.forEach((group) => {
+      const target = group.getAttribute('data-target');
+      const kind = group.getAttribute('data-kind');
+      let current;
+      if (kind === 'weight') {
+        const mass = target === 'A' ? blockA.mass : blockB.mass;
+        current = roundTo(gramsToWeightInputValue(mass), PANEL_DECIMALS);
+      } else {
+        current = roundTo(target === 'A' ? state.blockAVolume : state.blockBVolume, DISPLAY_DECIMALS);
+      }
+      Array.from(group.querySelectorAll('button')).forEach((btn) => {
+        btn.classList.toggle('active', Number(btn.getAttribute('data-val')) === current);
+      });
+    });
+
+    unitSegButtons.forEach((btn) => {
+      btn.classList.toggle('active', btn.getAttribute('data-unit') === state.forceUnit);
+    });
+
+    document.body.classList.toggle('teaching-mode', state.teachingMode);
+  }
+
+  // ===== 主迴圈 =====
+  function loop() {
+    applyTankGeometry();
+    updateWaterLevel();
+    updatePhysics();
+    render();
+    requestAnimationFrame(loop);
+  }
+
+  // 初始化
+  applyTankGeometry();
+  updateWaterLevel();
+  resetBlockPosition('A');
+  resetBlockPosition('B');
+  fluidSelect.value = state.fluidSelection;
+  matASelect.value = state.materialASelection;
+  matBSelect.value = state.materialBSelection;
+  requestAnimationFrame(loop);
+
+  // ===== 兩側欄高度同步畫布：讓左右兩欄跟著畫布等高，內容超出時內部捲動，且不會反過來撐高畫布 =====
+  // （畫布用 aspect-ratio 決定高度，純 CSS 無法把這個動態高度傳給側欄，所以用 ResizeObserver 同步最可靠）
+  if (window.ResizeObserver) {
+    const canvasCardForHeight = document.querySelector('.canvasCard');
+    const controlsColForHeight = document.getElementById('controlsCol');
+    const sideColForHeight = document.querySelector('.sideCol');
+    const syncSideHeights = () => {
+      const h = canvasCardForHeight.offsetHeight;
+      if (h > 0) {
+        if (controlsColForHeight) controlsColForHeight.style.maxHeight = h + 'px';
+        if (sideColForHeight) sideColForHeight.style.maxHeight = h + 'px';
+      }
+    };
+    new ResizeObserver(syncSideHeights).observe(canvasCardForHeight);
+    syncSideHeights();
+  }
+
+  // ===== 除錯用尺寸監測（開啟瀏覽器console F12就能看到，方便回報排版問題）=====
+  // 不影響畫面或功能，純粹記錄log，要拿掉的話直接刪掉這整段即可。
+  if (window.ResizeObserver) {
+    console.log('%c[尺寸監測已啟動] 請打開瀏覽器 Console（F12）查看，操作面板時注意有沒有 ⚠️ 開頭的警告訊息', 'color:#0369a1;font-weight:bold;');
+    const lastSizes = new Map();
+    const heightHistory = new Map(); // 記錄canvasCard/svg最近的高度變化時間序列，用來偵測「晃動」
+
+    function checkShaking(name, el, h) {
+      if (!heightHistory.has(el)) heightHistory.set(el, []);
+      const hist = heightHistory.get(el);
+      const now = Date.now();
+      hist.push({ t: now, h });
+      while (hist.length > 1 && now - hist[0].t > 2500) hist.shift();
+      if (hist.length >= 4) {
+        let directionChanges = 0;
+        for (let i = 2; i < hist.length; i++) {
+          const d1 = hist[i - 1].h - hist[i - 2].h;
+          const d2 = hist[i].h - hist[i - 1].h;
+          if (d1 !== 0 && d2 !== 0 && (d1 > 0) !== (d2 > 0)) directionChanges++;
+        }
+        if (directionChanges >= 2) {
+          console.warn(`⚠️ [晃動偵測] "${name}" 的高度在 2.5 秒內反覆變化（可能在晃動）：`, hist.map(p => p.h));
+        }
+      }
+    }
+
+    const sizeObserver = new ResizeObserver((entries) => {
+      entries.forEach((entry) => {
+        const el = entry.target;
+        const name = el.dataset.watchName || el.id || el.className;
+        const h = Math.round(entry.contentRect.height);
+        const w = Math.round(entry.contentRect.width);
+        const prev = lastSizes.get(el);
+        if (!prev || prev.h !== h || prev.w !== w) {
+          const diff = prev ? ` (原本 ${prev.w}x${prev.h}px，高度差 ${h - prev.h > 0 ? '+' : ''}${h - prev.h}px)` : ' (初始尺寸)';
+          console.log(`[尺寸] ${name}: ${w}x${h}px${diff}`);
+          lastSizes.set(el, { w, h });
+          if (name === 'canvasCard' || name === 'mainSvg' || name === 'mainGrid') checkShaking(name, el, h);
+        }
+      });
+    });
+
+    const watchList = [
+      ['mainGrid', document.querySelector('.mainGrid')],
+      ['canvasCard', document.querySelector('.canvasCard')],
+      ['mainSvg', document.getElementById('mainSvg')],
+      ['sideCol', document.querySelector('.sideCol')],
+      ['dataPanel', document.querySelector('.dataPanel')],
+      ['controlsCol', document.getElementById('controlsCol')],
+    ];
+    watchList.forEach(([name, el]) => {
+      if (el) { el.dataset.watchName = name; sizeObserver.observe(el); }
+    });
+
+    // 監測每一列受力數據是否換行（單行高度通常固定，一旦變高就代表換行了）
+    const rowObserver = new ResizeObserver((entries) => {
+      entries.forEach((entry) => {
+        const row = entry.target;
+        const label = row.querySelector('span') ? row.querySelector('span').textContent : (row.id || '(未知列)');
+        const h = Math.round(entry.contentRect.height);
+        const prev = lastSizes.get(row);
+        if (!prev) { lastSizes.set(row, { h }); return; }
+        if (h !== prev.h) {
+          const grew = h > prev.h;
+          console.log(`${grew ? '⚠️ [可能換行]' : '[資料列高度變化]'} "${label}" 高度從 ${prev.h}px 變成 ${h}px`);
+          lastSizes.set(row, { h });
+        }
+      });
+    });
+    document.querySelectorAll('.dataRow').forEach((row) => rowObserver.observe(row));
+  }
+})();
+</script>
+</body>
+</html>
