@@ -1135,10 +1135,9 @@
     if (!hollowEnabled && !state.secondLiquidEnabled) {
       const equilibriumRatio = density / state.fluidDensity;
       if (equilibriumRatio > 0 && equilibriumRatio < 1) {
-        // 只有「物體頂部確實在液面附近」才吸附到液面——否則接近隨遇平衡(密度≈液體)、又沉在深處的物體，
-        // 會因為 submergedRatio≈1≈equilibriumRatio 被誤判而硬拉到液面（造成「跳上去」）。
-        const topNearSurface = Math.abs(block.y - WATER_LEVEL) < blockSize * 0.5;
-        const closeEnough = topNearSurface && Math.abs(submergedRatio - equilibriumRatio) < 0.03 && Math.abs(block.vy) < 0.05;
+        // 浮體的定義是「部分露出水面」(submergedRatio<1)，這才該吸附；深處隨遇平衡物體是完全沒入(≈1)，不吸附。
+        const isFloating = submergedRatio < 0.995;
+        const closeEnough = isFloating && Math.abs(submergedRatio - equilibriumRatio) < 0.03 && Math.abs(block.vy) < 0.05;
         if (closeEnough) {
           block.y = WATER_LEVEL - blockSize * (1 - equilibriumRatio);
           block.vy = 0;
@@ -1152,8 +1151,8 @@
       // 密度比上層液體還小：完全浮在上層液體裡，跟單液體公式一樣，只是用上層液體密度
       const equilibriumRatio = density / upperDensity;
       if (equilibriumRatio > 0 && equilibriumRatio < 1) {
-        const topNearSurface = Math.abs(block.y - WATER_LEVEL) < blockSize * 0.5;
-        const closeEnough = topNearSurface && Math.abs(ratioUpper - equilibriumRatio) < 0.03 && ratioLower < 0.005 && Math.abs(block.vy) < 0.05;
+        const isFloating = (ratioUpper + ratioLower) < 0.995;
+        const closeEnough = isFloating && Math.abs(ratioUpper - equilibriumRatio) < 0.03 && ratioLower < 0.005 && Math.abs(block.vy) < 0.05;
         if (closeEnough) {
           block.y = WATER_LEVEL - blockSize * (1 - equilibriumRatio);
           block.vy = 0;
@@ -1193,8 +1192,10 @@
         const effBuoyVol = getEffectiveBuoyancyVolume(id, volumeCm3);
         const equilibriumRatio = effWeight / (effBuoyVol * state.fluidDensity);
         if (equilibriumRatio > 0 && equilibriumRatio < 1) {
-          const topNearSurface = Math.abs(block.y - WATER_LEVEL) < blockSize * 0.5;
-          const closeEnough = topNearSurface && Math.abs(submergedRatio - equilibriumRatio) < 0.03 && Math.abs(block.vy) < 0.05;
+          // 浮體的定義是「部分露出水面」(submergedRatio<1)，這才是該吸附到液面的情況；
+          // 深處隨遇平衡的物體是完全沒入(submergedRatio≈1)，不該吸附。用 submergedRatio<0.995 區分。
+          const isFloating = submergedRatio < 0.995;
+          const closeEnough = isFloating && Math.abs(submergedRatio - equilibriumRatio) < 0.03 && Math.abs(block.vy) < 0.05;
           if (closeEnough) {
             block.y = WATER_LEVEL - blockSize * (1 - equilibriumRatio);
             block.vy = 0;
