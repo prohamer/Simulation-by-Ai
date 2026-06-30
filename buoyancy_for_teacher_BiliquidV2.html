@@ -1238,6 +1238,25 @@
       }
     }
 
+    // ★ 開蓋且已淹沒、全沒入交界面的中性平衡校正：殼跨在交界面時，存在一個深度讓「殼浮力＝殼重」。
+    // 這種情況淨力通常很小、容易被阻尼壓住而卡在假平衡（之前 !openingSubmerged 把它擋在校正外），所以單獨處理。
+    if (hollowEnabled && state.secondLiquidEnabled && state['lidOpen' + id]
+        && state['fillRatio' + id] > 0.5 && submergedRatio > 0.995 && lowerDensity > upperDensity) {
+      const effWeight = getEffectiveWeightGrams(id, volumeCm3, density); // 開蓋淹沒時=殼重
+      const effBuoyVol = getEffectiveBuoyancyVolume(id, volumeCm3);       // 開蓋淹沒時=殼體積
+      // 解 effBuoyVol*((1-r)*upper + r*lower) = effWeight，r=殼沒入下層的比例
+      const r = (effWeight / effBuoyVol - upperDensity) / (lowerDensity - upperDensity);
+      if (r >= 0 && r <= 1) {
+        if (Math.abs(ratioLower - r) < 0.06 && Math.abs(block.vy) < 0.08) {
+          block.y = LIQUID2_TOP_Y - blockSize * (1 - r);
+          block.vy = 0; block.vx *= 0.9;
+          ratioLower = r; ratioUpper = 1 - r;
+          if (id === 'A') { lastSubmergedVolumeA = effBuoyVol; lastSubmergedVolumeLowerA = r * effBuoyVol; }
+          else { lastSubmergedVolumeB = effBuoyVol; lastSubmergedVolumeLowerB = r * effBuoyVol; }
+        }
+      }
+    }
+
     // 浮力（克）＝上層液體貢獻 + 下層液體貢獻；重力（有效重量，克）＝殼+填充內容。兩者比例決定加速度方向。
     // （當只有單一液體、非中空時，這個公式跟原本的 GRAVITY*(1 - fluidDensity*submergedRatio/density) 完全等價）
     const buoyancyVolume = getEffectiveBuoyancyVolume(id, volumeCm3);
@@ -1263,7 +1282,10 @@
     block.vx -= block.vx * dragCoef;
     block.vy = clamp(block.vy, -MAX_VELOCITY, MAX_VELOCITY);
 
-    if (Math.abs(block.vy) > 0.01 || Math.abs(block.vx) > 0.01) {
+    // 只要速度夠大、或還存在持續的淨加速度（淨力沒平衡），就移動。
+    // 後者很重要：淨力很小時速度會被阻尼壓在 0.01 以下，若只看速度就會卡在假平衡永遠不動；
+    // 加上「accY 不為 0 就移動」這條，微小淨力也能慢慢把物體推到真正的平衡位置（沉到底或浮起）。
+    if (Math.abs(block.vy) > 0.01 || Math.abs(block.vx) > 0.01 || Math.abs(accY) > 0.0002) {
       block.y += block.vy; block.x += block.vx;
     }
 
