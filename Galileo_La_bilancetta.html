@@ -1,0 +1,842 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>伽利略的小天平 - 浮力與比例模擬實驗</title>
+<style>
+    :root {
+        --primary: #2c3e50;
+        --accent: #d35400;
+        --bg: #f5f6fa;
+        --gold: #f1c40f;
+        --silver: #bdc3c7;
+        --water: rgba(52, 152, 219, 0.4);
+    }
+    body {
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        background-color: var(--bg);
+        color: var(--primary);
+        margin: 0;
+        padding: 20px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
+    h1 {
+        margin-bottom: 5px;
+    }
+    .subtitle {
+        color: #7f8c8d;
+        margin-bottom: 20px;
+    }
+    #progress-bar {
+        display: flex;
+        gap: 15px;
+        margin-bottom: 25px;
+        font-weight: bold;
+        color: #95a5a6;
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+    .step {
+        padding: 5px 10px;
+        border-bottom: 3px solid transparent;
+        transition: all 0.3s ease;
+    }
+    .step-active {
+        color: var(--primary);
+        border-bottom: 3px solid var(--accent);
+    }
+    .stage {
+        display: none;
+        background: white;
+        padding: 25px;
+        border-radius: 12px;
+        box-shadow: 0 8px 16px rgba(0,0,0,0.1);
+        width: 100%;
+        max-width: 800px;
+        text-align: center;
+        animation: fadeIn 0.5s;
+    }
+    .active {
+        display: block;
+    }
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    canvas {
+        background: #ecf0f1;
+        border: 1px solid #bdc3c7;
+        border-radius: 8px;
+        margin: 15px 0;
+        max-width: 100%;
+        height: auto;
+    }
+    .controls {
+        margin-top: 15px;
+    }
+    button {
+        background-color: var(--primary);
+        color: white;
+        border: none;
+        padding: 12px 24px;
+        font-size: 16px;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: background-color 0.2s, transform 0.1s;
+        margin: 5px;
+    }
+    button:hover:not(:disabled) {
+        background-color: #34495e;
+        transform: translateY(-2px);
+    }
+    button:disabled {
+        background-color: #95a5a6;
+        cursor: not-allowed;
+        opacity: 0.7;
+    }
+    .next-btn {
+        background-color: #27ae60;
+    }
+    .next-btn:hover:not(:disabled) {
+        background-color: #2ecc71;
+    }
+    .hidden {
+        display: none !important;
+    }
+    .input-group {
+        margin: 15px 0;
+        font-size: 18px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 10px;
+    }
+    input[type="number"] {
+        width: 70px;
+        padding: 8px;
+        font-size: 16px;
+        border: 2px solid #bdc3c7;
+        border-radius: 4px;
+        text-align: center;
+    }
+    .hint {
+        background: #fff3cd;
+        border-left: 4px solid #ffc107;
+        padding: 10px;
+        margin: 15px 0;
+        text-align: left;
+        font-size: 14px;
+        color: #856404;
+    }
+    #magnifier-info {
+        height: 30px;
+        font-weight: bold;
+        color: var(--accent);
+    }
+    .slider-container {
+        margin: 20px 0;
+        padding: 15px;
+        background: #fdfbf7;
+        border: 1px solid #dcdde1;
+        border-radius: 8px;
+    }
+    input[type="range"] {
+        width: 80%;
+        margin: 10px 0;
+    }
+</style>
+</head>
+<body>
+
+    <h1>伽利略的小天平 (La bilancetta)</h1>
+    <div class="subtitle">重現阿基米德浮力原理與反比幾何法則</div>
+    
+    <div id="progress-bar">
+        <span id="nav-step1" class="step step-active">1. 標定純金</span>
+        <span id="nav-step2" class="step">2. 標定純銀</span>
+        <span id="nav-step3" class="step">3. 測試皇冠</span>
+        <span id="nav-step4" class="step">4. 微觀解密</span>
+        <span id="nav-step5" class="step">5. 原理總結</span>
+    </div>
+
+    <!-- 第一關：純金標定 -->
+    <div id="stage1" class="stage active">
+        <h2>第一關：尋找純金點 (E點)</h2>
+        <p>將體積小、密度高的「純金塊」浸入水中。因為受到的浮力較小，天平右側的砝碼只需向左移動一小段距離即可重新平衡。請先將物品浸入水中，然後<strong>自由左右拖曳砝碼</strong>，直到天平恢復水平。</p>
+        <canvas id="canvas1" width="800" height="350"></canvas>
+        <div class="controls">
+            <button id="btn-run1" onclick="runSimulation(1)">1. 浸入水中</button>
+            <button id="btn-next1" class="next-btn hidden" onclick="nextStage(2)">前往標定純銀 ➔</button>
+        </div>
+    </div>
+
+    <!-- 第二關：純銀標定 -->
+    <div id="stage2" class="stage">
+        <h2>第二關：尋找純銀點 (F點)</h2>
+        <p>換成同重量的「純銀塊」。因為銀密度較小、體積大，排開的水較多、浮力更強。請將物品浸入水中，並<strong>自由左右拖曳砝碼</strong>，觀察需要退多遠才能平衡。</p>
+        <canvas id="canvas2" width="800" height="350"></canvas>
+        <div class="controls">
+            <button id="btn-run2" onclick="runSimulation(2)">1. 浸入水中</button>
+            <button id="btn-next2" class="next-btn hidden" onclick="nextStage(3)">進入皇冠測試 ➔</button>
+        </div>
+    </div>
+
+    <!-- 第三關：未知皇冠 -->
+    <div id="stage3" class="stage">
+        <h2>第三關：國王的皇冠 (G點)</h2>
+        <p>這是一頂全新打造的合金皇冠。請將其浸入水中，並<strong>自由左右拖曳砝碼</strong>，找出讓它恢復水平的平衡點 (G點)。<br>
+        <span style="font-size: 14px; color: #7f8c8d;">(每次重整網頁，皇冠的金銀比例都會隨機改變，外觀與體積也會隨之變化)</span></p>
+        <canvas id="canvas3" width="800" height="350"></canvas>
+        <div class="controls">
+            <button id="btn-run3" onclick="runSimulation(3)">1. 浸入水中</button>
+            <button id="btn-next3" class="next-btn hidden" onclick="nextStage(4)">啟動放大鏡分析 ➔</button>
+        </div>
+    </div>
+
+    <!-- 第四關：放大區微觀解密 -->
+    <div id="stage4" class="stage">
+        <h2>第四關：微觀解密與反比法則</h2>
+        <div class="hint">
+            <strong>伽利略的智慧：</strong> 秤桿上纏繞了 100 圈細小的黃銅絲。<br>
+            請將滑鼠移至下方秤桿區，模擬「鐵筆」劃過金屬絲，找到代表皇冠的 <strong>G 點</strong>。<br>
+            • 從 <strong>F點 (純銀)</strong> 到 G點 的距離，代表了 <strong>金的比例</strong> (反比法則)。<br>
+            • 從 <strong>E點 (純金)</strong> 到 G點 的距離，代表了 <strong>銀的比例</strong>。
+        </div>
+        <div id="magnifier-info">請將滑鼠移至下方秤桿上探索</div>
+        <canvas id="canvas4" width="800" height="150" style="cursor: crosshair;"></canvas>
+        
+        <div class="input-group">
+            <label>解算結果：金佔</label>
+            <input type="number" id="input-gold" min="0" max="100" placeholder="0"> %
+            <label style="margin-left: 15px;">銀佔</label>
+            <input type="number" id="input-silver" min="0" max="100" placeholder="0" readonly style="background:#eee;"> %
+        </div>
+        <div class="controls">
+            <button onclick="checkAnswer()">驗證答案</button>
+            <button id="btn-next4" class="next-btn hidden" onclick="nextStage(5)">查看背後的物理真相 ➔</button>
+            <button onclick="location.reload()" style="background-color: #7f8c8d;">重置實驗 (新皇冠)</button>
+        </div>
+    </div>
+
+    <!-- 第五關：原理總結 (質心與力矩模型) -->
+    <div id="stage5" class="stage">
+        <h2>第五關：揭開反比法則的物理真相</h2>
+        <p style="text-align: left; padding: 0 20px;">
+            如果一頂 1000 克的皇冠包含 30% 的金與 70% 的銀，它在水中的失重狀態，完美等價於：<br>
+            <strong>在「純金點 (E)」掛上 300 克的純金，並在「純銀點 (F)」掛上 700 克的純銀。</strong><br><br>
+            這兩個重量的「共同重心（平衡支點）」，就是合金的 G 點！因為大重量（銀）力臂短，小重量（金）力臂長，這正是為什麼 <strong>距離會與成分比例呈現反比</strong>。
+        </p>
+        
+        <div class="slider-container">
+            <label for="summary-slider" style="font-weight: bold;">自由探索成分比例：</label><br>
+            <span>純銀 1000g</span>
+            <input type="range" id="summary-slider" min="0" max="100" value="50">
+            <span>純金 1000g</span>
+            <div id="summary-text" style="margin-top: 10px; color: var(--accent); font-weight: bold;">當前：金 50% (500g) / 銀 50% (500g)</div>
+        </div>
+        
+        <canvas id="canvas5" width="800" height="250"></canvas>
+        
+        <div class="controls">
+            <button onclick="location.reload()" style="background-color: var(--primary);">重置實驗，再來一次！</button>
+        </div>
+    </div>
+
+<script>
+    // --- 物理與狀態設定 ---
+    const TOTAL_WIRES = 100;
+    
+    // 隨機產生皇冠比例 (金的比例 10% ~ 90%)
+    const actualGoldPercent = Math.floor(Math.random() * 81) + 10;
+    const actualSilverPercent = 100 - actualGoldPercent;
+    const goldRatio = actualGoldPercent / 100;
+
+    // 天平幾何與物理常數 (模擬座標系)
+    const centerX = 400;
+    const centerY = 120;
+    const armLen = 250;
+    
+    // 定義失重比例
+    const lossGold = 0.15;
+    const lossSilver = 0.45;
+    const posAir = centerX + armLen; // 650
+    const posE = centerX + armLen * (1 - lossGold); // 612.5
+    const posF = centerX + armLen * (1 - lossSilver); // 537.5
+    
+    // 合金失重
+    const lossCrown = goldRatio * lossGold + (1 - goldRatio) * lossSilver;
+    const posG = centerX + armLen * (1 - lossCrown); // G點座標
+
+    // 定義物品屬性，用於繪圖
+    const items = {
+        1: { type: 'gold', name: '純金塊', color: '#f1c40f', width: 40, height: 40, targetPos: posE, marker: 'E' },
+        2: { type: 'silver', name: '純銀塊', color: '#bdc3c7', width: 56, height: 56, targetPos: posF, marker: 'F' },
+        3: { type: 'crown', name: '皇冠', targetPos: posG, marker: 'G' }
+    };
+
+    const states = {
+        1: { stringLen: 20, angle: 0, angleVel: 0, cwPos: posAir, animState: 'idle', isDragging: false },
+        2: { stringLen: 20, angle: 0, angleVel: 0, cwPos: posAir, animState: 'idle', isDragging: false },
+        3: { stringLen: 20, angle: 0, angleVel: 0, cwPos: posAir, animState: 'idle', isDragging: false }
+    };
+
+    // --- 繪圖工具 (Stage 1-3) ---
+    function drawBalance(ctx, stageNum) {
+        ctx.clearRect(0, 0, 800, 350);
+        const st = states[stageNum];
+        const item = items[stageNum];
+
+        // 畫水槽與水
+        ctx.fillStyle = 'rgba(189, 195, 199, 0.2)';
+        ctx.fillRect(80, 200, 140, 150);
+        ctx.strokeStyle = '#7f8c8d';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(80, 200, 140, 150);
+        ctx.fillStyle = varColor('--water');
+        ctx.fillRect(82, 220, 136, 128);
+
+        // 畫支架與支點
+        ctx.fillStyle = '#34495e';
+        ctx.beginPath();
+        ctx.moveTo(390, 350);
+        ctx.lineTo(410, 350);
+        ctx.lineTo(405, 130);
+        ctx.lineTo(395, 130);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(400, 110);
+        ctx.lineTo(390, 130);
+        ctx.lineTo(410, 130);
+        ctx.fill();
+
+        // 儲存狀態並旋轉天平臂
+        ctx.save();
+        ctx.translate(centerX, centerY);
+        ctx.rotate(st.angle);
+
+        ctx.strokeStyle = '#d35400';
+        ctx.lineWidth = 6;
+        ctx.beginPath();
+        ctx.moveTo(-armLen, 0);
+        ctx.lineTo(armLen, 0);
+        ctx.stroke();
+
+        // 畫刻度標記
+        ctx.fillStyle = 'black';
+        ctx.font = '14px Arial';
+        ctx.textAlign = 'center';
+        const drawMarker = (pos, text, color) => {
+            const relX = pos - centerX;
+            ctx.fillStyle = color;
+            ctx.fillRect(relX - 2, -10, 4, 20);
+            ctx.fillText(text, relX, -15);
+        };
+
+        if (stageNum >= 1 && states[1].animState === 'done') drawMarker(posE, 'E (金)', '#f39c12');
+        if (stageNum >= 2 && states[2].animState === 'done') drawMarker(posF, 'F (銀)', '#7f8c8d');
+        if (stageNum >= 3 && states[3].animState === 'done') drawMarker(posG, 'G (合金)', '#e74c3c');
+
+        ctx.restore(); 
+
+        // 畫左側物品與繩
+        const hookLeftX = centerX - armLen * Math.cos(st.angle);
+        const hookLeftY = centerY - armLen * Math.sin(st.angle);
+        ctx.strokeStyle = '#2c3e50';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(hookLeftX, hookLeftY);
+        const itemTopY = hookLeftY + st.stringLen;
+        ctx.lineTo(hookLeftX, itemTopY);
+        ctx.stroke();
+        drawItem(ctx, stageNum, hookLeftX, itemTopY);
+
+        // 計算右側掛鉤的絕對位置
+        const hookRightX = centerX + (st.cwPos - centerX) * Math.cos(st.angle);
+        const hookRightY = centerY + (st.cwPos - centerX) * Math.sin(st.angle);
+
+        // 畫右側砝碼與懸掛線 (自然垂直下垂)
+        ctx.strokeStyle = '#2c3e50';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(hookRightX, hookRightY);
+        ctx.lineTo(hookRightX, hookRightY + 40); // 垂直懸掛線
+        ctx.stroke();
+        
+        ctx.fillStyle = '#2c3e50';
+        ctx.fillRect(hookRightX - 18, hookRightY + 40, 36, 30); // 砝碼本體稍微加寬以容納文字
+
+        // 加上 1公斤 標示 (砝碼)
+        ctx.fillStyle = '#fff';
+        ctx.font = '11px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('1公斤', hookRightX, hookRightY + 55);
+        ctx.textBaseline = 'alphabetic'; // 恢復預設
+    }
+
+    function drawItem(ctx, stageNum, x, y) {
+        if (stageNum === 1 || stageNum === 2) {
+            const item = items[stageNum];
+            ctx.fillStyle = item.color;
+            ctx.fillRect(x - item.width/2, y, item.width, item.height);
+            ctx.strokeRect(x - item.width/2, y, item.width, item.height);
+            
+            // 加上 1公斤 標示 (金屬方塊)
+            ctx.fillStyle = '#000';
+            ctx.font = 'bold 12px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('1公斤', x, y + item.height/2);
+            ctx.textBaseline = 'alphabetic';
+        } else if (stageNum === 3) {
+            // 畫皇冠
+            // 大小隨比例變化 (金多=小，銀多=大)
+            const baseSize = 40;
+            const sizeScale = 1 + (1 - goldRatio) * 0.5; // 比例 1 到 1.5
+            const w = baseSize * sizeScale;
+            const h = (baseSize - 10) * sizeScale;
+            
+            // 顏色隨比例變化
+            ctx.fillStyle = lerpColor('#bdc3c7', '#f1c40f', goldRatio);
+            ctx.strokeStyle = '#000';
+            
+            ctx.beginPath();
+            ctx.moveTo(x - w/2, y + h); // 左下
+            ctx.lineTo(x + w/2, y + h); // 右下
+            ctx.lineTo(x + w/2, y);     // 右上
+            ctx.lineTo(x + w/6, y + h/2); // 內凹
+            ctx.lineTo(x, y - h/4);       // 中間尖頂
+            ctx.lineTo(x - w/6, y + h/2); // 內凹
+            ctx.lineTo(x - w/2, y);       // 左上
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+            
+            // 加點寶石裝飾
+            ctx.fillStyle = '#e74c3c';
+            ctx.beginPath();
+            ctx.arc(x, y + h/2, 4 * sizeScale, 0, Math.PI*2);
+            ctx.fill();
+
+            // 加上 1公斤 標示 (皇冠)
+            ctx.fillStyle = '#000';
+            ctx.font = 'bold 11px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('1公斤', x, y + h - 8);
+            ctx.textBaseline = 'alphabetic';
+        }
+    }
+
+    // 動畫迴圈邏輯
+    function runSimulation(stageNum) {
+        const btnRun = document.getElementById(`btn-run${stageNum}`);
+        btnRun.disabled = true;
+        btnRun.innerText = "請拖曳右側砝碼尋找水平平衡";
+        
+        const st = states[stageNum];
+        st.animState = 'animating';
+
+        animateValue(20, 120, 1000, 
+            (val) => { st.stringLen = val; },
+            () => { st.animState = 'interactive'; }
+        );
+    }
+
+    // --- 真實物理引擎 ---
+    function physicsUpdate() {
+        [1, 2, 3].forEach(stageNum => {
+            const st = states[stageNum];
+            if (st.animState === 'idle') return;
+
+            const item = items[stageNum];
+            let itemH = item.height;
+            if (stageNum === 3) {
+                const baseSize = 40;
+                const sizeScale = 1 + (1 - goldRatio) * 0.5;
+                itemH = (baseSize - 10) * sizeScale;
+            }
+
+            const hookLeftY = centerY - armLen * Math.sin(st.angle);
+            const objY = hookLeftY + st.stringLen;
+            const waterY = 220;
+            let ratio = 0;
+            
+            if (objY >= waterY) ratio = 1;
+            else if (objY + itemH <= waterY) ratio = 0;
+            else ratio = (objY + itemH - waterY) / itemH;
+            
+            let bMax = 0;
+            if (stageNum === 1) bMax = 100 * lossGold;
+            if (stageNum === 2) bMax = 100 * lossSilver;
+            if (stageNum === 3) bMax = 100 * lossCrown;
+            const B = bMax * ratio;
+
+            const W = 100, W_cw = 100;
+            const T_left = -(W - B) * (armLen * Math.cos(st.angle));
+            const T_right = W_cw * ((st.cwPos - centerX) * Math.cos(st.angle));
+            const T_restore = -6000 * Math.sin(st.angle);
+
+            const T_net = T_left + T_right + T_restore;
+
+            st.angleVel += T_net * 0.00002;
+            st.angleVel *= 0.90;
+            st.angle += st.angleVel;
+
+            if (st.angle > 0.4) { st.angle = 0.4; st.angleVel *= -0.5; }
+            if (st.angle < -0.4) { st.angle = -0.4; st.angleVel *= -0.5; }
+
+            if (st.animState === 'interactive' && !st.isDragging) {
+                if (Math.abs(st.cwPos - item.targetPos) <= 15) {
+                    st.cwPos += (item.targetPos - st.cwPos) * 0.1;
+                    if (Math.abs(st.cwPos - item.targetPos) < 1 && Math.abs(st.angle) < 0.01 && Math.abs(st.angleVel) < 0.001) {
+                        st.cwPos = item.targetPos;
+                        st.angle = 0;
+                        st.angleVel = 0;
+                        st.animState = 'done';
+                        
+                        const btnRun = document.getElementById(`btn-run${stageNum}`);
+                        btnRun.innerText = "標定完成！";
+                        document.getElementById(`btn-next${stageNum}`).classList.remove('hidden');
+                    }
+                }
+            }
+
+            if (document.getElementById(`stage${stageNum}`).classList.contains('active')) {
+                render(stageNum);
+            }
+        });
+        requestAnimationFrame(physicsUpdate);
+    }
+    
+    physicsUpdate();
+
+    // --- 第四關：放大區 ---
+    const magCanvas = document.getElementById('canvas4');
+    const magCtx = magCanvas.getContext('2d');
+    let mouseX = -1;
+
+    function drawMagnifier() {
+        magCtx.clearRect(0, 0, 800, 150);
+        const paddingX = 100, width = 600, yTop = 40, barHeight = 40;
+        
+        magCtx.fillStyle = '#e67e22';
+        magCtx.fillRect(paddingX, yTop, width, barHeight);
+        magCtx.strokeStyle = '#d35400';
+        magCtx.lineWidth = 4;
+        magCtx.strokeRect(paddingX, yTop, width, barHeight);
+
+        magCtx.strokeStyle = 'rgba(0,0,0,0.3)';
+        magCtx.lineWidth = 1;
+        const wireSpacing = width / TOTAL_WIRES;
+        for(let i=0; i<=TOTAL_WIRES; i++) {
+            const x = paddingX + i * wireSpacing;
+            magCtx.beginPath();
+            magCtx.moveTo(x, yTop);
+            magCtx.lineTo(x, yTop + barHeight);
+            magCtx.stroke();
+        }
+
+        magCtx.fillStyle = '#2c3e50';
+        magCtx.font = 'bold 16px Arial';
+        magCtx.textAlign = 'center';
+        magCtx.fillText('F (純銀)', paddingX, yTop - 10);
+        magCtx.fillText('E (純金)', paddingX + width, yTop - 10);
+        
+        const gx = paddingX + width * goldRatio;
+        magCtx.fillStyle = '#e74c3c';
+        magCtx.fillRect(gx - 3, yTop - 5, 6, barHeight + 10);
+        magCtx.fillText('G (合金)', gx, yTop - 15);
+
+        if (mouseX >= paddingX && mouseX <= paddingX + width) {
+            const wireIndex = Math.round((mouseX - paddingX) / wireSpacing);
+            const snappedX = paddingX + wireIndex * wireSpacing;
+            
+            magCtx.strokeStyle = '#3498db';
+            magCtx.lineWidth = 3;
+            magCtx.beginPath();
+            magCtx.moveTo(snappedX, yTop - 20);
+            magCtx.lineTo(snappedX, yTop + barHeight + 20);
+            magCtx.stroke();
+
+            const infoDiv = document.getElementById('magnifier-info');
+            const distF = wireIndex, distE = TOTAL_WIRES - wireIndex; 
+            
+            if (Math.abs(snappedX - gx) < wireSpacing/2) {
+                infoDiv.innerHTML = `已找到 G 點！<br>
+                <span style="color:#f39c12">F到G距離：${distF} 圈 (金的比例)</span> | 
+                <span style="color:#7f8c8d">G到E距離：${distE} 圈 (銀的比例)</span>`;
+                drawBrace(magCtx, paddingX, gx, yTop + barHeight + 10, '金的比例', '#f39c12');
+                drawBrace(magCtx, gx, paddingX + width, yTop + barHeight + 10, '銀的比例', '#7f8c8d');
+            } else {
+                infoDiv.innerHTML = `目前位置：距離 F點 ${distF}圈，距離 E點 ${distE}圈。請繼續尋找 G 點紅色標記！`;
+            }
+        } else {
+            document.getElementById('magnifier-info').innerHTML = "請將滑鼠移至下方秤桿上探索";
+        }
+    }
+
+    function drawBrace(ctx, x1, x2, y, text, color) {
+        if(Math.abs(x2 - x1) < 10) return;
+        ctx.strokeStyle = color;
+        ctx.fillStyle = color;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(x1, y);
+        ctx.lineTo(x1, y+10);
+        ctx.lineTo(x2, y+10);
+        ctx.lineTo(x2, y);
+        ctx.stroke();
+        ctx.font = '14px Arial';
+        ctx.fillText(text, (x1+x2)/2, y+25);
+    }
+
+    magCanvas.addEventListener('mousemove', (e) => {
+        const rect = magCanvas.getBoundingClientRect();
+        mouseX = e.clientX - rect.left;
+        drawMagnifier();
+    });
+    magCanvas.addEventListener('mouseleave', () => {
+        mouseX = -1;
+        drawMagnifier();
+    });
+
+    const inputGold = document.getElementById('input-gold');
+    const inputSilver = document.getElementById('input-silver');
+    inputGold.addEventListener('input', function() {
+        let val = parseInt(this.value) || 0;
+        if(val > 100) val = 100;
+        if(val < 0) val = 0;
+        this.value = val;
+        inputSilver.value = 100 - val;
+    });
+
+    function checkAnswer() {
+        const userGold = parseInt(inputGold.value);
+        if(isNaN(userGold)) {
+            alert('請輸入金的比例數值！');
+            return;
+        }
+        if(userGold === actualGoldPercent) {
+            alert(`🎉 恭喜你答對了！\n這頂皇冠確實是由 ${actualGoldPercent}% 的金與 ${actualSilverPercent}% 的銀組成的。`);
+            document.getElementById('btn-next4').classList.remove('hidden'); // 答對後顯示第五關按鈕
+        } else {
+            alert(`❌ 答錯囉！\n你輸入的金比例是 ${userGold}%。\n請再重新觀察 G 點的位置。\n提示：金的比例 = F 到 G 的圈數！`);
+        }
+    }
+
+    // --- 第五關：原理總結圖解 ---
+    const summaryCanvas = document.getElementById('canvas5');
+    const summaryCtx = summaryCanvas.getContext('2d');
+    const summarySlider = document.getElementById('summary-slider');
+    const summaryText = document.getElementById('summary-text');
+
+    function drawSummaryModel() {
+        summaryCtx.clearRect(0, 0, 800, 250);
+        
+        const gPercent = parseInt(summarySlider.value);
+        const sPercent = 100 - gPercent;
+        
+        summaryText.innerHTML = `當前：金 ${gPercent}% (${gPercent}0g) / 銀 ${sPercent}% (${sPercent}0g)`;
+
+        const Fx = 150;
+        const Ex = 650;
+        const Gx = Fx + (Ex - Fx) * (gPercent / 100);
+
+        // 畫槓桿 (秤桿 E-F)
+        summaryCtx.strokeStyle = '#34495e';
+        summaryCtx.lineWidth = 6;
+        summaryCtx.beginPath();
+        summaryCtx.moveTo(Fx, 120);
+        summaryCtx.lineTo(Ex, 120);
+        summaryCtx.stroke();
+
+        // 畫平衡支點 G
+        summaryCtx.fillStyle = '#e74c3c';
+        summaryCtx.beginPath();
+        summaryCtx.moveTo(Gx, 120);
+        summaryCtx.lineTo(Gx - 15, 150);
+        summaryCtx.lineTo(Gx + 15, 150);
+        summaryCtx.fill();
+        summaryCtx.fillStyle = '#2c3e50';
+        summaryCtx.font = 'bold 16px Arial';
+        summaryCtx.textAlign = 'center';
+        summaryCtx.fillText('G (質心 / 支點)', Gx, 175);
+
+        // 畫懸掛重量與標示
+        const drawWeight = (x, percent, color, name) => {
+            const size = 30 + (percent / 100) * 50; // 根據百分比改變方塊大小
+            
+            // 懸掛線
+            summaryCtx.strokeStyle = '#7f8c8d';
+            summaryCtx.lineWidth = 2;
+            summaryCtx.beginPath();
+            summaryCtx.moveTo(x, 120);
+            summaryCtx.lineTo(x, 70 - size/2);
+            summaryCtx.stroke();
+
+            // 重量塊 (方塊朝上畫以免擋住桿子)
+            summaryCtx.fillStyle = color;
+            summaryCtx.fillRect(x - size/2, 70 - size, size, size);
+            summaryCtx.strokeStyle = '#000';
+            summaryCtx.strokeRect(x - size/2, 70 - size, size, size);
+
+            // 文字標示改置於方塊左右側，避免超出畫布上方
+            summaryCtx.fillStyle = '#2c3e50';
+            summaryCtx.font = 'bold 14px Arial';
+            summaryCtx.textBaseline = 'middle'; // 垂直置中於方塊
+            
+            if (name === '純銀') {
+                summaryCtx.textAlign = 'left';
+                summaryCtx.fillText(`${name} ${percent}0g`, x + size/2 + 10, 70 - size/2);
+            } else {
+                summaryCtx.textAlign = 'right';
+                summaryCtx.fillText(`${name} ${percent}0g`, x - size/2 - 10, 70 - size/2);
+            }
+            
+            // 恢復置中設定畫底部的 F/E 標示
+            summaryCtx.textAlign = 'center';
+            summaryCtx.textBaseline = 'alphabetic';
+            summaryCtx.fillText(name === '純銀' ? 'F' : 'E', x, 140);
+        };
+
+        drawWeight(Fx, sPercent, '#bdc3c7', '純銀'); // 左邊 F 點掛銀
+        drawWeight(Ex, gPercent, '#f1c40f', '純金'); // 右邊 E 點掛金
+
+        // 畫力臂距離標示
+        summaryCtx.strokeStyle = '#3498db';
+        summaryCtx.fillStyle = '#3498db';
+        
+        // F 到 G 距離
+        if(Gx - Fx > 10) {
+            summaryCtx.beginPath();
+            summaryCtx.moveTo(Fx, 200);
+            summaryCtx.lineTo(Fx, 210);
+            summaryCtx.lineTo(Gx, 210);
+            summaryCtx.lineTo(Gx, 200);
+            summaryCtx.stroke();
+            summaryCtx.fillText(`距離 ∝ ${gPercent} (金)`, (Fx + Gx)/2, 230);
+        }
+
+        // G 到 E 距離
+        if(Ex - Gx > 10) {
+            summaryCtx.beginPath();
+            summaryCtx.moveTo(Gx, 200);
+            summaryCtx.lineTo(Gx, 210);
+            summaryCtx.lineTo(Ex, 210);
+            summaryCtx.lineTo(Ex, 200);
+            summaryCtx.stroke();
+            summaryCtx.fillText(`距離 ∝ ${sPercent} (銀)`, (Gx + Ex)/2, 230);
+        }
+    }
+
+    summarySlider.addEventListener('input', drawSummaryModel);
+    
+    // 初始化第五關預設值設定與皇冠真實值連動
+    summarySlider.value = actualGoldPercent; 
+
+    // --- 通用流程控制 ---
+    function render(stageNum) {
+        if(stageNum <= 3) drawBalance(document.getElementById(`canvas${stageNum}`).getContext('2d'), stageNum);
+    }
+
+    function animateValue(start, end, duration, onUpdate, onComplete) {
+        const startTime = performance.now();
+        function update(currentTime) {
+            const elapsed = currentTime - startTime;
+            let progress = elapsed / duration;
+            if (progress > 1) progress = 1;
+            const easeProgress = progress < 0.5 ? 2 * progress * progress : 1 - Math.pow(-2 * progress + 2, 2) / 2;
+            onUpdate(start + (end - start) * easeProgress);
+            if (progress < 1) requestAnimationFrame(update);
+            else if (onComplete) onComplete();
+        }
+        requestAnimationFrame(update);
+    }
+
+    function nextStage(stageNum) {
+        document.querySelectorAll('.stage').forEach(el => el.classList.remove('active'));
+        document.querySelectorAll('.step').forEach(el => el.classList.remove('step-active'));
+        
+        document.getElementById(`stage${stageNum}`).classList.add('active');
+        document.getElementById(`nav-step${stageNum}`).classList.add('step-active');
+        
+        if(stageNum === 4) {
+            drawMagnifier();
+        } else if (stageNum === 5) {
+            summarySlider.value = actualGoldPercent; // 進入第五關時，自動跳到這頂皇冠的真實比例
+            drawSummaryModel();
+        } else {
+            render(stageNum);
+        }
+    }
+
+    function varColor(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+    function lerpColor(a, b, amount) {
+        const ah = parseInt(a.replace(/#/g, ''), 16), ar = ah >> 16, ag = ah >> 8 & 0xff, ab = ah & 0xff,
+              bh = parseInt(b.replace(/#/g, ''), 16), br = bh >> 16, bg = bh >> 8 & 0xff, bb = bh & 0xff,
+              rr = ar + amount * (br - ar), rg = ag + amount * (bg - ag), rb = ab + amount * (bb - ab);
+        return '#' + (((1 << 24) + (rr << 16) + (rg << 8) + rb) | 0).toString(16).slice(1);
+    }
+
+    render(1);
+
+    // --- 拖曳互動事件監聽 ---
+    let activeDragStage = null;
+    function getMousePos(canvas, evt) {
+        const rect = canvas.getBoundingClientRect();
+        return { x: (evt.clientX - rect.left) * (canvas.width / rect.width), y: (evt.clientY - rect.top) * (canvas.height / rect.height) };
+    }
+
+    function handlePointerDown(e, stageNum) {
+        const st = states[stageNum];
+        if (st.animState !== 'interactive') return;
+        const canvas = document.getElementById(`canvas${stageNum}`);
+        const pos = getMousePos(canvas, e.touches ? e.touches[0] : e);
+        const hookRightX = centerX + (st.cwPos - centerX) * Math.cos(st.angle);
+        const hookRightY = centerY + (st.cwPos - centerX) * Math.sin(st.angle);
+        const cwCenterY = hookRightY + 40 + 15;
+        
+        if (Math.abs(pos.x - hookRightX) < 50 && Math.abs(pos.y - cwCenterY) < 60) {
+            activeDragStage = stageNum;
+            st.isDragging = true;
+            if(e.type === 'touchstart') e.preventDefault();
+        }
+    }
+
+    function handlePointerMove(e) {
+        if (activeDragStage === null) return;
+        if(e.type === 'touchmove') e.preventDefault();
+        const st = states[activeDragStage];
+        const canvas = document.getElementById(`canvas${activeDragStage}`);
+        const pos = getMousePos(canvas, e.touches ? e.touches[0] : e);
+        
+        let newCwPos = pos.x;
+        if (newCwPos > centerX + armLen + 20) newCwPos = centerX + armLen + 20;
+        if (newCwPos < centerX + 20) newCwPos = centerX + 20;
+        st.cwPos = newCwPos;
+    }
+
+    function handlePointerUp() {
+        if (activeDragStage === null) return;
+        states[activeDragStage].isDragging = false;
+        activeDragStage = null;
+    }
+
+    [1, 2, 3].forEach(stageNum => {
+        const cvs = document.getElementById(`canvas${stageNum}`);
+        cvs.addEventListener('mousedown', (e) => handlePointerDown(e, stageNum));
+        cvs.addEventListener('touchstart', (e) => handlePointerDown(e, stageNum), {passive: false});
+    });
+
+    window.addEventListener('mousemove', handlePointerMove);
+    window.addEventListener('touchmove', handlePointerMove, {passive: false});
+    window.addEventListener('mouseup', handlePointerUp);
+    window.addEventListener('touchend', handlePointerUp);
+
+</script>
+</body>
+</html>
