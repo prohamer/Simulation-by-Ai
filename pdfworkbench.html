@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PDF 工作台</title>
+<title>PDF 工作台V3</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
 <style>
@@ -182,6 +182,8 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M12 8v8M8 12h8"/></svg>插入空白頁</button>
       <button class="btn" id="btnPnum" disabled title="加入頁碼設定">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4v16M18 4v16M6 20h4"/><path d="M15 14a2 2 0 1 1 3 1.7L15 20h4"/></svg>頁碼</button>
+      <button class="btn" id="btnNup" disabled title="版面合併 / N-up（例如 2 張 A4 → 1 張 A3）">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="8" height="16" rx="1"/><rect x="13" y="4" width="8" height="16" rx="1"/></svg>版面合併</button>
       <button class="btn" id="btnExtract" disabled title="把勾選的頁面另存成新的 PDF">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M3 16v3a2 2 0 0 0 2 2h3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3"/></svg>擷取所選</button>
       <button class="btn" id="btnPng" disabled title="把勾選（或目前）頁面匯出成 PNG 圖片">
@@ -266,7 +268,7 @@
       <p>把 PDF 檔拖曳到這裡，或點下方按鈕開啟。<br>選多個檔案即會依序合併。所有處理都在你的瀏覽器完成。</p>
       <button class="btn primary" id="btnOpen2" style="margin:0 auto">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>選擇 PDF 檔</button>
-      <div class="hint">合併 · 排序 · 旋轉 · 刪除 · 空白頁 · 頁碼 · 簽名標註 · 匯出 PNG</div>
+      <div class="hint">合併 · 排序 · 旋轉 · 刪除 · 空白頁 · 頁碼 · 版面合併 · 簽名標註 · 匯出 PNG</div>
     </div>
   </div>
 
@@ -305,6 +307,54 @@
         <label class="chkrow"><input type="checkbox" id="pnSkip"> 首頁不編號（適合封面）</label>
       </div>
       <footer><button class="btn primary" id="pnDone">完成</button></footer>
+    </div>
+  </div>
+
+  <!-- N-up modal -->
+  <div class="modal" id="nupModal">
+    <div class="sheet">
+      <header>版面合併（N-up） <button class="x" id="nupClose">&times;</button></header>
+      <div class="body">
+        <div class="frow"><label>每張紙頁數</label>
+          <select id="nuCount">
+            <option value="2" selected>2 頁</option>
+            <option value="4">4 頁</option>
+            <option value="6">6 頁</option>
+            <option value="9">9 頁</option>
+            <option value="16">16 頁</option>
+          </select>
+        </div>
+        <div class="frow"><label>輸出紙張</label>
+          <select id="nuSheet">
+            <option value="A4">A4</option>
+            <option value="A3" selected>A3</option>
+            <option value="Letter">Letter</option>
+          </select>
+        </div>
+        <div class="frow"><label>方向</label>
+          <select id="nuOrient">
+            <option value="portrait">直向</option>
+            <option value="landscape" selected>橫向</option>
+          </select>
+        </div>
+        <div class="frow"><label>間距</label>
+          <select id="nuGap"><option value="0" selected>無</option><option value="8">窄</option><option value="18">中</option></select>
+        </div>
+        <div class="frow"><label>邊界</label>
+          <select id="nuMargin"><option value="0" selected>無</option><option value="14">窄</option><option value="28">中</option></select>
+        </div>
+        <div class="frow"><label>品質</label>
+          <select id="nuDpi"><option value="150">標準</option><option value="220" selected>高</option></select>
+        </div>
+        <div class="frow"><label>範圍</label>
+          <select id="nuScope"><option value="all" selected>全部頁面</option><option value="selected">僅勾選頁面</option></select>
+        </div>
+        <div style="font-size:12.5px;color:var(--muted);line-height:1.5;background:#f6f7fa;border-radius:8px;padding:9px 11px" id="nuDesc">—</div>
+      </div>
+      <footer>
+        <button class="btn ghost" id="nuLoad">載入到工作區</button>
+        <button class="btn primary" id="nuDownload">產生並下載</button>
+      </footer>
     </div>
   </div>
 
@@ -745,6 +795,7 @@
     els.btnDownload.disabled=!has; els.btnClear.disabled=!has;
     els.btnBlank.disabled=false; // 空白頁隨時可插入（無頁面時建立 A4）
     els.btnPnum.disabled=!has;
+    $("btnNup").disabled=!has;
     els.btnExtract.disabled=!sel; els.btnPng.disabled=!act;
     els.btnRotL.disabled=!act; els.btnRotR.disabled=!act; els.btnDel.disabled=!act;
     els.selAll.checked=has&&sel===pages.length; els.selAll.indeterminate=sel>0&&sel<pages.length;
@@ -794,12 +845,102 @@
     thumbCache.clear(); renderThumbs(); renderMain(); updateUI();
   }
 
+  // ---------- N-up 版面合併 ----------
+  function sheetSize(name, orient){
+    const S={A4:[595.28,841.89],A3:[841.89,1190.55],Letter:[612,792]}[name]||[595.28,841.89];
+    let w=S[0],h=S[1];
+    if(orient==="landscape"){ if(w<h)[w,h]=[h,w]; } else { if(w>h)[w,h]=[h,w]; }
+    return [w,h];
+  }
+  function gridFor(count, landscape){
+    if(count===2) return landscape?[2,1]:[1,2];
+    if(count===4) return [2,2];
+    if(count===6) return landscape?[3,2]:[2,3];
+    if(count===9) return [3,3];
+    if(count===16) return [4,4];
+    return [2,1];
+  }
+  function readNup(){
+    return {
+      count:parseInt($("nuCount").value,10),
+      sheet:$("nuSheet").value, orient:$("nuOrient").value,
+      gap:parseFloat($("nuGap").value), margin:parseFloat($("nuMargin").value),
+      dpi:parseInt($("nuDpi").value,10), scope:$("nuScope").value,
+    };
+  }
+  function nupList(cfg){ return cfg.scope==="selected"?pages.filter(p=>selected.has(p.uid)):pages.slice(); }
+  function updateNupDesc(){
+    const cfg=readNup(); const list=nupList(cfg);
+    const [c,r]=gridFor(cfg.count, cfg.orient==="landscape"); const per=c*r;
+    const sheets=Math.ceil(list.length/per)||0;
+    const label={A4:"A4",A3:"A3",Letter:"Letter"}[cfg.sheet]+(cfg.orient==="landscape"?" 橫向":" 直向");
+    $("nuDesc").textContent = list.length
+      ? list.length+" 頁 → "+sheets+" 張 "+label+"（每張 "+per+" 頁，"+c+"×"+r+" 排列）"
+      : (cfg.scope==="selected"?"尚未勾選任何頁面。":"尚無頁面。");
+  }
+  async function pagePointSize(page){
+    const pg=await docs.get(page.docId).doc.getPage(page.srcIndex+1);
+    const vp=pg.getViewport({scale:1,rotation:(pg.rotate+page.rotation)%360});
+    return {wpt:vp.width,hpt:vp.height};
+  }
+  async function buildNup(cfg){
+    const list=nupList(cfg);
+    if(!list.length) throw new Error("沒有可合併的頁面");
+    const landscape=cfg.orient==="landscape";
+    const [cols,rows]=gridFor(cfg.count,landscape); const per=cols*rows;
+    const [W,H]=sheetSize(cfg.sheet,cfg.orient);
+    const m=cfg.margin,g=cfg.gap;
+    const cellW=(W-2*m-(cols-1)*g)/cols, cellH=(H-2*m-(rows-1)*g)/rows;
+    const out=await PDFDocument.create();
+    for(let i=0;i<list.length;i+=per){
+      const sheet=out.addPage([W,H]);
+      for(let k=0;k<per && i+k<list.length;k++){
+        const page=list[i+k];
+        const col=k%cols, row=Math.floor(k/cols);
+        const cx=m+col*(cellW+g);
+        const cellBottom=H-m-row*(cellH+g)-cellH;
+        const {wpt,hpt}=await pagePointSize(page);
+        const scale=Math.min(cellW/wpt, cellH/hpt);
+        const drawW=wpt*scale, drawH=hpt*scale;
+        const dx=cx+(cellW-drawW)/2, dy=cellBottom+(cellH-drawH)/2;
+        const canvas=await renderStatic(page, Math.max(1,Math.round(wpt/72*cfg.dpi)));
+        const png=await out.embedPng(dataURLtoBytes(canvas.toDataURL("image/png")));
+        sheet.drawImage(png,{x:dx,y:dy,width:drawW,height:drawH});
+      }
+    }
+    return out.save();
+  }
+  async function loadImposed(bytes){
+    clearAll();
+    const {docId,doc}=await registerDoc("N-up 合併",bytes);
+    for(let i=0;i<doc.numPages;i++) pages.push({uid:"p"+(uidN++),docId,srcIndex:i,rotation:0});
+    currentUid=pages[0]?.uid??null; document.body.classList.add("has-pages");
+    renderThumbs(); renderMain(); markCurrent(); updateUI();
+  }
+  function openNupModal(){ updateNupDesc(); $("nupModal").classList.add("show"); }
+  function closeNupModal(){ $("nupModal").classList.remove("show"); }
+  async function nupDownload(){
+    const cfg=readNup(); busy(true);
+    try{ const bytes=await buildNup(cfg); saveBlob(bytes,"nup.pdf","application/pdf"); closeNupModal(); toast("已產生版面合併 PDF"); }
+    catch(e){ console.error(e); toast("合併失敗："+(e.message||"未知錯誤"),true); } finally{ busy(false); }
+  }
+  async function nupLoad(){
+    const cfg=readNup(); busy(true);
+    try{ const bytes=await buildNup(cfg); await loadImposed(bytes); closeNupModal(); toast("已載入合併結果，可直接預覽或下載"); }
+    catch(e){ console.error(e); toast("合併失敗："+(e.message||"未知錯誤"),true); } finally{ busy(false); }
+  }
+
   // ---------- events ----------
   $("btnOpen").onclick=()=>els.file.click();
   $("btnOpen2").onclick=()=>els.file.click();
   els.file.onchange=e=>{ loadFiles(e.target.files); els.file.value=""; };
   els.btnBlank.onclick=insertBlank;
   els.btnPnum.onclick=openPnModal;
+  $("btnNup").onclick=openNupModal;
+  $("nupClose").onclick=closeNupModal;
+  $("nuDownload").onclick=nupDownload; $("nuLoad").onclick=nupLoad;
+  $("nupModal").addEventListener("click",e=>{ if(e.target===$("nupModal")) closeNupModal(); });
+  ["nuCount","nuSheet","nuOrient","nuGap","nuMargin","nuDpi","nuScope"].forEach(id=>$(id).addEventListener("change",updateNupDesc));
   $("pnClose").onclick=closePnModal; $("pnDone").onclick=closePnModal;
   els.pnModal.addEventListener("click",e=>{ if(e.target===els.pnModal) closePnModal(); });
   ["pnEnabled","pnStart","pnPos","pnFormat","pnSize","pnColor","pnSkip"].forEach(id=>{
@@ -826,6 +967,7 @@
   document.addEventListener("keydown",e=>{
     if(/input|textarea|select/i.test(e.target.tagName))return;
     if(els.pnModal.classList.contains("show")){ if(e.key==="Escape")closePnModal(); return; }
+    if($("nupModal").classList.contains("show")){ if(e.key==="Escape")closeNupModal(); return; }
     if(e.key==="ArrowDown"||e.key==="ArrowRight"){e.preventDefault();stepPage(1);}
     else if(e.key==="ArrowUp"||e.key==="ArrowLeft"){e.preventDefault();stepPage(-1);}
     else if((e.key==="Delete"||e.key==="Backspace")&&currentUid&&tool==="none"){e.preventDefault();deletePages(targets());}
