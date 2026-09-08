@@ -1,0 +1,801 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CK賽道｜直線運動競速站</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap');
+
+  :root{
+    --bg-deep:#12151b;
+    --bg-panel:#1b2029;
+    --bg-panel-2:#212734;
+    --bg-card:#232a37;
+    --line:#3a4252;
+    --grid:#2a3140;
+    --text:#e9e7df;
+    --text-dim:#8b93a1;
+    --accent:#f4b400;
+    --accent-dim:#8a6c1c;
+    --danger:#d64550;
+    --radius:10px;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:
+      radial-gradient(circle at 15% -10%, #232b3a 0%, transparent 45%),
+      var(--bg-deep);
+    color:var(--text);
+    font-family:'Inter',sans-serif;
+    font-feature-settings:'tnum' 1;
+  }
+  .app{max-width:1400px;margin:0 auto;padding:18px 22px 40px;}
+
+  /* ---------- Top bar ---------- */
+  .topbar{
+    display:flex;align-items:center;justify-content:space-between;
+    gap:20px;flex-wrap:wrap;
+    padding-bottom:14px;margin-bottom:16px;
+    border-bottom:2px solid var(--line);
+  }
+  .brand{font-family:'Oswald',sans-serif;font-weight:700;font-size:28px;letter-spacing:0.5px;}
+  .brand small{display:block;font-family:'Inter',sans-serif;font-weight:500;font-size:12.5px;color:var(--text-dim);letter-spacing:1px;margin-top:2px;}
+  .mode-switch{display:flex;background:var(--bg-panel);border:1px solid var(--line);border-radius:999px;padding:4px;gap:4px;}
+  .mode-switch button{
+    border:none;background:transparent;color:var(--text-dim);
+    font-family:'Inter',sans-serif;font-weight:600;font-size:13.5px;
+    padding:8px 16px;border-radius:999px;cursor:pointer;transition:all .15s;
+  }
+  .mode-switch button.active{background:var(--accent);color:#1b1503;}
+  .session-note{font-size:12.5px;color:var(--text-dim);max-width:260px;line-height:1.5;}
+
+  /* ---------- Track ---------- */
+  .track-card{
+    background:var(--bg-panel);border:1px solid var(--line);border-radius:var(--radius);
+    padding:14px 16px 6px;
+  }
+  .track-card h2{font-family:'Oswald',sans-serif;font-size:15px;margin:0 0 8px;color:var(--text-dim);font-weight:500;letter-spacing:0.3px;}
+  svg{display:block;width:100%;height:auto;}
+  .lane-label{font-size:11px;fill:var(--text-dim);font-family:'Inter',sans-serif;}
+  .tick-label{font-size:20px;fill:var(--text-dim);font-family:'Inter',sans-serif;font-weight:600;}
+  .car-value{font-size:20px;font-weight:700;font-family:'Oswald',sans-serif;letter-spacing:0.2px;}
+  .track-axis-label{font-size:16px;fill:var(--text-dim);font-family:'Inter',sans-serif;font-weight:500;}
+
+  /* ---------- Charts ---------- */
+  .charts-wrap{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px;}
+  @media (max-width:820px){.charts-wrap{grid-template-columns:1fr;}}
+  .chart-card{background:var(--bg-panel);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;}
+  .chart-card h2{font-family:'Oswald',sans-serif;font-size:15px;margin:0 0 8px;color:var(--text-dim);font-weight:500;letter-spacing:0.3px;}
+  .axis-label{font-size:11px;fill:var(--text-dim);}
+
+  /* ---------- Control bar ---------- */
+  .control-bar{
+    display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:14px;
+    background:var(--bg-panel);border:1px solid var(--line);border-radius:var(--radius);
+    padding:12px 16px;
+  }
+  .playback{display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
+  .btn{
+    font-family:'Inter',sans-serif;font-weight:700;font-size:13.5px;
+    border-radius:8px;border:1px solid var(--line);background:var(--bg-card);color:var(--text);
+    padding:9px 16px;cursor:pointer;transition:all .12s;
+  }
+  .btn:hover{border-color:var(--accent);}
+  .btn.primary{background:var(--accent);color:#1b1503;border-color:var(--accent);}
+  .btn.primary:hover{filter:brightness(1.08);}
+  .pm-group{display:flex;background:var(--bg-card);border:1px solid var(--line);border-radius:8px;overflow:hidden;}
+  .pm-opt{border:none;background:transparent;color:var(--text-dim);font-family:'Inter',sans-serif;font-weight:600;font-size:12.5px;padding:8px 12px;cursor:pointer;}
+  .pm-opt.active{background:var(--accent-dim);color:var(--text);}
+  .phase-toggles{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+  .toggle-btn.active{background:var(--accent);color:#1b1503;border-color:var(--accent);}
+  .leaderboard{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12.5px;color:var(--text-dim);}
+  .lb-chip{display:flex;align-items:center;gap:5px;background:var(--bg-card);border:1px solid var(--line);border-radius:999px;padding:4px 10px 4px 6px;}
+  .lb-dot{width:9px;height:9px;border-radius:50%;flex:none;}
+  .lb-chip b{color:var(--text);font-weight:700;}
+
+  /* ---------- Stage (track+controls | teams) ---------- */
+  .stage{display:grid;grid-template-columns:1.55fr 1fr;gap:16px;align-items:start;}
+  @media (max-width:980px){.stage{grid-template-columns:1fr;}}
+  .stage-left{display:flex;flex-direction:column;gap:12px;}
+  .stage-right{
+    max-height:calc(100vh - 120px);
+    overflow-y:auto;
+    padding-right:4px;
+  }
+  .stage-right::-webkit-scrollbar{width:8px;}
+  .stage-right::-webkit-scrollbar-thumb{background:var(--line);border-radius:4px;}
+
+  /* ---------- Teams ---------- */
+  .teams-wrap{display:flex;flex-direction:column;gap:10px;}
+  .team-card{background:var(--bg-panel);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;display:flex;flex-direction:column;flex:none;}
+  .team-head{display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--line);}
+  .team-swatch{width:12px;height:12px;border-radius:3px;flex:none;}
+  .team-name{
+    flex:1;background:transparent;border:none;color:var(--text);
+    font-family:'Oswald',sans-serif;font-size:15px;font-weight:600;letter-spacing:0.3px;
+    padding:2px 4px;border-radius:4px;
+  }
+  .team-name:focus{outline:1px solid var(--accent);background:var(--bg-card);}
+  .team-remove{background:transparent;border:none;color:var(--text-dim);font-size:16px;cursor:pointer;padding:2px 6px;line-height:1;}
+  .team-remove:hover{color:var(--danger);}
+  .team-body{padding:8px 10px 10px;display:flex;flex-direction:column;gap:8px;}
+  .poke-btn{
+    width:100%;font-family:'Oswald',sans-serif;font-weight:600;font-size:13.5px;letter-spacing:0.3px;
+    border-radius:8px;border:1px solid var(--line);padding:8px;cursor:pointer;color:#1b1503;
+  }
+  .poke-btn:disabled{background:var(--bg-card);color:var(--text-dim);border-color:var(--line);cursor:default;}
+  table.round-table{width:100%;border-collapse:collapse;font-size:12px;}
+  table.round-table th,table.round-table td{padding:3px 4px;text-align:center;border-bottom:1px solid var(--grid);}
+  table.round-table th{color:var(--text-dim);font-weight:600;font-size:11px;}
+  .stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px 10px;font-size:12px;background:var(--bg-panel-2);border-radius:8px;padding:8px 10px;}
+  .stats-grid div span{display:block;color:var(--text-dim);font-size:10.8px;}
+  .stats-grid div b{font-size:13.5px;font-family:'Inter',sans-serif;}
+  .empty-hint{font-size:12px;color:var(--text-dim);text-align:center;padding:6px 0;}
+  .add-team-card{
+    display:flex;align-items:center;justify-content:center;
+    border:2px dashed var(--line);border-radius:var(--radius);
+    color:var(--text-dim);font-family:'Oswald',sans-serif;font-weight:600;font-size:14px;
+    cursor:pointer;min-height:52px;background:transparent;flex:none;
+  }
+  .add-team-card:hover{border-color:var(--accent);color:var(--accent);}
+
+  /* ---------- Comparison table ---------- */
+  .compare-card{background:var(--bg-panel);border:1px solid var(--line);border-radius:var(--radius);padding:12px 16px;}
+  .compare-card h2{font-family:'Oswald',sans-serif;font-size:15px;margin:0 0 10px;color:var(--text-dim);font-weight:500;letter-spacing:0.3px;}
+  .compare-scroll{overflow-x:auto;}
+  table.compare-table{width:100%;border-collapse:collapse;font-size:12.5px;white-space:nowrap;}
+  table.compare-table th,table.compare-table td{padding:6px 10px;text-align:right;border-bottom:1px solid var(--grid);}
+  table.compare-table th{color:var(--text-dim);font-weight:600;font-size:11.5px;}
+  table.compare-table th:first-child,table.compare-table td:first-child{text-align:left;}
+  table.compare-table tbody td{font-family:'Inter',sans-serif;font-weight:600;}
+  .cmp-name{display:flex;align-items:center;gap:6px;font-family:'Oswald',sans-serif;font-weight:600;}
+  .cmp-name .lb-dot{width:9px;height:9px;border-radius:50%;flex:none;}
+
+  /* ---------- Teams toolbar ---------- */
+  .teams-toolbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:8px;}
+  .tt-title{font-family:'Oswald',sans-serif;font-size:15px;color:var(--text-dim);font-weight:600;letter-spacing:0.3px;}
+  .tt-actions{display:flex;gap:6px;}
+  .tt-btn{padding:5px 10px;font-size:12px;}
+
+  /* ---------- Collapse ---------- */
+  .team-head{cursor:pointer;}
+  .team-caret{background:transparent;border:none;color:var(--text-dim);font-size:11px;cursor:pointer;padding:2px 2px;line-height:1;flex:none;width:14px;text-align:center;}
+  .team-head-summary{font-size:12px;color:var(--text-dim);font-family:'Inter',sans-serif;white-space:nowrap;padding-right:4px;}
+  .team-head-summary b{color:var(--text);font-weight:700;}
+  .round-note{font-size:10.8px;color:var(--text-dim);text-align:right;margin-top:2px;}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="topbar">
+    <div class="brand">激素領域<small>小法師設計，Claude製作，一起飆速吧！</small></div>
+    <div class="mode-switch" id="modeSwitch">
+      <button data-mode="constant_v" class="active">誰最靠北（X–t）</button>
+      <button data-mode="constant_a">直線加速賽（V–t）</button>
+    </div>
+    <div class="session-note">切換模式會清空目前所有組別的資料（等速與等加速度的起跑規則不同）。</div>
+  </div>
+
+  <div class="stage">
+    <div class="stage-left">
+      <div class="track-card">
+        <h2>數線賽道</h2>
+        <svg id="trackSvg" viewBox="0 0 1000 140"></svg>
+      </div>
+
+      <div class="control-bar">
+        <div class="playback">
+          <button class="btn primary" id="replayBtn">▶ 全程重播</button>
+          <div class="pm-group">
+            <button class="pm-opt active" data-pm="single">戳完自動播該回合</button>
+            <button class="pm-opt" data-pm="full">只按重播鍵才動</button>
+          </div>
+        </div>
+        <div class="phase-toggles">
+          <button class="btn toggle-btn" id="toggleStatsBtn">📊 顯示計算結果</button>
+          <button class="btn toggle-btn" id="toggleXtBtn">📈 顯示 X–t 圖</button>
+          <button class="btn toggle-btn" id="toggleVtBtn">📉 顯示 V–t 圖</button>
+        </div>
+        <div class="leaderboard" id="leaderboard"></div>
+      </div>
+
+      <div class="compare-card" id="compareCard" style="display:none;">
+        <h2>跨組比較數據</h2>
+        <div class="compare-scroll" id="compareTableWrap"></div>
+      </div>
+    </div>
+
+    <div class="stage-right">
+      <div class="teams-toolbar">
+        <span class="tt-title">各組明細</span>
+        <div class="tt-actions">
+          <button class="btn tt-btn" id="collapseAllBtn">全部收合</button>
+          <button class="btn tt-btn" id="expandAllBtn">全部展開</button>
+        </div>
+      </div>
+      <div class="teams-wrap" id="teamsWrap"></div>
+    </div>
+  </div>
+
+  <div class="charts-wrap">
+    <div class="chart-card" id="xtCard" style="display:none;">
+      <h2 id="xtTitle">X–t 圖　位置－時間</h2>
+      <svg id="xtSvg" viewBox="0 0 560 300"></svg>
+    </div>
+    <div class="chart-card" id="vtCard" style="display:none;">
+      <h2 id="vtTitle">V–t 圖　速度－時間</h2>
+      <svg id="vtSvg" viewBox="0 0 560 300"></svg>
+    </div>
+  </div>
+
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  // ---------------- Constants ----------------
+  const TEAM_COLORS = ['#e4572e','#2e86ab','#3ba55d','#f4b400','#8e44ad','#17a398','#d64550','#4c6ef5'];
+  const SPEED_POOL = [1,2,3,4,5];
+  const ACCEL_POOL = [1,2,4];
+  const ROUND_DURATION = 4;
+  const MAX_ROUNDS = 4;
+
+  // ---------------- State ----------------
+  let mode = 'constant_v';
+  let teams = [];
+  let nextId = 1;
+  let playMode = 'single';
+  let fullReplayRunning = false;
+  let showStats = false, showXT = false, showVT = false;
+  let domains = {xMin:-10,xMax:10,vMin:-5,vMax:5,tMax:4.2};
+
+  const rand = (arr)=>arr[Math.floor(Math.random()*arr.length)];
+  const sign = ()=> Math.random()<0.5 ? -1 : 1;
+
+  // ---------------- Balanced "poke" bag ----------------
+  // Keeps 正/負/靜止(或加速度0) roughly even across ALL teams' pokes combined,
+  // without forcing any single team's own results to be balanced.
+  let vBag = [], aBag = [];
+  function freshBag(){
+    const cats = [];
+    for(let i=0;i<3;i++) cats.push('pos','neg','zero');
+    for(let i=cats.length-1;i>0;i--){
+      const j = Math.floor(Math.random()*(i+1));
+      [cats[i],cats[j]] = [cats[j],cats[i]];
+    }
+    return cats;
+  }
+  function nextPokeValue(){
+    if(mode==='constant_v'){
+      if(vBag.length===0) vBag = freshBag();
+      const cat = vBag.shift();
+      if(cat==='zero') return 0;
+      const mag = rand(SPEED_POOL);
+      return cat==='pos' ? mag : -mag;
+    } else {
+      if(aBag.length===0) aBag = freshBag();
+      const cat = aBag.shift();
+      if(cat==='zero') return 0;
+      const mag = rand(ACCEL_POOL);
+      return cat==='pos' ? mag : -mag;
+    }
+  }
+
+  // ---------------- Kinematics ----------------
+  function buildSegments(team){
+    let t=0, x=team.startPosition, v=0;
+    const segs=[];
+    for(const r of team.rounds){
+      const a = team.mode==='constant_a' ? r.value : 0;
+      if(team.mode==='constant_v') v = r.value;
+      segs.push({t0:t, t1:t+r.duration, x0:x, v0:v, a});
+      const dt=r.duration;
+      x = x + v*dt + 0.5*a*dt*dt;
+      if(team.mode==='constant_a') v = v + a*dt;
+      t += dt;
+    }
+    return segs;
+  }
+
+  function stateAt(segs, startPos, tau){
+    if(segs.length===0) return {x:startPos, v:0};
+    for(const s of segs){
+      if(tau>=s.t0 && tau<=s.t1+1e-9){
+        const dt=tau-s.t0;
+        return {x:s.x0+s.v0*dt+0.5*s.a*dt*dt, v:s.v0+s.a*dt};
+      }
+    }
+    const s=segs[segs.length-1];
+    const dt=s.t1-s.t0;
+    return {x:s.x0+s.v0*dt+0.5*s.a*dt*dt, v:s.v0+s.a*dt};
+  }
+
+  function recomputeTeam(team){
+    team.segments = buildSegments(team);
+    team.totalT = team.rounds.reduce((s,r)=>s+r.duration,0);
+    const samples=[]; const step=0.1;
+    for(let t=0;t<=team.totalT+1e-9;t+=step){
+      const tt=Math.min(t,team.totalT);
+      const st=stateAt(team.segments, team.startPosition, tt);
+      samples.push({t:tt, x:st.x, v:st.v});
+    }
+    if(samples.length===0 || Math.abs(samples[samples.length-1].t-team.totalT)>1e-6){
+      const st=stateAt(team.segments, team.startPosition, team.totalT);
+      samples.push({t:team.totalT, x:st.x, v:st.v});
+    }
+    team.samples = samples;
+    if(team.displayT===undefined) team.displayT = team.totalT;
+  }
+
+  // ---------------- Domains ----------------
+  function pad(min,max,minSpan){
+    let span=max-min;
+    if(span<minSpan){ const c=(max+min)/2; min=c-minSpan/2; max=c+minSpan/2; span=minSpan; }
+    const p=span*0.18;
+    return [min-p, max+p];
+  }
+
+  function computeDomains(){
+    let xs=[0], vs=[0], maxT=4;
+    teams.forEach(tm=>{
+      maxT=Math.max(maxT, tm.totalT);
+      xs.push(tm.startPosition);
+      tm.samples.forEach(s=>{ xs.push(s.x); vs.push(s.v); });
+    });
+    let xMin=Math.min(...xs), xMax=Math.max(...xs);
+    let vMin=Math.min(...vs), vMax=Math.max(...vs);
+    [xMin,xMax]=pad(xMin,xMax,16);
+    [vMin,vMax]=pad(vMin,vMax,8);
+    domains = {xMin,xMax,vMin,vMax,tMax:maxT*1.08};
+  }
+
+  function niceStep(span){
+    const rough = span/8;
+    if(rough<=0) return 1;
+    const mag = Math.pow(10, Math.floor(Math.log10(rough)));
+    const norm = rough/mag;
+    let step;
+    if(norm<1.5) step=1; else if(norm<3.5) step=2; else if(norm<7.5) step=5; else step=10;
+    return step*mag;
+  }
+
+  // ---------------- Poke / Animation ----------------
+  function createTeam(){
+    const idx = teams.length;
+    const color = TEAM_COLORS[idx % TEAM_COLORS.length];
+    const startPosition = mode==='constant_v' ? sign()*(1+Math.floor(Math.random()*6)) : 0;
+    const team = {
+      id: nextId++, name: `第${idx+1}組`, color, mode, startPosition,
+      rounds:[], totalT:0, samples:[], displayT:0, animRAF:null, collapsed:false
+    };
+    teams.push(team);
+    recomputeTeam(team);
+    computeDomains();
+    fullRenderIncludingTeams();
+  }
+
+  function removeTeam(id){
+    const tm = teams.find(t=>t.id===id);
+    if(tm && tm.animRAF) cancelAnimationFrame(tm.animRAF);
+    teams = teams.filter(t=>t.id!==id);
+    computeDomains();
+    fullRenderIncludingTeams();
+  }
+
+  function animateTeamReveal(team, from, to){
+    if(team.animRAF) cancelAnimationFrame(team.animRAF);
+    const start = performance.now();
+    const span = Math.max(to-from, 0.0001);
+    function step(now){
+      const elapsed = (now-start)/1000;
+      const t = Math.min(from+elapsed, to);
+      team.displayT = t;
+      renderAll();
+      if(t<to-1e-6){
+        team.animRAF = requestAnimationFrame(step);
+      } else {
+        team.animRAF = null;
+        team.displayT = to;
+        renderAll();
+      }
+    }
+    team.animRAF = requestAnimationFrame(step);
+  }
+
+  function pokeTeam(id){
+    const team = teams.find(t=>t.id===id);
+    if(!team || team.rounds.length>=MAX_ROUNDS) return;
+    const value = nextPokeValue();
+    const oldTotalT = team.totalT;
+    team.rounds.push({round:team.rounds.length+1, value, duration:ROUND_DURATION});
+    team.collapsed = false;
+    recomputeTeam(team);
+    computeDomains();
+    renderTeams();
+    if(playMode==='single'){
+      animateTeamReveal(team, oldTotalT, team.totalT);
+    } else {
+      team.displayT = team.totalT;
+      renderAll();
+    }
+  }
+
+  function fullReplay(){
+    if(fullReplayRunning || teams.length===0) return;
+    teams.forEach(tm=>{ if(tm.animRAF) cancelAnimationFrame(tm.animRAF); tm.animRAF=null; tm.displayT=0; });
+    const maxT = Math.max(4, ...teams.map(t=>t.totalT));
+    fullReplayRunning = true;
+    const start = performance.now();
+    function step(now){
+      const g = Math.min((now-start)/1000, maxT);
+      teams.forEach(tm=> tm.displayT = Math.min(g, tm.totalT));
+      renderAll();
+      if(g<maxT-1e-6){
+        requestAnimationFrame(step);
+      } else {
+        fullReplayRunning=false;
+        teams.forEach(tm=> tm.displayT = tm.totalT);
+        renderAll();
+      }
+    }
+    requestAnimationFrame(step);
+  }
+
+  // ---------------- Rendering: Track ----------------
+  function svgEl(tag, attrs){
+    const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
+    for(const k in attrs) el.setAttribute(k, attrs[k]);
+    return el;
+  }
+
+  function renderTrack(){
+    const svg = document.getElementById('trackSvg');
+    const height = 170;
+    const baselineY = 92;
+    const axisY = 122;
+    svg.setAttribute('viewBox', `0 0 1000 ${height}`);
+    svg.innerHTML = '';
+
+    const left=30, right=970;
+    const scaleX = (x)=> left + (x-domains.xMin)/(domains.xMax-domains.xMin)*(right-left);
+
+    // single shared number line
+    svg.appendChild(svgEl('line',{x1:left,y1:baselineY,x2:right,y2:baselineY, stroke:'var(--line)','stroke-width':1.5}));
+
+    // axis ticks
+    const step = niceStep(domains.xMax-domains.xMin);
+    let tickX = Math.ceil(domains.xMin/step)*step;
+    for(; tickX<=domains.xMax; tickX+=step){
+      const px = scaleX(tickX);
+      const isZero = Math.abs(tickX)<1e-6;
+      svg.appendChild(svgEl('line',{x1:px,y1:baselineY-4,x2:px,y2:axisY-6, stroke:isZero?'var(--accent)':'var(--grid)', 'stroke-width':isZero?1.6:1}));
+      const t = svgEl('text',{x:px,y:axisY+16,'text-anchor':'middle',class:'tick-label'});
+      t.textContent = (Math.round(tickX*10)/10) + (isZero?' (起點)':'');
+      svg.appendChild(t);
+    }
+    const axisLbl = svgEl('text',{x:right,y:axisY+42,'text-anchor':'end',class:'track-axis-label'});
+    axisLbl.textContent = '位置 x (m)';
+    svg.appendChild(axisLbl);
+
+    // cars — all on the shared line, tiered vertically only to avoid full overlap
+    const tiers = [0,-28,28,-56];
+    teams.forEach((tm,i)=>{
+      const y = baselineY + tiers[i % tiers.length];
+      const st = stateAt(tm.segments, tm.startPosition, tm.displayT);
+      const px = scaleX(st.x);
+      if(y!==baselineY){
+        svg.appendChild(svgEl('line',{x1:px,y1:baselineY,x2:px,y2:y, stroke:tm.color,'stroke-width':1,'stroke-dasharray':'2,2',opacity:0.6}));
+      }
+      const car = svgEl('circle',{cx:px,cy:y,r:9,fill:tm.color,stroke:'#0b0d11','stroke-width':1.5});
+      svg.appendChild(car);
+      const dir = st.v>0.001?'▶':(st.v<-0.001?'◀':'');
+      const val = svgEl('text',{x:px, y:y-16, 'text-anchor':'middle', class:'car-value'});
+      val.setAttribute('fill', tm.color);
+      val.textContent = `${tm.name} ${dir} ${st.x.toFixed(1)}m`;
+      svg.appendChild(val);
+    });
+  }
+
+  // ---------------- Rendering: Charts ----------------
+  function renderChart(svgId, kind){
+    const svg = document.getElementById(svgId);
+    svg.innerHTML = '';
+    const W=560,H=300, m={left:52,right:16,top:14,bottom:34};
+    svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+    const plotW = W-m.left-m.right, plotH = H-m.top-m.bottom;
+
+    const yMin = kind==='x' ? domains.xMin : domains.vMin;
+    const yMax = kind==='x' ? domains.xMax : domains.vMax;
+    const scaleT = (t)=> m.left + (t/domains.tMax)*plotW;
+    const scaleY = (y)=> m.top + (yMax-y)/(yMax-yMin)*plotH;
+
+    // grid: time
+    const tStep = niceStep(domains.tMax);
+    for(let t=0; t<=domains.tMax; t+=tStep){
+      const px = scaleT(t);
+      svg.appendChild(svgEl('line',{x1:px,y1:m.top,x2:px,y2:m.top+plotH,stroke:'var(--grid)','stroke-width':1}));
+      const lbl = svgEl('text',{x:px,y:H-m.bottom+16,'text-anchor':'middle',class:'axis-label'});
+      lbl.textContent = Math.round(t*10)/10;
+      svg.appendChild(lbl);
+    }
+    // grid: y
+    const yStep = niceStep(yMax-yMin);
+    let yv = Math.ceil(yMin/yStep)*yStep;
+    for(; yv<=yMax; yv+=yStep){
+      const py = scaleY(yv);
+      const isZero = Math.abs(yv)<1e-6;
+      svg.appendChild(svgEl('line',{x1:m.left,y1:py,x2:m.left+plotW,y2:py,stroke:isZero?'var(--line)':'var(--grid)','stroke-width':isZero?1.4:1}));
+      const lbl = svgEl('text',{x:m.left-6,y:py+3,'text-anchor':'end',class:'axis-label'});
+      lbl.textContent = Math.round(yv*10)/10;
+      svg.appendChild(lbl);
+    }
+    // axes label
+    const xl = svgEl('text',{x:m.left+plotW, y:H-4, 'text-anchor':'end', class:'axis-label'});
+    xl.textContent = '時間 t (s)';
+    svg.appendChild(xl);
+
+    // team traces — build each ROUND as its own sub-path so that
+    // discontinuous jumps (velocity jump between constant-velocity rounds)
+    // are NOT drawn as a connecting line; continuous quantities (position,
+    // or velocity under constant acceleration) still look unbroken because
+    // consecutive segments share the same start/end point.
+    teams.forEach(tm=>{
+      const cur = stateAt(tm.segments, tm.startPosition, tm.displayT);
+      let d = '';
+      const sampleStep = 0.08;
+      tm.segments.forEach(seg=>{
+        if(seg.t0 > tm.displayT + 1e-9) return;
+        const segEnd = Math.min(seg.t1, tm.displayT);
+        let first = true;
+        for(let t=seg.t0; t<segEnd-1e-9; t+=sampleStep){
+          const dt = t - seg.t0;
+          const val = kind==='x' ? (seg.x0+seg.v0*dt+0.5*seg.a*dt*dt) : (seg.v0+seg.a*dt);
+          d += (first?'M ':'L ') + scaleT(t).toFixed(2)+','+scaleY(val).toFixed(2)+' ';
+          first = false;
+        }
+        const dtEnd = segEnd - seg.t0;
+        const valEnd = kind==='x' ? (seg.x0+seg.v0*dtEnd+0.5*seg.a*dtEnd*dtEnd) : (seg.v0+seg.a*dtEnd);
+        d += (first?'M ':'L ') + scaleT(segEnd).toFixed(2)+','+scaleY(valEnd).toFixed(2)+' ';
+      });
+      if(d){
+        svg.appendChild(svgEl('path',{d:d.trim(), fill:'none', stroke:tm.color,'stroke-width':2.4,'stroke-linecap':'round','stroke-linejoin':'round'}));
+      }
+      const cy = kind==='x'? cur.x : cur.v;
+      svg.appendChild(svgEl('circle',{cx:scaleT(tm.displayT),cy:scaleY(cy),r:4.5,fill:tm.color,stroke:'#0b0d11','stroke-width':1}));
+    });
+  }
+
+  // ---------------- Rendering: Leaderboard ----------------
+  function renderLeaderboard(){
+    const el = document.getElementById('leaderboard');
+    if(teams.length===0){ el.innerHTML = '<span>還沒有組別，點下方「+ 新增組別」開始比賽。</span>'; return; }
+    const sorted = [...teams].sort((a,b)=>{
+      const xa = stateAt(a.segments,a.startPosition,a.totalT).x;
+      const xb = stateAt(b.segments,b.startPosition,b.totalT).x;
+      return xb-xa;
+    });
+    el.innerHTML = '<span>誰最靠北：</span>' + sorted.map((tm,i)=>{
+      const x = stateAt(tm.segments,tm.startPosition,tm.totalT).x;
+      return `<span class="lb-chip"><span class="lb-dot" style="background:${tm.color}"></span>${i+1}. ${tm.name} <b>${x.toFixed(1)}m</b></span>`;
+    }).join('');
+  }
+
+  // ---------------- Rendering: Team cards ----------------
+  function pathLengthFromSamples(samples){
+    let total = 0;
+    for(let i=1;i<samples.length;i++) total += Math.abs(samples[i].x - samples[i-1].x);
+    return total;
+  }
+
+  function computeStats(team){
+    if(team.rounds.length===0) return null;
+    const end = stateAt(team.segments, team.startPosition, team.totalT);
+    if(team.mode==='constant_v'){
+      const pathLen = team.rounds.reduce((s,r)=>s+Math.abs(r.value)*r.duration,0);
+      const disp = end.x - team.startPosition;
+      const T = team.totalT;
+      return {
+        labels:['路徑長 (m)','位移 (m)','平均速度 (m/s)','平均速率 (m/s)'],
+        values:[pathLen.toFixed(1), disp.toFixed(1), (disp/T).toFixed(2), (pathLen/T).toFixed(2)]
+      };
+    } else {
+      const pathLen = pathLengthFromSamples(team.samples);
+      const v0 = 0, v1 = end.v, T = team.totalT, disp = end.x - team.startPosition;
+      return {
+        labels:['路徑長 (m)','位移 (m)','最終速度 (m/s)','平均速度 (m/s)','平均加速度 (m/s²)'],
+        values:[pathLen.toFixed(1), disp.toFixed(1), v1.toFixed(1), (disp/T).toFixed(2), ((v1-v0)/T).toFixed(2)]
+      };
+    }
+  }
+
+  function renderTeams(){
+    const wrap = document.getElementById('teamsWrap');
+    wrap.innerHTML = '';
+    teams.forEach(tm=>{
+      const card = document.createElement('div');
+      card.className = 'team-card';
+
+      const head = document.createElement('div');
+      head.className = 'team-head';
+      head.onclick = ()=>{ tm.collapsed = !tm.collapsed; renderTeams(); };
+
+      const caret = document.createElement('button');
+      caret.className = 'team-caret';
+      caret.textContent = tm.collapsed ? '▸' : '▾';
+
+      const sw = document.createElement('div'); sw.className='team-swatch'; sw.style.background=tm.color;
+      const nameInp = document.createElement('input'); nameInp.className='team-name'; nameInp.value=tm.name;
+      nameInp.onclick = (e)=> e.stopPropagation();
+      nameInp.oninput = (e)=>{ tm.name = e.target.value; renderTrack(); renderLeaderboard(); renderComparison(); };
+
+      const summary = document.createElement('div'); summary.className='team-head-summary';
+      if(tm.collapsed){
+        const end = stateAt(tm.segments, tm.startPosition, tm.totalT);
+        summary.innerHTML = tm.rounds.length>0
+          ? `終點 <b>${end.x.toFixed(1)}m</b>　·　${tm.rounds.length}/${MAX_ROUNDS} 回合`
+          : `尚未開始`;
+      }
+
+      const rm = document.createElement('button'); rm.className='team-remove'; rm.textContent='✕';
+      rm.onclick = (e)=>{ e.stopPropagation(); if(confirm(`確定要刪除「${tm.name}」嗎？`)) removeTeam(tm.id); };
+
+      head.appendChild(caret); head.appendChild(sw); head.appendChild(nameInp);
+      head.appendChild(summary); head.appendChild(rm);
+      card.appendChild(head);
+
+      if(!tm.collapsed){
+        const body = document.createElement('div'); body.className='team-body';
+
+        const pokeBtn = document.createElement('button');
+        pokeBtn.className = 'poke-btn';
+        pokeBtn.style.background = tm.color;
+        const remaining = MAX_ROUNDS - tm.rounds.length;
+        pokeBtn.textContent = remaining>0 ? `🎯 戳一戳（第 ${tm.rounds.length+1} 回合 / 共 ${MAX_ROUNDS}）` : '✅ 四回合已完成';
+        pokeBtn.disabled = remaining<=0;
+        pokeBtn.onclick = ()=> pokeTeam(tm.id);
+        body.appendChild(pokeBtn);
+
+        if(tm.rounds.length===0){
+          const hint = document.createElement('div'); hint.className='empty-hint'; hint.textContent='尚未戳戳樂';
+          body.appendChild(hint);
+        } else {
+          const table = document.createElement('table'); table.className='round-table';
+          const isV = tm.mode==='constant_v';
+          table.innerHTML = `<thead><tr>
+            <th>回合</th><th>方向</th><th>${isV?'速度(m/s)':'加速度(m/s²)'}</th>
+          </tr></thead>`;
+          const tbody = document.createElement('tbody');
+          tm.rounds.forEach(r=>{
+            const dirTxt = r.value===0 ? (isV ? '靜止' : '等速（a=0）') : (r.value>0 ? '北 (+)' : '南 (−)');
+            const tr = document.createElement('tr');
+            tr.innerHTML = `<td>${r.round}</td><td>${dirTxt}</td><td>${Math.abs(r.value)}</td>`;
+            tbody.appendChild(tr);
+          });
+          table.appendChild(tbody);
+          body.appendChild(table);
+
+          const note = document.createElement('div'); note.className='round-note';
+          note.textContent = `每回合固定 ${ROUND_DURATION} 秒`;
+          body.appendChild(note);
+        }
+
+        card.appendChild(body);
+      }
+
+      wrap.appendChild(card);
+    });
+
+    const addCard = document.createElement('div');
+    addCard.className = 'add-team-card';
+    addCard.textContent = '+ 新增組別';
+    addCard.onclick = createTeam;
+    wrap.appendChild(addCard);
+
+    renderComparison();
+  }
+
+  // ---------------- Rendering: Comparison table ----------------
+  function renderComparison(){
+    const card = document.getElementById('compareCard');
+    const el = document.getElementById('compareTableWrap');
+    if(!showStats){ card.style.display='none'; return; }
+    card.style.display='';
+    const withData = teams.filter(t=>t.rounds.length>0);
+    if(withData.length===0){
+      el.innerHTML = '<div class="empty-hint">尚無資料，先讓各組「戳一戳」。</div>';
+      return;
+    }
+    const labels = computeStats(withData[0]).labels;
+    let html = '<table class="compare-table"><thead><tr><th>組別</th>';
+    labels.forEach(l=> html += `<th>${l}</th>`);
+    html += '</tr></thead><tbody>';
+    withData.forEach(tm=>{
+      const s = computeStats(tm);
+      html += `<tr><td><span class="cmp-name"><span class="lb-dot" style="background:${tm.color}"></span>${tm.name}</span></td>`;
+      s.values.forEach(v=> html += `<td>${v}</td>`);
+      html += '</tr>';
+    });
+    html += '</tbody></table>';
+    el.innerHTML = html;
+  }
+
+  function setAllCollapsed(v){ teams.forEach(t=> t.collapsed = v); renderTeams(); }
+
+  // ---------------- Master render ----------------
+  function renderAll(){
+    renderTrack();
+    renderChart('xtSvg','x');
+    renderChart('vtSvg','v');
+    renderLeaderboard();
+  }
+
+  function fullRenderIncludingTeams(){
+    renderAll();
+    renderTeams();
+  }
+
+  // ---------------- Events ----------------
+  document.getElementById('modeSwitch').addEventListener('click', (e)=>{
+    const btn = e.target.closest('button[data-mode]');
+    if(!btn) return;
+    const newMode = btn.dataset.mode;
+    if(newMode===mode) return;
+    if(teams.length>0){
+      const ok = confirm('切換模式會清空目前所有組別的資料，確定要切換嗎？');
+      if(!ok) return;
+    }
+    mode = newMode;
+    teams.forEach(tm=>{ if(tm.animRAF) cancelAnimationFrame(tm.animRAF); });
+    teams = [];
+    vBag = []; aBag = [];
+    document.querySelectorAll('#modeSwitch button').forEach(b=>b.classList.toggle('active', b===btn));
+    document.getElementById('xtTitle').textContent = mode==='constant_v' ? 'X–t 圖　位置－時間' : 'X–t 圖　位置－時間（拋物線）';
+    document.getElementById('vtTitle').textContent = mode==='constant_v' ? 'V–t 圖　速度－時間（階梯狀）' : 'V–t 圖　速度－時間（斜線）';
+    computeDomains();
+    fullRenderIncludingTeams();
+  });
+
+  document.getElementById('replayBtn').addEventListener('click', fullReplay);
+
+  document.getElementById('toggleStatsBtn').addEventListener('click', (e)=>{
+    showStats = !showStats;
+    e.currentTarget.classList.toggle('active', showStats);
+    e.currentTarget.textContent = showStats ? '📊 隱藏計算結果' : '📊 顯示計算結果';
+    renderComparison();
+  });
+  document.getElementById('collapseAllBtn').addEventListener('click', ()=> setAllCollapsed(true));
+  document.getElementById('expandAllBtn').addEventListener('click', ()=> setAllCollapsed(false));
+  document.getElementById('toggleXtBtn').addEventListener('click', (e)=>{
+    showXT = !showXT;
+    e.currentTarget.classList.toggle('active', showXT);
+    e.currentTarget.textContent = showXT ? '📈 隱藏 X–t 圖' : '📈 顯示 X–t 圖';
+    document.getElementById('xtCard').style.display = showXT ? '' : 'none';
+    if(showXT) renderChart('xtSvg','x');
+  });
+  document.getElementById('toggleVtBtn').addEventListener('click', (e)=>{
+    showVT = !showVT;
+    e.currentTarget.classList.toggle('active', showVT);
+    e.currentTarget.textContent = showVT ? '📉 隱藏 V–t 圖' : '📉 顯示 V–t 圖';
+    document.getElementById('vtCard').style.display = showVT ? '' : 'none';
+    if(showVT) renderChart('vtSvg','v');
+  });
+
+  document.querySelectorAll('.pm-opt').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      playMode = btn.dataset.pm;
+      document.querySelectorAll('.pm-opt').forEach(b=>b.classList.toggle('active', b===btn));
+    });
+  });
+
+  // ---------------- Init ----------------
+  computeDomains();
+  fullRenderIncludingTeams();
+
+})();
+</script>
+</body>
+</html>
