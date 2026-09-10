@@ -16,7 +16,7 @@
     .interactive { pointer-events: auto; }
 
     #info-panel {
-        position: absolute; top: 12px; left: 12px; max-width: min(320px, calc(100vw - 24px));
+        position: absolute; top: 12px; left: 12px; max-width: min(330px, calc(100vw - 24px));
         background: rgba(255,255,255,0.92); padding: 0.55rem 0.75rem; border-radius: 10px;
         box-shadow: 0 4px 12px rgba(0,0,0,0.12); backdrop-filter: blur(4px);
     }
@@ -34,9 +34,12 @@
         box-shadow: 0 6px 18px rgba(0,0,0,0.18); border: 2px solid #3b82f6; max-width: calc(100vw - 24px);
     }
     .btn { border-radius: 6px; font-weight: 600; font-size: 0.8rem; padding: 6px 13px; transition: all 0.15s; touch-action: manipulation; }
+    #font-ctrl { position: absolute; top: 12px; right: 12px; display: flex; gap: 6px; }
+    #font-ctrl button { width: 42px; height: 42px; border-radius: 8px; font-weight: 700; font-size: 1rem;
+        background: rgba(255,255,255,0.92); color: #1f2937; box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+        backdrop-filter: blur(4px); touch-action: manipulation; }
+    #font-ctrl button:active { background: #e5e7eb; }
     .hidden { display: none !important; }
-
-    /* 窄螢幕：滑桿自成一列，按鈕靠右 */
     @media (max-width: 560px) {
         #bottom-panel { gap: 8px 10px; }
         #rider-slider { flex-basis: 100%; order: 3; }
@@ -57,11 +60,12 @@
         </div>
         <div id="panel-body" class="hidden mt-2">
             <p class="text-xs text-gray-500 leading-relaxed mb-2">
+                <span class="text-amber-600 font-medium">先歸零：</span>空盤時天平未必平衡，拉動兩端橫樑的橙色螺母（較輕側往外拉），讓指針回到頂端中央刻度。<br>
                 點砝碼或待測物選取，再點左右盤放置；盤上物件可選取後移除。<br>
                 把待測物（鋁塊 / 銅塊）放一盤、砝碼放另一盤，騎碼微調到平衡。<br>
-                <span class="text-gray-700 font-medium">標牌只加總砝碼，待測物質量不顯示：砝碼＋騎碼＝待測物質量。</span><br>
-                騎碼可用滑桿或直接在樑上拖曳；空白處拖曳轉視角、雙指縮放。<br>
-                <span class="text-gray-400">每次重新載入，三個待測物質量都會改變。</span>
+                <span class="text-gray-700 font-medium">標牌只加總砝碼：砝碼＋騎碼＝待測物質量。</span><br>
+                騎碼可用滑桿或在樑上拖曳；空白處拖曳轉視角、右鍵或雙指平移、雙指縮放。<br>
+                <span class="text-gray-400">每次載入，三個待測物質量與歸零偏差都會改變。</span>
             </p>
             <label class="flex items-center gap-2 text-xs text-gray-600 cursor-pointer select-none mb-1">
                 <input type="checkbox" id="show-measured" class="accent-green-600 cursor-pointer">
@@ -79,6 +83,11 @@
         <span id="sel-hint" class="text-xs text-gray-500"></span>
         <button id="sel-remove" class="btn bg-red-500 hover:bg-red-600 text-white hidden">移除</button>
         <button id="sel-cancel" class="btn bg-gray-200 hover:bg-gray-300 text-gray-700">取消</button>
+    </div>
+
+    <div id="font-ctrl" class="interactive">
+        <button id="font-dec" title="縮小標籤字體">A−</button>
+        <button id="font-inc" title="放大標籤字體">A+</button>
     </div>
 
     <div id="bottom-panel" class="interactive">
@@ -103,7 +112,7 @@
     const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2)); // 限制解析度，省效能
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -113,7 +122,7 @@
     const orbitControls = new THREE.OrbitControls(camera, renderer.domElement);
     orbitControls.enableDamping = true;
     orbitControls.dampingFactor = 0.05;
-    orbitControls.enablePan = false; // 避免把天平平移出畫面
+    orbitControls.enablePan = true; // 右鍵 / 雙指平移
     orbitControls.maxPolarAngle = Math.PI / 2 - 0.05;
     orbitControls.minDistance = 18;
     orbitControls.maxDistance = 120;
@@ -122,7 +131,7 @@
     const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
     dirLight.position.set(10, 20, 10);
     dirLight.castShadow = true;
-    const shadowSize = isCoarse ? 1024 : 2048; // 行動裝置降低陰影貼圖
+    const shadowSize = isCoarse ? 1024 : 2048;
     dirLight.shadow.mapSize.set(shadowSize, shadowSize);
     dirLight.shadow.camera.left = -20; dirLight.shadow.camera.right = 20;
     dirLight.shadow.camera.top = 20; dirLight.shadow.camera.bottom = -20;
@@ -136,6 +145,7 @@
     const matBrassSmall = new THREE.MeshPhongMaterial({ color: 0xe5c158, shininess: 60 });
     const matAlum = new THREE.MeshPhongMaterial({ color: 0x4b5563, shininess: 55 });
     const matCopper = new THREE.MeshPhongMaterial({ color: 0xb87333, shininess: 70 });
+    const matNut = new THREE.MeshPhongMaterial({ color: 0xf59e0b, shininess: 70 }); // 歸零螺母（橙）
     const matTable = new THREE.MeshPhongMaterial({ color: 0x8B4513 });
 
     const table = new THREE.Mesh(new THREE.BoxGeometry(60, 1, 40), matTable);
@@ -193,13 +203,13 @@
     const meshRulerFace = new THREE.Mesh(new THREE.PlaneGeometry(rulerLength, 1), new THREE.MeshBasicMaterial({ map: rulerTex }));
     meshRulerFace.position.set(0, -1.8, 1.66); rotatingPart.add(meshRulerFace);
 
+    // 騎碼
     const riderGroup = new THREE.Group();
     const meshRiderFront = new THREE.Mesh(new THREE.BoxGeometry(0.4, 1.4, 0.1), matSilver); meshRiderFront.position.set(0, 0, 0.25);
     const meshRiderBack = new THREE.Mesh(new THREE.BoxGeometry(0.4, 1.4, 0.1), matSilver); meshRiderBack.position.set(0, 0, -0.25);
     const meshRiderTop = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.1, 0.6), matSilver); meshRiderTop.position.set(0, 0.75, 0);
     const meshRiderPointer = new THREE.Mesh(new THREE.CylinderGeometry(0, 0.05, 0.4, 4), matRed);
     meshRiderPointer.position.set(-0.2, 0.6, 0.3); meshRiderPointer.rotation.x = Math.PI;
-    // 行動裝置放大騎碼觸控範圍
     const riderHitbox = new THREE.Mesh(new THREE.BoxGeometry(isCoarse ? 2.4 : 1.6, 3.0, isCoarse ? 2.2 : 1.4), new THREE.MeshBasicMaterial({ visible: false }));
     riderHitbox.position.y = 0.3;
     riderGroup.add(meshRiderFront, meshRiderBack, meshRiderTop, meshRiderPointer, riderHitbox);
@@ -207,12 +217,40 @@
     riderGroup.position.set(riderStartX - pointerOffset, -1.8, 1.5);
     rotatingPart.add(riderGroup);
 
+    // 歸零螺母（兩端橫樑）
+    const nutHitboxes = [];
+    const nutMap = new Map();
+    const innerAbs = 10.4, notchStep = 0.25, maxNotch = 8, gPerNotch = 0.05;
+    function createZeroScrew(side) {
+        const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, maxNotch * notchStep + 0.9, 12), matSilver);
+        rod.rotation.z = Math.PI / 2;
+        rod.position.set(side * (innerAbs + (maxNotch * notchStep) / 2), -0.5, 0);
+        rotatingPart.add(rod);
+        const head = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.35, 6), matSilver);
+        head.rotation.z = Math.PI / 2;
+        head.position.set(side * (innerAbs + maxNotch * notchStep + 0.45), -0.5, 0);
+        rotatingPart.add(head);
+        const nutGroup = new THREE.Group();
+        const nutMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.36, 0.5, 6), matNut);
+        nutMesh.rotation.z = Math.PI / 2; nutMesh.castShadow = true;
+        nutGroup.add(nutMesh);
+        const nhit = new THREE.Mesh(new THREE.BoxGeometry(isCoarse ? 1.6 : 1.0, 1.4, isCoarse ? 1.6 : 1.2), new THREE.MeshBasicMaterial({ visible: false }));
+        nutGroup.add(nhit);
+        nutGroup.position.set(side * innerAbs, -0.5, 0);
+        rotatingPart.add(nutGroup);
+        const obj = { side, notch: 0, group: nutGroup };
+        nutHitboxes.push(nhit); nutMap.set(nhit, obj);
+        return obj;
+    }
+    const leftNut = createZeroScrew(-1);
+    const rightNut = createZeroScrew(1);
+
+    // 秤盤
     const panPivotX = 9;
     const leftPanGroup = new THREE.Group(); scene.add(leftPanGroup);
     const rightPanGroup = new THREE.Group(); scene.add(rightPanGroup);
     const panRadius = 4.5, panSurfaceLocalY = 1.25;
     const panTargets = [];
-
     function createPanStructure(group, panName) {
         const bracket = new THREE.Mesh(new THREE.BoxGeometry(2, 2.5, 1), matSilver);
         bracket.position.y = -1.25; group.add(bracket);
@@ -224,9 +262,21 @@
     createPanStructure(leftPanGroup, 'left');
     createPanStructure(rightPanGroup, 'right');
 
+    // 全域標籤字體縮放（A+/A−）
+    const labelSprites = [];
+    let labelScale = 1;
+    function registerLabel(spr, bx, by) {
+        spr.userData.base = [bx, by];
+        spr.scale.set(bx * labelScale, by * labelScale, 1);
+        labelSprites.push(spr);
+    }
+    function applyLabelScale() {
+        labelSprites.forEach(s => { const b = s.userData.base; s.scale.set(b[0] * labelScale, b[1] * labelScale, 1); });
+    }
     function drawPill(ctx, text, bg) {
-        ctx.clearRect(0, 0, 256, 128);
-        const rx = 8, ry = 34, rw = 240, rh = 60, r = 30;
+        const W = ctx.canvas.width, H = ctx.canvas.height;
+        ctx.clearRect(0, 0, W, H);
+        const rx = W * 0.031, ry = H * 0.266, rw = W * 0.938, rh = H * 0.469, r = H * 0.234;
         ctx.beginPath();
         ctx.moveTo(rx + r, ry);
         ctx.arcTo(rx + rw, ry, rx + rw, ry + rh, r);
@@ -235,25 +285,25 @@
         ctx.arcTo(rx, ry, rx + rw, ry, r);
         ctx.closePath(); ctx.fillStyle = bg; ctx.fill();
         ctx.fillStyle = '#ffffff';
-        let fs = 42; ctx.font = 'bold ' + fs + 'px system-ui, sans-serif';
-        while (ctx.measureText(text).width > 224 && fs > 18) { fs -= 2; ctx.font = 'bold ' + fs + 'px system-ui, sans-serif'; }
+        let fs = Math.round(H * 0.33); ctx.font = 'bold ' + fs + 'px system-ui, sans-serif';
+        while (ctx.measureText(text).width > W * 0.875 && fs > H * 0.14) { fs -= 2; ctx.font = 'bold ' + fs + 'px system-ui, sans-serif'; }
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.fillText(text, 128, 65);
+        ctx.fillText(text, W / 2, H * 0.505);
     }
     function makeLabelSprite(text, bg) {
-        const c = document.createElement('canvas'); c.width = 256; c.height = 128;
+        const c = document.createElement('canvas'); c.width = 512; c.height = 256; // 高解析，放大不糊
         drawPill(c.getContext('2d'), text, bg);
         const tex = new THREE.CanvasTexture(c); tex.anisotropy = 4;
         const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: true, depthWrite: false, transparent: true }));
-        spr.scale.set(2.1, 1.05, 1);
+        registerLabel(spr, 2.1, 1.05);
         return spr;
     }
     function makeDynLabel(sx, sy) {
-        const c = document.createElement('canvas'); c.width = 256; c.height = 128;
+        const c = document.createElement('canvas'); c.width = 512; c.height = 256;
         const ctx = c.getContext('2d');
         const tex = new THREE.CanvasTexture(c); tex.anisotropy = 4;
         const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, depthWrite: false, transparent: true }));
-        spr.scale.set(sx, sy, 1);
+        registerLabel(spr, sx, sy);
         return { ctx, tex, sprite: spr };
     }
     const leftPanLabel = makeDynLabel(3.2, 1.6);
@@ -264,6 +314,10 @@
     measuredLabel.sprite.position.set(0, 20.5, 0); measuredLabel.sprite.visible = false; scaleGroup.add(measuredLabel.sprite);
 
     let currentAngle = 0, targetAngle = 0, angleVel = 0, riderMass = 0;
+    // 隨機歸零偏差（0.05g 級距、含正負；+ 代表右盤偏重）
+    const biasMag = (1 + Math.floor(Math.random() * 6)) * 0.05;
+    const zeroBias = (Math.random() < 0.5 ? -1 : 1) * biasMag;
+
     const draggableObjects = [];
     const objectData = new Map();
 
@@ -285,7 +339,6 @@
             head.position.y = h + rTop * 0.5; head.castShadow = true; group.add(head);
             topY = h + rTop;
         }
-        // 行動裝置放大觸控範圍
         const pad = isCoarse ? 1.0 : 0.4;
         const hb = Math.max(rBottom * 2.2, rBottom * 2 + pad);
         const hitbox = new THREE.Mesh(new THREE.BoxGeometry(hb, Math.max(topY, 1.2), hb), new THREE.MeshBasicMaterial({ visible: false }));
@@ -308,10 +361,8 @@
         cube.position.y = s / 2; cube.castShadow = true; group.add(cube);
         const hitbox = new THREE.Mesh(new THREE.BoxGeometry(s, s, s), new THREE.MeshBasicMaterial({ visible: false }));
         hitbox.position.y = s / 2; group.add(hitbox);
-
         const spr = makeLabelSprite(name, pillBg);
         spr.position.set(0, s + 0.9, 0); group.add(spr);
-
         group.position.set(x, 0, z); scene.add(group);
         draggableObjects.push(hitbox);
         objectData.set(hitbox, { mass, type: 'unknown', label: name, footprint: s * 0.6, originalPos: new THREE.Vector3(x, 0, z), currentPan: null, parentGroup: group, mainMat: mat });
@@ -352,7 +403,10 @@
             if (d.currentPan === 'left') { leftAll += d.mass; if (d.type === 'weight') leftW += d.mass; }
             if (d.currentPan === 'right') { rightAll += d.mass; if (d.type === 'weight') rightW += d.mass; }
         });
-        targetAngle = Math.max(-0.25, Math.min(0.25, ((rightAll + riderMass) - leftAll) * 0.2));
+        // 螺母校正：右螺母外移 → 右變重(+)，左螺母外移 → 左變重(−)
+        const screwCorr = (rightNut.notch - leftNut.notch) * gPerNotch;
+        const diff = (rightAll + riderMass) - leftAll + zeroBias + screwCorr;
+        targetAngle = Math.max(-0.25, Math.min(0.25, diff * 0.2));
 
         drawPill(leftPanLabel.ctx, '左盤砝碼 ' + leftW.toFixed(1) + ' g', 'rgba(37,99,235,0.92)');
         leftPanLabel.tex.needsUpdate = true;
@@ -373,6 +427,8 @@
         leftPanLabel.sprite.visible = !e.target.checked;
         rightPanLabel.sprite.visible = !e.target.checked;
     });
+    document.getElementById('font-inc').addEventListener('click', () => { labelScale = Math.min(3.5, labelScale * 1.25); applyLabelScale(); });
+    document.getElementById('font-dec').addEventListener('click', () => { labelScale = Math.max(0.6, labelScale / 1.25); applyLabelScale(); });
 
     // ====== 點選 → 放置 ======
     let selectedHitbox = null, selectedData = null;
@@ -391,13 +447,8 @@
         if (!selectedData) { selBar.classList.add('hidden'); return; }
         selBar.classList.remove('hidden');
         selName.textContent = '已選取：' + selectedData.label;
-        if (selectedData.currentPan) {
-            selHint.textContent = '點另一盤可搬移';
-            selRemove.classList.remove('hidden');
-        } else {
-            selHint.textContent = '點左盤或右盤放上去';
-            selRemove.classList.add('hidden');
-        }
+        if (selectedData.currentPan) { selHint.textContent = '點另一盤可搬移'; selRemove.classList.remove('hidden'); }
+        else { selHint.textContent = '點左盤或右盤放上去'; selRemove.classList.add('hidden'); }
     }
     function selectObject(hitbox) {
         if (selectedData) { setHighlight(selectedData, false); selectedData.parentGroup.scale.setScalar(1); }
@@ -435,10 +486,11 @@
         }
     }
 
-    // ====== 騎碼拖曳 ======
-    const riderPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), -1.5);
+    // ====== 騎碼 & 螺母拖曳 ======
+    const riderPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), -1.5); // 尺桿平面 z=1.5
+    const nutPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);      // 樑中線平面 z=0
     const planeHit = new THREE.Vector3();
-    let riderDragging = false;
+    let riderDragging = false, nutDragging = null;
 
     function setRiderTicks(t) {
         t = Math.max(0, Math.min(100, Math.round(t)));
@@ -456,22 +508,36 @@
             setRiderTicks((local.x - riderStartX) / (riderEndX - riderStartX) * 100);
         }
     }
+    function updateNutFromEvent(e, nut) {
+        setMouse(e); raycaster.setFromCamera(mouse, camera);
+        if (raycaster.ray.intersectPlane(nutPlane, planeHit)) {
+            const local = rotatingPart.worldToLocal(planeHit.clone());
+            let notch = ((nut.side > 0 ? local.x : -local.x) - innerAbs) / notchStep;
+            notch = Math.max(0, Math.min(maxNotch, Math.round(notch)));
+            nut.notch = notch;
+            nut.group.position.x = nut.side * (innerAbs + notch * notchStep);
+            updateBalanceLogic();
+        }
+    }
 
     let downOnCanvas = false, downX = 0, downY = 0, moved = false, downType = 'mouse';
     renderer.domElement.addEventListener('pointerdown', (e) => {
         downOnCanvas = true; downX = e.clientX; downY = e.clientY; moved = false; downType = e.pointerType;
         setMouse(e); raycaster.setFromCamera(mouse, camera);
         if (raycaster.intersectObject(riderHitbox).length) { riderDragging = true; orbitControls.enabled = false; }
+        else { const nh = raycaster.intersectObjects(nutHitboxes); if (nh.length) { nutDragging = nutMap.get(nh[0].object); orbitControls.enabled = false; } }
     });
     window.addEventListener('pointermove', (e) => {
         if (riderDragging) { updateRiderFromEvent(e); return; }
+        if (nutDragging) { updateNutFromEvent(e, nutDragging); return; }
         if (downOnCanvas) {
-            const thr = downType === 'touch' ? 12 : 6; // 觸控容差較大
+            const thr = downType === 'touch' ? 12 : 6;
             if (Math.hypot(e.clientX - downX, e.clientY - downY) > thr) moved = true;
-        } else if (hasHover) { // 只有支援 hover 的裝置才算游標
+        } else if (hasHover) {
             setMouse(e); raycaster.setFromCamera(mouse, camera);
             let cur = 'default';
             if (raycaster.intersectObject(riderHitbox).length) cur = 'ew-resize';
+            else if (raycaster.intersectObjects(nutHitboxes).length) cur = 'ew-resize';
             else if (raycaster.intersectObjects(draggableObjects).length) cur = 'pointer';
             else if (selectedData && raycaster.intersectObjects(panTargets).length) cur = 'pointer';
             renderer.domElement.style.cursor = cur;
@@ -479,6 +545,7 @@
     });
     window.addEventListener('pointerup', (e) => {
         if (riderDragging) { riderDragging = false; orbitControls.enabled = true; downOnCanvas = false; return; }
+        if (nutDragging) { nutDragging = null; orbitControls.enabled = true; downOnCanvas = false; return; }
         if (downOnCanvas && !moved) handleClick(e);
         downOnCanvas = false;
     });
@@ -497,34 +564,36 @@
             setHighlight(d, false); d.parentGroup.scale.setScalar(1);
             d.currentPan = null; scene.add(d.parentGroup); d.parentGroup.position.copy(d.originalPos);
         });
-        setRiderTicks(0);
+        setRiderTicks(0); // 註：螺母校正保留，不重置
     });
 
-    // ====== 依畫面比例自動取景（含手機直式）======
+    // ====== 依畫面比例自動取景 ======
     let lastPortrait = null;
     function frameScene() {
         const aspect = camera.aspect;
         const portrait = aspect < 1;
-        camera.fov = portrait ? 56 : 45;
+        camera.fov = portrait ? 58 : 45;
         const vFOV = camera.fov * Math.PI / 180;
-        const cy = 9, hHalf = 16, vHalf = 12;
+        const hHalf = portrait ? 16 : 23;   // 想框住的內容半寬（橫式放寬，含兩側物件）
+        const vHalf = portrait ? 12 : 13;   // 想框住的內容半高
         const distH = hHalf / (Math.tan(vFOV / 2) * aspect);
         const distV = vHalf / Math.tan(vFOV / 2);
-        const dist = Math.max(distH, distV) * 1.12;
-        orbitControls.maxDistance = Math.max(90, dist * 1.5);
+        const dist = Math.max(distH, distV) * (portrait ? 1.1 : 1.05);
+        const ty = portrait ? 9 : 6.5;      // 橫式壓低對準點，讓桌面與砝碼入鏡
+        const tz = portrait ? 3 : 5;
+        const elev = portrait ? 0.34 : 0.42; // 橫式俯角略大
+        orbitControls.target.set(0, ty, tz);
+        camera.position.set(0, ty + dist * Math.sin(elev), tz + dist * Math.cos(elev));
         orbitControls.minDistance = Math.min(18, dist);
-        orbitControls.target.set(0, cy, 3);
-        const elev = 0.34;
-        camera.position.set(0, cy + dist * Math.sin(elev), dist * Math.cos(elev));
+        orbitControls.maxDistance = Math.max(90, dist * 1.6);
         camera.updateProjectionMatrix();
         orbitControls.update();
         lastPortrait = portrait;
     }
-
     function onResize() {
         camera.aspect = window.innerWidth / window.innerHeight;
         renderer.setSize(window.innerWidth, window.innerHeight);
-        if ((camera.aspect < 1) !== lastPortrait) frameScene(); // 只有直/橫切換時重新取景
+        if ((camera.aspect < 1) !== lastPortrait) frameScene();
         else camera.updateProjectionMatrix();
     }
     window.addEventListener('resize', onResize);
