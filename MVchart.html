@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>質量與體積關係圖</title>
+    <title>質量與體積關係做圖</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
@@ -30,6 +30,17 @@
             transition: border-color 0.2s, background-color 0.2s;
             touch-action: manipulation; /* 防止輸入框雙擊放大 */
         }
+
+        /* 隱藏 number input 的上下微調箭頭，純手動輸入 */
+        input[type="number"]::-webkit-outer-spin-button,
+        input[type="number"]::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        input[type="number"] {
+            -moz-appearance: textfield; /* 針對 Firefox 的設定 */
+        }
+
         input[type="number"]:hover, input[type="text"]:hover:not([readonly]) {
             border-color: #d1d5db;
             background-color: #fff;
@@ -70,6 +81,13 @@
         .remove-table-btn { position: absolute; top: -8px; right: -8px; display: none; }
         .table-container:hover .remove-table-btn { display: block; }
         
+        /* 刪除列模式的視覺提示 */
+        .delete-mode-active table { outline: 2px dashed #ef4444; outline-offset: -2px; background-color: #fef2f2;}
+        .delete-mode-active tbody tr { cursor: pointer; transition: background-color 0.2s; }
+        .delete-mode-active tbody tr:hover td { background-color: #fecaca; border-color: #ef4444; }
+        .delete-mode-active tbody tr:hover input { background-color: transparent; }
+        .delete-mode-active tbody tr input { pointer-events: none; /* 讓點擊穿透到 tr，方便選取 */ }
+
         /* 確保按鈕不會觸發雙擊放大 */
         button { touch-action: manipulation; }
         
@@ -121,8 +139,8 @@
                 <input type="text" id="chartTitle" value="質量與體積關係圖" class="flex-grow !border-gray-300 !bg-white" oninput="debouncedSaveState()">
             </div>
 
-            <!-- 動態表格容器 -->
-            <div id="tables-container" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <!-- 動態表格容器：移除並排設定，強制上下排列以增加欄位寬度 -->
+            <div id="tables-container" class="flex flex-col gap-4">
                 <!-- 表格由 JS 動態生成 -->
             </div>
 
@@ -497,21 +515,39 @@
                         ${rowsHtml}
                     </tbody>
                 </table>
-                <div class="p-1 border-t flex justify-center bg-gray-50">
-                    <button class="add-row-btn text-xs text-gray-500 hover:text-gray-800 flex items-center gap-1">
+                <div class="p-1 border-t flex justify-center gap-6 bg-gray-50">
+                    <button class="add-row-btn text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1 transition-colors">
                         <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                         加入列
+                    </button>
+                    <button class="del-row-mode-btn text-xs text-red-500 hover:text-red-700 flex items-center gap-1 transition-colors">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"></line><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                        刪除列
                     </button>
                 </div>
             </div>
         `;
     }
 
+    // 輔助函式：解除刪除模式
+    function resetDeleteMode(container) {
+        container.classList.remove('delete-mode-active');
+        const btn = container.querySelector('.del-row-mode-btn');
+        if (btn) {
+            btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"></line><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg> 刪除列`;
+            btn.classList.replace('text-gray-500', 'text-red-500');
+        }
+    }
+
     function bindTableEvents(container) {
         const addBtn = container.querySelector('.add-row-btn');
+        const delBtn = container.querySelector('.del-row-mode-btn');
+        const tbody = container.querySelector('tbody');
+        
+        // 加入列事件
         addBtn.addEventListener('click', () => {
-            const tbody = container.querySelector('tbody');
-            const themeClass = container.classList[container.classList.length-1];
+            if (container.classList.contains('delete-mode-active')) resetDeleteMode(container); // 若在刪除模式則先取消
+            
             const themeColor = container.querySelector('.table-name-input').style.color;
             const tableName = container.querySelector('.table-name-input').value;
             const rowCount = tbody.querySelectorAll('tr').length + 1;
@@ -526,6 +562,40 @@
             `;
             tbody.appendChild(tr);
             saveState();
+        });
+
+        // 啟動/取消 刪除列模式
+        delBtn.addEventListener('click', () => {
+            const isDeleting = container.classList.toggle('delete-mode-active');
+            if (isDeleting) {
+                // 進入刪除模式，改變按鈕外觀提示使用者
+                delBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg> 取消刪除 (請點擊上方列)`;
+                delBtn.classList.replace('text-red-500', 'text-gray-500');
+            } else {
+                // 取消刪除模式
+                resetDeleteMode(container);
+            }
+        });
+
+        // 處理刪除模式下的點擊事件 (使用事件委派)
+        tbody.addEventListener('click', (e) => {
+            // 如果不是在刪除模式，就不做任何事，讓 input 正常運作
+            if (!container.classList.contains('delete-mode-active')) return;
+            
+            const tr = e.target.closest('tr');
+            if (tr) {
+                // 防呆：至少保留一列
+                if (tbody.querySelectorAll('tr').length <= 1) {
+                    showModal('無法刪除', '每個測量物體至少需要保留一列數據。', [{ text: '確定', styleClass: 'bg-blue-600 text-white' }]);
+                    resetDeleteMode(container);
+                    return;
+                }
+                
+                // 移除該列並結束刪除模式
+                tr.remove();
+                resetDeleteMode(container);
+                saveState();
+            }
         });
     }
 
@@ -653,8 +723,9 @@
         // 收集各表格數據
         const tables = document.querySelectorAll('.table-container');
         
-        // 為了計算全局 X 軸最大值，先掃描所有數據
+        // 為了計算全局最大/最小值，先掃描所有數據
         let allXValues = [];
+        let allYValues = [];
         let parsedTablesData = [];
 
         tables.forEach(table => {
@@ -671,12 +742,15 @@
                 if (!isNaN(m) && !isNaN(v)) {
                     dataPoints.push({ x: v, y: m, label: label });
                     allXValues.push(v);
+                    allYValues.push(m);
                 }
             });
             parsedTablesData.push({ name: tableName, theme: theme, data: dataPoints });
         });
 
         const globalMaxX = allXValues.length > 0 ? Math.max(...allXValues) : 10;
+        const globalMinX = allXValues.length > 0 ? Math.min(...allXValues) : 0;
+        const globalMinY = allYValues.length > 0 ? Math.min(...allYValues) : 0;
 
         // 建立資料集
         parsedTablesData.forEach((item, index) => {
@@ -707,7 +781,7 @@
             if (showTrendline) {
                 const reg = calculateRegression(item.data);
                 if (reg) {
-                    let minX = xMinInput !== "" ? parseFloat(xMinInput) : 0;
+                    let minX = xMinInput !== "" ? parseFloat(xMinInput) : (globalMinX >= 0 ? 0 : globalMinX);
                     let maxX = xMaxInput !== "" ? parseFloat(xMaxInput) : (globalMaxX > 0 ? globalMaxX * 1.2 : 10);
                     
                     // 確保趨勢線範圍合理
@@ -765,13 +839,21 @@
             position: 'bottom',
             title: { display: true, text: '體積 V (mL)', font: { size: 14, weight: 'bold' } }
         };
-        if (xMinInput !== "") xScaleConfig.min = parseFloat(xMinInput);
+        if (xMinInput !== "") {
+            xScaleConfig.min = parseFloat(xMinInput);
+        } else if (globalMinX >= 0) {
+            xScaleConfig.min = 0;
+        }
         if (xMaxInput !== "") xScaleConfig.max = parseFloat(xMaxInput);
 
         let yScaleConfig = {
             title: { display: true, text: '質量 m (g)', font: { size: 14, weight: 'bold' } }
         };
-        if (yMinInput !== "") yScaleConfig.min = parseFloat(yMinInput);
+        if (yMinInput !== "") {
+            yScaleConfig.min = parseFloat(yMinInput);
+        } else if (globalMinY >= 0) {
+            yScaleConfig.min = 0;
+        }
         if (yMaxInput !== "") yScaleConfig.max = parseFloat(yMaxInput);
 
         myChart = new Chart(ctx, {
@@ -833,12 +915,59 @@
         const rightTopMenu = document.querySelector('.text-right .flex.gap-2');
         rightTopMenu.style.display = 'none';
 
+        // 獲取原始的所有 input，以備在克隆 DOM 時替換，避免文字被裁切
+        const originalInputs = target.querySelectorAll('input[type="text"], input[type="number"]');
+
         try {
             const canvas = await html2canvas(target, {
                 scale: 2, // 提高解析度
                 backgroundColor: '#ffffff',
                 logging: false,
-                useCORS: true
+                useCORS: true,
+                onclone: (clonedDoc) => {
+                    // 解決 html2canvas 渲染 input 時常發生的「文字位移與截斷」Bug
+                    // 在截圖前一刻，將克隆畫面中的 input 替換成一般帶有相同樣式的 div
+                    const clonedTarget = clonedDoc.getElementById('app-container');
+                    const clonedInputs = clonedTarget.querySelectorAll('input[type="text"], input[type="number"]');
+                    
+                    clonedInputs.forEach((clonedInput, index) => {
+                        const originalInput = originalInputs[index];
+                        if (!originalInput) return;
+
+                        const div = clonedDoc.createElement('div');
+                        div.textContent = originalInput.value;
+                        
+                        // 讀取原始的 computedStyle 來完美複製外觀
+                        const compStyle = window.getComputedStyle(originalInput);
+                        div.style.fontFamily = compStyle.fontFamily;
+                        div.style.fontSize = compStyle.fontSize;
+                        div.style.fontWeight = compStyle.fontWeight;
+                        div.style.color = compStyle.color;
+                        div.style.width = compStyle.width;
+                        div.style.height = compStyle.height;
+                        div.style.textAlign = compStyle.textAlign;
+                        div.style.backgroundColor = compStyle.backgroundColor;
+                        div.style.boxSizing = 'border-box';
+                        
+                        // 複製邊框設定
+                        div.style.borderTop = compStyle.borderTop;
+                        div.style.borderRight = compStyle.borderRight;
+                        div.style.borderBottom = compStyle.borderBottom;
+                        div.style.borderLeft = compStyle.borderLeft;
+                        div.style.borderRadius = compStyle.borderRadius;
+                        
+                        // 修正 inline 元素的排版流動 (確保跟著原本的排版走)
+                        div.style.display = compStyle.display === 'inline' ? 'inline-block' : compStyle.display;
+                        
+                        // 利用 line-height 使文字完美垂直置中，避免被上下裁切
+                        div.style.lineHeight = compStyle.height !== 'auto' ? compStyle.height : 'normal';
+                        div.style.whiteSpace = 'nowrap';
+                        div.style.overflow = 'hidden';
+                        
+                        // 替換掉原本的 input
+                        clonedInput.parentNode.replaceChild(div, clonedInput);
+                    });
+                }
             });
             
             // 建立下載連結
