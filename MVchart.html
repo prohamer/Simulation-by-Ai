@@ -1,0 +1,896 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>質量與體積關係圖</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
+    <!-- html2canvas 用於匯出圖檔 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <style>
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            background-color: #f3f4f6; 
+            touch-action: manipulation; /* 防止整個畫面的雙擊放大 */
+        }
+        table { border-collapse: collapse; width: 100%; margin-bottom: 0.5rem; font-size: 0.9rem;}
+        th, td { border: 1px solid #d1d5db; padding: 4px; text-align: center; vertical-align: middle; }
+        th { background-color: #f3f4f6; line-height: 1.2; font-weight: 600;}
+        input[type="number"], input[type="text"] { 
+            width: 100%; 
+            padding: 4px; 
+            box-sizing: border-box; 
+            text-align: center; 
+            font-size: 0.9rem; 
+            border: 1px solid transparent; 
+            border-radius: 0.25rem;
+            background: transparent;
+            transition: border-color 0.2s, background-color 0.2s;
+            touch-action: manipulation; /* 防止輸入框雙擊放大 */
+        }
+        input[type="number"]:hover, input[type="text"]:hover:not([readonly]) {
+            border-color: #d1d5db;
+            background-color: #fff;
+        }
+        input[type="number"]:focus, input[type="text"]:focus {
+            outline: none;
+            border-color: #3b82f6;
+            background-color: #fff;
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+        }
+        input[readonly] { background-color: transparent; color: #4b5563; cursor: not-allowed; border: none; pointer-events: none;}
+        .date-input { border: none; border-bottom: 1px solid #000; text-align: center; outline: none; background: transparent; padding:0; transition: border-color 0.2s;}
+        .date-input:focus { border-bottom-color: #3b82f6; }
+        
+        /* 表格顏色主題 */
+        .theme-blue th { background-color: #dbeafe; color: #1e40af; border-color: #bfdbfe; }
+        .theme-blue td { border-color: #bfdbfe; }
+        .theme-blue input:focus { border-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2); }
+        
+        .theme-red th { background-color: #fee2e2; color: #991b1b; border-color: #fecaca; }
+        .theme-red td { border-color: #fecaca; }
+        .theme-red input:focus { border-color: #ef4444; box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.2); }
+
+        .theme-green th { background-color: #dcfce7; color: #166534; border-color: #bbf7d0; }
+        .theme-green td { border-color: #bbf7d0; }
+        .theme-green input:focus { border-color: #22c55e; box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.2); }
+
+        .theme-purple th { background-color: #f3e8ff; color: #6b21a8; border-color: #e9d5ff; }
+        .theme-purple td { border-color: #e9d5ff; }
+        .theme-purple input:focus { border-color: #a855f7; box-shadow: 0 0 0 2px rgba(168, 85, 247, 0.2); }
+        
+        .theme-orange th { background-color: #ffedd5; color: #9a3412; border-color: #fed7aa; }
+        .theme-orange td { border-color: #fed7aa; }
+        .theme-orange input:focus { border-color: #f97316; box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.2); }
+
+        .color-dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; margin-right: 4px; }
+        .table-container { position: relative; }
+        .remove-table-btn { position: absolute; top: -8px; right: -8px; display: none; }
+        .table-container:hover .remove-table-btn { display: block; }
+        
+        /* 確保按鈕不會觸發雙擊放大 */
+        button { touch-action: manipulation; }
+        
+        /* 在觸控螢幕上隨時顯示刪除按鈕 */
+        @media (hover: none) {
+            .remove-table-btn { display: block; }
+        }
+    </style>
+</head>
+<body class="p-2 md:p-4 text-gray-800">
+
+<div class="max-w-7xl mx-auto bg-white rounded-xl shadow-lg p-4 md:p-6 flex flex-col gap-4" id="app-container">
+    
+    <!-- 頂部資訊列 -->
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-end border-b pb-2 gap-2">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-800 mb-2">實驗紀錄</h1>
+            <div class="text-sm font-semibold flex flex-wrap gap-4 items-center text-gray-700">
+                <span>班級：<input type="text" id="student-class" class="date-input w-20" oninput="debouncedSaveState()"></span>
+                <span>姓名：<input type="text" id="student-name" class="date-input w-24" oninput="debouncedSaveState()"></span>
+                <span>實驗日期：<input type="text" id="exp-date" class="date-input w-28" oninput="debouncedSaveState()"></span>
+            </div>
+        </div>
+        <div class="text-right w-full sm:w-auto flex flex-row sm:flex-col justify-between sm:justify-end items-end sm:items-end mt-2 sm:mt-0">
+            <div id="clock" class="text-sm text-gray-500 font-mono"></div>
+            <div class="mt-2 flex gap-2">
+                <button onclick="undo()" id="btn-undo" class="px-2 py-1 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed text-xs transition-colors" title="復原 (Ctrl+Z)">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="inline"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/></svg> 復原
+                </button>
+                <button onclick="redo()" id="btn-redo" class="px-2 py-1 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed text-xs transition-colors" title="重做 (Ctrl+Y)">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="inline"><path d="M21 7v6h-6"/><path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3l3 2.7"/></svg> 重做
+                </button>
+                <button onclick="clearData()" class="px-2 py-1 bg-red-100 text-red-700 rounded hover:bg-red-200 text-xs transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="inline"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg> 清空
+                </button>
+                <button onclick="exportToImage()" class="px-2 py-1 bg-green-500 text-white rounded hover:bg-green-600 text-xs shadow transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="inline"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> 匯出圖片
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <div class="flex flex-col lg:flex-row gap-6">
+        <!-- 左側：數據輸入區 -->
+        <div class="w-full lg:w-1/2 flex flex-col gap-4">
+            
+            <div class="flex items-center gap-2">
+                <label for="chartTitle" class="font-bold whitespace-nowrap text-sm">圖表標題：</label>
+                <input type="text" id="chartTitle" value="質量與體積關係圖" class="flex-grow !border-gray-300 !bg-white" oninput="debouncedSaveState()">
+            </div>
+
+            <!-- 動態表格容器 -->
+            <div id="tables-container" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <!-- 表格由 JS 動態生成 -->
+            </div>
+
+            <div class="text-center mt-2">
+                <button onclick="addNewTable()" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 border border-gray-300 border-dashed text-sm font-semibold transition-colors flex items-center justify-center mx-auto gap-1">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                    新增測量物體
+                </button>
+            </div>
+
+            <div class="bg-gray-50 p-3 rounded-lg border border-gray-200 mt-2 text-sm">
+                <h3 class="font-bold text-gray-700 mb-2 border-b pb-1">圖表與座標軸設定</h3>
+                
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-3">
+                    <div class="flex items-center gap-1">
+                        <label class="whitespace-nowrap text-gray-600">X軸(體積)</label>
+                        <input type="number" id="xMin" placeholder="最小" class="!w-16 !border-gray-300 !bg-white" oninput="debouncedSaveState()">
+                        <span class="text-gray-400">-</span>
+                        <input type="number" id="xMax" placeholder="最大" class="!w-16 !border-gray-300 !bg-white" oninput="debouncedSaveState()">
+                    </div>
+                    <div class="flex items-center gap-1">
+                        <label class="whitespace-nowrap text-gray-600">Y軸(質量)</label>
+                        <input type="number" id="yMin" placeholder="最小" class="!w-16 !border-gray-300 !bg-white" oninput="debouncedSaveState()">
+                        <span class="text-gray-400">-</span>
+                        <input type="number" id="yMax" placeholder="最大" class="!w-16 !border-gray-300 !bg-white" oninput="debouncedSaveState()">
+                    </div>
+                </div>
+
+                <div class="flex flex-wrap gap-x-4 gap-y-2 pt-2 border-t border-gray-200">
+                    <label class="flex items-center gap-1 cursor-pointer hover:text-blue-600 transition-colors">
+                        <input type="checkbox" id="showTrendline" onchange="saveState()" class="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"> 顯示趨勢線
+                    </label>
+                    <label class="flex items-center gap-1 cursor-pointer hover:text-blue-600 transition-colors">
+                        <input type="checkbox" id="showEquation" onchange="saveState()" class="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"> 顯示公式
+                    </label>
+                    <label class="flex items-center gap-1 cursor-pointer hover:text-blue-600 transition-colors">
+                        <input type="checkbox" id="showR2" onchange="saveState()" class="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"> 顯示相關係數 (R²)
+                    </label>
+                    <label class="flex items-center gap-1 cursor-pointer hover:text-blue-600 transition-colors">
+                        <input type="checkbox" id="showDataLabels" checked onchange="saveState()" class="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"> 標示數據數值
+                    </label>
+                </div>
+            </div>
+
+            <div id="results-container" class="hidden mt-2 p-3 rounded-lg bg-white border border-gray-200 shadow-inner text-sm overflow-auto max-h-40">
+                <h4 class="font-bold text-gray-700 mb-1 sticky top-0 bg-white">線性迴歸分析結果：</h4>
+                <div id="regression-results" class="space-y-1"></div>
+            </div>
+        </div>
+
+        <div class="w-full lg:w-1/2 flex flex-col relative" id="export-target">
+            <!-- 浮水印容器，預設隱藏，匯出時顯示 -->
+            <div id="watermark" class="absolute inset-0 pointer-events-none flex items-center justify-center opacity-0 z-10 overflow-hidden">
+                <div class="transform -rotate-45 text-gray-200 font-bold text-4xl whitespace-nowrap" id="watermark-text" style="text-shadow: 1px 1px 2px rgba(0,0,0,0.1);"></div>
+            </div>
+            
+            <div class="flex-grow bg-white border border-gray-200 rounded-lg p-2 min-h-[350px] h-[400px] lg:h-[500px] relative">
+                <canvas id="myChart"></canvas>
+            </div>
+            
+            <div id="export-timestamp" class="hidden text-right text-xs text-gray-500 mt-1 mr-2 font-mono"></div>
+        </div>
+    </div>
+</div>
+
+<!-- 自訂 Modal UI 替代 alert/confirm -->
+<div id="custom-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+    <div class="bg-white rounded-lg shadow-xl p-6 max-w-sm w-full mx-4 transform transition-all">
+        <h3 id="modal-title" class="text-lg font-bold text-gray-900 mb-2">提示</h3>
+        <p id="modal-message" class="text-sm text-gray-600 mb-4"></p>
+        <div class="flex justify-end gap-2" id="modal-buttons">
+            <!-- 按鈕由 JS 動態生成 -->
+        </div>
+    </div>
+</div>
+
+<script>
+    // --- 系統常數與狀態 ---
+    const STORAGE_KEY = 'density_app_' + Math.random().toString(36).substring(2, 10); // 隨機鍵值避免衝突
+    Chart.register(ChartDataLabels);
+    let myChart = null;
+    
+    // 主題顏色定義 (背景, 邊框, 文字, 點)
+    const THEMES = [
+        { class: 'theme-blue', color: '#2563eb', bg: '#dbeafe', label: '藍色' },
+        { class: 'theme-red', color: '#dc2626', bg: '#fee2e2', label: '紅色' },
+        { class: 'theme-green', color: '#16a34a', bg: '#dcfce7', label: '綠色' },
+        { class: 'theme-purple', color: '#9333ea', bg: '#f3e8ff', label: '紫色' },
+        { class: 'theme-orange', color: '#ea580c', bg: '#ffedd5', label: '橘色' }
+    ];
+    let themeIndex = 0;
+
+    // 取得今日日期字串 YYYY/MM/DD
+    function getTodayStr() {
+        const d = new Date();
+        return d.getFullYear() + '/' + 
+               String(d.getMonth() + 1).padStart(2, '0') + '/' + 
+               String(d.getDate()).padStart(2, '0');
+    }
+
+    // 歷史紀錄 (Undo/Redo)
+    let history = [];
+    let currentHistoryIndex = -1;
+    let isUndoRedoing = false;
+    let saveTimeout = null;
+
+    // 初始化狀態
+    const initialState = {
+        title: "鋁塊、銅塊的質量與體積關係圖",
+        studentClass: "",
+        studentName: "",
+        expDate: getTodayStr(),
+        settings: { xMin: "", xMax: "", yMin: "", yMax: "", showTrendline: false, showEquation: false, showR2: false, showDataLabels: true },
+        tables: [
+            { id: generateId(), name: "鋁塊", theme: 0, rows: [
+                { name: "鋁塊1", m: "", v: "" }, { name: "鋁塊2", m: "", v: "" }, { name: "鋁塊3", m: "", v: "" }
+            ]},
+            { id: generateId(), name: "銅塊", theme: 1, rows: [
+                { name: "銅塊1", m: "", v: "" }, { name: "銅塊2", m: "", v: "" }, { name: "銅塊3", m: "", v: "" }
+            ]}
+        ]
+    };
+
+    function generateId() {
+        return Math.random().toString(36).substring(2, 9);
+    }
+
+    // --- 時鐘功能 ---
+    function updateClock() {
+        const now = new Date();
+        const str = now.getFullYear() + '/' + 
+                    String(now.getMonth() + 1).padStart(2, '0') + '/' + 
+                    String(now.getDate()).padStart(2, '0') + ' ' + 
+                    String(now.getHours()).padStart(2, '0') + ':' + 
+                    String(now.getMinutes()).padStart(2, '0') + ':' + 
+                    String(now.getSeconds()).padStart(2, '0');
+        document.getElementById('clock').textContent = str;
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
+
+    // --- Modal UI ---
+    function showModal(title, message, buttons) {
+        document.getElementById('modal-title').textContent = title;
+        document.getElementById('modal-message').textContent = message;
+        const btnContainer = document.getElementById('modal-buttons');
+        btnContainer.innerHTML = '';
+        
+        buttons.forEach(btn => {
+            const button = document.createElement('button');
+            button.textContent = btn.text;
+            button.className = `px-4 py-2 text-sm font-medium rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 ${btn.styleClass}`;
+            button.onclick = () => {
+                document.getElementById('custom-modal').classList.add('hidden');
+                if (btn.onClick) btn.onClick();
+            };
+            btnContainer.appendChild(button);
+        });
+        
+        document.getElementById('custom-modal').classList.remove('hidden');
+    }
+
+    function captureState() {
+        const state = {
+            title: document.getElementById('chartTitle').value,
+            studentClass: document.getElementById('student-class').value,
+            studentName: document.getElementById('student-name').value,
+            expDate: document.getElementById('exp-date').value,
+            settings: {
+                xMin: document.getElementById('xMin').value,
+                xMax: document.getElementById('xMax').value,
+                yMin: document.getElementById('yMin').value,
+                yMax: document.getElementById('yMax').value,
+                showTrendline: document.getElementById('showTrendline').checked,
+                showEquation: document.getElementById('showEquation').checked,
+                showR2: document.getElementById('showR2').checked,
+                showDataLabels: document.getElementById('showDataLabels').checked
+            },
+            tables: []
+        };
+
+        const tableElements = document.querySelectorAll('.table-container');
+        tableElements.forEach(container => {
+            const tid = container.dataset.id;
+            const themeIdx = parseInt(container.dataset.theme);
+            const nameInput = container.querySelector('.table-name-input');
+            const tableName = nameInput ? nameInput.value : '';
+            
+            const tableData = { id: tid, name: tableName, theme: themeIdx, rows: [] };
+            
+            const rows = container.querySelectorAll('tbody tr');
+            rows.forEach(row => {
+                const nameInput = row.querySelector('.row-name-input');
+                const mInput = row.querySelector('.m-input');
+                const vInput = row.querySelector('.v-input');
+                
+                tableData.rows.push({
+                    name: nameInput ? nameInput.value : '',
+                    m: mInput ? mInput.value : '',
+                    v: vInput ? vInput.value : ''
+                });
+            });
+            state.tables.push(tableData);
+        });
+        return state;
+    }
+
+    function saveState(force = false) {
+        if (isUndoRedoing) return;
+
+        const newState = captureState();
+        
+        // 簡單的比對，避免連續儲存完全相同的狀態
+        if (!force && history.length > 0 && currentHistoryIndex >= 0) {
+            const currentStateStr = JSON.stringify(history[currentHistoryIndex]);
+            const newStateStr = JSON.stringify(newState);
+            if (currentStateStr === newStateStr) {
+                generateChart(); // 即使不存歷史，也更新圖表
+                return;
+            }
+        }
+
+        // 如果在歷史中途修改，截斷後面的歷史
+        if (currentHistoryIndex < history.length - 1) {
+            history = history.slice(0, currentHistoryIndex + 1);
+        }
+
+        history.push(newState);
+        
+        // 限制歷史紀錄長度避免記憶體耗盡
+        if (history.length > 50) {
+            history.shift();
+        } else {
+            currentHistoryIndex++;
+        }
+        
+        updateUndoRedoButtons();
+        
+        // 儲存到 LocalStorage
+        try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(newState));
+        } catch(e) {
+            console.warn("LocalStorage quota exceeded", e);
+        }
+
+        generateChart();
+    }
+
+    // 防抖儲存，用於連續輸入
+    function debouncedSaveState() {
+        if (saveTimeout) clearTimeout(saveTimeout);
+        // 先即時更新自己表格內的計算
+        if (event && event.target && (event.target.classList.contains('m-input') || event.target.classList.contains('v-input'))) {
+            autoCalc(event.target);
+        }
+        saveTimeout = setTimeout(() => {
+            saveState();
+        }, 500);
+    }
+
+    function loadState(state) {
+        if (!state) return;
+        isUndoRedoing = true; // 暫停觸發 saveState
+
+        // 恢復基礎資料
+        document.getElementById('chartTitle').value = state.title || '';
+        document.getElementById('student-class').value = state.studentClass || '';
+        document.getElementById('student-name').value = state.studentName || '';
+        
+        // 處理日期格式 (兼容舊版存檔)
+        if (state.expDate !== undefined) {
+            document.getElementById('exp-date').value = state.expDate;
+        } else if (state.date && state.date.month && state.date.day) {
+            const currentYear = new Date().getFullYear();
+            document.getElementById('exp-date').value = `${currentYear}/${String(state.date.month).padStart(2, '0')}/${String(state.date.day).padStart(2, '0')}`;
+        } else {
+            document.getElementById('exp-date').value = getTodayStr();
+        }
+        
+        document.getElementById('xMin').value = state.settings?.xMin || '';
+        document.getElementById('xMax').value = state.settings?.xMax || '';
+        document.getElementById('yMin').value = state.settings?.yMin || '';
+        document.getElementById('yMax').value = state.settings?.yMax || '';
+        
+        document.getElementById('showTrendline').checked = !!state.settings?.showTrendline;
+        document.getElementById('showEquation').checked = !!state.settings?.showEquation;
+        document.getElementById('showR2').checked = !!state.settings?.showR2;
+        document.getElementById('showDataLabels').checked = !!state.settings?.showDataLabels;
+
+        // 重建表格
+        const container = document.getElementById('tables-container');
+        container.innerHTML = '';
+        
+        if (state.tables && state.tables.length > 0) {
+            state.tables.forEach(tableData => {
+                const tableHtml = createTableHTML(tableData);
+                container.insertAdjacentHTML('beforeend', tableHtml);
+                
+                // 重新綁定事件
+                const newTable = container.lastElementChild;
+                bindTableEvents(newTable);
+                
+                // 重新計算計算欄位
+                const mInputs = newTable.querySelectorAll('.m-input');
+                mInputs.forEach(input => autoCalc(input));
+            });
+            // 更新 themeIndex，確保新增表格顏色不重複
+            themeIndex = (Math.max(...state.tables.map(t => t.theme || 0)) + 1) % THEMES.length;
+        } else {
+            themeIndex = 0;
+        }
+
+        generateChart();
+        isUndoRedoing = false;
+    }
+
+    function undo() {
+        if (currentHistoryIndex > 0) {
+            currentHistoryIndex--;
+            loadState(history[currentHistoryIndex]);
+            updateUndoRedoButtons();
+        }
+    }
+
+    function redo() {
+        if (currentHistoryIndex < history.length - 1) {
+            currentHistoryIndex++;
+            loadState(history[currentHistoryIndex]);
+            updateUndoRedoButtons();
+        }
+    }
+
+    function updateUndoRedoButtons() {
+        document.getElementById('btn-undo').disabled = currentHistoryIndex <= 0;
+        document.getElementById('btn-redo').disabled = currentHistoryIndex >= history.length - 1;
+    }
+
+    function createTableHTML(tableData) {
+        const theme = THEMES[tableData.theme] || THEMES[0];
+        
+        let rowsHtml = '';
+        tableData.rows.forEach(row => {
+            rowsHtml += `
+                <tr>
+                    <td><input type="text" class="row-name-input font-semibold" value="${row.name}" style="color: ${theme.color}" oninput="debouncedSaveState()"></td>
+                    <td><input type="number" step="any" class="m-input" value="${row.m}" oninput="debouncedSaveState()"></td>
+                    <td><input type="number" step="any" class="v-input" value="${row.v}" oninput="debouncedSaveState()"></td>
+                    <td><input type="text" class="calc-mul text-xs" readonly tabindex="-1"></td>
+                    <td><input type="text" class="calc-div text-xs" readonly tabindex="-1"></td>
+                </tr>
+            `;
+        });
+
+        return `
+            <div class="table-container overflow-x-auto bg-white rounded border shadow-sm ${theme.class}" data-id="${tableData.id}" data-theme="${tableData.theme}">
+                <button onclick="removeTable('${tableData.id}')" class="remove-table-btn w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 shadow-md text-xs z-10" title="刪除此表格">×</button>
+                <div class="flex items-center p-2 border-b justify-center">
+                    <span class="color-dot" style="background-color: ${theme.color};"></span>
+                    <input type="text" class="table-name-input font-bold text-center !w-auto focus:!bg-white" value="${tableData.name}" style="color: ${theme.color}; border-bottom: 1px dashed ${theme.color}; border-radius:0;" oninput="debouncedSaveState()">
+                </div>
+                <table class="!mb-0">
+                    <thead>
+                        <tr>
+                            <th class="w-[20%]">名稱</th>
+                            <th class="w-[20%]">質量(g)<br>m</th>
+                            <th class="w-[20%]">體積(mL)<br>V</th>
+                            <th class="w-[20%]">m × V</th>
+                            <th class="w-[20%]">m / V</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${rowsHtml}
+                    </tbody>
+                </table>
+                <div class="p-1 border-t flex justify-center bg-gray-50">
+                    <button class="add-row-btn text-xs text-gray-500 hover:text-gray-800 flex items-center gap-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                        加入列
+                    </button>
+                </div>
+            </div>
+        `;
+    }
+
+    function bindTableEvents(container) {
+        const addBtn = container.querySelector('.add-row-btn');
+        addBtn.addEventListener('click', () => {
+            const tbody = container.querySelector('tbody');
+            const themeClass = container.classList[container.classList.length-1];
+            const themeColor = container.querySelector('.table-name-input').style.color;
+            const tableName = container.querySelector('.table-name-input').value;
+            const rowCount = tbody.querySelectorAll('tr').length + 1;
+            
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td><input type="text" class="row-name-input font-semibold" value="${tableName}${rowCount}" style="color: ${themeColor}" oninput="debouncedSaveState()"></td>
+                <td><input type="number" step="any" class="m-input" oninput="debouncedSaveState()"></td>
+                <td><input type="number" step="any" class="v-input" oninput="debouncedSaveState()"></td>
+                <td><input type="text" class="calc-mul text-xs" readonly tabindex="-1"></td>
+                <td><input type="text" class="calc-div text-xs" readonly tabindex="-1"></td>
+            `;
+            tbody.appendChild(tr);
+            saveState();
+        });
+    }
+
+    function addNewTable() {
+        const id = generateId();
+        const theme = THEMES[themeIndex % THEMES.length];
+        themeIndex++;
+
+        const newTableData = {
+            id: id,
+            name: "新物體",
+            theme: THEMES.indexOf(theme),
+            rows: [
+                { name: "新物體1", m: "", v: "" },
+                { name: "新物體2", m: "", v: "" }
+            ]
+        };
+
+        const container = document.getElementById('tables-container');
+        container.insertAdjacentHTML('beforeend', createTableHTML(newTableData));
+        bindTableEvents(container.lastElementChild);
+        saveState();
+    }
+
+    function removeTable(id) {
+        showModal('確認刪除', '確定要刪除這個測量物體的所有數據嗎？', [
+            { text: '取消', styleClass: 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50' },
+            { 
+                text: '刪除', 
+                styleClass: 'bg-red-600 text-white hover:bg-red-700 border border-transparent',
+                onClick: () => {
+                    const table = document.querySelector(`.table-container[data-id="${id}"]`);
+                    if (table) {
+                        table.remove();
+                        saveState();
+                    }
+                }
+            }
+        ]);
+    }
+
+    function clearData() {
+        showModal('警告', '確定要清空所有實驗數據嗎？此操作可透過「復原」救回。', [
+            { text: '取消', styleClass: 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50' },
+            { 
+                text: '確認清空', 
+                styleClass: 'bg-red-600 text-white hover:bg-red-700 border border-transparent',
+                onClick: () => {
+                    // 保留標題和設定，只清空表格內容
+                    const state = captureState();
+                    state.tables.forEach(table => {
+                        table.rows.forEach(row => {
+                            row.m = '';
+                            row.v = '';
+                        });
+                    });
+                    loadState(state);
+                    saveState(true);
+                }
+            }
+        ]);
+    }
+
+    function autoCalc(element) {
+        let row = element.closest('tr');
+        if(!row) return;
+        let mInput = row.querySelector('.m-input').value;
+        let vInput = row.querySelector('.v-input').value;
+        let mulOutput = row.querySelector('.calc-mul');
+        let divOutput = row.querySelector('.calc-div');
+
+        let m = parseFloat(mInput);
+        let v = parseFloat(vInput);
+
+        if (!isNaN(m) && !isNaN(v)) {
+            mulOutput.value = (m * v).toFixed(2);
+            divOutput.value = v !== 0 ? (m / v).toFixed(2) : "錯誤";
+        } else {
+            mulOutput.value = "";
+            divOutput.value = "";
+        }
+    }
+
+    function calculateRegression(data) {
+        let n = data.length;
+        if (n < 2) return null;
+        let sumX = 0, sumY = 0, sumXY = 0, sumXX = 0, sumYY = 0;
+        for (let p of data) {
+            sumX += p.x; sumY += p.y;
+            sumXY += p.x * p.y;
+            sumXX += p.x * p.x;
+            sumYY += p.y * p.y;
+        }
+        
+        let denominator = (n * sumXX - sumX * sumX);
+        if (denominator === 0) return null; // 避免除以零
+
+        let slope = (n * sumXY - sumX * sumY) / denominator;
+        let intercept = (sumY - slope * sumX) / n;
+        
+        let r2Denominator = (n * sumXX - sumX * sumX) * (n * sumYY - sumY * sumY);
+        let r2 = r2Denominator === 0 ? 1 : Math.pow((n * sumXY - sumX * sumY), 2) / r2Denominator;
+        
+        return { slope, intercept, r2 };
+    }
+
+    function generateChart() {
+        const title = document.getElementById('chartTitle').value;
+        const showTrendline = document.getElementById('showTrendline').checked;
+        const showEquation = document.getElementById('showEquation').checked;
+        const showR2 = document.getElementById('showR2').checked;
+        const showDataLabels = document.getElementById('showDataLabels').checked;
+
+        const xMinInput = document.getElementById('xMin').value;
+        const xMaxInput = document.getElementById('xMax').value;
+        const yMinInput = document.getElementById('yMin').value;
+        const yMaxInput = document.getElementById('yMax').value;
+
+        let datasets = [];
+        let resultsDiv = document.getElementById('results-container');
+        let resultsContent = document.getElementById('regression-results');
+        resultsContent.innerHTML = '';
+        let showResultsBox = false;
+
+        // 收集各表格數據
+        const tables = document.querySelectorAll('.table-container');
+        
+        // 為了計算全局 X 軸最大值，先掃描所有數據
+        let allXValues = [];
+        let parsedTablesData = [];
+
+        tables.forEach(table => {
+            const themeIdx = parseInt(table.dataset.theme);
+            const theme = THEMES[themeIdx];
+            const tableName = table.querySelector('.table-name-input').value;
+            const rows = table.querySelectorAll('tbody tr');
+            
+            let dataPoints = [];
+            rows.forEach(row => {
+                const label = row.querySelector('.row-name-input').value;
+                const m = parseFloat(row.querySelector('.m-input').value); // Y
+                const v = parseFloat(row.querySelector('.v-input').value); // X
+                if (!isNaN(m) && !isNaN(v)) {
+                    dataPoints.push({ x: v, y: m, label: label });
+                    allXValues.push(v);
+                }
+            });
+            parsedTablesData.push({ name: tableName, theme: theme, data: dataPoints });
+        });
+
+        const globalMaxX = allXValues.length > 0 ? Math.max(...allXValues) : 10;
+
+        // 建立資料集
+        parsedTablesData.forEach((item, index) => {
+            if (item.data.length === 0) return;
+
+            // 散佈點
+            datasets.push({
+                label: `${item.name} 數據點`,
+                data: item.data,
+                backgroundColor: item.theme.color,
+                borderColor: item.theme.color,
+                type: 'scatter',
+                pointRadius: 5,
+                pointHoverRadius: 8,
+                datalabels: {
+                    display: showDataLabels,
+                    align: index % 2 === 0 ? 'top' : 'bottom', // 交錯對齊減少重疊
+                    formatter: function(value, context) {
+                        return `${value.label}\n(${value.x}, ${value.y})`;
+                    },
+                    color: item.theme.color,
+                    font: { weight: 'bold', size: 10 },
+                    textAlign: 'center'
+                }
+            });
+
+            // 趨勢線與結果
+            if (showTrendline) {
+                const reg = calculateRegression(item.data);
+                if (reg) {
+                    let minX = xMinInput !== "" ? parseFloat(xMinInput) : 0;
+                    let maxX = xMaxInput !== "" ? parseFloat(xMaxInput) : (globalMaxX > 0 ? globalMaxX * 1.2 : 10);
+                    
+                    // 確保趨勢線範圍合理
+                    if (minX > maxX) { let temp = minX; minX = maxX; maxX = temp; }
+
+                    datasets.push({
+                        label: `${item.name} 趨勢線`,
+                        data: [{x: minX, y: reg.slope * minX + reg.intercept}, {x: maxX, y: reg.slope * maxX + reg.intercept}],
+                        type: 'line',
+                        borderColor: item.theme.color,
+                        borderWidth: 2,
+                        fill: false,
+                        pointRadius: 0,
+                        borderDash: [5, 5],
+                        borderWidth: 1.5,
+                        datalabels: { display: false }
+                    });
+
+                    // 準備迴歸結果文字
+                    if (showEquation || showR2) {
+                        let textHtml = `<div style="color: ${item.theme.color}; font-weight: 600;" class="flex items-center gap-2">`;
+                        textHtml += `<span class="color-dot" style="background-color: ${item.theme.color};"></span> ${item.name}：`;
+                        
+                        if (showEquation) {
+                            let sign = reg.intercept >= 0 ? '+' : '-';
+                            textHtml += `y = ${reg.slope.toFixed(3)}x ${sign} ${Math.abs(reg.intercept).toFixed(3)}`;
+                        }
+                        if (showEquation && showR2) textHtml += `<span class="text-gray-400 mx-2">|</span>`;
+                        if (showR2) {
+                            textHtml += `R² = ${reg.r2.toFixed(4)}`;
+                        }
+                        textHtml += `</div>`;
+                        
+                        resultsContent.insertAdjacentHTML('beforeend', textHtml);
+                        showResultsBox = true;
+                    }
+                }
+            }
+        });
+
+        if (showResultsBox) {
+            resultsDiv.classList.remove('hidden');
+        } else {
+            resultsDiv.classList.add('hidden');
+        }
+
+        if (myChart) { 
+            myChart.destroy(); 
+        }
+
+        const ctx = document.getElementById('myChart').getContext('2d');
+        
+        let xScaleConfig = {
+            type: 'linear',
+            position: 'bottom',
+            title: { display: true, text: '體積 V (mL)', font: { size: 14, weight: 'bold' } }
+        };
+        if (xMinInput !== "") xScaleConfig.min = parseFloat(xMinInput);
+        if (xMaxInput !== "") xScaleConfig.max = parseFloat(xMaxInput);
+
+        let yScaleConfig = {
+            title: { display: true, text: '質量 m (g)', font: { size: 14, weight: 'bold' } }
+        };
+        if (yMinInput !== "") yScaleConfig.min = parseFloat(yMinInput);
+        if (yMaxInput !== "") yScaleConfig.max = parseFloat(yMaxInput);
+
+        myChart = new Chart(ctx, {
+            data: { datasets: datasets },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: { duration: 0 }, // 關閉動畫以利流暢編輯
+                plugins: {
+                    title: { display: true, text: title, font: { size: 18 } },
+                    tooltip: { mode: 'index', intersect: false },
+                    legend: {
+                        labels: { filter: function(item, chart) { return !item.text.includes('趨勢線'); } }
+                    },
+                    datalabels: {
+                        clip: true // 防止標籤超出畫布
+                    }
+                },
+                scales: {
+                    x: xScaleConfig,
+                    y: yScaleConfig
+                },
+                layout: {
+                    padding: { top: 20, right: 20, bottom: 10, left: 10 }
+                }
+            },
+            plugins: [{
+                id: 'customCanvasBackgroundColor',
+                beforeDraw: (chart, args, options) => {
+                    const {ctx} = chart;
+                    ctx.save();
+                    ctx.globalCompositeOperation = 'destination-over';
+                    ctx.fillStyle = options.color || 'white';
+                    ctx.fillRect(0, 0, chart.width, chart.height);
+                    ctx.restore();
+                }
+            }]
+        });
+    }
+
+    async function exportToImage() {
+        const target = document.getElementById('app-container'); // 匯出整個 APP 畫面比較完整
+        
+        // 準備匯出狀態
+        const timestamp = new Date().toLocaleString('zh-TW');
+        const tsElement = document.getElementById('export-timestamp');
+        const watermark = document.getElementById('watermark');
+        const watermarkText = document.getElementById('watermark-text');
+        
+        tsElement.textContent = `匯出時間: ${timestamp}`;
+        tsElement.classList.remove('hidden');
+        
+        watermarkText.textContent = timestamp;
+        watermark.classList.remove('opacity-0');
+        watermark.classList.add('opacity-30'); // 淡淡的浮水印
+
+        // 隱藏不需要匯出的按鈕
+        const buttonsToHide = document.querySelectorAll('button:not(#btn-undo):not(#btn-redo)'); // 保留某些外觀
+        const rightTopMenu = document.querySelector('.text-right .flex.gap-2');
+        rightTopMenu.style.display = 'none';
+
+        try {
+            const canvas = await html2canvas(target, {
+                scale: 2, // 提高解析度
+                backgroundColor: '#ffffff',
+                logging: false,
+                useCORS: true
+            });
+            
+            // 建立下載連結
+            const link = document.createElement('a');
+            link.download = `實驗紀錄圖表_${timestamp.replace(/[:\/\s]/g, '')}.png`;
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+            
+        } catch (error) {
+            console.error("匯出失敗:", error);
+            showModal('匯出失敗', '無法產生圖片，請稍後再試。', [{ text: '確定', styleClass: 'bg-blue-600 text-white' }]);
+        } finally {
+            // 恢復原本狀態
+            tsElement.classList.add('hidden');
+            watermark.classList.add('opacity-0');
+            watermark.classList.remove('opacity-30');
+            rightTopMenu.style.display = 'flex';
+        }
+    }
+
+    window.onload = function() {
+        // 加上快捷鍵支援
+        document.addEventListener('keydown', function(e) {
+            if (e.ctrlKey && e.key === 'z') { e.preventDefault(); undo(); }
+            if (e.ctrlKey && e.key === 'y') { e.preventDefault(); redo(); }
+        });
+
+        // 嘗試讀取本地紀錄
+        let loaded = false;
+        try {
+            const savedStr = localStorage.getItem(STORAGE_KEY);
+            if (savedStr) {
+                const savedState = JSON.parse(savedStr);
+                // 初始化歷史
+                history = [savedState];
+                currentHistoryIndex = 0;
+                loadState(savedState);
+                updateUndoRedoButtons();
+                loaded = true;
+            }
+        } catch(e) {
+            console.warn("無法讀取本地紀錄", e);
+        }
+
+        // 如果沒有紀錄，載入初始狀態
+        if (!loaded) {
+            history = [initialState];
+            currentHistoryIndex = 0;
+            loadState(initialState);
+            updateUndoRedoButtons();
+        }
+    };
+</script>
+</body>
+</html>
