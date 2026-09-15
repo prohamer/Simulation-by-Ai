@@ -1,0 +1,2661 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>3D 滑車打點計時器與多情境物理實驗室 (含鏡像與數據分析)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <!-- 修正 1：載入 MathJax 讓 LaTeX 公式能正確渲染，同時啟用 \( \) 與 $ $ 兩種行內分隔符 -->
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['\\(', '\\)'], ['$', '$']],
+        displayMath: [['$$', '$$']]
+      },
+      options: { skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'] },
+      svg: { fontCache: 'global' }
+    };
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js" async></script>
+  <style>
+    .chart-container {
+      position: relative;
+      width: 100%;
+      max-width: 600px;
+      margin-left: auto;
+      margin-right: auto;
+      height: 250px;
+      max-height: 280px;
+    }
+    #webglCanvas {
+      width: 100%;
+      height: 480px;
+      outline: none;
+    }
+    canvas {
+      touch-action: none;
+    }
+    /* 鏡像模式 CSS 轉換：僅套用於 3D 場景外框，2D 紙帶改由 canvas 內部鏡射以保持文字可讀 */
+    .mirror-mode {
+      transform: scaleX(-1);
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen font-sans pb-12">
+
+  <!-- 頂部導航列與主控制區 -->
+  <header class="border-b border-slate-800 bg-slate-900/90 backdrop-blur sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-4">
+      <div class="flex items-center space-x-3">
+        <div class="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 font-bold text-xl shadow-lg shadow-emerald-950/40">
+          🚀
+        </div>
+        <div>
+          <h1 class="text-base md:text-lg font-bold text-slate-100 tracking-wide flex items-center gap-2">
+            3D 滑車打點計時器與物理實驗室
+            <span class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">鏡像觀點 & 原始數據版</span>
+          </h1>
+          <p class="text-xs text-slate-400">紙帶時空對應標示 · 兩階段彈簧與懸重動力學 · 原始數據日誌</p>
+        </div>
+      </div>
+
+      <!-- 右側控制按鈕 -->
+      <div class="flex items-center space-x-2 md:space-x-3">
+        <button id="btnTimerPower" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 active:scale-95 border border-slate-700 text-slate-300 font-semibold text-xs md:text-sm rounded-lg transition flex items-center gap-2">
+          <span id="timerLed" class="w-2.5 h-2.5 rounded-full bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.8)]"></span>
+          <span id="timerStatusText">計時器電源：關閉</span>
+        </button>
+
+        <button id="btnStart" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-semibold text-xs md:text-sm rounded-lg shadow-lg shadow-emerald-950/50 transition flex items-center gap-1.5">
+          <span id="startIcon">▶</span> <span id="startText">釋放 / 彈射滑車</span>
+        </button>
+
+        <button id="btnReset" class="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 active:scale-95 border border-slate-700 text-slate-200 font-semibold text-xs md:text-sm rounded-lg transition">
+          ↺ 重置
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-4 pt-6 space-y-6">
+
+    <!-- 鏡像模式與觀點輔助工具列 -->
+    <section class="bg-gradient-to-r from-slate-900 via-indigo-950/40 to-slate-900 border border-indigo-500/30 rounded-2xl p-3.5 shadow-xl flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center gap-2 text-xs font-semibold text-indigo-300">
+        <span>🔍 教學引向與紙帶觀點對照:</span>
+      </div>
+      <div class="flex flex-wrap items-center gap-2 text-xs">
+        <button id="btnToggleMirror" class="px-3 py-1.5 bg-indigo-900/60 border border-indigo-400/50 text-indigo-200 rounded-lg hover:bg-indigo-800/60 transition font-medium flex items-center gap-1.5 shadow-md">
+          <span>🪞</span> <span id="mirrorBtnText">開啟場景鏡像模式 (左右對調觀看)</span>
+        </button>
+        <button id="btnToggleTapeDir" class="px-3 py-1.5 bg-slate-800 border border-slate-700 text-slate-300 rounded-lg hover:bg-slate-700 transition font-medium flex items-center gap-1.5">
+          <span>🏷️</span> <span id="tapeDirText">顯示紙帶點陣時間軸導引 (t₀ ➔ tₙ)</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- 運動情境預設 -->
+    <section class="bg-slate-900/90 border border-slate-800 rounded-2xl p-3.5 shadow-xl flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center gap-2 text-xs font-semibold text-slate-300">
+        <span>🎯 運動情境預設:</span>
+      </div>
+      <div class="flex flex-wrap items-center gap-2 text-xs">
+        <button id="presetAccel" class="px-3 py-1.5 bg-emerald-950/60 border border-emerald-500/50 text-emerald-300 rounded-lg hover:bg-emerald-900/50 transition font-medium flex items-center gap-1.5">
+          <span>📈</span> 懸重等加速度
+        </button>
+        <button id="presetConstVel" class="px-3 py-1.5 bg-sky-950/60 border border-sky-500/50 text-sky-300 rounded-lg hover:bg-sky-900/50 transition font-medium flex items-center gap-1.5">
+          <span>➡️</span> 彈簧加速 ➔ 脫離後等速度
+        </button>
+        <button id="presetDecel" class="px-3 py-1.5 bg-amber-950/60 border border-amber-500/50 text-amber-300 rounded-lg hover:bg-amber-900/50 transition font-medium flex items-center gap-1.5">
+          <span>🛑</span> 彈簧加速 ➔ 脫離後等減速
+        </button>
+      </div>
+    </section>
+
+    <!-- 物理參數與控制面板 -->
+    <section class="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 shadow-xl space-y-4">
+      <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-3 text-xs">
+
+        <div class="bg-slate-800/60 p-3 rounded-xl border border-slate-700/50 space-y-2 col-span-1 md:col-span-1 lg:col-span-1">
+          <label class="block font-semibold text-slate-300">驅動機制</label>
+          <select id="driveModeSelect" class="w-full bg-slate-900 border border-slate-700 text-slate-100 rounded-lg p-2 focus:outline-none focus:border-emerald-500 font-medium">
+            <option value="weight">懸掛重物拉力 (Pull)</option>
+            <option value="spring">彈簧彈射模式 (Spring)</option>
+            <option value="hand">手拉車模式 (Hand Pull)</option>
+          </select>
+          <div class="text-[11px] text-slate-400">
+            <span id="driveModeDesc">牽引繩引導持續加速</span>
+          </div>
+        </div>
+
+        <div id="m1Panel" class="bg-slate-800/60 p-3 rounded-xl border border-slate-700/50 space-y-2">
+          <div class="flex justify-between font-semibold">
+            <span id="m1Label" class="text-slate-300">懸掛重量 \(m_1\)</span>
+            <span id="m1Disp" class="text-emerald-400 font-mono font-bold">50 g</span>
+          </div>
+          <input type="range" id="m1Input" min="10" max="150" step="10" value="50" class="w-full accent-emerald-500 h-1.5 bg-slate-700 rounded-lg cursor-pointer">
+          <div class="flex justify-between text-[11px] text-slate-400">
+            <span id="m1SubLabel">外力拉力 \(F = m_1 g\)</span>
+            <span id="fDisp" class="text-emerald-300 font-mono">0.49 N</span>
+          </div>
+        </div>
+
+        <div id="springCompressPanel" class="bg-slate-800/60 p-3 rounded-xl border border-slate-700/50 space-y-2 hidden">
+          <div class="flex justify-between font-semibold">
+            <span class="text-slate-300">彈簧壓縮量 \(\Delta x\)</span>
+            <span id="springDxDisp" class="text-sky-400 font-mono font-bold">5.0 cm</span>
+          </div>
+          <input type="range" id="springDxInput" min="1" max="10" step="0.5" value="5" class="w-full accent-sky-500 h-1.5 bg-slate-700 rounded-lg cursor-pointer">
+          <div class="flex justify-between text-[11px] text-slate-400">
+            <span>脫離末速 \(v_{\text{detach}}\)</span>
+            <span id="v0Disp" class="text-sky-300 font-mono">0.82 m/s</span>
+          </div>
+        </div>
+
+        <div class="bg-slate-800/60 p-3 rounded-xl border border-slate-700/50 space-y-2">
+          <div class="flex justify-between font-semibold">
+            <span class="text-slate-300">車上載重砝碼 \(m_2\)</span>
+            <span id="m2Disp" class="text-amber-400 font-mono font-bold">100 g</span>
+          </div>
+          <input type="range" id="m2Input" min="0" max="300" step="50" value="100" class="w-full accent-amber-500 h-1.5 bg-slate-700 rounded-lg cursor-pointer">
+          <div class="flex justify-between text-[11px] text-slate-400">
+            <span>車重 \(M = 200\text{g}\)</span>
+            <span id="sysMassDisp" class="text-amber-300 font-mono">總重 350g</span>
+          </div>
+        </div>
+
+        <div class="bg-slate-800/60 p-3 rounded-xl border border-slate-700/50 space-y-2">
+          <div class="flex justify-between font-semibold">
+            <span class="text-slate-300">動摩擦係數 \(\mu_k\)</span>
+            <span id="muDisp" class="text-rose-400 font-mono font-bold">0.00 (光滑)</span>
+          </div>
+          <input type="range" id="muInput" min="0" max="0.15" step="0.01" value="0.00" class="w-full accent-rose-500 h-1.5 bg-slate-700 rounded-lg cursor-pointer">
+          <div class="flex justify-between text-[11px] text-slate-400">
+            <span>摩擦阻力 \(f_k = \mu_k N\)</span>
+            <span id="fkDisp" class="text-rose-300 font-mono">0.00 N</span>
+          </div>
+        </div>
+
+        <div class="bg-slate-800/60 p-3 rounded-xl border border-slate-700/50 space-y-2">
+          <div class="flex justify-between font-semibold">
+            <span class="text-slate-300">打點頻率 \(f\)</span>
+            <span id="freqDisp" class="text-sky-400 font-mono font-bold">50 Hz</span>
+          </div>
+          <input type="range" id="freqInput" min="10" max="50" step="10" value="50" class="w-full accent-sky-500 h-1.5 bg-slate-700 rounded-lg cursor-pointer">
+          <div class="flex justify-between text-[11px] text-slate-400">
+            <span>週期 \(T = 1/f\)</span>
+            <span id="periodDisp" class="text-sky-300 font-mono">0.020 s</span>
+          </div>
+        </div>
+
+        <div class="bg-slate-800/60 p-3 rounded-xl border border-slate-700/50 flex flex-col justify-between">
+          <div class="flex justify-between items-center">
+            <span class="text-slate-300 font-semibold">當前運動狀態</span>
+            <span id="phaseDisp" class="text-emerald-400 font-bold text-xs px-2 py-0.5 rounded bg-emerald-950/80 border border-emerald-500/40">準備就緒</span>
+          </div>
+          <div class="text-[11px] text-slate-400">
+            即時加速度 \(a\): <span id="accelDisp" class="text-emerald-300 font-mono font-bold">0.00 m/s²</span>
+          </div>
+          <div class="flex justify-between border-t border-slate-700/60 pt-1.5 text-[11px] font-mono">
+            <span class="text-slate-400">速度: <span id="speedDisp" class="text-amber-400">0.00</span> m/s</span>
+            <span class="text-slate-400">打點數: <span id="dotCountDisp" class="text-sky-400">0</span></span>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- 固定總質量模式 & 手拉車提示 -->
+      <div class="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs border-t border-slate-800 pt-3">
+        <label id="fixedMassLabel" class="flex items-center gap-1.5 text-slate-300 cursor-pointer select-none">
+          <input id="chkFixedMass" type="checkbox" class="accent-emerald-500 w-3.5 h-3.5">
+          <span>⚖️ 固定總質量模式（m₁ + m₂ 守恆：加拉力就減車上砝碼）</span>
+        </label>
+        <span id="fixedMassInfo" class="hidden text-emerald-300 font-mono px-2 py-0.5 rounded bg-emerald-950/60 border border-emerald-700/50">固定 m₁+m₂ = 150 g</span>
+        <span id="handModeHint" class="hidden text-amber-300 font-medium px-2 py-0.5 rounded bg-amber-950/50 border border-amber-700/50">✋ 手拉車模式：在下方 3D 畫面「按住滑車並拖曳」即開始計時打點，放開停止</span>
+      </div>
+    </section>
+
+    <!-- 3D 物理動態模擬視窗 -->
+    <section class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl space-y-3">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <h2 class="text-sm font-bold text-slate-200 flex items-center gap-2">
+          <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+          主 3D 物理動態模擬畫布 (Three.js WebGL 3D Lab)
+        </h2>
+
+        <div class="flex items-center gap-1.5 text-xs">
+          <span class="text-slate-400 mr-1">🎥 視角:</span>
+          <button id="camDefault" class="px-2.5 py-1 bg-emerald-600/30 border border-emerald-500/50 text-emerald-300 rounded hover:bg-emerald-600/50 transition font-semibold">自由 3D</button>
+          <button id="camSide" class="px-2.5 py-1 bg-slate-800 border border-slate-700 text-slate-300 rounded hover:bg-slate-700 transition">側視特寫</button>
+          <button id="camFollow" class="px-2.5 py-1 bg-slate-800 border border-slate-700 text-slate-300 rounded hover:bg-slate-700 transition">追蹤滑車</button>
+          <button id="camTop" class="px-2.5 py-1 bg-slate-800 border border-slate-700 text-slate-300 rounded hover:bg-slate-700 transition">俯視概覽</button>
+        </div>
+      </div>
+
+      <!-- 場景背景色控制 -->
+      <div class="flex flex-wrap items-center gap-1.5 text-xs bg-slate-800/40 border border-slate-700/50 rounded-xl p-2">
+        <span class="text-slate-400 mr-1">🎨 場景背景:</span>
+        <button data-bg="0xf1f5f9" class="bg-preset px-2.5 py-1 rounded border border-slate-600 hover:ring-2 hover:ring-emerald-500/50 transition" style="background:#f1f5f9;color:#1e293b">教室白</button>
+        <button data-bg="0xdbe4ee" class="bg-preset px-2.5 py-1 rounded border border-slate-600 hover:ring-2 hover:ring-emerald-500/50 transition" style="background:#dbe4ee;color:#1e293b">淺藍灰 ⭐</button>
+        <button data-bg="0x64748b" class="bg-preset px-2.5 py-1 rounded border border-slate-600 hover:ring-2 hover:ring-emerald-500/50 transition" style="background:#64748b;color:#f8fafc">中性灰</button>
+        <button data-bg="0x1e3a5f" class="bg-preset px-2.5 py-1 rounded border border-slate-600 hover:ring-2 hover:ring-emerald-500/50 transition" style="background:#1e3a5f;color:#e2e8f0">教學藍</button>
+        <button data-bg="0x0a0f1d" class="bg-preset px-2.5 py-1 rounded border border-slate-600 hover:ring-2 hover:ring-emerald-500/50 transition" style="background:#0a0f1d;color:#cbd5e1">深空藍(原始)</button>
+        <label class="flex items-center gap-1 text-slate-400 ml-1">自訂
+          <input id="bgColorInput" type="color" value="#dbe4ee" class="w-8 h-7 rounded cursor-pointer bg-transparent border border-slate-600 p-0.5">
+        </label>
+      </div>
+
+      <div id="canvasViewportWrapper" class="w-full overflow-hidden rounded-xl border border-slate-800 bg-slate-950 relative transition-transform duration-300">
+        <div id="webglCanvas"></div>
+        <div class="absolute bottom-3 left-3 bg-slate-900/80 backdrop-blur px-3 py-1.5 rounded-lg border border-slate-800 text-[11px] text-slate-400 flex items-center gap-2">
+          <span id="camHint">💡 自由 3D 視角：左鍵旋轉 / 右鍵平移 / 滾輪縮放</span>
+          <span id="mirrorActiveTag" class="hidden text-amber-400 font-bold ml-2">🪞 鏡像模式啟用中</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- 打點紙帶點陣細節 Canvas 檢視器（含時間軸方向解析） -->
+    <section class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl space-y-3">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <h2 class="text-sm font-bold text-slate-200 flex items-center gap-2">
+          <span>📜</span> 打點紙帶點陣細節 Canvas 檢視器 (Paper Tape Visualizer)
+        </h2>
+        <div class="flex flex-wrap items-center gap-1.5 text-xs">
+          <span class="text-slate-400 mr-0.5">起點方向:</span>
+          <button id="btnTapeOriginLeft" class="px-2.5 py-1 bg-emerald-600/30 border border-emerald-500/50 text-emerald-300 rounded hover:bg-emerald-600/50 transition font-semibold">t₀◀ 左邊起點</button>
+          <button id="btnTapeOriginRight" class="px-2.5 py-1 bg-slate-800 border border-slate-700 text-slate-300 rounded hover:bg-slate-700 transition">右邊起點 ▶t₀</button>
+          <span class="text-slate-600 mx-1 hidden sm:inline">|</span>
+          <span class="text-slate-400 mr-0.5">縮放:</span>
+          <button id="btnTapeZoomOut" class="px-2 py-1 bg-slate-800 border border-slate-700 text-slate-200 rounded hover:bg-slate-700 transition font-bold w-7">−</button>
+          <span id="tapeZoomDisp" class="px-1 text-slate-300 font-mono w-10 text-center">1.0×</span>
+          <button id="btnTapeZoomIn" class="px-2 py-1 bg-slate-800 border border-slate-700 text-slate-200 rounded hover:bg-slate-700 transition font-bold w-7">＋</button>
+          <button id="btnTapeZoomReset" class="px-2 py-1 bg-slate-800 border border-slate-700 text-slate-300 rounded hover:bg-slate-700 transition">重置</button>
+        </div>
+      </div>
+
+      <!-- 紙帶點陣導引註解列 -->
+      <!-- 分析模式控制列（計數點方法） -->
+      <div class="flex flex-wrap items-center gap-2 text-xs bg-slate-800/40 border border-slate-700/50 rounded-xl p-2.5">
+        <button id="btnAnalysisMode" class="px-2.5 py-1 bg-slate-800 border border-slate-700 text-slate-300 rounded hover:bg-slate-700 transition font-semibold flex items-center gap-1">
+          <span>🔬</span> <span id="analysisModeText">分析模式：關</span>
+        </button>
+        <div id="analysisControls" class="hidden flex flex-wrap items-center gap-x-3 gap-y-1.5">
+          <label class="flex items-center gap-1 text-slate-300">從第
+            <input id="analysisStart" type="number" min="0" value="0" class="w-16 bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5 text-center text-emerald-300 font-mono focus:outline-none focus:border-emerald-500">
+            點開始
+          </label>
+          <label class="flex items-center gap-1 text-slate-300">每
+            <input id="analysisInterval" type="number" min="1" value="5" class="w-14 bg-slate-900 border border-slate-700 rounded px-1.5 py-0.5 text-center text-sky-300 font-mono focus:outline-none focus:border-sky-500">
+            點為一計數點
+          </label>
+          <span id="analysisInfo" class="text-slate-400 font-mono px-2 py-0.5 rounded bg-slate-900/60 border border-slate-700/50">ΔT = 0.100 s · 計數點 0 個</span>
+        </div>
+      </div>
+
+      <div id="tapeDirectionHintBar" class="bg-indigo-950/40 border border-indigo-500/30 p-2.5 rounded-xl text-xs flex justify-between items-center text-indigo-200 font-medium">
+        <div class="flex items-center gap-2">
+          <span id="tapeDirChip" class="px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 font-mono text-[11px] border border-indigo-500/30">滑車牽引方向 ➔</span>
+          <span id="tapeHintText">最早點 <strong>t₀ (起點)</strong> 位在紙帶左端，最新點 <strong>tₙ (末點)</strong> 隨滑車前進向右延伸。</span>
+        </div>
+        <span class="text-[11px] text-indigo-400 hidden md:inline">💡 點距變寬 = 速度變快 | 點距變窄 = 速度變慢</span>
+      </div>
+
+
+      <div id="tapeScrollWrap" class="w-full overflow-x-auto rounded-xl border border-slate-800 bg-slate-950 relative" style="cursor: crosshair;">
+        <canvas id="tapeCanvas" width="1000" height="180" class="block"></canvas>
+      </div>
+      <p class="text-[11px] text-slate-500">💡 滑鼠移到任一點可查看該點數據與車子位置快照 · 用 ＋ / − 或滑鼠滾輪縮放放大檢視 · 拖曳底部捲軸左右瀏覽</p>
+
+      <!-- 計數點分析結果表（僅分析模式顯示） -->
+      <div id="analysisResultWrap" class="hidden space-y-2">
+        <div class="flex items-center gap-2 text-xs font-bold text-emerald-300">
+          <span>🔬</span> 計數點分析結果（間距 Δs / 總距 Σs / 區間速度 v / 逐差加速度 a）
+          <button id="btnExportAnalysisCSV" class="ml-auto px-2 py-1 bg-emerald-950/80 border border-emerald-500/50 text-emerald-300 rounded hover:bg-emerald-900/80 transition text-[11px] font-semibold">📥 匯出分析 CSV</button>
+        </div>
+        <div class="overflow-x-auto max-h-56 rounded-xl border border-emerald-800/40 bg-slate-950">
+          <table class="w-full text-left text-xs text-slate-300 font-mono">
+            <thead class="bg-emerald-950/40 text-emerald-200 text-[11px] sticky top-0 backdrop-blur">
+              <tr>
+                <th class="px-3 py-2">計數序 k</th>
+                <th class="px-3 py-2">對應點 #</th>
+                <th class="px-3 py-2">時間 t (s)</th>
+                <th class="px-3 py-2">間距 Δs (cm)</th>
+                <th class="px-3 py-2">總距 Σs (cm)</th>
+                <th class="px-3 py-2">區間速度 v (m/s)</th>
+                <th class="px-3 py-2">逐差 a (m/s²)</th>
+              </tr>
+            </thead>
+            <tbody id="analysisTableBody" class="divide-y divide-slate-800/60"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- hover 懸浮提示卡（固定定位，跟隨滑鼠） -->
+      <div id="tapeTooltip" class="hidden fixed z-50 pointer-events-none bg-slate-900/95 backdrop-blur border border-emerald-500/50 rounded-lg shadow-2xl p-2.5 text-[11px]" style="width: 214px;">
+        <div id="ttTitle" class="font-bold text-emerald-400 mb-1.5 text-xs">點 #0</div>
+        <div class="grid grid-cols-2 gap-x-2 gap-y-1 font-mono text-slate-300">
+          <span class="text-slate-500">時間 t</span><span id="ttTime" class="text-right text-slate-200">-</span>
+          <span class="text-slate-500">位移 x</span><span id="ttPos" class="text-right text-emerald-300">-</span>
+          <span class="text-slate-500">點距 Δx</span><span id="ttDx" class="text-right text-amber-300">-</span>
+          <span class="text-slate-500">區間 v</span><span id="ttV" class="text-right text-sky-300">-</span>
+          <span class="text-slate-500">逐差 a</span><span id="ttA" class="text-right text-rose-300">-</span>
+        </div>
+        <div class="mt-1.5 pt-1.5 border-t border-slate-700/60">
+          <div class="text-slate-500 mb-1 flex items-center gap-1">🚗 車子當下位置快照</div>
+          <canvas id="tapeSnapshot" width="196" height="48" class="block w-full rounded bg-slate-950 border border-slate-800"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <!-- 動態圖表區 -->
+    <section class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl space-y-3">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <h3 class="text-sm font-bold text-slate-200 flex items-center gap-2">
+          <span>📈</span> 運動圖表（x–t · v–t · a–t，以打點資料呈現）
+        </h3>
+        <div class="flex flex-wrap items-center gap-4 text-xs">
+          <label class="flex items-center gap-1.5 text-slate-300 cursor-pointer select-none">
+            <input id="chkShowLine" type="checkbox" class="accent-emerald-500 w-3.5 h-3.5"> 顯示連線
+          </label>
+          <label class="flex items-center gap-1.5 text-slate-300 cursor-pointer select-none">
+            <input id="chkChartAnalysis" type="checkbox" class="accent-amber-500 w-3.5 h-3.5"> 🎯 兩點量測模式
+          </label>
+          <span class="text-slate-600 mx-1 hidden md:inline">|</span>
+          <button id="btnAddGroup" class="px-2.5 py-1 bg-emerald-950/70 border border-emerald-600/50 text-emerald-300 rounded hover:bg-emerald-900/70 transition font-semibold">➕ 加入新實驗組</button>
+          <button id="btnClearGroups" class="px-2.5 py-1 bg-slate-800 border border-slate-700 text-slate-300 rounded hover:bg-slate-700 transition">🗑 清除組別</button>
+          <span id="groupInfo" class="text-slate-400 font-mono">目前 0 組</span>
+          <span class="text-[11px] text-slate-500 hidden lg:inline">💡 移到任一點，四視圖同步高亮對應點</span>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div class="bg-slate-950/60 border border-slate-800 rounded-xl p-3 space-y-2">
+          <h4 class="text-xs font-bold text-sky-300 flex items-center gap-1.5"><span>📊</span> 位移–時間 (x–t)</h4>
+          <div class="chart-container"><canvas id="xtChart"></canvas></div>
+          <div id="xtReadout" class="hidden text-[11px] font-mono text-slate-300 bg-slate-900/70 border border-sky-800/50 rounded-lg p-2 space-y-0.5"></div>
+        </div>
+        <div class="bg-slate-950/60 border border-slate-800 rounded-xl p-3 space-y-2">
+          <h4 class="text-xs font-bold text-amber-300 flex items-center gap-1.5"><span>📈</span> 速度–時間 (v–t)</h4>
+          <div class="chart-container"><canvas id="vtChart"></canvas></div>
+          <div id="vtReadout" class="hidden text-[11px] font-mono text-slate-300 bg-slate-900/70 border border-amber-800/50 rounded-lg p-2 space-y-0.5"></div>
+        </div>
+        <div class="bg-slate-950/60 border border-slate-800 rounded-xl p-3 space-y-2">
+          <h4 class="text-xs font-bold text-rose-300 flex items-center gap-1.5"><span>📉</span> 加速度–時間 (a–t)</h4>
+          <div class="chart-container"><canvas id="atChart"></canvas></div>
+          <div id="atReadout" class="hidden text-[11px] font-mono text-slate-300 bg-slate-900/70 border border-rose-800/50 rounded-lg p-2 space-y-0.5"></div>
+        </div>
+      </div>
+      <p id="chartAnalysisHint" class="hidden text-[11px] text-amber-300/90">🎯 兩點量測模式：在任一張圖點兩個點，該圖下方會列出 Δt 與差值計算；點第三個點會以它為新的起點重新量測。</p>
+    </section>
+
+    <!-- 原理與說明 -->
+    <section class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
+      <h3 class="text-base font-bold text-slate-100 flex items-center gap-2">
+        <span>📖</span> 兩階段彈簧動力學與牛頓定律分析
+      </h3>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs md:text-sm text-slate-300">
+        <div class="p-3 bg-slate-800/60 rounded-xl border border-emerald-500/30 space-y-2">
+          <div class="font-bold text-emerald-400 flex items-center gap-1">📈 1. 懸掛重物持續加速</div>
+          <p class="text-slate-400 text-[12px] leading-relaxed">
+            <strong>受力</strong>：牽引繩持續作用，\(F_{\text{net}} = m_1 g - f_k\)。<br>
+            <strong>運動</strong>：全程為固定加速度之<strong>等加速度運動</strong>。<br>
+            <strong>紙帶</strong>：打點間距持續遞增。
+          </p>
+        </div>
+
+        <div class="p-3 bg-slate-800/60 rounded-xl border border-sky-500/30 space-y-2">
+          <div class="font-bold text-sky-400 flex items-center gap-1">➡️ 2. 彈簧彈射 (光滑面)</div>
+          <p class="text-slate-400 text-[12px] leading-relaxed">
+            <strong>推動期 (\(x < \Delta x\))</strong>：彈力推動進行變加速度，速度累加至最高。<br>
+            <strong>脫離期 (\(x \ge \Delta x\))</strong>：彈簧脫離，\(F_{\text{net}} = 0\)，進入<strong>等速度運動</strong>。<br>
+            <strong>紙帶</strong>：點距先變寬後保持完全相等。
+          </p>
+        </div>
+
+        <div class="p-3 bg-slate-800/60 rounded-xl border border-amber-500/30 space-y-2">
+          <div class="font-bold text-amber-400 flex items-center gap-1">🛑 3. 彈簧彈射 (粗糙面)</div>
+          <p class="text-slate-400 text-[12px] leading-relaxed">
+            <strong>推動期 (\(x < \Delta x\))</strong>：彈力減去摩擦力推動加速。<br>
+            <strong>脫離期 (\(x \ge \Delta x\))</strong>：彈簧脫離，僅受摩擦阻力，進入<strong>等減速運動</strong>直至煞停。<br>
+            <strong>紙帶</strong>：點距先變寬，脫離後逐漸變窄。
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 原始數據紀錄表與逐差法分析面板（移至頁面最下方） -->
+    <section class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl space-y-4">
+      <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-3">
+        <div class="flex items-center gap-2">
+          <span class="text-lg">📊</span>
+          <h3 class="text-sm md:text-base font-bold text-slate-100">原始打點數據紀錄與逐差法分析表 (Raw Measurement Log)</h3>
+        </div>
+        <button id="btnExportCSV" class="px-3 py-1.5 bg-emerald-950/80 border border-emerald-500/50 text-emerald-300 rounded-lg hover:bg-emerald-900/80 transition text-xs font-semibold flex items-center gap-1.5">
+          <span>📥</span> 導出 CSV 原始數據表
+        </button>
+      </div>
+
+      <div class="overflow-x-auto max-h-64 rounded-xl border border-slate-800 bg-slate-950">
+        <table class="w-full text-left text-xs text-slate-300 font-mono">
+          <thead class="bg-slate-800/80 text-slate-200 uppercase text-[11px] sticky top-0 backdrop-blur">
+            <tr>
+              <th class="px-4 py-2.5">點號 #</th>
+              <th class="px-4 py-2.5">時間 t (s)</th>
+              <th class="px-4 py-2.5">絕對位移 x (cm)</th>
+              <th class="px-4 py-2.5">區間點距 Δx (cm)</th>
+              <th class="px-4 py-2.5">區間平均速度 v (m/s)</th>
+              <th class="px-4 py-2.5">逐差加速度 a (m/s²)</th>
+            </tr>
+          </thead>
+          <tbody id="dataTableBody" class="divide-y divide-slate-800/60">
+            <tr>
+              <td colspan="6" class="px-4 py-6 text-center text-slate-500 italic">
+                尚無打點紀錄。請點擊「開啟電源」並「釋放滑車」開始收集數據...
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+  </main>
+
+  <script>
+    // 物理常數與狀態變數
+    const g = 9.8;
+    const M_car = 0.20; // 200g
+    let m1 = 0.05;      // 50g
+    let m2 = 0.10;      // 100g
+    let muk = 0.00;     // 動摩擦係數
+    let driveMode = 'weight'; // 'weight' 或 'spring'
+    let springK = 80;   // 彈簧彈性係數 (N/m)
+    let springDx = 0.05;// 壓縮量 (m)
+
+    let f = 50;         // 50Hz
+    let period = 1 / f;
+
+    let isTimerOn = false;
+    let isRunning = false;
+    let isMirrorMode = false;
+    let showTapeHint = true;
+
+    let simTime = 0;
+    let carX = 0; // 滑車位移 (m)
+    let carV = 0; // 即時速度 (m/s)
+    let carA = 0; // 即時加速度 (m/s²)
+    let vDetach = 0;
+    let tDetach = 0;
+
+    // 關鍵幾何座標
+    const CAR_HALF_LENGTH = 0.19;
+    const TRACK_START_X = -1.25;
+    const CAR_START_CENTER_X = TRACK_START_X + 0.22;
+    const TABLE_RIGHT_EDGE_X = 1.20;
+    const BUMPER_STOP_X = 0.95;
+
+    const MAX_CAR_X = BUMPER_STOP_X - CAR_HALF_LENGTH - CAR_START_CENTER_X;
+
+    const TABLE_Y = 1.90;
+    const RAIL_Y = TABLE_Y + 0.04;
+    const WHEEL_RADIUS = 0.10;
+    const CAR_BODY_Y = RAIL_Y + WHEEL_RADIUS + 0.04;
+
+    // 定滑輪世界座標與半徑（讓繩子能正確跨過滑輪頂端）
+    const PULLEY_R = 0.06;
+    const PULLEY_CX = TABLE_RIGHT_EDGE_X + 0.02;
+    const PULLEY_CY = RAIL_Y + 0.13;
+
+    let tapeDots = [];
+    let nextDotIndex = 1;
+    let lastAnimTime = 0;
+
+    // 紙帶檢視器狀態（縮放 / 起點方向 / hover 高亮）
+    let tapeZoom = 1;
+    let tapeOriginRight = false;   // false = 左邊起點, true = 右邊起點
+    let hoveredDotIndex = -1;
+    const TAPE_BASE_WIDTH = 1000;
+    const TAPE_PAD = 60;
+
+    // 分析模式（計數點方法）狀態
+    let analysisMode = false;
+    let analysisStartIdx = 0;   // 從第幾點開始
+    let analysisEvery = 5;      // 每幾點取一個計數點
+
+    // DOM 元素
+    const driveModeSelect = document.getElementById('driveModeSelect');
+    const driveModeDesc = document.getElementById('driveModeDesc');
+    const m1Panel = document.getElementById('m1Panel');
+    const m1Input = document.getElementById('m1Input');
+    const m1Disp = document.getElementById('m1Disp');
+    const fDisp = document.getElementById('fDisp');
+
+    const springCompressPanel = document.getElementById('springCompressPanel');
+    const springDxInput = document.getElementById('springDxInput');
+    const springDxDisp = document.getElementById('springDxDisp');
+    const v0Disp = document.getElementById('v0Disp');
+
+    const m2Input = document.getElementById('m2Input');
+    const m2Disp = document.getElementById('m2Disp');
+    const sysMassDisp = document.getElementById('sysMassDisp');
+
+    const muInput = document.getElementById('muInput');
+    const muDisp = document.getElementById('muDisp');
+    const fkDisp = document.getElementById('fkDisp');
+
+    const freqInput = document.getElementById('freqInput');
+    const freqDisp = document.getElementById('freqDisp');
+    const periodDisp = document.getElementById('periodDisp');
+
+    const phaseDisp = document.getElementById('phaseDisp');
+    const accelDisp = document.getElementById('accelDisp');
+    const speedDisp = document.getElementById('speedDisp');
+    const dotCountDisp = document.getElementById('dotCountDisp');
+
+    const btnTimerPower = document.getElementById('btnTimerPower');
+    const timerLed = document.getElementById('timerLed');
+    const timerStatusText = document.getElementById('timerStatusText');
+
+    const btnStart = document.getElementById('btnStart');
+    const startIcon = document.getElementById('startIcon');
+    const startText = document.getElementById('startText');
+    const btnReset = document.getElementById('btnReset');
+
+    const btnToggleMirror = document.getElementById('btnToggleMirror');
+    const mirrorBtnText = document.getElementById('mirrorBtnText');
+    const mirrorActiveTag = document.getElementById('mirrorActiveTag');
+    const canvasViewportWrapper = document.getElementById('canvasViewportWrapper');
+
+    const btnToggleTapeDir = document.getElementById('btnToggleTapeDir');
+    const tapeDirText = document.getElementById('tapeDirText');
+    const tapeDirectionHintBar = document.getElementById('tapeDirectionHintBar');
+
+    const presetAccel = document.getElementById('presetAccel');
+    const presetConstVel = document.getElementById('presetConstVel');
+    const presetDecel = document.getElementById('presetDecel');
+
+    const tapeCanvas = document.getElementById('tapeCanvas');
+    const tapeCtx = tapeCanvas.getContext('2d');
+    const dataTableBody = document.getElementById('dataTableBody');
+    const btnExportCSV = document.getElementById('btnExportCSV');
+    const camHint = document.getElementById('camHint');
+    const bgColorInput = document.getElementById('bgColorInput');
+
+    // 紙帶檢視器新增元件
+    const tapeScrollWrap = document.getElementById('tapeScrollWrap');
+    const tapeTooltip = document.getElementById('tapeTooltip');
+    const ttTitle = document.getElementById('ttTitle');
+    const ttTime = document.getElementById('ttTime');
+    const ttPos = document.getElementById('ttPos');
+    const ttDx = document.getElementById('ttDx');
+    const ttV = document.getElementById('ttV');
+    const ttA = document.getElementById('ttA');
+    const tapeSnapshot = document.getElementById('tapeSnapshot');
+    const tapeSnapCtx = tapeSnapshot.getContext('2d');
+    const tapeZoomDisp = document.getElementById('tapeZoomDisp');
+    const btnTapeZoomIn = document.getElementById('btnTapeZoomIn');
+    const btnTapeZoomOut = document.getElementById('btnTapeZoomOut');
+    const btnTapeZoomReset = document.getElementById('btnTapeZoomReset');
+    const btnTapeOriginLeft = document.getElementById('btnTapeOriginLeft');
+    const btnTapeOriginRight = document.getElementById('btnTapeOriginRight');
+    const tapeHintText = document.getElementById('tapeHintText');
+    const tapeDirChip = document.getElementById('tapeDirChip');
+
+    // 分析模式元件
+    const btnAnalysisMode = document.getElementById('btnAnalysisMode');
+    const analysisModeText = document.getElementById('analysisModeText');
+    const analysisControls = document.getElementById('analysisControls');
+    const analysisStartInput = document.getElementById('analysisStart');
+    const analysisIntervalInput = document.getElementById('analysisInterval');
+    const analysisInfo = document.getElementById('analysisInfo');
+    const analysisResultWrap = document.getElementById('analysisResultWrap');
+    const analysisTableBody = document.getElementById('analysisTableBody');
+    const btnExportAnalysisCSV = document.getElementById('btnExportAnalysisCSV');
+
+    // 圖表元件與狀態
+    const chkShowLine = document.getElementById('chkShowLine');
+    const chkChartAnalysis = document.getElementById('chkChartAnalysis');
+    const chartAnalysisHint = document.getElementById('chartAnalysisHint');
+    const xtReadout = document.getElementById('xtReadout');
+    const vtReadout = document.getElementById('vtReadout');
+    const atReadout = document.getElementById('atReadout');
+    const btnAddGroup = document.getElementById('btnAddGroup');
+    const btnClearGroups = document.getElementById('btnClearGroups');
+    const groupInfo = document.getElementById('groupInfo');
+
+    // 固定質量 & 手拉車元件
+    const chkFixedMass = document.getElementById('chkFixedMass');
+    const fixedMassInfo = document.getElementById('fixedMassInfo');
+    const handModeHint = document.getElementById('handModeHint');
+
+    let vtChart, xtChart, atChart;
+    let highlightIdx = -1;          // 四視圖共同高亮的打點索引
+    let showChartLine = false;      // 是否顯示連線（預設只有點）
+    let chartAnalysisMode = false;  // 兩點量測模式
+    const chartSelections = { xt: [], vt: [], at: [] }; // 各圖已選取的兩個點（存打點索引）
+
+    // 實驗組（多次結果疊圖）
+    let experimentGroups = [];      // {label, color, dots:[], period}
+    const GROUP_COLORS = ['#22c55e', '#a855f7', '#ec4899', '#14b8a6', '#eab308', '#fb7185', '#60a5fa', '#f97316'];
+
+    // 固定總質量模式
+    let fixedMassOn = false;
+    let massBudget = 150;           // m1+m2 總和 (g)
+
+    // 手拉車拖曳
+    let handGrabbing = false;
+    let handPrevX = 0;
+    let carBodyMat = null;
+    let raycaster = null;
+
+    // =========================================================================
+    // 3D WebGL (Three.js) 變數與場景建構
+    // =========================================================================
+    let scene, camera, renderer, controls;
+    let carGroup, wheelMeshes = [], m2WeightMeshes = [];
+    let floorMesh; // 地板網格（背景色連動）
+    const DEFAULT_BG_HEX = 0xdbe4ee; // 預設淺藍灰
+    let pulleyMesh, stringLine, paperTapeMesh, hangingHangerGroup, m1PlateMeshes = [];
+    let pulleyArcPts = []; // 繩子跨過滑輪頂端的固定弧線點
+    let needleMesh, timerLedMesh;
+    let springMesh, rail1Mesh, rail2Mesh;
+    let dots3DGroup, dot3DMeshes = [];
+
+    let cameraMode = 'default';
+    const TICKER_NEEDLE_X = TRACK_START_X - 0.04;
+
+    class HelixCurve extends THREE.Curve {
+      constructor(radius, turns, length) {
+        super();
+        this.radius = radius;
+        this.turns = turns;
+        this.length = length;
+      }
+      getPoint(t) {
+        const angle = t * this.turns * Math.PI * 2;
+        const x = t * this.length;
+        const y = Math.cos(angle) * this.radius;
+        const z = Math.sin(angle) * this.radius;
+        return new THREE.Vector3(x, y, z);
+      }
+    }
+
+    function init3DScene() {
+      const container = document.getElementById('webglCanvas');
+      const width = container.clientWidth;
+      const height = container.clientHeight;
+
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x0a0f1d);
+      scene.fog = new THREE.FogExp2(0x0a0f1d, 0.08);
+
+      camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 50);
+      camera.position.set(-0.2, TABLE_Y + 1.4, 3.2);
+
+      renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setSize(width, height);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      container.appendChild(renderer.domElement);
+
+      controls = new THREE.OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.05;
+      controls.target.set(0, TABLE_Y + 0.1, 0);
+
+      raycaster = new THREE.Raycaster();
+      setupHandDrag();
+
+      const ambientLight = new THREE.AmbientLight(0xffffff, 0.65);
+      scene.add(ambientLight);
+
+      const dirLight = new THREE.DirectionalLight(0xffffff, 0.95);
+      dirLight.position.set(3, TABLE_Y + 5, 4);
+      dirLight.castShadow = true;
+      dirLight.shadow.mapSize.width = 1024;
+      dirLight.shadow.mapSize.height = 1024;
+      scene.add(dirLight);
+
+      const pointLight = new THREE.PointLight(0x38bdf8, 0.5, 10);
+      pointLight.position.set(-1, TABLE_Y + 1.5, -1);
+      scene.add(pointLight);
+
+      buildEnvironment();
+      buildTrack();
+      buildSpringLauncher();
+      buildTickerTimer();
+      buildTrolley();
+      buildPulleyAndHangingWeights();
+      buildPaperTapeMesh();
+
+      dots3DGroup = new THREE.Group();
+      scene.add(dots3DGroup);
+
+      setSceneBackground(DEFAULT_BG_HEX); // 套用預設背景（淺藍灰）
+
+      window.addEventListener('resize', onWindowResize);
+    }
+
+    // 將 hex 顏色朝黑色壓暗 f 比例（0~1），用來由背景色推導地板色
+    function darkenHex(hex, f) {
+      const r = Math.round((hex >> 16 & 255) * (1 - f));
+      const g = Math.round((hex >> 8 & 255) * (1 - f));
+      const b = Math.round((hex & 255) * (1 - f));
+      return (r << 16) | (g << 8) | b;
+    }
+
+    // 設定場景背景：同步 background、fog 與地板色，並更新色票輸入
+    function setSceneBackground(hex) {
+      if (scene) {
+        if (scene.background && scene.background.setHex) scene.background.setHex(hex);
+        else scene.background = new THREE.Color(hex);
+        if (scene.fog) scene.fog.color.setHex(hex);
+      }
+      if (floorMesh) floorMesh.material.color.setHex(darkenHex(hex, 0.35));
+      if (bgColorInput) bgColorInput.value = '#' + hex.toString(16).padStart(6, '0');
+    }
+
+    function buildEnvironment() {
+      const floorGeo = new THREE.PlaneGeometry(20, 20);
+      const floorMat = new THREE.MeshStandardMaterial({ color: 0x070a14, roughness: 0.9 });
+      const floor = new THREE.Mesh(floorGeo, floorMat);
+      floor.rotation.x = -Math.PI / 2;
+      floor.receiveShadow = true;
+      scene.add(floor);
+      floorMesh = floor;
+
+      const tableGeo = new THREE.BoxGeometry(2.6, 0.08, 0.8);
+      const tableMat = new THREE.MeshStandardMaterial({ color: 0x451a03, roughness: 0.4, metalness: 0.1 });
+      const table = new THREE.Mesh(tableGeo, tableMat);
+      table.position.set(TABLE_RIGHT_EDGE_X - 1.3, TABLE_Y, 0);
+      table.castShadow = true;
+      table.receiveShadow = true;
+      scene.add(table);
+
+      const legGeo = new THREE.CylinderGeometry(0.035, 0.035, TABLE_Y);
+      const legMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, metalness: 0.8, roughness: 0.2 });
+      [
+        [TABLE_RIGHT_EDGE_X - 2.5, TABLE_Y / 2, -0.35], [TABLE_RIGHT_EDGE_X - 2.5, TABLE_Y / 2, 0.35],
+        [TABLE_RIGHT_EDGE_X - 0.1, TABLE_Y / 2, -0.35], [TABLE_RIGHT_EDGE_X - 0.1, TABLE_Y / 2, 0.35]
+      ].forEach(pos => {
+        const leg = new THREE.Mesh(legGeo, legMat);
+        leg.position.set(...pos);
+        leg.castShadow = true;
+        scene.add(leg);
+      });
+    }
+
+    function buildTrack() {
+      const railGeo = new THREE.BoxGeometry(2.4, 0.03, 0.04);
+      const railMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, metalness: 0.9, roughness: 0.2 });
+
+      rail1Mesh = new THREE.Mesh(railGeo, railMat.clone());
+      rail1Mesh.position.set(-0.05, RAIL_Y, -0.12);
+      rail1Mesh.castShadow = true;
+      scene.add(rail1Mesh);
+
+      rail2Mesh = new THREE.Mesh(railGeo, railMat.clone());
+      rail2Mesh.position.set(-0.05, RAIL_Y, 0.12);
+      rail2Mesh.castShadow = true;
+      scene.add(rail2Mesh);
+
+      const supGeo = new THREE.BoxGeometry(0.06, 0.04, 0.32);
+      const supMat = new THREE.MeshStandardMaterial({ color: 0x334155 });
+      [-1.1, -0.1, 0.9].forEach(x => {
+        const sup = new THREE.Mesh(supGeo, supMat);
+        sup.position.set(x, RAIL_Y - 0.025, 0);
+        sup.castShadow = true;
+        scene.add(sup);
+      });
+
+      const bumperGroup = new THREE.Group();
+      const bumperBase = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.12, 0.3), new THREE.MeshStandardMaterial({ color: 0x1e293b }));
+      const rubberGeo = new THREE.CylinderGeometry(0.025, 0.025, 0.26);
+      rubberGeo.rotateX(Math.PI / 2);
+      const rubber = new THREE.Mesh(rubberGeo, new THREE.MeshStandardMaterial({ color: 0xdc2626, roughness: 0.9 }));
+      rubber.position.x = -0.025;
+      bumperGroup.add(bumperBase);
+      bumperGroup.add(rubber);
+      bumperGroup.position.set(BUMPER_STOP_X + 0.045, RAIL_Y + 0.04, 0);
+      bumperGroup.castShadow = true;
+      scene.add(bumperGroup);
+    }
+
+    function buildSpringLauncher() {
+      updateSpringMesh(springDx);
+    }
+
+    function updateSpringMesh(currentComp) {
+      if (springMesh) scene.remove(springMesh);
+
+      const relaxedLen = 0.20;
+      const currentLen = Math.max(0.02, relaxedLen - currentComp);
+
+      const curve = new HelixCurve(0.035, 10, currentLen);
+      const tubeGeo = new THREE.TubeGeometry(curve, 64, 0.005, 8, false);
+      const tubeMat = new THREE.MeshStandardMaterial({ color: 0x0284c7, metalness: 0.8, roughness: 0.2 });
+      springMesh = new THREE.Mesh(tubeGeo, tubeMat);
+
+      springMesh.position.set(TRACK_START_X - 0.02, CAR_BODY_Y - 0.02, 0);
+      springMesh.visible = (driveMode === 'spring');
+      scene.add(springMesh);
+    }
+
+    function buildTickerTimer() {
+      const timerGroup = new THREE.Group();
+      const box = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.16, 0.18), new THREE.MeshStandardMaterial({ color: 0x0284c7, roughness: 0.3, metalness: 0.4 }));
+      timerGroup.add(box);
+
+      timerLedMesh = new THREE.Mesh(new THREE.SphereGeometry(0.012, 16, 16), new THREE.MeshStandardMaterial({ color: 0xef4444, emissive: 0xef4444, emissiveIntensity: 0.6 }));
+      timerLedMesh.position.set(-0.08, 0.06, 0.07);
+      timerGroup.add(timerLedMesh);
+
+      needleMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.12), new THREE.MeshStandardMaterial({ color: 0x10b981, metalness: 0.8 }));
+      needleMesh.position.set(0.08, 0.04, 0);
+      timerGroup.add(needleMesh);
+
+      const slot = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.012, 0.06), new THREE.MeshBasicMaterial({ color: 0x020617 }));
+      slot.position.set(0, -0.02, 0);
+      timerGroup.add(slot);
+
+      timerGroup.position.set(TRACK_START_X - 0.12, RAIL_Y + 0.08, 0);
+      scene.add(timerGroup);
+    }
+
+    function buildTrolley() {
+      carGroup = new THREE.Group();
+      const bodyMat = new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.3, metalness: 0.2 });
+      carBodyMat = bodyMat; // 供手拉抓取時改變外觀
+      const body = new THREE.Mesh(new THREE.BoxGeometry(CAR_HALF_LENGTH * 2, 0.10, 0.22), bodyMat);
+      body.castShadow = true;
+      carGroup.add(body);
+
+      const hook = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.04, 0.04), new THREE.MeshStandardMaterial({ color: 0x334155, metalness: 0.8 }));
+      hook.position.set(-CAR_HALF_LENGTH, -0.01, 0);
+      carGroup.add(hook);
+
+      const wheelGeo = new THREE.CylinderGeometry(WHEEL_RADIUS, WHEEL_RADIUS, 0.03, 24);
+      wheelGeo.rotateX(Math.PI / 2);
+      const wheelMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.5 });
+      const rimMat = new THREE.MeshStandardMaterial({ color: 0x38bdf8, metalness: 0.8, roughness: 0.2 });
+
+      wheelMeshes = [];
+      const wheelPositions = [
+        [-0.11, -WHEEL_RADIUS / 2, -0.12], [ 0.11, -WHEEL_RADIUS / 2, -0.12],
+        [-0.11, -WHEEL_RADIUS / 2,  0.12], [ 0.11, -WHEEL_RADIUS / 2,  0.12]
+      ];
+
+      wheelPositions.forEach(pos => {
+        const wGroup = new THREE.Group();
+        const tire = new THREE.Mesh(wheelGeo, wheelMat);
+        tire.castShadow = true;
+        wGroup.add(tire);
+        const rim = new THREE.Mesh(new THREE.BoxGeometry(WHEEL_RADIUS * 1.5, 0.015, 0.035), rimMat);
+        wGroup.add(rim);
+        wGroup.position.set(...pos);
+        carGroup.add(wGroup);
+        wheelMeshes.push(wGroup);
+      });
+
+      m2WeightMeshes = [];
+      for (let i = 0; i < 6; i++) {
+        const weight = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.08), new THREE.MeshStandardMaterial({ color: 0x0284c7, metalness: 0.7 }));
+        weight.castShadow = true;
+        weight.visible = false;
+        carGroup.add(weight);
+        m2WeightMeshes.push(weight);
+      }
+
+      carGroup.position.set(CAR_START_CENTER_X, CAR_BODY_Y, 0);
+      scene.add(carGroup);
+    }
+
+    function buildPulleyAndHangingWeights() {
+      const pulleyGroup = new THREE.Group();
+      const bracket = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.20, 0.06), new THREE.MeshStandardMaterial({ color: 0x475569, metalness: 0.8 }));
+      pulleyGroup.add(bracket);
+
+      const pulleyGeo = new THREE.CylinderGeometry(0.06, 0.06, 0.02, 24);
+      pulleyGeo.rotateX(Math.PI / 2);
+      pulleyMesh = new THREE.Mesh(pulleyGeo, new THREE.MeshStandardMaterial({ color: 0xdc2626, metalness: 0.5 }));
+      pulleyMesh.position.set(0.02, 0.09, 0);
+      pulleyGroup.add(pulleyMesh);
+
+      pulleyGroup.position.set(TABLE_RIGHT_EDGE_X, RAIL_Y + 0.04, 0);
+      scene.add(pulleyGroup);
+
+      const stringMat = new THREE.LineBasicMaterial({ color: 0xf8fafc, linewidth: 2 });
+      // 建立繩子跨過滑輪頂端的固定弧線：由上緣（左上）繞過頂點到右緣切點
+      pulleyArcPts = [];
+      const arcN = 9;
+      const aStart = 140 * Math.PI / 180; // 左上進線接觸點
+      const aEnd = 0;                       // 右切點（之後垂直往下）
+      for (let k = 0; k < arcN; k++) {
+        const th = aStart + (aEnd - aStart) * (k / (arcN - 1));
+        pulleyArcPts.push(new THREE.Vector3(
+          PULLEY_CX + PULLEY_R * Math.cos(th),
+          PULLEY_CY + PULLEY_R * Math.sin(th),
+          0
+        ));
+      }
+      const stringPts = [
+        new THREE.Vector3(CAR_START_CENTER_X + CAR_HALF_LENGTH, CAR_BODY_Y, 0), // 車頭端（動態）
+        ...pulleyArcPts,                                                         // 跨過滑輪頂端（固定）
+        new THREE.Vector3(PULLEY_CX + PULLEY_R, TABLE_Y - 0.1, 0)               // 砝碼吊桿端（動態 y）
+      ];
+      const stringGeo = new THREE.BufferGeometry().setFromPoints(stringPts);
+      stringLine = new THREE.Line(stringGeo, stringMat);
+      scene.add(stringLine);
+
+      hangingHangerGroup = new THREE.Group();
+      const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.22), new THREE.MeshStandardMaterial({ color: 0x94a3b8 }));
+      const tray = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.01, 24), new THREE.MeshStandardMaterial({ color: 0x64748b }));
+      tray.position.y = -0.11;
+      hangingHangerGroup.add(stem);
+      hangingHangerGroup.add(tray);
+      hangingHangerGroup.position.set(TABLE_RIGHT_EDGE_X + 0.08, TABLE_Y - 0.1, 0);
+      scene.add(hangingHangerGroup);
+
+      m1PlateMeshes = [];
+      for (let i = 0; i < 15; i++) {
+        const plate = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.012, 24), new THREE.MeshStandardMaterial({ color: 0x10b981, roughness: 0.3 }));
+        plate.position.y = -0.10 + i * 0.013;
+        plate.visible = false;
+        hangingHangerGroup.add(plate);
+        m1PlateMeshes.push(plate);
+      }
+    }
+
+    function buildPaperTapeMesh() {
+      const tapeMat = new THREE.MeshBasicMaterial({ color: 0xf8fafc, side: THREE.DoubleSide });
+      paperTapeMesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 0.035), tapeMat);
+      paperTapeMesh.rotation.x = Math.PI / 2;
+      paperTapeMesh.position.set(TRACK_START_X, RAIL_Y + 0.06, 0);
+      scene.add(paperTapeMesh);
+    }
+
+    function update3DObjectsPosition() {
+      const carCenterPixelX = CAR_START_CENTER_X + carX;
+      carGroup.position.x = carCenterPixelX;
+
+      const rotAng = carX / WHEEL_RADIUS;
+      wheelMeshes.forEach(w => { w.children[1].rotation.z = rotAng; });
+
+      const m2Count = Math.round((m2 * 1000) / 50);
+      m2WeightMeshes.forEach((w, idx) => {
+        if (idx < m2Count) {
+          w.visible = true;
+          w.position.set(-0.10 + (idx % 3) * 0.09, 0.075, (Math.floor(idx / 3) - 0.5) * 0.09);
+        } else {
+          w.visible = false;
+        }
+      });
+
+      if (driveMode === 'weight') {
+        stringLine.visible = true;
+        hangingHangerGroup.visible = true;
+        if (springMesh) springMesh.visible = false;
+
+        const m1Count = Math.round((m1 * 1000) / 10);
+        m1PlateMeshes.forEach((p, idx) => { p.visible = idx < m1Count; });
+
+        const hangerY = Math.max(0.12, (TABLE_Y - 0.15) - carX);
+        hangingHangerGroup.position.y = hangerY;
+        pulleyMesh.rotation.z = rotAng;
+
+        const carFrontX = carCenterPixelX + CAR_HALF_LENGTH;
+        const positions = stringLine.geometry.attributes.position.array;
+        // 第 0 點：車頭掛勾（隨滑車水平移動）
+        positions[0] = carFrontX;
+        positions[1] = CAR_BODY_Y;
+        positions[2] = 0;
+        // 中間弧線點跨過滑輪頂端，固定不動（不覆寫）
+        // 最後一點：砝碼吊桿頂端，x 對齊滑輪右切點正下方、y 隨滑車前進下降
+        const lastIdx = positions.length / 3 - 1;
+        positions[lastIdx * 3] = PULLEY_CX + PULLEY_R;
+        positions[lastIdx * 3 + 1] = hangerY + 0.11;
+        positions[lastIdx * 3 + 2] = 0;
+        stringLine.geometry.attributes.position.needsUpdate = true;
+      } else {
+        stringLine.visible = false;
+        hangingHangerGroup.visible = false;
+        if (driveMode === 'spring') {
+          const currentComp = Math.max(0, springDx - carX);
+          updateSpringMesh(currentComp);
+        } else if (springMesh) {
+          springMesh.visible = false; // 手拉車模式：不顯示彈簧
+        }
+      }
+
+      const railColorHex = muk === 0 ? 0x94a3b8 : (muk < 0.08 ? 0x475569 : 0x1e293b);
+      rail1Mesh.material.color.setHex(railColorHex);
+      rail2Mesh.material.color.setHex(railColorHex);
+
+      const tapeStartX = TICKER_NEEDLE_X - 0.15;
+      const tapeEndX = carCenterPixelX - CAR_HALF_LENGTH;
+      const tapeLen = Math.max(0.01, tapeEndX - tapeStartX);
+      paperTapeMesh.scale.set(tapeLen, 1, 1);
+      paperTapeMesh.position.set(tapeStartX + tapeLen / 2, RAIL_Y + 0.06, 0);
+
+      sync3DDotsOnTape();
+
+      if (isTimerOn) {
+        timerLedMesh.material.color.setHex(0x22c55e);
+        timerLedMesh.material.emissive.setHex(0x22c55e);
+        needleMesh.position.y = 0.04 + Math.sin(Date.now() * 0.001 * f * Math.PI * 2) * 0.015;
+      } else {
+        timerLedMesh.material.color.setHex(0xef4444);
+        timerLedMesh.material.emissive.setHex(0xef4444);
+        needleMesh.position.y = 0.04;
+      }
+
+      updateCameraPosition();
+    }
+
+    function sync3DDotsOnTape() {
+      while (dot3DMeshes.length < tapeDots.length) {
+        const dotGeo = new THREE.CircleGeometry(0.007, 12);
+        dotGeo.rotateX(-Math.PI / 2);
+        const dotMesh = new THREE.Mesh(dotGeo, new THREE.MeshBasicMaterial({ color: 0xdc2626 }));
+        dots3DGroup.add(dotMesh);
+        dot3DMeshes.push(dotMesh);
+      }
+
+      const carBackX = carGroup.position.x - CAR_HALF_LENGTH;
+
+      for (let i = 0; i < dot3DMeshes.length; i++) {
+        if (i < tapeDots.length) {
+          const worldDotX = TICKER_NEEDLE_X + (carX - tapeDots[i]);
+          dot3DMeshes[i].position.set(worldDotX, RAIL_Y + 0.062, 0);
+          dot3DMeshes[i].visible = (worldDotX >= TICKER_NEEDLE_X && worldDotX <= carBackX);
+        } else {
+          dot3DMeshes[i].visible = false;
+        }
+      }
+    }
+
+    // 修正 3：相機模式改良。側視 / 追蹤僅平移追隨滑車 x，保留使用者滑鼠旋轉；
+    // 自由 3D 與俯視為靜態，於按鈕點擊時設定一次，之後可自由旋轉。
+    function updateCameraPosition() {
+      if (cameraMode === 'side' || cameraMode === 'follow') {
+        const tx = carGroup.position.x + (cameraMode === 'follow' ? 0.3 : 0);
+        const dx = tx - controls.target.x;
+        if (Math.abs(dx) > 1e-6) {
+          camera.position.x += dx;
+          controls.target.x = tx;
+        }
+      }
+      controls.update();
+    }
+
+    function applyCameraPreset(mode) {
+      if (mode === 'default') {
+        camera.position.set(-0.2, TABLE_Y + 1.4, 3.2);
+        controls.target.set(0, TABLE_Y + 0.1, 0);
+        camHint.textContent = '💡 自由 3D 視角：左鍵旋轉 / 右鍵平移 / 滾輪縮放';
+      } else if (mode === 'side') {
+        camera.position.set(carGroup.position.x, TABLE_Y + 0.4, 1.5);
+        controls.target.set(carGroup.position.x, TABLE_Y + 0.1, 0);
+        camHint.textContent = '💡 側視特寫：畫面隨滑車水平平移，仍可左鍵旋轉觀看';
+      } else if (mode === 'follow') {
+        camera.position.set(carGroup.position.x - 0.6, TABLE_Y + 0.5, 0.8);
+        controls.target.set(carGroup.position.x + 0.3, TABLE_Y + 0.1, 0);
+        camHint.textContent = '💡 追蹤滑車：鏡頭跟隨滑車前進，仍可左鍵旋轉觀看';
+      } else if (mode === 'top') {
+        camera.position.set(0, TABLE_Y + 2.6, 0.01);
+        controls.target.set(0, TABLE_Y, 0);
+        camHint.textContent = '💡 俯視概覽：靜態鳥瞰，可左鍵旋轉 / 滾輪縮放';
+      }
+      controls.update();
+    }
+
+    function onWindowResize() {
+      const container = document.getElementById('webglCanvas');
+      if (!container) return;
+      const w = container.clientWidth;
+      const h = container.clientHeight;
+      camera.aspect = w / h;
+      camera.updateProjectionMatrix();
+      renderer.setSize(w, h);
+    }
+
+    // ---- 手拉車模式：以滑鼠/觸控拖曳滑車 ----
+    const HAND_DRAG_PLANE = new THREE.Plane(new THREE.Vector3(0, 1, 0), -CAR_BODY_Y); // y = CAR_BODY_Y 水平面
+
+    function pointerToTrackX(clientX, clientY) {
+      const rect = renderer.domElement.getBoundingClientRect();
+      const ndc = {
+        x: ((clientX - rect.left) / rect.width) * 2 - 1,
+        y: -((clientY - rect.top) / rect.height) * 2 + 1
+      };
+      raycaster.setFromCamera(ndc, camera);
+      const pt = new THREE.Vector3();
+      return raycaster.ray.intersectPlane(HAND_DRAG_PLANE, pt) ? pt.x : null;
+    }
+
+    function pointerHitsCar(clientX, clientY) {
+      const rect = renderer.domElement.getBoundingClientRect();
+      const ndc = {
+        x: ((clientX - rect.left) / rect.width) * 2 - 1,
+        y: -((clientY - rect.top) / rect.height) * 2 + 1
+      };
+      raycaster.setFromCamera(ndc, camera);
+      return raycaster.intersectObjects(carGroup.children, true).length > 0;
+    }
+
+    function handGrabStart(clientX, clientY) {
+      if (!isTimerOn) toggleTimerPower(); // 開電源才會印點
+      resetSim();                          // 清空目前這組，車回起點
+      isRunning = true;
+      lastAnimTime = 0;
+      handPrevX = carX;
+      handGrabbing = true;
+      controls.enabled = false;
+      if (carBodyMat) { carBodyMat.emissive = new THREE.Color(0x10b981); carBodyMat.emissiveIntensity = 0.5; }
+      startText.textContent = '✋ 手拉記錄中…';
+      startIcon.textContent = '✋';
+      btnStart.disabled = true;
+      btnStart.classList.add('opacity-50');
+    }
+
+    function handGrabMove(clientX, clientY) {
+      const wx = pointerToTrackX(clientX, clientY);
+      if (wx != null) carX = Math.max(0, Math.min(MAX_CAR_X, wx - CAR_START_CENTER_X));
+    }
+
+    function handGrabEnd() {
+      if (!handGrabbing) return;
+      handGrabbing = false;
+      isRunning = false;
+      controls.enabled = true;
+      if (carBodyMat) { carBodyMat.emissive = new THREE.Color(0x000000); carBodyMat.emissiveIntensity = 0; }
+      startText.textContent = '手拉完成（可按重置再來）';
+      startIcon.textContent = '✋';
+    }
+
+    function setupHandDrag() {
+      const el = renderer.domElement;
+      // 用 capture 讓我們在 OrbitControls 之前攔截，決定是否要拖車
+      el.addEventListener('pointerdown', (e) => {
+        if (driveMode !== 'hand') return;
+        if (pointerHitsCar(e.clientX, e.clientY)) {
+          e.stopPropagation();
+          e.preventDefault();
+          handGrabStart(e.clientX, e.clientY);
+        }
+      }, true);
+      window.addEventListener('pointermove', (e) => {
+        if (handGrabbing) handGrabMove(e.clientX, e.clientY);
+      });
+      window.addEventListener('pointerup', () => {
+        if (handGrabbing) handGrabEnd();
+      });
+    }
+
+    // =========================================================================
+    // 運動圖表（x-t / v-t / a-t）：以打點資料為離散點
+    // =========================================================================
+    function chartKey(id) { return id === 'xtChart' ? 'xt' : id === 'vtChart' ? 'vt' : 'at'; }
+
+    function pointRadiusFor(ctx) {
+      const raw = ctx.raw; if (!raw) return 3;
+      const key = chartKey(ctx.chart.canvas.id);
+      if (chartSelections[key].includes(raw.i)) return 6.5;
+      if (raw.i === highlightIdx) return 6;
+      return 3;
+    }
+    function pointColorFor(ctx, base) {
+      const raw = ctx.raw; if (!raw) return base;
+      const key = chartKey(ctx.chart.canvas.id);
+      if (chartSelections[key].includes(raw.i)) return '#f59e0b'; // 選取=琥珀
+      if (raw.i === highlightIdx) return '#34d399';               // 高亮=翠綠
+      return base;
+    }
+    function pointBorderFor(ctx) {
+      const raw = ctx.raw; if (!raw) return 'transparent';
+      const key = chartKey(ctx.chart.canvas.id);
+      if (chartSelections[key].includes(raw.i) || raw.i === highlightIdx) return '#0f172a';
+      return 'transparent';
+    }
+
+    // 座標刻度格式：最多 2 位小數、去尾零
+    function tick2(v) {
+      const n = Number(v);
+      if (!Number.isFinite(n)) return v;
+      return String(parseFloat(n.toFixed(2)));
+    }
+
+    function makeChart(canvasId, color, yTitle) {
+      const ctx = document.getElementById(canvasId).getContext('2d');
+      return new Chart(ctx, {
+        type: 'line',
+        data: { datasets: [] },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          animation: false,
+          interaction: { mode: 'nearest', intersect: true },
+          onHover: (e, els, chart) => {
+            const hit = els && els.find(el => chart.data.datasets[el.datasetIndex].isLive);
+            if (hit) {
+              const p = chart.data.datasets[hit.datasetIndex].data[hit.index];
+              setHighlight(p ? p.i : -1);
+            } else {
+              setHighlight(-1);
+            }
+          },
+          onClick: (e, els, chart) => {
+            if (!chartAnalysisMode || !els) return;
+            const hit = els.find(el => chart.data.datasets[el.datasetIndex].isLive);
+            if (!hit) return;
+            const p = chart.data.datasets[hit.datasetIndex].data[hit.index];
+            if (p) selectChartPoint(chart.canvas.id, p);
+          },
+          scales: {
+            x: { type: 'linear', min: 0, title: { display: true, text: '時間 t (s)', color: '#94a3b8' }, ticks: { color: '#64748b', maxTicksLimit: 6, callback: tick2 }, grid: { color: '#1e293b' } },
+            y: { beginAtZero: true, title: { display: true, text: yTitle, color: '#94a3b8' }, ticks: { color: '#64748b', callback: tick2 }, grid: { color: '#1e293b' } }
+          },
+          plugins: {
+            legend: { display: false, labels: { color: '#cbd5e1', boxWidth: 12, font: { size: 10 } } },
+            tooltip: {
+              enabled: true,
+              callbacks: {
+                title: (items) => items.length ? `#${items[0].raw.i} · t=${items[0].parsed.x.toFixed(3)}s` : '',
+                label: (item) => `${yTitle}: ${item.parsed.y.toFixed(3)}`
+              }
+            }
+          }
+        }
+      });
+    }
+
+    function initCharts() {
+      xtChart = makeChart('xtChart', '#38bdf8', '位移 x (cm)');
+      vtChart = makeChart('vtChart', '#f59e0b', '速度 v (m/s)');
+      atChart = makeChart('atChart', '#f43f5e', '加速度 a (m/s²)');
+    }
+
+    // 由任一組打點資料建立各點 {i,t,x,v,a}；分析模式只取計數點並以 ΔT 計算 v/a
+    function buildPointsFrom(dots, per) {
+      const n = dots.length;
+      const pts = [];
+      if (analysisMode) {
+        const every = Math.max(1, Math.round(analysisEvery));
+        const start = Math.max(0, Math.min(Math.round(analysisStartIdx), n - 1));
+        const cps = [];
+        for (let i = start; i < n; i += every) cps.push(i);
+        const dT = every * per;
+        for (let k = 0; k < cps.length; k++) {
+          const j = cps[k];
+          let v = null, a = null;
+          if (k >= 1 && k <= cps.length - 2) {
+            v = (dots[cps[k + 1]] - dots[cps[k - 1]]) / (2 * dT);
+            a = (dots[cps[k + 1]] - 2 * dots[cps[k]] + dots[cps[k - 1]]) / (dT * dT);
+          }
+          pts.push({ i: j, t: j * per, x: dots[j] * 100, v, a });
+        }
+      } else {
+        for (let i = 0; i < n; i++) {
+          let v = null, a = null;
+          if (i >= 1 && i <= n - 2) {
+            v = (dots[i + 1] - dots[i - 1]) / (2 * per);
+            a = (dots[i + 1] - 2 * dots[i] + dots[i - 1]) / (per * per);
+          }
+          pts.push({ i, t: i * per, x: dots[i] * 100, v, a });
+        }
+      }
+      return pts;
+    }
+
+    function seriesFor(key, pts) {
+      if (key === 'xt') return pts.map(p => ({ x: p.t, y: p.x, i: p.i }));
+      if (key === 'vt') return pts.filter(p => p.v != null).map(p => ({ x: p.t, y: p.v, i: p.i }));
+      return pts.filter(p => p.a != null).map(p => ({ x: p.t, y: p.a, i: p.i }));
+    }
+
+    const CHART_DEFS = [['xt', () => xtChart, '#38bdf8'], ['vt', () => vtChart, '#f59e0b'], ['at', () => atChart, '#f43f5e']];
+
+    function refreshCharts() {
+      if (!xtChart) return;
+      const livePts = buildPointsFrom(tapeDots, period);
+      const groupPts = experimentGroups.map(g => ({ g, pts: buildPointsFrom(g.dots, g.period) }));
+
+      CHART_DEFS.forEach(([key, getC, baseColor]) => {
+        const chart = getC();
+        const datasets = [];
+        // 已存實驗組（靜態對照疊圖）
+        groupPts.forEach(({ g, pts }) => {
+          datasets.push({
+            label: g.label,
+            data: seriesFor(key, pts),
+            borderColor: g.color,
+            backgroundColor: 'transparent',
+            borderWidth: 1.5,
+            showLine: showChartLine,
+            tension: 0.05,
+            pointRadius: 2.6,
+            pointHoverRadius: 4,
+            pointBackgroundColor: g.color,
+            pointBorderWidth: 0,
+            isLive: false
+          });
+        });
+        // 目前這組（可高亮 / 兩點量測）
+        datasets.push({
+          label: '目前',
+          data: seriesFor(key, livePts),
+          borderColor: baseColor,
+          backgroundColor: baseColor + '22',
+          borderWidth: 2,
+          showLine: showChartLine,
+          tension: 0.05,
+          pointRadius: pointRadiusFor,
+          pointHoverRadius: 7,
+          pointBackgroundColor: (c) => pointColorFor(c, baseColor),
+          pointBorderColor: pointBorderFor,
+          pointBorderWidth: (c) => (c.raw && (chartSelections[key].includes(c.raw.i) || c.raw.i === highlightIdx)) ? 2 : 0,
+          isLive: true
+        });
+        chart.data.datasets = datasets;
+        chart.options.plugins.legend.display = experimentGroups.length > 0;
+        chart.update('none');
+      });
+      updateAllReadouts();
+    }
+
+    // 四視圖共同高亮
+    function setHighlight(i) {
+      if (i === highlightIdx) return;
+      highlightIdx = i;
+      hoveredDotIndex = i;
+      if (isMultiTape()) hoveredTapeRow = experimentGroups.length; // live 列在最後
+      drawTapeCanvas();
+      [xtChart, vtChart, atChart].forEach(c => c && c.update('none'));
+    }
+
+    // 兩點量測：選點
+    function selectChartPoint(canvasId, p) {
+      const key = chartKey(canvasId);
+      const sel = chartSelections[key];
+      if (sel.length >= 2) sel.length = 0; // 第三次點擊重新開始
+      sel.push(p.i);
+      [xtChart, vtChart, atChart].forEach(c => c && c.update('none'));
+      updateReadout(key);
+    }
+
+    function readoutValueForKey(key, i) {
+      const chart = key === 'xt' ? xtChart : key === 'vt' ? vtChart : atChart;
+      const live = chart.data.datasets.find(ds => ds.isLive);
+      if (!live) return null;
+      const d = live.data.find(pt => pt.i === i);
+      return d ? { t: d.x, y: d.y } : null;
+    }
+
+    const READOUT_META = {
+      xt: { name: '位移 x', unit: 'cm', dsym: 'Δx', slopeName: '平均速度 v̄ = Δx/Δt', slopeUnit: 'm/s', slopeFn: (dy, dt) => (dy / 100) / dt },
+      vt: { name: '速度 v', unit: 'm/s', dsym: 'Δv', slopeName: '加速度 a = Δv/Δt', slopeUnit: 'm/s²', slopeFn: (dy, dt) => dy / dt },
+      at: { name: '加速度 a', unit: 'm/s²', dsym: 'Δa', slopeName: '加加速度 Δa/Δt', slopeUnit: 'm/s³', slopeFn: (dy, dt) => dy / dt }
+    };
+
+    function updateReadout(key) {
+      const el = key === 'xt' ? xtReadout : key === 'vt' ? vtReadout : atReadout;
+      const sel = chartSelections[key];
+      const meta = READOUT_META[key];
+      if (!chartAnalysisMode || sel.length === 0) { el.classList.add('hidden'); el.innerHTML = ''; return; }
+
+      if (sel.length === 1) {
+        const p = readoutValueForKey(key, sel[0]);
+        if (!p) { el.classList.add('hidden'); return; }
+        el.classList.remove('hidden');
+        el.innerHTML = `已選 <b class="text-amber-300">A：#${sel[0]}</b>　t=${p.t.toFixed(3)}s　${meta.name}=${p.y.toFixed(3)}${meta.unit}<br><span class="text-slate-500">再點第二個點以計算差值…</span>`;
+        return;
+      }
+      const A = readoutValueForKey(key, sel[0]);
+      const B = readoutValueForKey(key, sel[1]);
+      if (!A || !B) { el.classList.add('hidden'); return; }
+      const dt = B.t - A.t;
+      const dy = B.y - A.y;
+      const slope = dt !== 0 ? meta.slopeFn(dy, dt) : NaN;
+      el.classList.remove('hidden');
+      el.innerHTML =
+        `<div class="text-slate-400">A #${sel[0]} (t=${A.t.toFixed(3)}, ${A.y.toFixed(3)}${meta.unit}) → B #${sel[1]} (t=${B.t.toFixed(3)}, ${B.y.toFixed(3)}${meta.unit})</div>` +
+        `<div class="text-sky-300">Δt = ${dt.toFixed(3)} s</div>` +
+        `<div class="text-emerald-300">${meta.dsym} = ${dy.toFixed(3)} ${meta.unit}</div>` +
+        `<div class="text-amber-300">${meta.slopeName} = ${isFinite(slope) ? slope.toFixed(3) : '—'} ${meta.slopeUnit}</div>`;
+    }
+
+    function updateAllReadouts() { ['xt', 'vt', 'at'].forEach(updateReadout); }
+
+    // 紙帶採用「固定比例尺」：每點依實際位移直接定位，比例尺以最大行程 MAX_CAR_X 為基準。
+    // 支援縮放（tapeZoom 改變 canvas 寬度）、左/右起點（tapeOriginRight）、hover 高亮。
+    const TAPE_TOP = 74, TAPE_BAND_H = 46;           // 紙帶帶狀區
+    const TAPE_BAND_CENTER = TAPE_TOP + TAPE_BAND_H / 2;
+
+    // 把實際位移 (m) 換算成畫布 x 座標（含起點方向）
+    function tapePixelX(phys) {
+      const w = tapeCanvas.width;
+      const tapeScale = (w - TAPE_PAD * 2) / (MAX_CAR_X * 1.02);
+      const base = TAPE_PAD + phys * tapeScale;
+      return tapeOriginRight ? (w - base) : base;
+    }
+
+    // 多組併排相關
+    function isMultiTape() { return experimentGroups.length > 0; }
+    function tapeRows() {
+      const rows = experimentGroups.map(gp => ({ label: gp.label, color: gp.color, dots: gp.dots, period: gp.period, isLive: false }));
+      rows.push({ label: '目前', color: '#dc2626', dots: tapeDots, period: period, isLive: true });
+      return rows;
+    }
+    const MT_LABEL_W = 62, MT_ROW_H = 54, MT_TOP = 12, MT_STRIP_H = 26;
+    let hoveredTapeRow = -1; // 多組模式中被 hover 的列（-1 表無）
+
+    function multiXOf(phys, w) {
+      const leftX = MT_LABEL_W + 10, rightX = w - 24;
+      const scale = (rightX - leftX) / (MAX_CAR_X * 1.02);
+      const base = leftX + phys * scale;
+      return tapeOriginRight ? (rightX - (base - leftX)) : base;
+    }
+
+    function drawTapeCanvas() {
+      if (isMultiTape()) { drawMultiTape(); return; }
+      const w = tapeCanvas.width;
+      const h = tapeCanvas.height;
+
+      tapeCtx.clearRect(0, 0, w, h);
+      tapeCtx.fillStyle = '#020617';
+      tapeCtx.fillRect(0, 0, w, h);
+
+      // 紙帶帶狀底
+      tapeCtx.fillStyle = '#f8fafc';
+      tapeCtx.fillRect(30, TAPE_TOP, w - 60, TAPE_BAND_H);
+      tapeCtx.strokeStyle = '#cbd5e1';
+      tapeCtx.lineWidth = 1;
+      tapeCtx.strokeRect(30, TAPE_TOP, w - 60, TAPE_BAND_H);
+
+      if (tapeDots.length === 0) {
+        tapeCtx.fillStyle = '#64748b';
+        tapeCtx.font = '13px sans-serif';
+        tapeCtx.fillText('💡 打點計時器電源目前為「關閉」。請點擊上方「計時器電源：關閉」開啟電源...', 50, TAPE_BAND_CENTER + 4);
+        return;
+      }
+
+      if (tapeDots.length === 1 && !isRunning) {
+        tapeCtx.fillStyle = '#10b981';
+        tapeCtx.font = '13px sans-serif';
+        tapeCtx.fillText('⚡ 計時器已開啟！已在原點印出第 0 號墨跡。請點擊「釋放 / 彈射滑車」...', 50, TAPE_BAND_CENTER + 4);
+      }
+
+      // 共用：點號標籤（防重疊由呼叫端控制）
+      const drawIndexLabel = (i, x, hl) => {
+        tapeCtx.fillStyle = hl ? '#fbbf24' : '#94a3b8';
+        tapeCtx.font = hl ? 'bold 11px monospace' : '10px monospace';
+        const s = String(i);
+        const tw = tapeCtx.measureText(s).width;
+        tapeCtx.fillText(s, x - tw / 2, TAPE_TOP - 8);
+      };
+
+      const countingSet = analysisMode ? new Set(getCountingPoints()) : new Set();
+
+      // 1) 畫所有點：分析模式時非計數點淡化、計數點加粗
+      for (let i = 0; i < tapeDots.length; i++) {
+        const px = tapePixelX(tapeDots[i]);
+        if (analysisMode) {
+          if (countingSet.has(i)) {
+            tapeCtx.fillStyle = '#dc2626';
+            tapeCtx.beginPath();
+            tapeCtx.arc(px, TAPE_BAND_CENTER, 4.5, 0, Math.PI * 2);
+            tapeCtx.fill();
+          } else {
+            tapeCtx.fillStyle = 'rgba(148,163,184,0.5)';
+            tapeCtx.beginPath();
+            tapeCtx.arc(px, TAPE_BAND_CENTER, 2, 0, Math.PI * 2);
+            tapeCtx.fill();
+          }
+        } else {
+          tapeCtx.fillStyle = '#dc2626';
+          tapeCtx.beginPath();
+          tapeCtx.arc(px, TAPE_BAND_CENTER, 3.2, 0, Math.PI * 2);
+          tapeCtx.fill();
+        }
+      }
+
+      if (analysisMode) {
+        drawAnalysisOverlay(w);
+      } else {
+        // 2) 點號標籤：依 x 排序後跳過會重疊者，確保永遠可讀；放大後自然顯示更多
+        const entries = tapeDots.map((p, i) => ({ i, x: tapePixelX(p) })).sort((a, b) => a.x - b.x);
+        let lastLabelX = -1e9;
+        const drawn = new Set();
+        for (const e of entries) {
+          if (e.x - lastLabelX >= 16) { drawIndexLabel(e.i, e.x, false); lastLabelX = e.x; drawn.add(e.i); }
+        }
+        [0, tapeDots.length - 1].forEach(i => {
+          if (!drawn.has(i)) { drawIndexLabel(i, tapePixelX(tapeDots[i]), false); drawn.add(i); }
+        });
+
+        // 3) 點距 cm 標籤：僅在該區間畫面夠寬時顯示（放大後更多會出現）
+        for (let i = 1; i < tapeDots.length; i++) {
+          const px = tapePixelX(tapeDots[i]);
+          const prevX = tapePixelX(tapeDots[i - 1]);
+          if (Math.abs(px - prevX) >= 26) {
+            const midX = (px + prevX) / 2;
+            tapeCtx.strokeStyle = '#94a3b8';
+            tapeCtx.lineWidth = 1;
+            tapeCtx.beginPath();
+            tapeCtx.moveTo(prevX, TAPE_TOP + TAPE_BAND_H + 6);
+            tapeCtx.lineTo(px, TAPE_TOP + TAPE_BAND_H + 6);
+            tapeCtx.stroke();
+
+            const distCm = ((tapeDots[i] - tapeDots[i - 1]) * 100).toFixed(2) + 'cm';
+            tapeCtx.fillStyle = '#38bdf8';
+            tapeCtx.font = '10px monospace';
+            const tw = tapeCtx.measureText(distCm).width;
+            tapeCtx.fillText(distCm, midX - tw / 2, TAPE_TOP + TAPE_BAND_H + 20);
+          }
+        }
+
+        // 4) t₀ / tₙ 時空導引標籤（依起點方向）
+        if (showTapeHint && tapeDots.length > 1) {
+          const startX = tapePixelX(tapeDots[0]);
+          const endX = tapePixelX(tapeDots[tapeDots.length - 1]);
+          tapeCtx.font = 'bold 11px sans-serif';
+          tapeCtx.fillStyle = '#818cf8';
+          tapeCtx.fillText('🏷️ t₀ 起點', Math.min(Math.max(startX - 24, 4), w - 90), 40);
+          tapeCtx.fillStyle = '#38bdf8';
+          const endLbl = `🏷️ t${tapeDots.length - 1} 末點`;
+          const etw = tapeCtx.measureText(endLbl).width;
+          tapeCtx.fillText(endLbl, Math.min(Math.max(endX - etw / 2, 4), w - etw - 4), 40);
+        }
+      }
+
+      // 5) hover 高亮：導引線 + 外環 + 粗體點號
+      if (hoveredDotIndex >= 0 && hoveredDotIndex < tapeDots.length) {
+        const hx = tapePixelX(tapeDots[hoveredDotIndex]);
+        tapeCtx.strokeStyle = 'rgba(52,211,153,0.5)';
+        tapeCtx.lineWidth = 1;
+        tapeCtx.setLineDash([4, 4]);
+        tapeCtx.beginPath();
+        tapeCtx.moveTo(hx, TAPE_TOP - 4);
+        tapeCtx.lineTo(hx, TAPE_TOP + TAPE_BAND_H + 24);
+        tapeCtx.stroke();
+        tapeCtx.setLineDash([]);
+
+        tapeCtx.fillStyle = '#34d399';
+        tapeCtx.beginPath();
+        tapeCtx.arc(hx, TAPE_BAND_CENTER, 4, 0, Math.PI * 2);
+        tapeCtx.fill();
+        tapeCtx.strokeStyle = '#34d399';
+        tapeCtx.lineWidth = 2;
+        tapeCtx.beginPath();
+        tapeCtx.arc(hx, TAPE_BAND_CENTER, 8, 0, Math.PI * 2);
+        tapeCtx.stroke();
+
+        drawIndexLabel(hoveredDotIndex, hx, true);
+      }
+    }
+
+    // 多組併排：每組一條紙帶，上下平行、共用固定比例尺
+    function drawMultiTape() {
+      const rows = tapeRows();
+      const w = tapeCanvas.width;
+      const h = tapeCanvas.height;
+      tapeCtx.clearRect(0, 0, w, h);
+      tapeCtx.fillStyle = '#020617';
+      tapeCtx.fillRect(0, 0, w, h);
+
+      const every = Math.max(1, Math.round(analysisEvery));
+      const leftX = MT_LABEL_W + 10, rightX = w - 24;
+
+      rows.forEach((row, r) => {
+        const rowTop = MT_TOP + r * MT_ROW_H;
+        const stripTop = rowTop + 16;
+        const dotY = stripTop + MT_STRIP_H / 2;
+
+        // 左側標籤：色塊 + 名稱
+        tapeCtx.fillStyle = row.color;
+        tapeCtx.fillRect(8, dotY - 6, 12, 12);
+        tapeCtx.fillStyle = row.isLive ? '#fca5a5' : '#e2e8f0';
+        tapeCtx.font = 'bold 11px sans-serif';
+        tapeCtx.fillText(row.label, 24, dotY - 2);
+        tapeCtx.fillStyle = '#64748b';
+        tapeCtx.font = '9px monospace';
+        tapeCtx.fillText(`${row.dots.length}點`, 24, dotY + 10);
+
+        // 紙帶白底
+        tapeCtx.fillStyle = '#f8fafc';
+        tapeCtx.fillRect(leftX - 6, stripTop, (rightX - leftX) + 12, MT_STRIP_H);
+        tapeCtx.strokeStyle = '#cbd5e1';
+        tapeCtx.lineWidth = 1;
+        tapeCtx.strokeRect(leftX - 6, stripTop, (rightX - leftX) + 12, MT_STRIP_H);
+
+        // 分析模式的計數點集合（依各組自己的資料）
+        let countingSet = null;
+        if (analysisMode) {
+          countingSet = new Set();
+          const start = Math.max(0, Math.min(Math.round(analysisStartIdx), row.dots.length - 1));
+          for (let i = start; i < row.dots.length; i += every) countingSet.add(i);
+        }
+
+        // 畫點
+        for (let i = 0; i < row.dots.length; i++) {
+          const x = multiXOf(row.dots[i], w);
+          if (analysisMode) {
+            if (countingSet.has(i)) {
+              tapeCtx.fillStyle = row.color;
+              tapeCtx.beginPath(); tapeCtx.arc(x, dotY, 3.6, 0, Math.PI * 2); tapeCtx.fill();
+            } else {
+              tapeCtx.fillStyle = 'rgba(148,163,184,0.5)';
+              tapeCtx.beginPath(); tapeCtx.arc(x, dotY, 1.8, 0, Math.PI * 2); tapeCtx.fill();
+            }
+          } else {
+            tapeCtx.fillStyle = row.color;
+            tapeCtx.beginPath(); tapeCtx.arc(x, dotY, 2.6, 0, Math.PI * 2); tapeCtx.fill();
+          }
+        }
+
+        // hover 高亮
+        if (hoveredTapeRow === r && hoveredDotIndex >= 0 && hoveredDotIndex < row.dots.length) {
+          const hx = multiXOf(row.dots[hoveredDotIndex], w);
+          tapeCtx.strokeStyle = '#34d399';
+          tapeCtx.lineWidth = 2;
+          tapeCtx.beginPath(); tapeCtx.arc(hx, dotY, 7, 0, Math.PI * 2); tapeCtx.stroke();
+        }
+      });
+
+      // 底部提示
+      tapeCtx.fillStyle = '#475569';
+      tapeCtx.font = '10px sans-serif';
+      tapeCtx.fillText('併排比較模式：各組共用同一比例尺，可直接比較點距（清除組別可回單條詳細檢視）', 8, h - 6);
+    }
+
+    // 多組模式：由畫布座標找最近的 (列, 點)
+    function findNearestInMulti(cx, cy) {
+      const rows = tapeRows();
+      const w = tapeCanvas.width;
+      for (let r = 0; r < rows.length; r++) {
+        const rowTop = MT_TOP + r * MT_ROW_H;
+        const stripTop = rowTop + 16;
+        const dotY = stripTop + MT_STRIP_H / 2;
+        if (cy >= stripTop - 6 && cy <= stripTop + MT_STRIP_H + 6) {
+          let best = -1, bestD = 1e9;
+          for (let i = 0; i < rows[r].dots.length; i++) {
+            const d = Math.abs(multiXOf(rows[r].dots[i], w) - cx);
+            if (d < bestD) { bestD = d; best = i; }
+          }
+          if (bestD <= 12) return { row: r, i: best, isLive: rows[r].isLive };
+          return { row: -1, i: -1 };
+        }
+      }
+      return { row: -1, i: -1 };
+    }
+
+    // 套用縮放：1× 時填滿容器寬度，放大時畫布變寬並在容器內水平捲動
+    function applyTapeZoom() {
+      const baseW = Math.max(320, tapeScrollWrap.clientWidth || TAPE_BASE_WIDTH);
+      tapeCanvas.width = Math.round(baseW * tapeZoom);
+      if (isMultiTape()) {
+        tapeCanvas.height = MT_TOP + tapeRows().length * MT_ROW_H + 16;
+      } else {
+        tapeCanvas.height = analysisMode ? 210 : 180;
+      }
+      tapeZoomDisp.textContent = tapeZoom.toFixed(1) + '×';
+      drawTapeCanvas();
+    }
+
+    // ---- 計數點分析（分析模式）----
+    // 取得計數點的原始點索引：從 analysisStartIdx 起，每 analysisEvery 點取一個
+    function getCountingPoints() {
+      const n = tapeDots.length;
+      if (n === 0) return [];
+      const every = Math.max(1, Math.round(analysisEvery));
+      const start = Math.max(0, Math.min(Math.round(analysisStartIdx), n - 1));
+      const pts = [];
+      for (let i = start; i < n; i += every) pts.push(i);
+      return pts;
+    }
+
+    // 在紙帶上疊加：計數點垂直刻度、計數序/點號、總距 Σ、間距 Δ 括號與區間速度
+    function drawAnalysisOverlay(w) {
+      const cps = getCountingPoints();
+      if (cps.length === 0) return;
+      const s0 = tapeDots[cps[0]];
+      const dT = Math.max(1, Math.round(analysisEvery)) * period;
+
+      let lastTopLabelX = -1e9;
+      for (let k = 0; k < cps.length; k++) {
+        const j = cps[k];
+        const x = tapePixelX(tapeDots[j]);
+
+        // 計數點垂直刻度
+        tapeCtx.strokeStyle = 'rgba(16,185,129,0.7)';
+        tapeCtx.lineWidth = 1;
+        tapeCtx.beginPath();
+        tapeCtx.moveTo(x, TAPE_TOP - 2);
+        tapeCtx.lineTo(x, TAPE_TOP + TAPE_BAND_H + 4);
+        tapeCtx.stroke();
+
+        // 上方標籤：計數序 + 對應點號 + 總距（防重疊）
+        if (x - lastTopLabelX >= 40 || k === 0 || k === cps.length - 1) {
+          tapeCtx.fillStyle = '#34d399';
+          tapeCtx.font = 'bold 11px monospace';
+          let s = `計${k}`;
+          let tw = tapeCtx.measureText(s).width;
+          tapeCtx.fillText(s, x - tw / 2, 52);
+
+          tapeCtx.fillStyle = '#64748b';
+          tapeCtx.font = '9px monospace';
+          s = `#${j}`;
+          tw = tapeCtx.measureText(s).width;
+          tapeCtx.fillText(s, x - tw / 2, 63);
+
+          if (k > 0) {
+            const total = (tapeDots[j] - s0) * 100;
+            tapeCtx.fillStyle = '#a7f3d0';
+            tapeCtx.font = '9px monospace';
+            s = `Σ${total.toFixed(1)}`;
+            tw = tapeCtx.measureText(s).width;
+            tapeCtx.fillText(s, x - tw / 2, 34);
+          }
+          lastTopLabelX = x;
+        }
+      }
+
+      // 相鄰計數點之間：間距 Δs 括號 + 區間速度
+      for (let k = 1; k < cps.length; k++) {
+        const xA = tapePixelX(tapeDots[cps[k - 1]]);
+        const xB = tapePixelX(tapeDots[cps[k]]);
+        const lo = Math.min(xA, xB), hi = Math.max(xA, xB);
+        if (hi - lo < 22) continue;
+        const mid = (lo + hi) / 2;
+        const yb = TAPE_TOP + TAPE_BAND_H + 8;
+
+        tapeCtx.strokeStyle = '#38bdf8';
+        tapeCtx.lineWidth = 1.2;
+        tapeCtx.beginPath();
+        tapeCtx.moveTo(lo, yb); tapeCtx.lineTo(hi, yb);
+        tapeCtx.moveTo(lo, yb - 4); tapeCtx.lineTo(lo, yb + 4);
+        tapeCtx.moveTo(hi, yb - 4); tapeCtx.lineTo(hi, yb + 4);
+        tapeCtx.stroke();
+
+        const ds = Math.abs(tapeDots[cps[k]] - tapeDots[cps[k - 1]]);
+        tapeCtx.fillStyle = '#7dd3fc';
+        tapeCtx.font = 'bold 10px monospace';
+        let s = `Δ${(ds * 100).toFixed(2)}`;
+        let tw = tapeCtx.measureText(s).width;
+        tapeCtx.fillText(s, mid - tw / 2, yb + 16);
+
+        tapeCtx.fillStyle = '#fbbf24';
+        tapeCtx.font = '9px monospace';
+        s = `v=${(ds / dT).toFixed(3)}`;
+        tw = tapeCtx.measureText(s).width;
+        tapeCtx.fillText(s, mid - tw / 2, yb + 28);
+      }
+    }
+
+    function updateAnalysisInfo() {
+      const dT = Math.max(1, Math.round(analysisEvery)) * period;
+      const cps = getCountingPoints();
+      analysisInfo.textContent = `ΔT = ${dT.toFixed(3)} s · 計數點 ${cps.length} 個`;
+    }
+
+    function updateAnalysisTable() {
+      if (!analysisMode) return;
+      const cps = getCountingPoints();
+      if (cps.length === 0) {
+        analysisTableBody.innerHTML = '<tr><td colspan="7" class="px-3 py-5 text-center text-slate-500 italic">尚無足夠資料，請先讓滑車運動產生打點。</td></tr>';
+        return;
+      }
+      const dT = Math.max(1, Math.round(analysisEvery)) * period;
+      const s0 = tapeDots[cps[0]];
+      const ds = [];
+      for (let k = 1; k < cps.length; k++) ds[k] = tapeDots[cps[k]] - tapeDots[cps[k - 1]];
+
+      let rows = '';
+      for (let k = 0; k < cps.length; k++) {
+        const j = cps[k];
+        const t = (j * period).toFixed(3);
+        const total = ((tapeDots[j] - s0) * 100).toFixed(2);
+        const dsCm = k > 0 ? (ds[k] * 100).toFixed(2) : '—';
+        const v = k > 0 ? (ds[k] / dT).toFixed(3) : '—';
+        let a = '—';
+        if (k >= 1 && k + 1 < cps.length) a = ((ds[k + 1] - ds[k]) / (dT * dT)).toFixed(2);
+        rows += `<tr class="${k % 2 ? 'bg-slate-800/30' : 'bg-slate-900/50'} hover:bg-slate-800/70 transition">
+          <td class="px-3 py-1.5 font-bold text-emerald-400">計${k}</td>
+          <td class="px-3 py-1.5 text-slate-400">#${j}</td>
+          <td class="px-3 py-1.5 text-slate-300">${t}</td>
+          <td class="px-3 py-1.5 text-sky-300">${dsCm}</td>
+          <td class="px-3 py-1.5 text-emerald-300 font-bold">${total}</td>
+          <td class="px-3 py-1.5 text-amber-300">${v}</td>
+          <td class="px-3 py-1.5 text-rose-300 font-bold">${a}</td>
+        </tr>`;
+      }
+      analysisTableBody.innerHTML = rows;
+    }
+
+    function exportAnalysisCSV() {
+      const cps = getCountingPoints();
+      if (cps.length === 0) { alert('目前無分析資料可導出！請先進行實驗打點。'); return; }
+      const every = Math.max(1, Math.round(analysisEvery));
+      const dT = every * period;
+      const s0 = tapeDots[cps[0]];
+      const ds = [];
+      for (let k = 1; k < cps.length; k++) ds[k] = tapeDots[cps[k]] - tapeDots[cps[k - 1]];
+
+      let csv = `# 計數點分析 start=${cps[0]} every=${every} dT=${dT.toFixed(3)}s\n`;
+      csv += 'k,Point_Index,Time_s,Interval_ds_cm,Total_s_cm,Velocity_ms,Accel_ms2\n';
+      for (let k = 0; k < cps.length; k++) {
+        const j = cps[k];
+        const t = (j * period).toFixed(3);
+        const total = ((tapeDots[j] - s0) * 100).toFixed(2);
+        const dsCm = k > 0 ? (ds[k] * 100).toFixed(2) : '';
+        const v = k > 0 ? (ds[k] / dT).toFixed(3) : '';
+        const a = (k >= 1 && k + 1 < cps.length) ? ((ds[k + 1] - ds[k]) / (dT * dT)).toFixed(3) : '';
+        csv += `${k},${j},${t},${dsCm},${total},${v},${a}\n`;
+      }
+      const blob = new Blob(["\uFEFF" + csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `ticker_analysis_${Date.now()}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    }
+
+    // 以游標（或畫面中央）為錨點縮放，並調整捲軸讓錨點大致停在原處
+    function setTapeZoom(z, anchorClientX) {
+      const oldW = tapeCanvas.width;
+      const rect = tapeCanvas.getBoundingClientRect();
+      const anchorCanvasX = (anchorClientX != null)
+        ? (anchorClientX - rect.left)
+        : (tapeScrollWrap.scrollLeft + tapeScrollWrap.clientWidth / 2);
+      const frac = oldW > 0 ? anchorCanvasX / oldW : 0.5;
+
+      tapeZoom = Math.max(1, Math.min(8, z));
+      applyTapeZoom();
+
+      const newW = tapeCanvas.width;
+      const screenOffset = (anchorClientX != null)
+        ? (anchorClientX - tapeScrollWrap.getBoundingClientRect().left)
+        : tapeScrollWrap.clientWidth / 2;
+      tapeScrollWrap.scrollLeft = frac * newW - screenOffset;
+    }
+
+    // 依游標畫布 x 找最近的點（12px 內才算命中）
+    function findNearestDot(canvasX) {
+      if (tapeDots.length === 0) return -1;
+      let best = -1, bestD = 1e9;
+      for (let i = 0; i < tapeDots.length; i++) {
+        const d = Math.abs(tapePixelX(tapeDots[i]) - canvasX);
+        if (d < bestD) { bestD = d; best = i; }
+      }
+      return bestD <= 12 ? best : -1;
+    }
+
+    // 繪製 hover 提示卡內的「車子當下位置快照」（實體側視，恆為左→右）
+    function drawSnapshot(i, dots) {
+      dots = dots || tapeDots;
+      const c = tapeSnapshot, ctx = tapeSnapCtx;
+      const W = c.width, H = c.height;
+      ctx.clearRect(0, 0, W, H);
+      ctx.fillStyle = '#020617';
+      ctx.fillRect(0, 0, W, H);
+
+      const m = 16, trackY = H * 0.58;
+      const usable = W - m * 2 - 14;
+      const frac = Math.max(0, Math.min(1, dots[i] / MAX_CAR_X));
+      const carX = m + frac * usable;
+
+      ctx.strokeStyle = '#334155'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(m - 8, trackY); ctx.lineTo(W - m + 2, trackY); ctx.stroke();
+      ctx.fillStyle = '#0284c7'; ctx.fillRect(m - 12, trackY - 12, 7, 15);
+      ctx.fillStyle = '#dc2626'; ctx.fillRect(W - m + 2, trackY - 9, 4, 13);
+      ctx.strokeStyle = '#e2e8f0'; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(m - 5, trackY - 7); ctx.lineTo(carX, trackY - 7); ctx.stroke();
+      ctx.fillStyle = '#d97706';
+      ctx.fillRect(carX, trackY - 14, 17, 10);
+      ctx.fillStyle = '#1e293b';
+      ctx.beginPath(); ctx.arc(carX + 4.5, trackY - 2, 2.6, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(carX + 12.5, trackY - 2, 2.6, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#38bdf8'; ctx.font = '9px monospace';
+      ctx.fillText(`x = ${(dots[i] * 100).toFixed(1)} cm`, m - 8, H - 4);
+    }
+
+    // 顯示 hover 提示卡（可指定資料組 dots/per/label）
+    function showTapeTooltip(i, clientX, clientY, dots, per, label) {
+      dots = dots || tapeDots;
+      per = per || period;
+      const t = (i * per).toFixed(3);
+      const x = (dots[i] * 100).toFixed(2);
+      let dx = '—', v = '—', a = '—';
+      if (i > 0) {
+        const d = dots[i] - dots[i - 1];
+        dx = (d * 100).toFixed(2) + ' cm';
+        v = (d / per).toFixed(3) + ' m/s';
+      }
+      if (i >= 2) {
+        const d2 = dots[i] - 2 * dots[i - 1] + dots[i - 2];
+        a = (d2 / (per * per)).toFixed(2) + ' m/s²';
+      }
+      ttTitle.textContent = label ? `${label} · 點 #${i}` : `點 #${i}`;
+      ttTime.textContent = t + ' s';
+      ttPos.textContent = x + ' cm';
+      ttDx.textContent = dx;
+      ttV.textContent = v;
+      ttA.textContent = a;
+      drawSnapshot(i, dots);
+
+      tapeTooltip.classList.remove('hidden');
+      const tw = tapeTooltip.offsetWidth || 214;
+      const th = tapeTooltip.offsetHeight || 170;
+      let left = clientX + 16, top = clientY + 16;
+      if (left + tw > window.innerWidth - 8) left = clientX - tw - 16;
+      if (top + th > window.innerHeight - 8) top = clientY - th - 16;
+      tapeTooltip.style.left = Math.max(8, left) + 'px';
+      tapeTooltip.style.top = Math.max(8, top) + 'px';
+    }
+
+    function hideTapeTooltip() {
+      tapeTooltip.classList.add('hidden');
+    }
+
+    // 依起點方向更新導引列文字
+    function updateTapeHintBar() {
+      if (tapeOriginRight) {
+        tapeDirChip.textContent = '◀ 滑車牽引方向';
+        tapeHintText.innerHTML = '最早點 <strong>t₀ (起點)</strong> 位在紙帶右端，最新點 <strong>tₙ (末點)</strong> 隨滑車前進向左延伸。';
+      } else {
+        tapeDirChip.textContent = '滑車牽引方向 ➔';
+        tapeHintText.innerHTML = '最早點 <strong>t₀ (起點)</strong> 位在紙帶左端，最新點 <strong>tₙ (末點)</strong> 隨滑車前進向右延伸。';
+      }
+    }
+
+    // 更新原始數據紀錄表 (Raw Data Table Log)
+    function updateDataTable() {
+      if (tapeDots.length === 0) {
+        dataTableBody.innerHTML = `
+          <tr>
+            <td colspan="6" class="px-4 py-6 text-center text-slate-500 italic">
+              尚無打點紀錄。請點擊「開啟電源」並「釋放滑車」開始收集數據...
+            </td>
+          </tr>`;
+        return;
+      }
+
+      let rowsHTML = '';
+      for (let i = 0; i < tapeDots.length; i++) {
+        const timeVal = (i * period).toFixed(3);
+        const absPosX = (tapeDots[i] * 100).toFixed(2); // cm
+        let deltaX = '-';
+        let segV = '-';
+        let calcA = '-';
+
+        if (i > 0) {
+          const dxM = tapeDots[i] - tapeDots[i - 1];
+          deltaX = (dxM * 100).toFixed(2); // cm
+          segV = (dxM / period).toFixed(2); // m/s
+        }
+
+        // 逐差法加速度計算 (二階差分: (x_i - 2x_{i-1} + x_{i-2}) / T^2)
+        if (i >= 2) {
+          const dx2 = tapeDots[i] - 2 * tapeDots[i - 1] + tapeDots[i - 2];
+          calcA = (dx2 / (period * period)).toFixed(2);
+        }
+
+        rowsHTML += `
+          <tr class="${i % 2 === 0 ? 'bg-slate-900/50' : 'bg-slate-800/30'} hover:bg-slate-800/80 transition">
+            <td class="px-4 py-2 font-bold text-sky-400">#${i}</td>
+            <td class="px-4 py-2 text-slate-300">${timeVal} s</td>
+            <td class="px-4 py-2 text-emerald-300 font-bold">${absPosX} cm</td>
+            <td class="px-4 py-2 text-amber-300">${deltaX} cm</td>
+            <td class="px-4 py-2 text-sky-300">${segV} ${segV !== '-' ? 'm/s' : ''}</td>
+            <td class="px-4 py-2 text-rose-300 font-bold">${calcA} ${calcA !== '-' ? 'm/s²' : ''}</td>
+          </tr>`;
+      }
+      dataTableBody.innerHTML = rowsHTML;
+
+      // 分析模式開啟時同步更新計數點資訊與分析表
+      if (analysisMode) {
+        updateAnalysisInfo();
+        updateAnalysisTable();
+      }
+    }
+
+    // 導出 CSV 原始數據表格 (改用 Blob 避免 data URI 長度限制)
+    function exportToCSV() {
+      if (tapeDots.length === 0) {
+        alert('目前無數據可導出！請先進行實驗打點。');
+        return;
+      }
+
+      let csvContent = "Point_Index,Time_s,Position_cm,Delta_X_cm,Segment_Velocity_ms,Calc_Acceleration_ms2\n";
+
+      for (let i = 0; i < tapeDots.length; i++) {
+        const timeVal = (i * period).toFixed(3);
+        const absPosX = (tapeDots[i] * 100).toFixed(2);
+        let deltaX = i > 0 ? ((tapeDots[i] - tapeDots[i - 1]) * 100).toFixed(2) : "0";
+        let segV = i > 0 ? ((tapeDots[i] - tapeDots[i - 1]) / period).toFixed(2) : "0";
+        let calcA = i >= 2 ? ((tapeDots[i] - 2 * tapeDots[i - 1] + tapeDots[i - 2]) / (period * period)).toFixed(2) : "0";
+
+        csvContent += `${i},${timeVal},${absPosX},${deltaX},${segV},${calcA}\n`;
+      }
+
+      // 加上 BOM 讓 Excel 正確辨識 UTF-8
+      const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", `trolley_ticker_tape_raw_data_${Date.now()}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    }
+
+    // =========================================================================
+    // 兩階段物理動力學引擎
+    // =========================================================================
+    function updateParams() {
+      driveMode = driveModeSelect.value;
+      m1 = parseFloat(m1Input.value) / 1000;
+      m2 = parseFloat(m2Input.value) / 1000;
+      muk = parseFloat(muInput.value);
+      springDx = parseFloat(springDxInput.value) / 100;
+      f = parseInt(freqInput.value);
+      period = 1 / f;
+
+      const totalMassOnTable = M_car + m2;
+      const normalForce = totalMassOnTable * g;
+      const fk = muk * normalForce;
+
+      // 手拉車模式提示（僅此模式顯示）
+      handModeHint.classList.toggle('hidden', driveMode !== 'hand');
+
+      if (driveMode === 'weight') {
+        driveModeDesc.textContent = '牽引繩懸重拉力，全程等加速度';
+        m1Panel.classList.remove('hidden');
+        springCompressPanel.classList.add('hidden');
+
+        const pullF = m1 * g;
+        const totalSysMass = M_car + m1 + m2;
+        const fNet = pullF - fk;
+        carA = fNet > 0 ? fNet / totalSysMass : 0;
+
+        m1Disp.textContent = `${(m1 * 1000).toFixed(0)} g`;
+        fDisp.textContent = `${pullF.toFixed(2)} N`;
+        accelDisp.textContent = `${carA.toFixed(2)} m/s²`;
+        if (fNet > 0) {
+          phaseDisp.textContent = '等加速度 (拉力)';
+          phaseDisp.className = 'text-emerald-400 font-bold text-xs px-2 py-0.5 rounded bg-emerald-950/80 border border-emerald-500/40';
+        } else {
+          phaseDisp.textContent = '拉力不足 · 靜止';
+          phaseDisp.className = 'text-rose-400 font-bold text-xs px-2 py-0.5 rounded bg-rose-950/80 border border-rose-500/40';
+        }
+      } else if (driveMode === 'spring') {
+        driveModeDesc.textContent = '彈簧推動加速 ➔ 完全脫離後等速/等減速';
+        m1Panel.classList.add('hidden');
+        springCompressPanel.classList.remove('hidden');
+
+        const omega = Math.sqrt(springK / totalMassOnTable);
+        tDetach = (Math.PI / 2) / omega;
+        const effectiveDx = Math.max(0, springDx - (fk / springK));
+        vDetach = omega * effectiveDx;
+
+        springDxDisp.textContent = `${(springDx * 100).toFixed(1)} cm`;
+        v0Disp.textContent = `${vDetach.toFixed(2)} m/s`;
+        accelDisp.textContent = '兩階段動態';
+        phaseDisp.textContent = '兩階段彈簧模式';
+        phaseDisp.className = 'text-sky-400 font-bold text-xs px-2 py-0.5 rounded bg-sky-950/80 border border-sky-500/40';
+      } else { // hand 手拉車
+        driveModeDesc.textContent = '手動拖曳滑車，運動由你決定';
+        m1Panel.classList.add('hidden');
+        springCompressPanel.classList.add('hidden');
+        carA = 0;
+        accelDisp.textContent = '手動';
+        phaseDisp.textContent = '手拉車模式';
+        phaseDisp.className = 'text-amber-400 font-bold text-xs px-2 py-0.5 rounded bg-amber-950/80 border border-amber-500/40';
+      }
+
+      // 固定總質量模式資訊
+      if (fixedMassOn) {
+        fixedMassInfo.classList.remove('hidden');
+        fixedMassInfo.textContent = `固定 m₁+m₂ = ${massBudget.toFixed(0)} g（總系統含車 ${(massBudget + M_car * 1000).toFixed(0)} g）`;
+      } else {
+        fixedMassInfo.classList.add('hidden');
+      }
+
+      m2Disp.textContent = `${(m2 * 1000).toFixed(0)} g`;
+      muDisp.textContent = `${muk.toFixed(2)} (${muk === 0 ? '光滑' : '粗糙'})`;
+      fkDisp.textContent = `${fk.toFixed(2)} N`;
+      freqDisp.textContent = `${f} Hz`;
+      periodDisp.textContent = `${period.toFixed(3)} s`;
+      sysMassDisp.textContent = `總重 ${((M_car + (driveMode === 'weight' ? m1 : 0) + m2) * 1000).toFixed(0)}g`;
+    }
+
+    function calculatePhysicsAtTime(t) {
+      const totalMassOnTable = M_car + m2;
+      const fk = muk * totalMassOnTable * g;
+
+      if (driveMode === 'weight') {
+        const pullF = m1 * g;
+        const totalSysMass = M_car + m1 + m2;
+        const fNet = pullF - fk;
+        // 修正 5：拉力不足時系統不動
+        if (fNet <= 0) {
+          return { x: 0, v: 0, a: 0, phaseStr: '拉力不足：系統靜止' };
+        }
+        const a = fNet / totalSysMass;
+        const v = a * t;
+        const x = 0.5 * a * t * t;
+        return { x, v, a, phaseStr: '等加速度運動' };
+      } else {
+        const omega = Math.sqrt(springK / totalMassOnTable);
+        const effectiveDx = Math.max(0, springDx - (fk / springK));
+
+        if (t <= tDetach) {
+          const x = effectiveDx * (1 - Math.cos(omega * t));
+          const v = omega * effectiveDx * Math.sin(omega * t);
+          const a = (omega * omega) * effectiveDx * Math.cos(omega * t);
+          return { x, v, a, phaseStr: '階段1：彈簧推動加速中' };
+        } else {
+          const dt = t - tDetach;
+          const xDetach = effectiveDx;
+          const aDecel = -fk / totalMassOnTable;
+
+          const v = Math.max(0, vDetach + aDecel * dt);
+          let x = 0;
+          if (v > 0) {
+            x = xDetach + vDetach * dt + 0.5 * aDecel * dt * dt;
+          } else {
+            const stopDt = vDetach / Math.abs(aDecel);
+            x = xDetach + vDetach * stopDt + 0.5 * aDecel * stopDt * stopDt;
+          }
+          const phaseStr = muk === 0 ? '階段2：脫離後 (等速度)' : (v > 0 ? '階段2：脫離後 (等減速)' : '完全煞停');
+          return { x, v, a: aDecel, phaseStr };
+        }
+      }
+    }
+
+    function toggleTimerPower() {
+      isTimerOn = !isTimerOn;
+      if (isTimerOn) {
+        timerLed.className = 'w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.9)]';
+        timerStatusText.textContent = '計時器電源：開啟';
+        btnTimerPower.classList.add('border-emerald-500/50', 'bg-emerald-950/30', 'text-emerald-300');
+        btnTimerPower.classList.remove('border-slate-700', 'bg-slate-800', 'text-slate-300');
+
+        if (tapeDots.length === 0) {
+          tapeDots.push(carX);
+          dotCountDisp.textContent = tapeDots.length;
+        }
+      } else {
+        timerLed.className = 'w-2.5 h-2.5 rounded-full bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.8)]';
+        timerStatusText.textContent = '計時器電源：關閉';
+        btnTimerPower.classList.remove('border-emerald-500/50', 'bg-emerald-950/30', 'text-emerald-300');
+        btnTimerPower.classList.add('border-slate-700', 'bg-slate-800', 'text-slate-300');
+      }
+      drawTapeCanvas();
+      updateDataTable();
+    }
+
+    function resetSim() {
+      isRunning = false;
+      simTime = 0;
+      carX = 0;
+      carV = 0;
+      carA = 0;
+      tapeDots = [];
+      nextDotIndex = 1;
+      lastAnimTime = 0;
+
+      dot3DMeshes.forEach(m => m.visible = false);
+
+      if (isTimerOn) {
+        tapeDots.push(0);
+      }
+
+      startText.textContent = '釋放 / 彈射滑車';
+      startIcon.textContent = '▶';
+      btnStart.disabled = false;
+      btnStart.classList.remove('opacity-50');
+
+      speedDisp.textContent = '0.00';
+      dotCountDisp.textContent = tapeDots.length;
+
+      // 清除兩點量測選取與高亮，並依目前打點重建圖表
+      highlightIdx = -1;
+      hoveredDotIndex = -1;
+      chartSelections.xt.length = 0;
+      chartSelections.vt.length = 0;
+      chartSelections.at.length = 0;
+      refreshCharts();
+
+      update3DObjectsPosition();
+      drawTapeCanvas();
+      updateDataTable();
+    }
+
+    // =========================================================================
+    // 動態主渲染迴圈
+    // =========================================================================
+    function animate(timestamp) {
+      requestAnimationFrame(animate);
+
+      if (isRunning) {
+        if (!lastAnimTime) lastAnimTime = timestamp;
+        const realDt = Math.min((timestamp - lastAnimTime) / 1000, 0.032);
+        lastAnimTime = timestamp;
+
+        simTime += realDt;
+
+        if (driveMode === 'hand') {
+          // 手拉車：carX 由拖曳設定，估算速度供顯示
+          carV = realDt > 0 ? (carX - handPrevX) / realDt : 0;
+          handPrevX = carX;
+          carA = 0;
+          phaseDisp.textContent = handGrabbing ? '✋ 手拉記錄中…' : '手拉車模式';
+          phaseDisp.className = 'text-amber-400 font-bold text-xs px-2 py-0.5 rounded bg-amber-950/80 border border-amber-500/40';
+          while (simTime >= nextDotIndex * period && isRunning) {
+            if (isTimerOn) tapeDots.push(carX); // 記錄「當下拖曳位置」
+            nextDotIndex++;
+          }
+        } else {
+          const state = calculatePhysicsAtTime(simTime);
+          carX = state.x;
+          carV = state.v;
+          carA = state.a;
+
+          phaseDisp.textContent = state.phaseStr;
+          if (state.phaseStr.includes('等加速度')) {
+            phaseDisp.className = 'text-emerald-400 font-bold text-xs px-2 py-0.5 rounded bg-emerald-950/80 border border-emerald-500/40';
+          } else if (state.phaseStr.includes('階段1')) {
+            phaseDisp.className = 'text-amber-400 font-bold text-xs px-2 py-0.5 rounded bg-amber-950/80 border border-amber-500/40';
+          } else if (state.phaseStr.includes('靜止')) {
+            phaseDisp.className = 'text-rose-400 font-bold text-xs px-2 py-0.5 rounded bg-rose-950/80 border border-rose-500/40';
+          } else {
+            phaseDisp.className = 'text-sky-400 font-bold text-xs px-2 py-0.5 rounded bg-sky-950/80 border border-sky-500/40';
+          }
+
+          while (simTime >= nextDotIndex * period && isRunning) {
+            const dotTime = nextDotIndex * period;
+            if (isTimerOn) {
+              const dotState = calculatePhysicsAtTime(dotTime);
+              tapeDots.push(dotState.x);
+            }
+            nextDotIndex++;
+          }
+        }
+
+        accelDisp.textContent = driveMode === 'hand' ? '—' : `${carA.toFixed(2)} m/s²`;
+        speedDisp.textContent = carV.toFixed(2);
+        dotCountDisp.textContent = tapeDots.length;
+
+        // 依最新打點資料重建三張圖（x-t / v-t / a-t）
+        refreshCharts();
+
+        // 懸重模式若拉力不足則不啟動運動
+        if (driveMode === 'weight' && carA === 0 && carX === 0) {
+          isRunning = false;
+          startText.textContent = '拉力不足，無法拉動滑車';
+          startIcon.textContent = '🛑';
+          btnStart.disabled = true;
+          btnStart.classList.add('opacity-50');
+        }
+
+        if (driveMode === 'spring' && muk > 0 && simTime > tDetach && carV === 0) {
+          isRunning = false;
+          startText.textContent = '摩擦力已將滑車煞停';
+          startIcon.textContent = '🛑';
+          btnStart.disabled = true;
+          btnStart.classList.add('opacity-50');
+        }
+
+        if (driveMode !== 'hand' && carX >= MAX_CAR_X) {
+          carX = MAX_CAR_X;
+          isRunning = false;
+          startText.textContent = '車頭抵達止擋塊煞停';
+          startIcon.textContent = '🛑';
+          btnStart.disabled = true;
+          btnStart.classList.add('opacity-50');
+        }
+
+        drawTapeCanvas();
+        updateDataTable();
+      }
+
+      update3DObjectsPosition();
+      renderer.render(scene, camera);
+    }
+
+    // =========================================================================
+    // 事件監聽與切換
+    // =========================================================================
+    btnTimerPower.addEventListener('click', toggleTimerPower);
+
+    btnStart.addEventListener('click', () => {
+      if (driveModeSelect.value === 'hand') {
+        startText.textContent = '請在 3D 畫面直接按住滑車拖曳';
+        startIcon.textContent = '✋';
+        return;
+      }
+      if (!isRunning && !btnStart.disabled) {
+        isRunning = true;
+        lastAnimTime = 0;
+        startText.textContent = '滑行運動中...';
+        startIcon.textContent = '⏳';
+      }
+    });
+
+    btnReset.addEventListener('click', () => {
+      updateParams();
+      resetSim();
+    });
+
+    // 鏡像模式切換觸發器（僅影響 3D 場景；紙帶方向改由下方「起點方向」專屬按鈕控制）
+    btnToggleMirror.addEventListener('click', () => {
+      isMirrorMode = !isMirrorMode;
+      if (isMirrorMode) {
+        canvasViewportWrapper.classList.add('mirror-mode');
+        mirrorBtnText.textContent = '關閉鏡像模式 (恢復標準方向)';
+        mirrorActiveTag.classList.remove('hidden');
+        btnToggleMirror.classList.add('bg-amber-900/60', 'border-amber-400/50', 'text-amber-200');
+        btnToggleMirror.classList.remove('bg-indigo-900/60', 'border-indigo-400/50', 'text-indigo-200');
+      } else {
+        canvasViewportWrapper.classList.remove('mirror-mode');
+        mirrorBtnText.textContent = '開啟場景鏡像模式 (左右對調觀看)';
+        mirrorActiveTag.classList.add('hidden');
+        btnToggleMirror.classList.remove('bg-amber-900/60', 'border-amber-400/50', 'text-amber-200');
+        btnToggleMirror.classList.add('bg-indigo-900/60', 'border-indigo-400/50', 'text-indigo-200');
+      }
+    });
+
+    // === 紙帶：起點方向切換 ===
+    function setTapeOrigin(right) {
+      tapeOriginRight = right;
+      const onCls = ['bg-emerald-600/30', 'border-emerald-500/50', 'text-emerald-300', 'font-semibold'];
+      const offCls = ['bg-slate-800', 'border-slate-700', 'text-slate-300'];
+      const active = right ? btnTapeOriginRight : btnTapeOriginLeft;
+      const inactive = right ? btnTapeOriginLeft : btnTapeOriginRight;
+      active.classList.add(...onCls); active.classList.remove(...offCls);
+      inactive.classList.add(...offCls); inactive.classList.remove(...onCls);
+      updateTapeHintBar();
+      drawTapeCanvas();
+    }
+    btnTapeOriginLeft.addEventListener('click', () => setTapeOrigin(false));
+    btnTapeOriginRight.addEventListener('click', () => setTapeOrigin(true));
+
+    // === 紙帶：縮放控制 ===
+    btnTapeZoomIn.addEventListener('click', () => setTapeZoom(tapeZoom * 1.5));
+    btnTapeZoomOut.addEventListener('click', () => setTapeZoom(tapeZoom / 1.5));
+    btnTapeZoomReset.addEventListener('click', () => { tapeZoom = 1; applyTapeZoom(); tapeScrollWrap.scrollLeft = 0; });
+    tapeScrollWrap.addEventListener('wheel', (e) => {
+      if (e.ctrlKey) return; // 保留系統縮放
+      e.preventDefault();
+      const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+      setTapeZoom(tapeZoom * factor, e.clientX);
+    }, { passive: false });
+
+    // === 紙帶：hover 顯示點資訊與車子快照（並連動圖表高亮）===
+    tapeCanvas.addEventListener('mousemove', (e) => {
+      const rect = tapeCanvas.getBoundingClientRect();
+      const scaleX = tapeCanvas.width / rect.width;
+      const scaleY = tapeCanvas.height / rect.height;
+      const canvasX = (e.clientX - rect.left) * scaleX;
+      const canvasY = (e.clientY - rect.top) * scaleY;
+
+      if (isMultiTape()) {
+        const hit = findNearestInMulti(canvasX, canvasY);
+        const rows = tapeRows();
+        if (hit.row >= 0) {
+          hoveredTapeRow = hit.row;
+          hoveredDotIndex = hit.i;
+          if (hit.isLive) { highlightIdx = hit.i; [xtChart, vtChart, atChart].forEach(c => c && c.update('none')); }
+          drawTapeCanvas();
+          const row = rows[hit.row];
+          showTapeTooltip(hit.i, e.clientX, e.clientY, row.dots, row.period, row.label);
+        } else {
+          hoveredTapeRow = -1; hoveredDotIndex = -1;
+          drawTapeCanvas(); hideTapeTooltip();
+        }
+        return;
+      }
+
+      const idx = findNearestDot(canvasX);
+      setHighlight(idx); // 同步高亮紙帶與三張圖
+      if (idx >= 0) { showTapeTooltip(idx, e.clientX, e.clientY); } else { hideTapeTooltip(); }
+    });
+    tapeCanvas.addEventListener('mouseleave', () => {
+      hoveredTapeRow = -1;
+      setHighlight(-1);
+      if (isMultiTape()) drawTapeCanvas();
+      hideTapeTooltip();
+    });
+    // 視窗大小改變時重新調整紙帶畫布寬度
+    let tapeResizeRaf = 0;
+    window.addEventListener('resize', () => {
+      cancelAnimationFrame(tapeResizeRaf);
+      tapeResizeRaf = requestAnimationFrame(applyTapeZoom);
+    });
+    // 觸控支援：點按顯示點資訊
+    tapeCanvas.addEventListener('touchstart', (e) => {
+      if (!e.touches.length) return;
+      const t = e.touches[0];
+      const rect = tapeCanvas.getBoundingClientRect();
+      const canvasX = (t.clientX - rect.left) * (tapeCanvas.width / rect.width);
+      const canvasY = (t.clientY - rect.top) * (tapeCanvas.height / rect.height);
+      if (isMultiTape()) {
+        const hit = findNearestInMulti(canvasX, canvasY);
+        const rows = tapeRows();
+        if (hit.row >= 0) {
+          hoveredTapeRow = hit.row; hoveredDotIndex = hit.i;
+          if (hit.isLive) { highlightIdx = hit.i; [xtChart, vtChart, atChart].forEach(c => c && c.update('none')); }
+          drawTapeCanvas();
+          const row = rows[hit.row];
+          showTapeTooltip(hit.i, t.clientX, t.clientY, row.dots, row.period, row.label);
+        } else { hoveredTapeRow = -1; hoveredDotIndex = -1; drawTapeCanvas(); hideTapeTooltip(); }
+        return;
+      }
+      const idx = findNearestDot(canvasX);
+      setHighlight(idx);
+      if (idx >= 0) showTapeTooltip(idx, t.clientX, t.clientY); else hideTapeTooltip();
+    }, { passive: true });
+
+    // === 分析模式（計數點方法）===
+    function refreshAnalysis() {
+      updateAnalysisInfo();
+      updateAnalysisTable();
+      drawTapeCanvas();
+      refreshCharts(); // 分析設定改變會影響圖表點集合
+    }
+    btnAnalysisMode.addEventListener('click', () => {
+      analysisMode = !analysisMode;
+      analysisModeText.textContent = analysisMode ? '分析模式：開' : '分析模式：關';
+      analysisControls.classList.toggle('hidden', !analysisMode);
+      analysisResultWrap.classList.toggle('hidden', !analysisMode);
+      if (analysisMode) {
+        btnAnalysisMode.classList.add('bg-emerald-600/30', 'border-emerald-500/50', 'text-emerald-300');
+        btnAnalysisMode.classList.remove('bg-slate-800', 'border-slate-700', 'text-slate-300');
+      } else {
+        btnAnalysisMode.classList.remove('bg-emerald-600/30', 'border-emerald-500/50', 'text-emerald-300');
+        btnAnalysisMode.classList.add('bg-slate-800', 'border-slate-700', 'text-slate-300');
+      }
+      // 圖表點集合改變，清掉舊的兩點選取避免對不上
+      chartSelections.xt.length = 0; chartSelections.vt.length = 0; chartSelections.at.length = 0;
+      applyTapeZoom(); // 調整畫布高度並重繪
+      updateAnalysisInfo();
+      updateAnalysisTable();
+      refreshCharts();
+    });
+    analysisStartInput.addEventListener('input', () => {
+      analysisStartIdx = Math.max(0, parseInt(analysisStartInput.value) || 0);
+      chartSelections.xt.length = 0; chartSelections.vt.length = 0; chartSelections.at.length = 0;
+      refreshAnalysis();
+    });
+    analysisIntervalInput.addEventListener('input', () => {
+      analysisEvery = Math.max(1, parseInt(analysisIntervalInput.value) || 1);
+      chartSelections.xt.length = 0; chartSelections.vt.length = 0; chartSelections.at.length = 0;
+      refreshAnalysis();
+    });
+    btnExportAnalysisCSV.addEventListener('click', exportAnalysisCSV);
+
+    // === 圖表控制：顯示連線 / 兩點量測 ===
+    chkShowLine.addEventListener('change', () => {
+      showChartLine = chkShowLine.checked;
+      refreshCharts();
+    });
+    chkChartAnalysis.addEventListener('change', () => {
+      chartAnalysisMode = chkChartAnalysis.checked;
+      chartAnalysisHint.classList.toggle('hidden', !chartAnalysisMode);
+      if (!chartAnalysisMode) {
+        chartSelections.xt.length = 0; chartSelections.vt.length = 0; chartSelections.at.length = 0;
+        [xtChart, vtChart, atChart].forEach(c => c && c.update('none'));
+      }
+      updateAllReadouts();
+    });
+
+    // === 實驗組（多次結果疊圖）===
+    function updateGroupInfo() {
+      groupInfo.textContent = `目前 ${experimentGroups.length} 組`;
+    }
+    btnAddGroup.addEventListener('click', () => {
+      if (tapeDots.length < 3) { alert('目前資料太少，請先完成一次實驗（讓滑車運動打點）再加入實驗組。'); return; }
+      const idx = experimentGroups.length;
+      experimentGroups.push({
+        label: `組${idx + 1}`,
+        color: GROUP_COLORS[idx % GROUP_COLORS.length],
+        dots: tapeDots.slice(),
+        period: period
+      });
+      updateGroupInfo();
+      resetSim();       // 清空目前這組以便重跑；experimentGroups 保留並會疊在圖上
+      applyTapeZoom();  // 紙帶改為併排、重算高度
+    });
+    btnClearGroups.addEventListener('click', () => {
+      if (experimentGroups.length === 0) return;
+      experimentGroups = [];
+      hoveredTapeRow = -1;
+      updateGroupInfo();
+      refreshCharts();
+      applyTapeZoom();  // 回復單條詳細紙帶、重算高度
+    });
+
+    // === 固定總質量模式 ===
+    chkFixedMass.addEventListener('change', () => {
+      fixedMassOn = chkFixedMass.checked;
+      if (fixedMassOn) {
+        massBudget = parseFloat(m1Input.value) + parseFloat(m2Input.value); // 以當前 m1+m2 為固定總和
+      }
+      fixedMassInfo.classList.toggle('hidden', !fixedMassOn);
+      fixedMassInfo.textContent = `固定 m₁+m₂ = ${massBudget.toFixed(0)} g`;
+      updateParams();
+      resetSim();
+    });
+
+    // === 場景背景色：預設按鈕 + 自訂色票 ===
+    document.querySelectorAll('.bg-preset').forEach(btn => {
+      btn.addEventListener('click', () => setSceneBackground(parseInt(btn.dataset.bg)));
+    });
+    bgColorInput.addEventListener('input', () => {
+      setSceneBackground(parseInt(bgColorInput.value.slice(1), 16));
+    });
+
+    // 紙帶觀念時空標籤切換
+    btnToggleTapeDir.addEventListener('click', () => {
+      showTapeHint = !showTapeHint;
+      tapeDirectionHintBar.classList.toggle('hidden', !showTapeHint);
+      tapeDirText.textContent = showTapeHint ? '隱藏紙帶時間軸導引' : '顯示紙帶時間軸導引 (t₀ ➔ tₙ)';
+      drawTapeCanvas();
+    });
+
+    btnExportCSV.addEventListener('click', exportToCSV);
+
+    driveModeSelect.addEventListener('change', () => {
+      updateParams();
+      resetSim();
+    });
+
+    // 固定質量守恆：調一個，另一個等量反向調整
+    function applyFixedMassCoupling(changed) {
+      if (!fixedMassOn || driveModeSelect.value !== 'weight') return;
+      if (changed === 'm1') {
+        let m2g = massBudget - parseFloat(m1Input.value);
+        m2g = Math.max(0, Math.min(300, m2g));
+        m2Input.value = m2g;
+        // 若 m2 觸底，回推 m1 以維持總和
+        m1Input.value = Math.max(10, Math.min(150, massBudget - m2g));
+      } else {
+        let m1g = massBudget - parseFloat(m2Input.value);
+        m1g = Math.max(10, Math.min(150, m1g));
+        m1Input.value = m1g;
+        m2Input.value = Math.max(0, Math.min(300, massBudget - m1g));
+      }
+    }
+
+    m1Input.addEventListener('input', () => { applyFixedMassCoupling('m1'); updateParams(); resetSim(); });
+    m2Input.addEventListener('input', () => { applyFixedMassCoupling('m2'); updateParams(); resetSim(); });
+
+    [muInput, springDxInput, freqInput].forEach(elem => {
+      elem.addEventListener('input', () => {
+        updateParams();
+        resetSim();
+      });
+    });
+
+    presetAccel.addEventListener('click', () => {
+      driveModeSelect.value = 'weight';
+      m1Input.value = 50;
+      m2Input.value = 100;
+      muInput.value = 0.00;
+      updateParams();
+      resetSim();
+    });
+
+    presetConstVel.addEventListener('click', () => {
+      driveModeSelect.value = 'spring';
+      springDxInput.value = 5.0;
+      m2Input.value = 100;
+      muInput.value = 0.00;
+      updateParams();
+      resetSim();
+    });
+
+    presetDecel.addEventListener('click', () => {
+      driveModeSelect.value = 'spring';
+      springDxInput.value = 6.0;
+      m2Input.value = 100;
+      muInput.value = 0.06;
+      updateParams();
+      resetSim();
+    });
+
+    const camButtons = { camDefault: 'default', camSide: 'side', camFollow: 'follow', camTop: 'top' };
+    Object.keys(camButtons).forEach(btnId => {
+      document.getElementById(btnId).addEventListener('click', (e) => {
+        cameraMode = camButtons[btnId];
+        Object.keys(camButtons).forEach(b => {
+          document.getElementById(b).className = 'px-2.5 py-1 bg-slate-800 border border-slate-700 text-slate-300 rounded hover:bg-slate-700 transition';
+        });
+        e.target.className = 'px-2.5 py-1 bg-emerald-600/40 border border-emerald-500/60 text-emerald-300 rounded transition font-semibold';
+        applyCameraPreset(cameraMode); // 只在切換時定位一次
+      });
+    });
+
+    window.addEventListener('load', () => {
+      init3DScene();
+      initCharts();
+      updateParams();
+      updateTapeHintBar();
+      updateAnalysisInfo();
+      updateGroupInfo();
+      applyTapeZoom();  // 設定紙帶畫布初始寬度
+      refreshCharts();  // 建立三張圖初始（空）資料
+      resetSim();
+      requestAnimationFrame(animate);
+    });
+  </script>
+</body>
+</html>
