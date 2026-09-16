@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>物質質量與體積 (M-V) 互動模擬實驗</title>
+    <title>M-V-simulation</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
@@ -418,11 +418,19 @@
                     scene.add(cube);
                     cubes[matId] = cube;
 
+                    // 內部空腔：近乎全透明的方塊 + 清晰邊框，用來標示中空區域
                     const innerGeo = new THREE.BoxGeometry(1, 1, 1);
-                    const innerMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.4 });
+                    const innerMat = new THREE.MeshBasicMaterial({
+                        color: 0xbfdbfe,      // 淡藍，代表內部空氣/空腔
+                        transparent: true,
+                        opacity: 0.12,
+                        depthWrite: false
+                    });
                     const innerMesh = new THREE.Mesh(innerGeo, innerMat);
+                    innerMesh.renderOrder = 2; // 於外殼之後繪製，避免透明排序問題
                     const edges = new THREE.EdgesGeometry(innerGeo);
-                    const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.6 }));
+                    const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x1f2937, transparent: true, opacity: 0.9 }));
+                    line.renderOrder = 3;
                     innerMesh.add(line);
                     cube.add(innerMesh);
                     cube.innerCavity = innerMesh;
@@ -434,14 +442,18 @@
 
                 if (data.h > 0) {
                     cube.innerCavity.visible = true;
+                    // 空腔邊長 = 立方根(中空度)，體積比剛好等於中空度
                     const innerScale = Math.cbrt(data.h);
-                    cube.innerCavity.scale.set(innerScale * 0.99, innerScale * 0.99, innerScale * 0.99);
+                    cube.innerCavity.scale.set(innerScale * 0.995, innerScale * 0.995, innerScale * 0.995);
+                    // 外殼只微透（看得出材質），不再整體淡化成半透明；關閉 depthWrite 讓內部空腔透得出來
                     cube.material.transparent = true;
-                    cube.material.opacity = mat.opacity * 0.5;
+                    cube.material.opacity = mat.transparent ? mat.opacity : 0.55;
+                    cube.material.depthWrite = false;
                 } else {
                     cube.innerCavity.visible = false;
                     cube.material.transparent = mat.transparent;
                     cube.material.opacity = mat.opacity;
+                    cube.material.depthWrite = true;
                 }
 
                 const scaleFactor = 0.8;
