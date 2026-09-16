@@ -1,0 +1,787 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>物質質量與體積 (M-V) 互動模擬實驗</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/plotly.js@2.24.1/dist/plotly.min.js"></script>
+    <style>
+        body { margin: 0; font-family: 'Inter', sans-serif; background-color: #f3f4f6; }
+        ::-webkit-scrollbar { width: 7px; height: 7px; }
+        ::-webkit-scrollbar-track { background: #e5e7eb; }
+        ::-webkit-scrollbar-thumb { background: #9ca3af; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #6b7280; }
+
+        #canvas-container { cursor: grab; }
+        #canvas-container:active { cursor: grabbing; }
+
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.5);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+
+        #tooltip-3d {
+            position: absolute;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 6px;
+            font-size: 12px;
+            pointer-events: none;
+            display: none;
+            z-index: 50;
+            transform: translate(-50%, -100%);
+            margin-top: -10px;
+            white-space: nowrap;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+        #tooltip-3d::after {
+            content: '';
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            margin-left: -5px;
+            border-width: 5px;
+            border-style: solid;
+            border-color: rgba(0, 0, 0, 0.8) transparent transparent transparent;
+        }
+    </style>
+</head>
+<body class="flex flex-col md:flex-row min-h-screen md:h-screen md:overflow-hidden text-gray-800">
+
+    <!-- 左側控制面板 -->
+    <div class="w-full md:w-[32%] lg:w-[26%] xl:w-[22%] md:h-full glass-panel z-10 flex flex-col p-3 md:overflow-y-auto">
+        <h1 class="text-lg font-bold mb-2 text-blue-800 flex items-center">
+            <svg class="w-5 h-5 mr-2 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path></svg>
+            M-V 關係模擬
+        </h1>
+
+        <!-- 1. 選擇物質 -->
+        <div class="mb-3">
+            <label class="block text-sm font-semibold mb-1.5">1. 選擇物質 (加入畫布)</label>
+            <select id="add-preset-select" class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 transition-shadow"></select>
+
+            <!-- 自訂物質欄位 -->
+            <div id="custom-mat-fields" class="hidden mt-2 p-2.5 bg-gray-50 border border-gray-200 rounded-md shadow-inner">
+                <label class="block text-xs text-gray-500 mb-1 font-bold">自訂新物質</label>
+                <div class="grid grid-cols-2 gap-2 mb-2">
+                    <input type="text" id="new-mat-name" placeholder="名稱 (如: 冰)" class="p-2 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-blue-500">
+                    <input type="number" id="new-mat-density" placeholder="密度" class="p-2 border border-gray-300 rounded text-sm focus:ring-1 focus:ring-blue-500">
+                </div>
+                <div class="flex items-center mb-2 gap-2">
+                    <span class="text-xs text-gray-500">顏色:</span>
+                    <input type="color" id="new-mat-color" value="#a0aec0" class="w-8 h-8 rounded cursor-pointer border-none">
+                </div>
+                <button id="add-custom-btn" class="w-full bg-blue-100 text-blue-700 hover:bg-blue-200 font-bold py-1.5 px-4 rounded text-sm transition-colors">+ 建立並加入</button>
+            </div>
+
+            <!-- 畫布上的物質 (Chips) -->
+            <div class="mt-2">
+                <div class="flex justify-between items-center mb-1.5">
+                    <span class="text-xs text-gray-500 font-medium">畫布上的物質：</span>
+                    <label class="flex items-center text-xs text-red-500 cursor-pointer hover:text-red-700 font-bold bg-red-50 px-2 py-0.5 rounded">
+                        <input type="checkbox" id="delete-mode-checkbox" class="mr-1"> 移除模式
+                    </label>
+                </div>
+                <div id="active-materials-list" class="flex flex-wrap gap-1.5"></div>
+            </div>
+        </div>
+
+        <!-- 2. 調整數值 -->
+        <div class="mb-3">
+            <label class="text-sm font-semibold block mb-1.5">2. 調整數值 (<span id="current-mat-name" class="text-blue-600">水</span>)</label>
+
+            <div class="bg-blue-50 p-2 rounded flex justify-between items-center mb-2 border border-blue-100">
+                <span class="text-xs font-semibold text-blue-800">多物體連動：</span>
+                <div class="flex gap-2">
+                    <label class="flex items-center text-xs cursor-pointer"><input type="radio" name="sync-mode" value="none" class="mr-1" checked> 獨立</label>
+                    <label class="flex items-center text-xs cursor-pointer"><input type="radio" name="sync-mode" value="v" class="mr-1"> 同步 V</label>
+                    <label class="flex items-center text-xs cursor-pointer"><input type="radio" name="sync-mode" value="m" class="mr-1"> 同步 M</label>
+                </div>
+            </div>
+
+            <datalist id="v-marks">
+                <option value="50"></option><option value="100"></option><option value="150"></option>
+                <option value="200"></option><option value="250"></option><option value="300"></option>
+            </datalist>
+            <div class="mb-2 bg-white p-2 rounded-md border border-gray-200 shadow-sm">
+                <div class="flex justify-between items-center">
+                    <span class="text-sm font-medium">體積 V (cm³)</span>
+                    <input type="number" id="v-input" min="1" max="400" step="0.1" class="w-20 p-1 text-sm font-mono font-bold text-blue-600 border border-gray-300 rounded text-right focus:outline-none focus:ring-1 focus:ring-blue-500">
+                </div>
+                <input type="range" id="v-slider" list="v-marks" min="1" max="400" step="1" value="50" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer mt-1.5">
+            </div>
+
+            <datalist id="m-marks">
+                <option value="100"></option><option value="500"></option><option value="1000"></option>
+                <option value="1500"></option><option value="2000"></option>
+            </datalist>
+            <div class="mb-2 bg-white p-2 rounded-md border border-gray-200 shadow-sm">
+                <div class="flex justify-between items-center">
+                    <span class="text-sm font-medium">質量 M (g)</span>
+                    <input type="number" id="m-input" min="1" max="4000" step="0.1" class="w-24 p-1 text-sm font-mono font-bold text-red-600 border border-gray-300 rounded text-right focus:outline-none focus:ring-1 focus:ring-red-500">
+                </div>
+                <input type="range" id="m-slider" list="m-marks" min="1" max="4000" step="1" value="50" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer mt-1.5">
+            </div>
+
+            <datalist id="h-marks"><option value="0"></option><option value="50"></option><option value="90"></option></datalist>
+            <div class="bg-white p-2 rounded-md border border-gray-200 shadow-sm">
+                <div class="flex justify-between items-center">
+                    <span class="text-sm font-medium text-gray-600">內部中空度 (%)</span>
+                    <input type="number" id="h-input" min="0" max="90" step="1" class="w-16 p-1 text-sm font-mono font-bold text-gray-600 border border-gray-300 rounded text-right focus:outline-none focus:ring-1 focus:ring-gray-500">
+                </div>
+                <input type="range" id="h-slider" list="h-marks" min="0" max="90" step="1" value="0" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer mt-1.5">
+            </div>
+        </div>
+
+        <!-- 3. 實驗紀錄 -->
+        <div class="mt-auto border-t border-gray-200 pt-2.5">
+            <label class="block text-sm font-semibold mb-1.5">3. 實驗紀錄設定</label>
+            <div class="bg-gray-50 p-2 border border-gray-200 rounded mb-2">
+                <span class="text-xs font-semibold text-gray-600 mb-1 block">要紀錄的物質：</span>
+                <div id="record-targets-list" class="flex flex-wrap gap-1.5 text-xs"></div>
+            </div>
+            <button id="record-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded transition-colors shadow-sm mb-2 flex justify-center items-center">
+                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                紀錄選中數值點
+            </button>
+            <div class="flex items-center justify-between text-sm">
+                <label class="flex items-center cursor-pointer text-gray-700">
+                    <input type="checkbox" id="trendline-checkbox" class="mr-2"> 顯示趨勢線
+                </label>
+                <button id="clear-btn" class="text-red-500 hover:text-red-700 underline text-xs">清除所有紀錄</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 右側主要顯示區 -->
+    <div class="w-full md:flex-1 h-auto md:h-full flex flex-col">
+        <!-- 3D 預覽區 -->
+        <div class="h-[42vh] md:h-1/2 w-full bg-gradient-to-b from-gray-200 to-gray-300 relative border-b-2 border-gray-400 shadow-inner" id="canvas-container">
+            <div class="absolute top-2 left-3 bg-white/80 px-2.5 py-0.5 rounded-full text-xs font-semibold text-gray-700 shadow-sm pointer-events-none z-10">
+                💡 拖曳旋轉 · 滾輪縮放 · 移至方塊看數值
+            </div>
+            <div id="tooltip-3d"></div>
+        </div>
+
+        <!-- Plotly 圖表區 -->
+        <div class="h-[50vh] md:h-1/2 w-full bg-white relative flex flex-col">
+            <div class="px-3 py-1.5 bg-blue-50 border-b border-blue-100 flex flex-wrap gap-x-3 gap-y-1 text-sm items-center z-10">
+                <span class="font-semibold text-blue-800">圖表設定：</span>
+                <label class="flex items-center cursor-pointer text-gray-700 hover:text-blue-600 transition-colors">
+                    <input type="checkbox" id="show-density-checkbox" class="mr-1"> Hover 顯示密度
+                </label>
+                <div class="flex items-center gap-1.5">
+                    <label class="text-gray-600 font-medium">最大 V:</label>
+                    <input type="number" id="axis-max-v" value="400" min="100" max="2000" step="50" class="w-16 p-1 border border-gray-300 rounded text-xs focus:ring-1 focus:ring-blue-500">
+                </div>
+                <div class="flex items-center gap-1.5">
+                    <label class="text-gray-600 font-medium">最大 M:</label>
+                    <input type="number" id="axis-max-m" value="4000" min="500" max="20000" step="500" class="w-20 p-1 border border-gray-300 rounded text-xs focus:ring-1 focus:ring-blue-500">
+                </div>
+            </div>
+            <div id="chart-container" class="w-full flex-1 min-h-0 p-1"></div>
+        </div>
+    </div>
+
+    <script>
+        const materials = {
+            'water': { id: 'water', name: '水 (Water)', density: 1.0, color: '#3b82f6', metalness: 0.1, roughness: 0.1, transparent: true, opacity: 0.8 },
+            'wood': { id: 'wood', name: '木塊 (Wood)', density: 0.6, color: '#8B5A2B', metalness: 0.0, roughness: 0.9, transparent: false, opacity: 1 },
+            'aluminum': { id: 'aluminum', name: '鋁塊 (Aluminum)', density: 2.7, color: '#d1d5db', metalness: 0.6, roughness: 0.4, transparent: false, opacity: 1 },
+            'iron': { id: 'iron', name: '鐵塊 (Iron)', density: 7.87, color: '#575b63', metalness: 0.8, roughness: 0.5, transparent: false, opacity: 1 },
+            'copper': { id: 'copper', name: '銅塊 (Copper)', density: 8.96, color: '#b87333', metalness: 0.9, roughness: 0.3, transparent: false, opacity: 1 },
+            'silver': { id: 'silver', name: '銀塊 (Silver)', density: 10.49, color: '#c0c0c0', metalness: 1.0, roughness: 0.2, transparent: false, opacity: 1 },
+            'gold': { id: 'gold', name: '金塊 (Gold)', density: 19.3, color: '#ffd700', metalness: 1.0, roughness: 0.2, transparent: false, opacity: 1 },
+            'magnesium': { id: 'magnesium', name: '鎂塊 (Magnesium)', density: 1.74, color: '#e0e5e5', metalness: 0.5, roughness: 0.6, transparent: false, opacity: 1 },
+            'sodium': { id: 'sodium', name: '鈉塊 (Sodium)', density: 0.97, color: '#e8e8e8', metalness: 0.4, roughness: 0.7, transparent: false, opacity: 1 },
+            'potassium': { id: 'potassium', name: '鉀塊 (Potassium)', density: 0.86, color: '#dcdcdc', metalness: 0.3, roughness: 0.8, transparent: false, opacity: 1 },
+            'tin': { id: 'tin', name: '錫塊 (Tin)', density: 7.29, color: '#d3d4d5', metalness: 0.7, roughness: 0.4, transparent: false, opacity: 1 },
+            'tungsten': { id: 'tungsten', name: '鎢塊 (Tungsten)', density: 19.25, color: '#7a7a7a', metalness: 0.8, roughness: 0.5, transparent: false, opacity: 1 },
+            'rhenium': { id: 'rhenium', name: '錸塊 (Rhenium)', density: 21.02, color: '#a0a0a4', metalness: 0.9, roughness: 0.4, transparent: false, opacity: 1 }
+        };
+
+        const state = {
+            currentMatId: 'water',
+            activeMatIds: ['water'],
+            matData: {},
+            syncMode: 'none',
+            showTrendline: false,
+            deleteMode: false,
+            showDensity: false,
+            records: [],
+            recordTargets: ['water'],
+            maxV: 400,
+            maxM: 4000
+        };
+
+        for (const key in materials) {
+            state.matData[key] = { v: 50, h: 0, m: 50 * materials[key].density };
+        }
+
+        const cubes = {};
+        const els = {
+            addSelect: document.getElementById('add-preset-select'),
+            customFields: document.getElementById('custom-mat-fields'),
+            addCustomBtn: document.getElementById('add-custom-btn'),
+            activeList: document.getElementById('active-materials-list'),
+            deleteCheck: document.getElementById('delete-mode-checkbox'),
+            syncRadios: document.querySelectorAll('input[name="sync-mode"]'),
+            currentMatName: document.getElementById('current-mat-name'),
+            vSlider: document.getElementById('v-slider'),
+            vInput: document.getElementById('v-input'),
+            mSlider: document.getElementById('m-slider'),
+            mInput: document.getElementById('m-input'),
+            hSlider: document.getElementById('h-slider'),
+            hInput: document.getElementById('h-input'),
+            trendCheck: document.getElementById('trendline-checkbox'),
+            densityCheck: document.getElementById('show-density-checkbox'),
+            recordBtn: document.getElementById('record-btn'),
+            clearBtn: document.getElementById('clear-btn'),
+            recordTargetsList: document.getElementById('record-targets-list'),
+            axisMaxV: document.getElementById('axis-max-v'),
+            axisMaxM: document.getElementById('axis-max-m')
+        };
+
+        const canvasContainer = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        scene.fog = new THREE.Fog(0xdfdfdf, 20, 150);
+
+        const camera = new THREE.PerspectiveCamera(45, canvasContainer.clientWidth / canvasContainer.clientHeight, 0.1, 1000);
+        camera.position.set(0, 15, 35);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(canvasContainer.clientWidth, canvasContainer.clientHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.shadowMap.enabled = true;
+        canvasContainer.appendChild(renderer.domElement);
+
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.maxPolarAngle = Math.PI / 2 - 0.01;
+
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+        scene.add(ambientLight);
+
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        dirLight.position.set(10, 25, 15);
+        dirLight.castShadow = true;
+        scene.add(dirLight);
+
+        const gridHelper = new THREE.GridHelper(80, 80, 0x000000, 0x000000);
+        gridHelper.material.opacity = 0.1;
+        gridHelper.material.transparent = true;
+        scene.add(gridHelper);
+
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+        const tooltip3D = document.getElementById('tooltip-3d');
+
+        canvasContainer.addEventListener('mousemove', (event) => {
+            const rect = canvasContainer.getBoundingClientRect();
+            mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+            mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, camera);
+            const activeMeshes = state.activeMatIds.map(id => cubes[id]).filter(c => c);
+            const intersects = raycaster.intersectObjects(activeMeshes);
+
+            if (intersects.length > 0) {
+                const hitObj = intersects[0].object;
+                const matId = hitObj.userData.matId;
+                if (matId) {
+                    const data = state.matData[matId];
+                    const mat = materials[matId];
+                    tooltip3D.style.display = 'block';
+                    tooltip3D.style.left = (event.clientX - rect.left) + 'px';
+                    tooltip3D.style.top = (event.clientY - rect.top) + 'px';
+                    tooltip3D.innerHTML = `<b>${mat.name}</b><br>V: ${Number(data.v).toFixed(1)} cm³<br>M: ${Number(data.m).toFixed(1)} g`;
+                    canvasContainer.style.cursor = 'pointer';
+                }
+            } else {
+                tooltip3D.style.display = 'none';
+                canvasContainer.style.cursor = 'grab';
+            }
+        });
+
+        function animate3D() {
+            requestAnimationFrame(animate3D);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+        animate3D();
+
+        function resizeRenderer() {
+            const w = canvasContainer.clientWidth, h = canvasContainer.clientHeight;
+            if (w === 0 || h === 0) return;
+            camera.aspect = w / h;
+            camera.updateProjectionMatrix();
+            renderer.setSize(w, h);
+        }
+
+        window.addEventListener('resize', () => {
+            resizeRenderer();
+            updateChart();
+        });
+
+        // ---- UI 更新：拆成「輕量數值」與「較重的清單重建」以減少滑桿拖曳負擔 ----
+        function updateValues() {
+            if (!state.currentMatId) return;
+            const data = state.matData[state.currentMatId];
+            els.currentMatName.innerText = materials[state.currentMatId].name;
+            els.vInput.value = Number(data.v).toFixed(1);
+            els.mInput.value = Number(data.m).toFixed(1);
+            els.hInput.value = Number(data.h * 100).toFixed(0);
+            els.vSlider.value = data.v;
+            els.mSlider.value = data.m;
+            els.hSlider.value = data.h * 100;
+        }
+
+        function updateLists() {
+            els.activeList.innerHTML = '';
+            state.activeMatIds.forEach(id => {
+                const chip = document.createElement('div');
+                const isCurrent = id === state.currentMatId;
+                if (state.deleteMode) {
+                    chip.className = `px-2.5 py-0.5 rounded-full text-sm cursor-pointer border shadow-sm select-none transition-all flex items-center bg-red-50 text-red-600 border-red-300 hover:bg-red-500 hover:text-white`;
+                    chip.innerHTML = `${materials[id].name} <span class="ml-1.5 font-black">×</span>`;
+                    chip.onclick = () => removeMaterial(id);
+                } else {
+                    chip.className = `px-2.5 py-0.5 rounded-full text-sm cursor-pointer border shadow-sm select-none transition-all duration-200 flex items-center ${isCurrent ? 'bg-blue-600 text-white border-blue-700 font-bold scale-105' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-100'}`;
+                    chip.innerHTML = materials[id].name;
+                    chip.onclick = () => { state.currentMatId = id; handleStateChange(); };
+                }
+                els.activeList.appendChild(chip);
+            });
+
+            els.recordTargetsList.innerHTML = '';
+            state.activeMatIds.forEach(id => {
+                const label = document.createElement('label');
+                label.className = 'flex items-center cursor-pointer bg-white px-2 py-0.5 rounded border border-gray-300 shadow-sm hover:bg-gray-50';
+                const cb = document.createElement('input');
+                cb.type = 'checkbox';
+                cb.className = 'mr-1 record-target-cb';
+                cb.value = id;
+                cb.checked = state.recordTargets.includes(id);
+                cb.addEventListener('change', (e) => {
+                    if (e.target.checked) state.recordTargets.push(id);
+                    else state.recordTargets = state.recordTargets.filter(t => t !== id);
+                });
+                label.appendChild(cb);
+                label.appendChild(document.createTextNode(materials[id].name));
+                els.recordTargetsList.appendChild(label);
+            });
+        }
+
+        function renderAddSelect() {
+            els.addSelect.innerHTML = '<option value="" disabled selected>+ 選擇並加入畫布...</option>';
+            Object.keys(materials).forEach(key => {
+                if (!state.activeMatIds.includes(key)) {
+                    const opt = document.createElement('option');
+                    opt.value = key;
+                    opt.innerText = materials[key].name;
+                    els.addSelect.appendChild(opt);
+                }
+            });
+            const customOpt = document.createElement('option');
+            customOpt.value = 'custom';
+            customOpt.innerText = '✨ 自訂新物質...';
+            els.addSelect.appendChild(customOpt);
+        }
+
+        function update3D() {
+            const keys = state.activeMatIds;
+            const spacing = 10;
+            const offset = (keys.length - 1) * spacing / 2;
+
+            Object.keys(cubes).forEach(matId => {
+                if (!keys.includes(matId)) cubes[matId].visible = false;
+            });
+
+            keys.forEach((matId, index) => {
+                const mat = materials[matId];
+
+                if (!cubes[matId]) {
+                    const geometry = new THREE.BoxGeometry(1, 1, 1);
+                    const material = new THREE.MeshStandardMaterial({
+                        color: mat.color, metalness: mat.metalness, roughness: mat.roughness, transparent: mat.transparent, opacity: mat.opacity
+                    });
+                    const cube = new THREE.Mesh(geometry, material);
+                    cube.castShadow = true;
+                    cube.userData = { matId: matId };
+                    scene.add(cube);
+                    cubes[matId] = cube;
+
+                    const innerGeo = new THREE.BoxGeometry(1, 1, 1);
+                    const innerMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.4 });
+                    const innerMesh = new THREE.Mesh(innerGeo, innerMat);
+                    const edges = new THREE.EdgesGeometry(innerGeo);
+                    const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.6 }));
+                    innerMesh.add(line);
+                    cube.add(innerMesh);
+                    cube.innerCavity = innerMesh;
+                }
+
+                const cube = cubes[matId];
+                cube.visible = true;
+                const data = state.matData[matId];
+
+                if (data.h > 0) {
+                    cube.innerCavity.visible = true;
+                    const innerScale = Math.cbrt(data.h);
+                    cube.innerCavity.scale.set(innerScale * 0.99, innerScale * 0.99, innerScale * 0.99);
+                    cube.material.transparent = true;
+                    cube.material.opacity = mat.opacity * 0.5;
+                } else {
+                    cube.innerCavity.visible = false;
+                    cube.material.transparent = mat.transparent;
+                    cube.material.opacity = mat.opacity;
+                }
+
+                const scaleFactor = 0.8;
+                const L = Math.cbrt(data.v) * scaleFactor;
+                cube.scale.set(L, L, L);
+
+                const targetX = index * spacing - offset;
+                cube.position.set(targetX, L / 2, 0);
+
+                if (matId === state.currentMatId) {
+                    cube.material.emissive.set(mat.color);
+                    cube.material.emissiveIntensity = 0.4;
+                } else {
+                    cube.material.emissiveIntensity = 0;
+                }
+            });
+        }
+
+        function updateChart() {
+            const chartData = [];
+
+            if (state.showTrendline) {
+                state.activeMatIds.forEach(matId => {
+                    const mat = materials[matId];
+                    const data = state.matData[matId];
+                    const avgDensity = mat.density * (1 - data.h);
+                    const maxV = state.maxV * 1.1;
+                    chartData.push({
+                        x: [0, maxV], y: [0, maxV * avgDensity],
+                        mode: 'lines', type: 'scatter',
+                        line: { color: mat.color, dash: 'dot', width: 2 },
+                        name: `${mat.name} 趨勢`,
+                        legendgroup: matId, hoverinfo: 'skip'
+                    });
+                });
+            }
+
+            const groupedRecords = {};
+            state.records.forEach(r => {
+                if (!groupedRecords[r.matId]) groupedRecords[r.matId] = { x: [], y: [], text: [] };
+                const mat = materials[r.matId];
+                const avgD = mat.density * (1 - r.h);
+                groupedRecords[r.matId].x.push(r.v);
+                groupedRecords[r.matId].y.push(r.m);
+                let hoverText = `[紀錄] ${mat.name}<br>V: ${Number(r.v).toFixed(1)}<br>M: ${Number(r.m).toFixed(1)}`;
+                if (state.showDensity) hoverText += `<br>平均密度: ${avgD.toFixed(2)}`;
+                groupedRecords[r.matId].text.push(hoverText);
+            });
+
+            for (const [matId, groupData] of Object.entries(groupedRecords)) {
+                chartData.push({
+                    x: groupData.x, y: groupData.y,
+                    mode: 'markers', type: 'scatter',
+                    marker: { size: 10, color: materials[matId].color, line: { color: '#333', width: 1 } },
+                    name: `${materials[matId].name}`,
+                    legendgroup: matId, text: groupData.text, hoverinfo: 'text'
+                });
+            }
+
+            state.activeMatIds.forEach(matId => {
+                const currentData = state.matData[matId];
+                const mat = materials[matId];
+                const curAvgD = mat.density * (1 - currentData.h);
+                const isCurrent = (matId === state.currentMatId);
+                let hoverText = `${mat.name} (即時)<br>V: ${Number(currentData.v).toFixed(1)}<br>M: ${Number(currentData.m).toFixed(1)}`;
+                if (state.showDensity) hoverText += `<br>平均密度: ${curAvgD.toFixed(2)}`;
+
+                chartData.push({
+                    x: [currentData.v], y: [currentData.m],
+                    mode: 'markers', type: 'scatter',
+                    marker: {
+                        size: isCurrent ? 18 : 12,
+                        color: mat.color,
+                        symbol: isCurrent ? 'cross' : 'diamond',
+                        line: { color: '#000', width: isCurrent ? 2 : 1 }
+                    },
+                    name: `${mat.name} (即時)`,
+                    legendgroup: matId, text: [hoverText], hoverinfo: 'text'
+                });
+            });
+
+            const layout = {
+                margin: { t: 15, r: 15, l: 50, b: 40 },
+                xaxis: { title: '體積 Volume (cm³)', range: [0, state.maxV * 1.05], gridcolor: '#e5e7eb' },
+                yaxis: { title: '質量 Mass (g)', range: [0, state.maxM], gridcolor: '#e5e7eb' },
+                paper_bgcolor: 'rgba(0,0,0,0)',
+                plot_bgcolor: 'rgba(250,250,250,0.8)',
+                hovermode: 'closest',
+                legend: { orientation: 'v', y: 1, x: 1.02 }
+            };
+
+            Plotly.react('chart-container', chartData, layout, { displayModeBar: false, responsive: true });
+        }
+
+        // Plotly 較重，滑桿拖曳時用 rAF 節流，避免每一格都重繪造成卡頓
+        let _chartRAF = null;
+        function scheduleChart() {
+            if (_chartRAF) return;
+            _chartRAF = requestAnimationFrame(() => { _chartRAF = null; updateChart(); });
+        }
+
+        // 結構性變更（新增/移除/切換物質、連動模式）：完整重建
+        function handleStateChange() {
+            updateValues();
+            updateLists();
+            update3D();
+            scheduleChart();
+        }
+
+        // 數值變更（拖曳滑桿/輸入）：只更新數值 + 3D + 圖表，不重建清單
+        function handleValueChange() {
+            updateValues();
+            update3D();
+            scheduleChart();
+        }
+
+        function removeMaterial(id) {
+            state.activeMatIds = state.activeMatIds.filter(mid => mid !== id);
+            state.recordTargets = state.recordTargets.filter(mid => mid !== id);
+            // 一併清除該物質已紀錄的數據點（移除後圖上不再殘留）
+            state.records = state.records.filter(r => r.matId !== id);
+            if (cubes[id]) { scene.remove(cubes[id]); delete cubes[id]; }
+            if (state.activeMatIds.length === 0) {
+                state.activeMatIds.push('water');
+                state.recordTargets.push('water');
+                state.matData['water'] = { v: 50, m: 50, h: 0 };
+            }
+            if (state.currentMatId === id) state.currentMatId = state.activeMatIds[0];
+
+            renderAddSelect();
+            handleStateChange();
+        }
+
+        // ---- 數值換算，全程夾限在 [0, maxV] 與 [0, maxM] 之內 ----
+        function updateFromV(v, srcId) {
+            if (v > state.maxV) v = state.maxV;
+
+            if (state.syncMode === 'v') {
+                // 同步 V：找出讓所有物質都不超過 maxV / maxM 的最大共用 V
+                let vLimit = state.maxV;
+                state.activeMatIds.forEach(id => {
+                    const h = state.matData[id].h;
+                    const limV = state.maxM / (materials[id].density * (1 - h));
+                    if (vLimit > limV) vLimit = limV;
+                });
+                if (v > vLimit) v = vLimit;
+                state.activeMatIds.forEach(id => {
+                    const h = state.matData[id].h;
+                    state.matData[id].v = v;
+                    state.matData[id].m = v * materials[id].density * (1 - h);
+                });
+            } else if (state.syncMode === 'm') {
+                const hSrc = state.matData[srcId].h;
+                const newM = v * materials[srcId].density * (1 - hSrc);
+                updateFromM(newM, srcId);
+            } else {
+                const h = state.matData[srcId].h;
+                let m = v * materials[srcId].density * (1 - h);
+                if (m > state.maxM) { m = state.maxM; v = m / (materials[srcId].density * (1 - h)); }
+                state.matData[srcId].v = v;
+                state.matData[srcId].m = m;
+            }
+        }
+
+        function updateFromM(m, srcId) {
+            if (m > state.maxM) m = state.maxM;
+
+            if (state.syncMode === 'm') {
+                // 同步 M：找出讓所有物質都不超過 maxV 的最大共用 M
+                let maxAllowedM = m;
+                state.activeMatIds.forEach(id => {
+                    const h = state.matData[id].h;
+                    const limitM = state.maxV * materials[id].density * (1 - h);
+                    if (maxAllowedM > limitM) maxAllowedM = limitM;
+                });
+                m = maxAllowedM;
+                state.activeMatIds.forEach(id => {
+                    const h = state.matData[id].h;
+                    state.matData[id].m = m;
+                    state.matData[id].v = m / (materials[id].density * (1 - h));
+                });
+            } else if (state.syncMode === 'v') {
+                const hSrc = state.matData[srcId].h;
+                const newV = m / (materials[srcId].density * (1 - hSrc));
+                updateFromV(newV, srcId);
+            } else {
+                const h = state.matData[srcId].h;
+                let calcV = m / (materials[srcId].density * (1 - h));
+                if (calcV > state.maxV) {
+                    calcV = state.maxV;
+                    m = state.maxV * materials[srcId].density * (1 - h);
+                }
+                state.matData[srcId].m = m;
+                state.matData[srcId].v = calcV;
+            }
+        }
+
+        // ---- 事件監聽 ----
+        els.addSelect.addEventListener('change', (e) => {
+            const selectedVal = e.target.value;
+            if (selectedVal === 'custom') {
+                els.customFields.classList.remove('hidden');
+            } else if (selectedVal) {
+                if (!state.activeMatIds.includes(selectedVal)) {
+                    state.activeMatIds.push(selectedVal);
+                    state.recordTargets.push(selectedVal);
+                    if (!state.matData[selectedVal]) {
+                        state.matData[selectedVal] = { v: 50, h: 0, m: 50 * materials[selectedVal].density };
+                    }
+                    if (state.syncMode === 'v') updateFromV(state.matData[state.currentMatId].v, state.currentMatId);
+                    if (state.syncMode === 'm') updateFromM(state.matData[state.currentMatId].m, state.currentMatId);
+                }
+                state.currentMatId = selectedVal;
+                els.customFields.classList.add('hidden');
+                renderAddSelect();
+                e.target.value = '';
+                handleStateChange();
+            }
+        });
+
+        els.addCustomBtn.addEventListener('click', () => {
+            const nameInput = document.getElementById('new-mat-name').value;
+            const densityInput = parseFloat(document.getElementById('new-mat-density').value);
+            const colorInput = document.getElementById('new-mat-color').value;
+
+            if (!nameInput || isNaN(densityInput) || densityInput <= 0) return alert("請填寫完整數值！");
+
+            const newId = 'custom_' + Date.now();
+            materials[newId] = {
+                id: newId, name: nameInput, density: densityInput, color: colorInput,
+                metalness: 0.2, roughness: 0.8, transparent: false, opacity: 1
+            };
+
+            state.activeMatIds.push(newId);
+            state.recordTargets.push(newId);
+            state.matData[newId] = { v: 50, h: 0, m: 50 * densityInput };
+
+            if (state.syncMode === 'v') updateFromV(state.matData[state.currentMatId].v, state.currentMatId);
+            if (state.syncMode === 'm') updateFromM(state.matData[state.currentMatId].m, state.currentMatId);
+
+            state.currentMatId = newId;
+            els.customFields.classList.add('hidden');
+            renderAddSelect();
+            els.addSelect.value = '';
+            handleStateChange();
+        });
+
+        els.deleteCheck.addEventListener('change', (e) => { state.deleteMode = e.target.checked; handleStateChange(); });
+        els.trendCheck.addEventListener('change', (e) => { state.showTrendline = e.target.checked; updateChart(); });
+        els.densityCheck.addEventListener('change', (e) => { state.showDensity = e.target.checked; updateChart(); });
+
+        function applyAxisLimits() {
+            state.maxV = parseFloat(els.axisMaxV.value) || 400;
+            state.maxM = parseFloat(els.axisMaxM.value) || 4000;
+
+            els.vSlider.max = state.maxV;
+            els.vInput.max = state.maxV;
+            els.mSlider.max = state.maxM;
+            els.mInput.max = state.maxM;
+
+            state.activeMatIds.forEach(id => {
+                let v = state.matData[id].v;
+                if (v > state.maxV) v = state.maxV;
+                const limitV_by_M = state.maxM / (materials[id].density * (1 - state.matData[id].h));
+                if (v > limitV_by_M) v = limitV_by_M;
+                state.matData[id].v = v;
+                state.matData[id].m = v * materials[id].density * (1 - state.matData[id].h);
+            });
+
+            if (state.syncMode === 'v') updateFromV(state.matData[state.currentMatId].v, state.currentMatId);
+            if (state.syncMode === 'm') updateFromM(state.matData[state.currentMatId].m, state.currentMatId);
+
+            handleStateChange();
+        }
+
+        els.axisMaxV.addEventListener('change', applyAxisLimits);
+        els.axisMaxM.addEventListener('change', applyAxisLimits);
+
+        els.syncRadios.forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                state.syncMode = e.target.value;
+                if (state.syncMode === 'v') updateFromV(state.matData[state.currentMatId].v, state.currentMatId);
+                if (state.syncMode === 'm') updateFromM(state.matData[state.currentMatId].m, state.currentMatId);
+                handleStateChange();
+            });
+        });
+
+        const bindInputPair = (slider, input, updateFunc, isHollow = false) => {
+            slider.addEventListener('input', (e) => {
+                const val = parseFloat(e.target.value);
+                input.value = val;
+                updateFunc(isHollow ? val / 100 : val, state.currentMatId);
+                handleValueChange();
+            });
+            input.addEventListener('change', (e) => {
+                let val = parseFloat(e.target.value);
+                if (val < parseFloat(input.min)) val = parseFloat(input.min);
+                if (val > parseFloat(input.max)) val = parseFloat(input.max);
+                input.value = val;
+                slider.value = val;
+                updateFunc(isHollow ? val / 100 : val, state.currentMatId);
+                handleValueChange();
+            });
+        };
+
+        const updateHollow = (h, srcId) => {
+            state.matData[srcId].h = h;
+            const currentV = state.matData[srcId].v;
+            const newM = currentV * materials[srcId].density * (1 - h);
+            if (state.syncMode === 'm') updateFromM(newM, srcId);
+            else state.matData[srcId].m = newM;
+        };
+
+        bindInputPair(els.vSlider, els.vInput, updateFromV);
+        bindInputPair(els.mSlider, els.mInput, updateFromM);
+        bindInputPair(els.hSlider, els.hInput, updateHollow, true);
+
+        els.recordBtn.addEventListener('click', () => {
+            state.recordTargets.forEach(matId => {
+                const data = state.matData[matId];
+                if (data) state.records.push({ matId: matId, v: data.v, m: data.m, h: data.h });
+            });
+            updateChart();
+
+            const originalText = els.recordBtn.innerHTML;
+            els.recordBtn.innerHTML = '✅ 已紀錄選擇的數據！';
+            setTimeout(() => els.recordBtn.innerHTML = originalText, 800);
+        });
+
+        els.clearBtn.addEventListener('click', () => {
+            state.records = [];
+            updateChart();
+        });
+
+        // ---- 啟動 ----
+        renderAddSelect();
+        applyAxisLimits(); // 啟動即同步滑桿上限與軸範圍（修正 M 滑桿初始只能到 3000 的問題）
+        // 版面套用後再校正一次 3D 畫布尺寸，避免初次量測到高度為 0
+        requestAnimationFrame(resizeRenderer);
+        setTimeout(resizeRenderer, 200);
+    </script>
+</body>
+</html>
