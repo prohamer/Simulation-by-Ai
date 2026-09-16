@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Markdown to Docs - 開源文件轉換器</title>
+
+    <!-- Tailwind CSS for rapid UI styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Marked.js: Markdown -> HTML -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+    <!-- DOMPurify: sanitize preview HTML (XSS protection) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.6/purify.min.js"></script>
+
+    <!-- html2pdf: render HTML -> PDF -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+
+    <!-- html-docx-js: produce a genuine .docx from HTML -->
+    <script src="https://cdn.jsdelivr.net/npm/html-docx-js/dist/html-docx.js"></script>
+
+    <!-- PptxGenJS: generate .pptx (npm path is more reliable than /gh/) -->
+    <script src="https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js"></script>
+
+    <!-- highlight.js: code-block syntax highlighting -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+
+    <style>
+        html, body { height: 100%; margin: 0; }
+        body { display: flex; flex-direction: column; height: 100dvh; overflow: hidden; }
+
+        /* ---- Preview themes (scoped) ---- */
+        /* 1. GitHub */
+        .theme-github { color:#24292e; background:#fff; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif; }
+        .theme-github h1,.theme-github h2 { border-bottom:1px solid #eaecef; padding-bottom:.3em; }
+        .theme-github h1,.theme-github h2,.theme-github h3,.theme-github h4 { font-weight:600; margin-top:24px; margin-bottom:16px; line-height:1.25; }
+        .theme-github p,.theme-github blockquote,.theme-github ul,.theme-github ol,.theme-github dl,.theme-github table,.theme-github pre { margin-top:0; margin-bottom:16px; }
+        .theme-github a { color:#0366d6; text-decoration:none; }
+        .theme-github a:hover { text-decoration:underline; }
+        .theme-github blockquote { padding:0 1em; color:#6a737d; border-left:.25em solid #dfe2e5; }
+        .theme-github code { padding:.2em .4em; margin:0; font-size:85%; background:rgba(27,31,35,.05); border-radius:3px; font-family:monospace; }
+        .theme-github pre { padding:16px; overflow:auto; font-size:85%; line-height:1.45; background:#f6f8fa; border-radius:3px; }
+        .theme-github pre code { background:transparent; padding:0; }
+        .theme-github table { border-spacing:0; border-collapse:collapse; width:100%; }
+        .theme-github table th,.theme-github table td { padding:6px 13px; border:1px solid #dfe2e5; }
+        .theme-github table tr:nth-child(2n) { background:#f6f8fa; }
+        .theme-github ul,.theme-github ol { padding-left:2em; list-style-position:outside; }
+        .theme-github ul { list-style-type:disc; }
+
+        /* 2. Dark */
+        .theme-dark { color:#e5e7eb; background:#1f2937; font-family:ui-sans-serif,system-ui,-apple-system,sans-serif; }
+        .theme-dark h1,.theme-dark h2 { border-bottom:1px solid #374151; padding-bottom:.3em; color:#f9fafb; }
+        .theme-dark h1,.theme-dark h2,.theme-dark h3 { font-weight:600; margin-top:24px; margin-bottom:16px; }
+        .theme-dark p,.theme-dark ul,.theme-dark ol { margin-bottom:16px; line-height:1.6; }
+        .theme-dark a { color:#60a5fa; }
+        .theme-dark blockquote { padding:0 1em; color:#9ca3af; border-left:4px solid #4b5563; }
+        .theme-dark code { padding:.2em .4em; background:#374151; border-radius:3px; font-family:monospace; color:#fca5a5; }
+        .theme-dark pre { padding:16px; overflow:auto; background:#111827; border-radius:6px; }
+        .theme-dark pre code { background:transparent; color:#e5e7eb; }
+        .theme-dark table th,.theme-dark table td { padding:8px; border:1px solid #4b5563; }
+        .theme-dark ul,.theme-dark ol { padding-left:2em; }
+        .theme-dark ul { list-style-type:disc; }
+
+        /* 3. Plain (document-style) */
+        .theme-plain { color:#000; background:#fff; font-family:"Times New Roman",Times,serif; line-height:1.5; }
+        .theme-plain h1,.theme-plain h2,.theme-plain h3 { font-weight:bold; margin-top:1.2em; margin-bottom:.5em; }
+        .theme-plain h1 { font-size:2em; }
+        .theme-plain h2 { font-size:1.5em; }
+        .theme-plain p,.theme-plain ul,.theme-plain ol { margin-bottom:1em; }
+        .theme-plain code,.theme-plain pre { font-family:monospace; }
+        .theme-plain pre { margin-bottom:1em; white-space:pre-wrap; background:#f4f4f4; padding:10px; border-radius:4px; }
+        .theme-plain table th,.theme-plain table td { border:1px solid #000; padding:4px; }
+        .theme-plain ul,.theme-plain ol { padding-left:40px; }
+        .theme-plain ul { list-style-type:disc; }
+
+        /* Keep atomic blocks intact across PDF page breaks */
+        #preview-content pre,
+        #preview-content table,
+        #preview-content blockquote,
+        #preview-content img { page-break-inside: avoid; break-inside: avoid; }
+        #preview-content h1, #preview-content h2, #preview-content h3 { page-break-after: avoid; }
+
+        /* ---- Syntax highlighting tokens (colors switch with the theme) ---- */
+        .theme-github, .theme-plain {
+            --hl-comment:#6a737d; --hl-keyword:#d73a49; --hl-string:#032f62; --hl-number:#005cc5;
+            --hl-title:#6f42c1; --hl-builtin:#e36209; --hl-attr:#005cc5; --hl-tag:#22863a; --hl-meta:#6a737d;
+        }
+        .theme-dark {
+            --hl-comment:#8b949e; --hl-keyword:#ff7b72; --hl-string:#a5d6ff; --hl-number:#79c0ff;
+            --hl-title:#d2a8ff; --hl-builtin:#ffa657; --hl-attr:#79c0ff; --hl-tag:#7ee787; --hl-meta:#8b949e;
+        }
+        .hljs-comment, .hljs-quote { color:var(--hl-comment); font-style:italic; }
+        .hljs-keyword, .hljs-selector-tag, .hljs-literal, .hljs-doctag, .hljs-name { color:var(--hl-keyword); }
+        .hljs-string, .hljs-regexp, .hljs-addition { color:var(--hl-string); }
+        .hljs-number, .hljs-symbol, .hljs-bullet { color:var(--hl-number); }
+        .hljs-title, .hljs-title.function_, .hljs-section { color:var(--hl-title); }
+        .hljs-built_in, .hljs-type, .hljs-class .hljs-title { color:var(--hl-builtin); }
+        .hljs-attr, .hljs-attribute, .hljs-variable, .hljs-template-variable { color:var(--hl-attr); }
+        .hljs-tag { color:var(--hl-tag); }
+        .hljs-meta { color:var(--hl-meta); }
+        .hljs-emphasis { font-style:italic; }
+        .hljs-strong { font-weight:bold; }
+
+        /* Scrollbars */
+        ::-webkit-scrollbar { width:8px; height:8px; }
+        ::-webkit-scrollbar-track { background:#f1f1f1; }
+        ::-webkit-scrollbar-thumb { background:#c1c1c1; border-radius:4px; }
+        ::-webkit-scrollbar-thumb:hover { background:#a8a8a8; }
+
+        /* Spinner */
+        .spinner { width:42px; height:42px; border:4px solid rgba(255,255,255,.3); border-top-color:#fff; border-radius:50%; animation:spin .8s linear infinite; }
+        @keyframes spin { to { transform:rotate(360deg); } }
+
+        /* Toast entrance */
+        .toast { animation:toastIn .2s ease-out; }
+        @keyframes toastIn { from { opacity:0; transform:translateY(-6px); } to { opacity:1; transform:none; } }
+
+        @media (prefers-reduced-motion: reduce) {
+            *, ::before, ::after { animation-duration:.001ms !important; transition-duration:.001ms !important; }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 font-sans text-gray-800">
+
+    <header class="bg-white shadow-sm border-b border-gray-200 px-4 sm:px-6 py-3 flex flex-col lg:flex-row justify-between items-center z-10 shrink-0 gap-3">
+        <div class="flex items-center gap-2">
+            <svg class="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+            <h1 class="text-xl font-bold text-gray-800">Markdown to Docs</h1>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-center gap-3">
+            <!-- File actions -->
+            <div class="flex items-center gap-2">
+                <button onclick="document.getElementById('md-file').click()" class="text-sm text-gray-600 hover:text-blue-600 border border-gray-300 rounded-md py-1.5 px-3 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500">開啟 .md</button>
+                <input id="md-file" type="file" accept=".md,.markdown,.txt,text/markdown,text/plain" class="hidden">
+                <button onclick="downloadMarkdown()" class="text-sm text-gray-600 hover:text-blue-600 border border-gray-300 rounded-md py-1.5 px-3 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500">儲存 .md</button>
+            </div>
+
+            <!-- Theme selector -->
+            <div class="flex items-center gap-2">
+                <label for="theme-selector" class="text-sm font-medium text-gray-600">排版樣式</label>
+                <select id="theme-selector" class="border border-gray-300 rounded-md text-sm py-1.5 px-3 bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500">
+                    <option value="theme-github">GitHub 風格</option>
+                    <option value="theme-dark">深色模式</option>
+                    <option value="theme-plain">純文字</option>
+                </select>
+            </div>
+
+            <!-- Export buttons -->
+            <div class="flex gap-2">
+                <button onclick="exportDOCX()" class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-1.5 px-4 rounded-md transition-colors shadow-sm flex items-center gap-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-blue-500">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                    Word
+                </button>
+                <button onclick="exportPDF()" class="bg-red-600 hover:bg-red-700 text-white text-sm font-medium py-1.5 px-4 rounded-md transition-colors shadow-sm flex items-center gap-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-red-500">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 6H7a2 2 0 00-2 2v11a2 2 0 002 2z"></path></svg>
+                    PDF
+                </button>
+                <button onclick="exportPPTX()" class="bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium py-1.5 px-4 rounded-md transition-colors shadow-sm flex items-center gap-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-orange-500" title="用 '---' 分隔投影片">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+                    PPT
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-1 flex flex-col md:flex-row w-full min-h-0 overflow-hidden">
+        <!-- Editor -->
+        <section class="w-full md:w-1/2 h-1/2 md:h-full border-b md:border-b-0 md:border-r border-gray-300 bg-white flex flex-col min-h-0">
+            <div class="bg-gray-50 px-4 py-2 border-b border-gray-200 text-xs font-semibold text-gray-500 flex justify-between items-center shrink-0">
+                <label for="md-input">Markdown 編輯區</label>
+                <span id="word-count" class="text-gray-400 font-normal" aria-live="polite">0 字</span>
+            </div>
+            <textarea id="md-input" class="flex-1 w-full p-4 resize-none outline-none font-mono text-sm text-gray-800 min-h-0" spellcheck="false" placeholder="在這裡輸入 Markdown…"></textarea>
+        </section>
+
+        <!-- Preview -->
+        <section class="w-full md:w-1/2 h-1/2 md:h-full flex flex-col relative bg-gray-50 min-h-0">
+            <div class="bg-gray-50 px-4 py-2 border-b border-gray-200 text-xs font-semibold text-gray-500 shrink-0">預覽與轉檔結果</div>
+            <div class="flex-1 overflow-auto p-4 sm:p-8 flex justify-center min-h-0">
+                <div id="preview-container" class="w-full max-w-3xl min-h-full bg-white p-6 sm:p-12 shadow-sm border border-gray-200 rounded-sm theme-github">
+                    <div id="preview-content"></div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Loading overlay -->
+    <div id="overlay" class="hidden fixed inset-0 z-50 bg-black/50 flex-col items-center justify-center gap-4 text-white" style="display:none;">
+        <div class="spinner" role="status" aria-label="處理中"></div>
+        <p id="overlay-msg" class="font-medium">正在產生檔案…</p>
+    </div>
+
+    <!-- Toasts -->
+    <div id="toast-container" class="fixed top-4 right-4 z-50 flex flex-col gap-2" aria-live="polite"></div>
+
+    <script>
+        // ---------- DOM ----------
+        const mdInput = document.getElementById('md-input');
+        const previewContent = document.getElementById('preview-content');
+        const previewContainer = document.getElementById('preview-container');
+        const themeSelector = document.getElementById('theme-selector');
+        const wordCount = document.getElementById('word-count');
+        const overlay = document.getElementById('overlay');
+        const overlayMsg = document.getElementById('overlay-msg');
+
+        const STORAGE_KEY = 'md2docs:content';
+        const THEME_KEY = 'md2docs:theme';
+
+        const initialMarkdown = `# 歡迎使用 Markdown 文件轉換器 🚀
+
+這是一個完全在瀏覽器執行的純前端工具，完美支援 GitHub Pages！
+
+## 支援的轉檔格式
+1. **Word (.docx)**：產生真正的 Word 檔，排版乾淨。
+2. **PDF**：所見即所得，保留你在畫面上看到的樣式。
+3. **PowerPoint (.pptx)**：支援標題、清單、表格與程式碼區塊。
+
+---
+
+## PPT 換頁教學
+用一條水平線 \`---\` 就能把簡報切到新的一頁。**粗體**、*斜體* 與 \`行內程式碼\` 都會正確顯示。
+
+* 用 \`#\` 製作大標題
+* 用 \`-\` 或 \`*\` 製作項目符號
+* 用 \`|\` 製作表格
+
+### 程式碼區塊
+\`\`\`javascript
+function greet() {
+    console.log("Hello, GitHub Pages!");
+}
+\`\`\`
+
+> 引用文字：這個工具不需要後端伺服器，安全又輕量。
+
+| 功能 | 支援度 | 備註 |
+| --- | --- | --- |
+| 即時預覽 | ✅ | 無延遲 |
+| 自訂樣式 | ✅ | 從上方切換 |
+| 離線運作 | ✅ | 載入後可離線 |
+`;
+
+        marked.setOptions({ breaks: true, gfm: true });
+
+        // ---------- Preview ----------
+        function updatePreview() {
+            const clean = DOMPurify.sanitize(marked.parse(mdInput.value));
+            previewContent.innerHTML = clean;
+            if (window.hljs) {
+                previewContent.querySelectorAll('pre code').forEach((el) => {
+                    try { hljs.highlightElement(el); } catch (e) {}
+                });
+            }
+            const chars = mdInput.value.length;
+            wordCount.textContent = chars + ' 字';
+            try { localStorage.setItem(STORAGE_KEY, mdInput.value); } catch (e) {}
+        }
+
+        let debounceTimer;
+        mdInput.addEventListener('input', () => {
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(updatePreview, 120);
+        });
+
+        function applyTheme(theme) {
+            previewContainer.classList.remove('theme-github', 'theme-dark', 'theme-plain');
+            previewContainer.classList.add(theme);
+            previewContainer.style.backgroundColor = (theme === 'theme-dark') ? '#1f2937' : '#ffffff';
+            try { localStorage.setItem(THEME_KEY, theme); } catch (e) {}
+        }
+        themeSelector.addEventListener('change', (e) => applyTheme(e.target.value));
+
+        // ---------- File open / save ----------
+        document.getElementById('md-file').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = () => {
+                mdInput.value = reader.result;
+                updatePreview();
+                showToast('已載入 ' + file.name, 'success');
+            };
+            reader.onerror = () => showToast('讀取檔案失敗，請再試一次', 'error');
+            reader.readAsText(file);
+            e.target.value = '';
+        });
+
+        function baseName() {
+            const m = mdInput.value.match(/^#\s+(.+)$/m);
+            let name = m ? m[1] : 'document';
+            name = name.replace(/[\\/:*?"<>|#]/g, '').trim().slice(0, 60) || 'document';
+            return name;
+        }
+        function stamp() {
+            const d = new Date();
+            const p = (n) => String(n).padStart(2, '0');
+            return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}`;
+        }
+
+        function downloadMarkdown() {
+            const blob = new Blob([mdInput.value], { type: 'text/markdown;charset=utf-8' });
+            triggerDownload(blob, `${baseName()}.md`);
+            showToast('已儲存 Markdown', 'success');
+        }
+
+        function triggerDownload(blob, filename) {
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url; a.download = filename;
+            document.body.appendChild(a); a.click(); a.remove();
+            URL.revokeObjectURL(url);
+        }
+
+        // ---------- UI feedback ----------
+        function showOverlay(msg) { overlayMsg.textContent = msg; overlay.style.display = 'flex'; }
+        function hideOverlay() { overlay.style.display = 'none'; }
+        function showToast(msg, type = 'info') {
+            const colors = { success: 'bg-green-600', error: 'bg-red-600', info: 'bg-gray-800' };
+            const el = document.createElement('div');
+            el.className = `toast text-white text-sm px-4 py-2 rounded-md shadow-lg ${colors[type] || colors.info}`;
+            el.textContent = msg;
+            document.getElementById('toast-container').appendChild(el);
+            setTimeout(() => { el.style.opacity = '0'; el.style.transition = 'opacity .3s'; setTimeout(() => el.remove(), 300); }, 3000);
+        }
+        // yield to the browser so the overlay paints before heavy work
+        const nextFrame = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+
+        // ---------- 1. PDF (WYSIWYG) ----------
+        async function exportPDF() {
+            showOverlay('正在產生 PDF…');
+            // Dark theme prints poorly (heavy ink, low contrast on paper) — capture in light instead.
+            const wasDark = previewContainer.classList.contains('theme-dark');
+            const prevBg = previewContainer.style.backgroundColor;
+            try {
+                if (wasDark) {
+                    previewContainer.classList.replace('theme-dark', 'theme-github');
+                    previewContainer.style.backgroundColor = '#ffffff';
+                }
+                await nextFrame();
+                await html2pdf().set({
+                    margin: 10,
+                    filename: `${baseName()}_${stamp()}.pdf`,
+                    image: { type: 'jpeg', quality: 0.98 },
+                    html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
+                    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+                    pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+                }).from(previewContainer).save();
+                showToast('PDF 已下載', 'success');
+            } catch (err) {
+                console.error(err);
+                showToast('PDF 產生失敗：' + err.message, 'error');
+            } finally {
+                if (wasDark) {
+                    previewContainer.classList.replace('theme-github', 'theme-dark');
+                    previewContainer.style.backgroundColor = prevBg || '#1f2937';
+                }
+                hideOverlay();
+            }
+        }
+
+        // ---------- 2. Word (.docx) ----------
+        function buildDocHtml(bodyHtml) {
+            return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+                body { font-family:'Calibri','Microsoft JhengHei',sans-serif; font-size:12pt; line-height:1.5; color:#000; }
+                h1 { font-size:22pt; } h2 { font-size:17pt; border-bottom:1px solid #ccc; padding-bottom:2pt; } h3 { font-size:14pt; }
+                p, ul, ol, blockquote, pre, table { margin:0 0 10pt; }
+                table { border-collapse:collapse; width:100%; } th,td { border:1px solid #999; padding:4pt 6pt; } th { background:#f0f0f0; }
+                pre { background:#f5f5f5; border:1px solid #ddd; padding:8pt; font-family:Consolas,monospace; font-size:10pt; white-space:pre-wrap; }
+                code { font-family:Consolas,monospace; background:#f0f0f0; padding:1pt 3pt; }
+                blockquote { border-left:3px solid #ccc; margin-left:0; padding-left:10pt; color:#555; }
+                img { max-width:100%; }
+            </style></head><body>${bodyHtml}</body></html>`;
+        }
+
+        async function exportDOCX() {
+            showOverlay('正在產生 Word…');
+            try {
+                await nextFrame();
+                // Always use the clean semantic HTML so the doc is readable regardless of preview theme.
+                const html = buildDocHtml(previewContent.innerHTML);
+                const filename = `${baseName()}_${stamp()}.docx`;
+
+                if (window.htmlDocx && typeof window.htmlDocx.asBlob === 'function') {
+                    // Genuine .docx (Office Open XML)
+                    triggerDownload(window.htmlDocx.asBlob(html), filename);
+                } else {
+                    // Fallback: legacy Word-compatible HTML (.doc)
+                    const blob = new Blob(['\ufeff', html], { type: 'application/msword' });
+                    triggerDownload(blob, `${baseName()}_${stamp()}.doc`);
+                }
+                showToast('Word 檔已下載', 'success');
+            } catch (err) {
+                console.error(err);
+                showToast('Word 產生失敗：' + err.message, 'error');
+            } finally {
+                hideOverlay();
+            }
+        }
+
+        // ---------- 3. PowerPoint (.pptx) ----------
+        // Slide geometry (LAYOUT_16x9 = 10 x 5.625 in)
+        const SLIDE_W = 10, SLIDE_H = 5.625, MARGIN = 0.5, MAX_Y = SLIDE_H - MARGIN;
+
+        // Inline markdown -> PptxGenJS text runs (bold / italic / code / links)
+        function parseInline(text) {
+            const runs = [];
+            const re = /(\*\*|__)(.+?)\1|(\*|_)(.+?)\3|`([^`]+)`|\[([^\]]+)\]\(([^)]+)\)/g;
+            let last = 0, m;
+            while ((m = re.exec(text)) !== null) {
+                if (m.index > last) runs.push({ text: text.slice(last, m.index), options: {} });
+                if (m[2] !== undefined) runs.push({ text: m[2], options: { bold: true } });
+                else if (m[4] !== undefined) runs.push({ text: m[4], options: { italic: true } });
+                else if (m[5] !== undefined) runs.push({ text: m[5], options: { fontFace: 'Consolas' } });
+                else if (m[6] !== undefined) runs.push({ text: m[6], options: {} });
+                last = re.lastIndex;
+            }
+            if (last < text.length) runs.push({ text: text.slice(last), options: {} });
+            return runs.length ? runs : [{ text: text, options: {} }];
+        }
+
+        // Group a slide's raw markdown into structured blocks
+        function parseBlocks(md) {
+            const lines = md.split('\n');
+            const blocks = [];
+            let i = 0;
+            while (i < lines.length) {
+                let line = lines[i];
+                const t = line.trim();
+                if (!t) { i++; continue; }
+
+                // Fenced code block
+                if (t.startsWith('```')) {
+                    const code = [];
+                    i++;
+                    while (i < lines.length && !lines[i].trim().startsWith('```')) { code.push(lines[i]); i++; }
+                    i++; // skip closing fence
+                    blocks.push({ type: 'code', text: code.join('\n') });
+                    continue;
+                }
+                // Table (header row followed by a separator row)
+                if (t.startsWith('|') && i + 1 < lines.length && /^\s*\|?[\s:|-]+\|?\s*$/.test(lines[i + 1]) && lines[i + 1].includes('-')) {
+                    const rows = [];
+                    const toCells = (l) => l.trim().replace(/^\||\|$/g, '').split('|').map(c => c.trim());
+                    rows.push(toCells(line)); // header
+                    i += 2; // skip header + separator
+                    while (i < lines.length && lines[i].trim().startsWith('|')) { rows.push(toCells(lines[i])); i++; }
+                    blocks.push({ type: 'table', rows });
+                    continue;
+                }
+                // Heading
+                const h = t.match(/^(#{1,6})\s+(.*)$/);
+                if (h) { blocks.push({ type: 'heading', level: h[1].length, text: h[2] }); i++; continue; }
+                // Blockquote
+                if (t.startsWith('>')) { blocks.push({ type: 'quote', text: t.replace(/^>\s?/, '') }); i++; continue; }
+                // List (collect consecutive items)
+                if (/^([-*+]\s+|\d+\.\s+)/.test(t)) {
+                    const items = []; let ordered = /^\d+\.\s+/.test(t);
+                    while (i < lines.length && /^\s*([-*+]\s+|\d+\.\s+)/.test(lines[i])) {
+                        items.push(lines[i].trim().replace(/^([-*+]\s+|\d+\.\s+)/, ''));
+                        i++;
+                    }
+                    blocks.push({ type: 'list', ordered, items });
+                    continue;
+                }
+                // Horizontal rule inside a slide -> ignore
+                if (/^([-*_])\1{2,}$/.test(t)) { i++; continue; }
+                // Paragraph (merge consecutive plain lines)
+                const para = [t]; i++;
+                while (i < lines.length && lines[i].trim() && !/^(#{1,6}\s|>|```|\||[-*+]\s|\d+\.\s)/.test(lines[i].trim())) {
+                    para.push(lines[i].trim()); i++;
+                }
+                blocks.push({ type: 'paragraph', text: para.join(' ') });
+            }
+            return blocks;
+        }
+
+        function estimateHeight(block) {
+            switch (block.type) {
+                case 'heading': return block.level === 1 ? 0.9 : 0.65;
+                case 'paragraph': return Math.max(1, Math.ceil(block.text.length / 85)) * 0.3 + 0.15;
+                case 'quote': return Math.max(1, Math.ceil(block.text.length / 80)) * 0.3 + 0.2;
+                case 'list': return block.items.reduce((s, it) => s + Math.max(1, Math.ceil(it.length / 80)) * 0.34, 0) + 0.1;
+                case 'code': return block.text.split('\n').length * 0.24 + 0.3;
+                case 'table': return block.rows.length * 0.4 + 0.15;
+                default: return 0.4;
+            }
+        }
+
+        function exportPPTX() {
+            showOverlay('正在產生 PowerPoint…');
+            setTimeout(() => {
+                try {
+                    const pptx = new PptxGenJS();
+                    pptx.layout = 'LAYOUT_16x9';
+
+                    const rawSlides = mdInput.value.split(/\n[ \t]*(?:---|\*\*\*)[ \t]*\n/);
+                    let produced = 0;
+
+                    rawSlides.forEach((raw) => {
+                        const blocks = parseBlocks(raw);
+                        if (!blocks.length) return; // skip empty slides
+                        produced++;
+
+                        let slide = pptx.addSlide();
+                        let y = MARGIN;
+                        const newSlide = () => { slide = pptx.addSlide(); y = MARGIN; };
+
+                        blocks.forEach((b) => {
+                            const h = estimateHeight(b);
+                            if (y + h > MAX_Y && y > MARGIN) newSlide();
+
+                            if (b.type === 'heading') {
+                                const size = b.level === 1 ? 30 : b.level === 2 ? 24 : 20;
+                                slide.addText(parseInline(b.text), { x: MARGIN, y, w: SLIDE_W - MARGIN * 2, h, fontSize: size, bold: true, color: b.level === 1 ? '1F2937' : '374151' });
+                            } else if (b.type === 'paragraph') {
+                                slide.addText(parseInline(b.text), { x: MARGIN, y, w: SLIDE_W - MARGIN * 2, h, fontSize: 16, color: '333333', valign: 'top' });
+                            } else if (b.type === 'quote') {
+                                slide.addText(parseInline(b.text), { x: MARGIN, y, w: SLIDE_W - MARGIN * 2, h, fontSize: 15, italic: true, color: '666666', fill: { color: 'F3F4F6' }, align: 'left' });
+                            } else if (b.type === 'list') {
+                                const items = b.items.map((it, idx) => {
+                                    const runs = parseInline(it);
+                                    runs[0].options = Object.assign({}, runs[0].options, { bullet: b.ordered ? { type: 'number' } : true });
+                                    runs[runs.length - 1].options = Object.assign({}, runs[runs.length - 1].options, { breakLine: true });
+                                    return runs;
+                                }).flat();
+                                slide.addText(items, { x: MARGIN + 0.2, y, w: SLIDE_W - MARGIN * 2 - 0.2, h, fontSize: 16, color: '333333', valign: 'top' });
+                            } else if (b.type === 'code') {
+                                slide.addText(b.text, { x: MARGIN, y, w: SLIDE_W - MARGIN * 2, h, fontSize: 12, fontFace: 'Consolas', color: '1F2937', fill: { color: 'F3F4F6' }, align: 'left', valign: 'top' });
+                            } else if (b.type === 'table') {
+                                const rows = b.rows.map((r, ri) => r.map((c) => ({
+                                    text: c,
+                                    options: { bold: ri === 0, fill: { color: ri === 0 ? 'E5E7EB' : 'FFFFFF' }, color: '111827', fontSize: 12, valign: 'middle' }
+                                })));
+                                slide.addTable(rows, { x: MARGIN, y, w: SLIDE_W - MARGIN * 2, border: { pt: 0.5, color: '9CA3AF' }, autoPage: false });
+                            }
+                            y += h + 0.1;
+                        });
+                    });
+
+                    if (produced === 0) { showToast('沒有可轉換的內容', 'error'); hideOverlay(); return; }
+
+                    pptx.writeFile({ fileName: `${baseName()}_${stamp()}.pptx` })
+                        .then(() => showToast('PowerPoint 已下載', 'success'))
+                        .catch((err) => { console.error(err); showToast('PPT 產生失敗：' + err.message, 'error'); })
+                        .finally(hideOverlay);
+                } catch (err) {
+                    console.error(err);
+                    showToast('PPT 產生失敗：' + err.message, 'error');
+                    hideOverlay();
+                }
+            }, 50);
+        }
+
+        // ---------- Init ----------
+        (function init() {
+            let saved = '';
+            try { saved = localStorage.getItem(STORAGE_KEY) || ''; } catch (e) {}
+            mdInput.value = saved || initialMarkdown;
+
+            let theme = 'theme-github';
+            try { theme = localStorage.getItem(THEME_KEY) || 'theme-github'; } catch (e) {}
+            themeSelector.value = theme;
+            applyTheme(theme);
+
+            updatePreview();
+        })();
+    </script>
+</body>
+</html>
