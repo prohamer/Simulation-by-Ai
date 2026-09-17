@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Let's drive</title>
+    <title>Let'sdrive</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -550,12 +550,13 @@
             let tractionForce = engineForce + brakingForce;
             if (Math.abs(tractionForce) > longBudgetForce) tractionForce = Math.sign(tractionForce) * longBudgetForce;
 
-            // ---- 5. 耗散阻力 (空氣/滾動/引擎煞車，不佔輪胎抓地力預算) ----
-            const dragForce = -AIR_DRAG_COEFFICIENT * s * speed;   // 空氣阻力 ~ v²
+            // ---- 5. 耗散阻力 (空氣阻力與路面無關；滾動阻力/引擎煞車隨路面抓地力縮放) ----
+            const dragForce = -AIR_DRAG_COEFFICIENT * s * speed;   // 空氣阻力 ~ v² (與路面無關)
+            const gripFactor = currentState.surfaceFriction / 0.7; // 以柏油路(0.7)為基準：冰面滑行阻力大幅降低
             let rollingResistance = 0;
-            if (speed > 0.001) rollingResistance = -Math.sign(s) * ROLLING_RESISTANCE_COEF * N; // 低速仍作用，才能停住
+            if (speed > 0.001) rollingResistance = -Math.sign(s) * ROLLING_RESISTANCE_COEF * N * gripFactor;
             let engineBraking = 0;
-            if (engineForce === 0 && speed > 0.5) engineBraking = -Math.sign(s) * ENGINE_BRAKING_DRAG;
+            if (engineForce === 0 && speed > 0.5) engineBraking = -Math.sign(s) * ENGINE_BRAKING_DRAG * gripFactor;
 
             const netLongitudinalForce = tractionForce + dragForce + rollingResistance + engineBraking;
             currentState.lastNetForce = netLongitudinalForce;
@@ -567,7 +568,8 @@
             if (engineForce === 0) { // 未踩油門：耗散力不得把車推過零點反向，且低速直接停住
                 if (s > 0 && sNew < 0) sNew = 0;
                 if (s < 0 && sNew > 0) sNew = 0;
-                if (Math.abs(sNew) < 0.06) sNew = 0; // 消除近乎無限慢的滑行尾巴
+                const stopThreshold = 0.06 / Math.min(gripFactor, 1); // 低摩擦路面稍早停住，避免無盡的緩慢滑行尾巴
+                if (Math.abs(sNew) < stopThreshold) sNew = 0;
             }
             currentState.velocity = sNew;
             if (currentState.velocity < -REVERSE_MAX_SPEED) currentState.velocity = -REVERSE_MAX_SPEED;
