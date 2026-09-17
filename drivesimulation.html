@@ -1,0 +1,983 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>物理模擬駕駛</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #111;
+            font-family: 'Inter', sans-serif;
+            touch-action: none;
+        }
+        #game-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+        #canvas-container {
+            flex: 1;
+            position: relative;
+            width: 100%;
+            overflow: hidden;
+        }
+        
+        #dashboard {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 40%;
+            background: linear-gradient(to top, rgba(20, 20, 20, 0.95) 0%, rgba(40, 40, 40, 0.8) 100%);
+            border-top: 2px solid #444;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            padding: 10px;
+            box-sizing: border-box;
+            z-index: 10;
+        }
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+        }
+
+        /* Steering Wheel */
+        #steering-container {
+            width: 150px;
+            height: 150px;
+            position: relative;
+            margin-left: 20px;
+            margin-bottom: 20px;
+        }
+        #steering-wheel {
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            background: radial-gradient(circle, #555 30%, #222 70%);
+            border: 10px solid #111;
+            box-shadow: inset 0 0 15px rgba(0,0,0,0.8), 0 5px 15px rgba(0,0,0,0.5);
+            position: relative;
+            cursor: pointer;
+            transition: transform 0.1s;
+        }
+        #steering-wheel::before {
+            content: ''; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            width: 40px; height: 40px; background: #333; border-radius: 50%; box-shadow: inset 0 2px 5px rgba(255,255,255,0.2);
+        }
+        #steering-wheel::after {
+            content: ''; position: absolute; top: 50%; left: 10px; right: 10px; height: 20px;
+            background: #222; transform: translateY(-50%); border-radius: 5px; z-index: -1;
+        }
+        .steering-labels {
+            display: flex; justify-content: space-between; width: 100%; color: #aaa; font-size: 12px; margin-top: 5px;
+        }
+
+        #instruments {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            flex: 1;
+            margin-bottom: 20px;
+        }
+        .gauge-container {
+            background: rgba(0,0,0,0.7);
+            border: 2px solid #555;
+            border-radius: 10px;
+            padding: 15px 30px;
+            text-align: center;
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.8);
+            margin-bottom: 10px;
+            width: 250px;
+        }
+        .speed-text { font-size: 48px; font-weight: bold; color: #0f0; font-family: 'Courier New', Courier, monospace; text-shadow: 0 0 10px #0f0; line-height: 1; }
+        .speed-unit { color: #aaa; font-size: 16px; }
+        .info-text { color: #0ff; font-size: 16px; font-family: 'Courier New', Courier, monospace; margin-top: 2px; }
+
+        /* Pedals */
+        #pedals-container { display: flex; align-items: flex-end; margin-right: 20px; margin-bottom: 20px; gap: 15px; }
+        .pedal {
+            width: 60px; height: 120px; background: linear-gradient(to bottom, #777, #333);
+            border: 2px solid #222; border-radius: 5px; position: relative; cursor: pointer;
+            box-shadow: 0 5px 10px rgba(0,0,0,0.5); transition: transform 0.1s, box-shadow 0.1s;
+            display: flex; align-items: flex-end; justify-content: center; padding-bottom: 10px;
+        }
+        .pedal::before {
+            content: ''; position: absolute; top: 5px; bottom: 5px; left: 5px; right: 5px;
+            background: repeating-linear-gradient(0deg, transparent, transparent 5px, rgba(0,0,0,0.2) 5px, rgba(0,0,0,0.2) 10px);
+        }
+        .pedal:active, .pedal.active { transform: perspective(200px) rotateX(15deg) translateY(5px); box-shadow: 0 2px 5px rgba(0,0,0,0.5); }
+        #brake-pedal { width: 80px; background: linear-gradient(to bottom, #944, #422); }
+        .pedal-label { color: white; font-weight: bold; z-index: 1; text-shadow: 1px 1px 2px black; }
+
+        #cruise-control { margin-top: 10px; padding: 8px 15px; background-color: #444; color: white; border: 2px solid #666; border-radius: 20px; cursor: pointer; font-weight: bold; transition: background-color 0.2s; }
+        #cruise-control.active { background-color: #28a745; border-color: #1e7e34; }
+
+        #settings-panel {
+            position: absolute; top: 10px; right: 10px; background: rgba(20, 20, 20, 0.8);
+            padding: 15px; border-radius: 8px; border: 1px solid #444; color: white; z-index: 20;
+            display: flex; flex-direction: column; gap: 10px; width: 220px;
+        }
+        select, button.setting-btn { background: #333; color: white; border: 1px solid #555; padding: 5px; border-radius: 4px; transition: 0.3s; }
+        
+        #graphs-panel {
+            position: absolute; top: 10px; left: 10px; background: rgba(20, 20, 20, 0.85);
+            padding: 10px; border-radius: 8px; border: 1px solid #444; z-index: 20; width: 300px;
+            display: flex; flex-direction: column; gap: 10px;
+        }
+        .chart-container { width: 100%; height: 80px; background: #000; border-radius: 4px; }
+        
+        /* Data Modal */
+        #data-modal {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(10, 10, 10, 0.95); z-index: 100;
+            display: none; /* 將原本的 flex 改為 none 預設隱藏 */
+            flex-direction: column; padding: 20px; box-sizing: border-box;
+        }
+        #data-modal.active { display: flex; } /* 新增 active class 控制顯示 */
+        
+        .modal-grid { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 20px; flex: 1; min-height: 0; }
+        .modal-chart-wrapper { background: #1a1a1a; border: 1px solid #444; border-radius: 8px; padding: 10px; display: flex; flex-direction: column; }
+        .modal-chart-canvas { flex: 1; min-height: 0; }
+        
+        @media (max-width: 768px) {
+            #graphs-panel { display: none; }
+            .speed-text { font-size: 32px; }
+            #steering-container { width: 100px; height: 100px; }
+            .pedal { height: 90px; }
+            .modal-grid { grid-template-columns: 1fr; grid-template-rows: repeat(4, 1fr); overflow-y: auto; }
+        }
+        
+        .pedal-zones { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; pointer-events: none; z-index: 0; }
+        .pedal-zone { flex: 1; border-bottom: 1px dashed rgba(255,255,255,0.3); display: flex; justify-content: center; align-items: flex-start; padding-top: 4px; font-size: 10px; color: rgba(255,255,255,0.8); text-shadow: 1px 1px 2px black; }
+        .pedal-zone:last-child { border-bottom: none; }
+        
+        #windshield-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 60%; pointer-events: none; z-index: 5; box-shadow: inset 0 20px 50px rgba(0,0,0,0.5); }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <div id="canvas-container">
+            <div id="windshield-overlay"></div>
+        </div>
+
+        <div id="graphs-panel">
+            <div class="text-white text-xs font-bold text-center">即時物理數據 (Real-time)</div>
+            <div class="chart-container"><canvas id="xtChart"></canvas></div>
+            <div class="chart-container"><canvas id="vtChart"></canvas></div>
+            <div class="chart-container"><canvas id="atChart"></canvas></div>
+        </div>
+
+        <div id="settings-panel">
+            <div>
+                <label for="scene-select" class="text-xs text-gray-300">場景 (Scene):</label>
+                <select id="scene-select" class="w-full mt-1 text-sm">
+                    <option value="straight">無限直線 (Straight)</option>
+                    <option value="circular">圓形賽道 (Circular)</option>
+                </select>
+            </div>
+            <div>
+                <label for="passenger-select" class="text-xs text-gray-300 mt-2 block">載客人數 (Passengers):</label>
+                <select id="passenger-select" class="w-full mt-1 text-sm">
+                    <option value="0">0 人 (空車)</option>
+                    <option value="1">1 人</option>
+                    <option value="2">2 人</option>
+                    <option value="3">3 人</option>
+                    <option value="4">4 人 (滿載)</option>
+                </select>
+            </div>
+            <div>
+                <label for="surface-select" class="text-xs text-gray-300 mt-2 block">路面狀況 (Surface):</label>
+                <select id="surface-select" class="w-full mt-1 text-sm">
+                    <option value="asphalt" data-friction="0.7">柏油路 (Asphalt)</option>
+                    <option value="ice" data-friction="0.1">極度光滑 (Ice)</option>
+                    <option value="snow" data-friction="0.3">雪地 (Snow)</option>
+                    <option value="gravel" data-friction="0.9">石子地 (Gravel)</option>
+                </select>
+            </div>
+            <hr class="border-gray-600 my-2">
+            <button id="reset-btn" class="setting-btn bg-gray-600 hover:bg-gray-500 font-bold">重置場景 (Reset)</button>
+            <button id="record-btn" class="setting-btn bg-blue-600 hover:bg-blue-500 font-bold text-sm">開始紀錄 (Record 30s)</button>
+            <button id="data-btn" class="setting-btn bg-purple-600 hover:bg-purple-500 font-bold text-sm">駕駛數據 (Data View)</button>
+        </div>
+
+        <div id="dashboard">
+            <div class="control-group">
+                <div id="steering-container">
+                    <div id="steering-wheel"></div>
+                </div>
+                <div class="steering-labels"><span>左 (Left)</span><span>右 (Right)</span></div>
+            </div>
+
+            <div id="instruments">
+                <div class="gauge-container relative">
+                    <div>
+                        <span class="speed-text" id="speed-display">0</span>
+                        <span class="speed-unit">km/h</span>
+                    </div>
+                    <div class="info-text" id="accel-display">a: 0.00 m/s²</div>
+                    <div class="info-text" id="forces-display">合力: 0 N</div>
+                    
+                    <!-- Instant Fuel Bar -->
+                    <div class="w-full mt-3">
+                        <div class="flex justify-between text-xs text-purple-400 mb-1">
+                            <span>瞬時油耗 (Fuel)</span>
+                            <span id="fuel-text">0.0 cc/s</span>
+                        </div>
+                        <div class="w-full h-3 bg-gray-800 rounded-full overflow-hidden border border-gray-600">
+                            <div id="fuel-bar" class="h-full bg-purple-500 w-0 transition-all duration-75"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="control-group" style="align-items: flex-end;">
+                <div id="pedals-container">
+                    <div class="pedal" id="brake-pedal">
+                        <div class="pedal-zones">
+                            <div class="pedal-zone">重</div>
+                            <div class="pedal-zone">中</div>
+                            <div class="pedal-zone">輕</div>
+                        </div>
+                        <span class="pedal-label">煞車<br>Brake</span>
+                    </div>
+                    <div class="pedal" id="gas-pedal">
+                        <div class="pedal-zones">
+                            <div class="pedal-zone">重</div>
+                            <div class="pedal-zone">中</div>
+                            <div class="pedal-zone">輕</div>
+                        </div>
+                        <span class="pedal-label">油門<br>Gas</span>
+                    </div>
+                </div>
+                <button id="cruise-control">定速 (Cruise Control)</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 移除原先的 class="hidden" -->
+    <div id="data-modal">
+        <div class="flex justify-between items-center mb-4">
+            <h2 class="text-2xl text-white font-bold">30秒 駕駛數據分析 (Driving Data)</h2>
+            <div class="flex gap-4">
+                <button id="clear-all-btn" class="bg-orange-600 hover:bg-orange-500 text-white px-4 py-2 rounded font-bold hidden">清空紀錄 (Clear)</button>
+                <button id="close-modal-btn" class="bg-red-600 hover:bg-red-500 text-white px-4 py-2 rounded font-bold">關閉 (Close)</button>
+            </div>
+        </div>
+        <div id="record-tags-container" class="flex flex-wrap gap-2 mb-4">
+            <!-- 紀錄標籤將會生在這裡 -->
+        </div>
+        <div class="modal-grid">
+            <div class="modal-chart-wrapper">
+                <div class="text-sm text-center text-teal-400 mb-2">位移 - 時間 (X-t)</div>
+                <div class="modal-chart-canvas"><canvas id="modalXtChart"></canvas></div>
+            </div>
+            <div class="modal-chart-wrapper">
+                <div class="text-sm text-center text-yellow-400 mb-2">速度 - 時間 (V-t)</div>
+                <div class="modal-chart-canvas"><canvas id="modalVtChart"></canvas></div>
+            </div>
+            <div class="modal-chart-wrapper">
+                <div class="text-sm text-center text-pink-400 mb-2">加速度 - 時間 (a-t)</div>
+                <div class="modal-chart-canvas"><canvas id="modalAtChart"></canvas></div>
+            </div>
+            <div class="modal-chart-wrapper">
+                <div class="text-sm text-center text-purple-400 mb-2">油耗 - 時間 (Fuel-t)</div>
+                <div class="modal-chart-canvas"><canvas id="modalFuelChart"></canvas></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- 物理常數與狀態 (Physics Constants & State) ---
+        const BASE_CAR_MASS = 1430; 
+        const PASSENGER_MASS = 70; 
+        const ENGINE_POWER = 110000; 
+        const MAX_TORQUE_FORCE = 7000; 
+        const MAX_BRAKE_FORCE = 15000; 
+        // 增強空氣阻力與滾動阻力，確保滑行距離更合理
+        const AIR_DRAG_COEFFICIENT = 1.0; 
+        const ROLLING_RESISTANCE_COEF = 0.08; // 從0.015提升至0.08 (約5.3倍)
+        const ENGINE_BRAKING_DRAG = 800; // 模擬放開油門時引擎牽引的基礎阻力 (N)
+        
+        let currentState = {
+            hasStarted: false,
+            passengers: 0,
+            scene: 'straight',
+            surfaceFriction: 0.7,
+            position: { x: 0, y: 0.5, z: 0 },
+            velocity: 0,
+            acceleration: 0, 
+            rotation: 0, 
+            steeringAngle: 0, 
+            
+            inputs: { gas: 0, brake: 0, steering: 0 },
+            
+            fuelConsumptionRate: 0,
+            
+            cruiseControl: { active: false, targetSpeed: 0 },
+            
+            timeElapsed: 0,
+            distanceTraveled: 0
+        };
+
+        function getTotalMass() { return BASE_CAR_MASS + (currentState.passengers * PASSENGER_MASS); }
+
+        // --- DOM Elements ---
+        const speedDisplay = document.getElementById('speed-display');
+        const accelDisplay = document.getElementById('accel-display');
+        const forcesDisplay = document.getElementById('forces-display');
+        const fuelText = document.getElementById('fuel-text');
+        const fuelBar = document.getElementById('fuel-bar');
+        
+        const gasPedal = document.getElementById('gas-pedal');
+        const brakePedal = document.getElementById('brake-pedal');
+        const steeringWheel = document.getElementById('steering-wheel');
+        const cruiseControlBtn = document.getElementById('cruise-control');
+        
+        const sceneSelect = document.getElementById('scene-select');
+        const surfaceSelect = document.getElementById('surface-select');
+        const passengerSelect = document.getElementById('passenger-select');
+        const resetBtn = document.getElementById('reset-btn');
+        const recordBtn = document.getElementById('record-btn');
+        const dataBtn = document.getElementById('data-btn');
+
+        // --- Three.js Setup ---
+        const canvasContainer = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x87CEEB); 
+        scene.fog = new THREE.FogExp2(0x87CEEB, 0.005);
+
+        const camera = new THREE.PerspectiveCamera(75, canvasContainer.clientWidth / canvasContainer.clientHeight, 0.1, 1000);
+        camera.position.set(0, 1.5, 0); 
+        
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(canvasContainer.clientWidth, canvasContainer.clientHeight);
+        renderer.shadowMap.enabled = true;
+        canvasContainer.appendChild(renderer.domElement);
+
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        scene.add(ambientLight);
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        directionalLight.position.set(100, 100, 50);
+        directionalLight.castShadow = true;
+        scene.add(directionalLight);
+
+        let ground, roadLines = [], poles = [];
+        let trackRadius = 50; 
+
+        function createEnvironment() {
+            if (ground) scene.remove(ground);
+            roadLines.forEach(l => scene.remove(l));
+            poles.forEach(p => scene.remove(p));
+            roadLines = []; poles = [];
+
+            let groundColor = 0x333333; 
+            if (currentState.surfaceFriction < 0.2) groundColor = 0xaaddff; 
+            else if (currentState.surfaceFriction < 0.5) groundColor = 0xeeeeee; 
+            else if (currentState.surfaceFriction > 0.8) groundColor = 0x886644; 
+
+            const groundGeo = new THREE.PlaneGeometry(2000, 2000);
+            const groundMat = new THREE.MeshLambertMaterial({ color: groundColor });
+            ground = new THREE.Mesh(groundGeo, groundMat);
+            ground.rotation.x = -Math.PI / 2;
+            ground.receiveShadow = true;
+            scene.add(ground);
+
+            if (currentState.scene === 'straight') createStraightRoad();
+            else createCircularTrack();
+        }
+
+        function createStraightRoad() {
+            const lineGeo = new THREE.PlaneGeometry(0.5, 4);
+            const lineMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+            for (let i = -2000; i < 2000; i += 10) {
+                const line = new THREE.Mesh(lineGeo, lineMat);
+                line.rotation.x = -Math.PI / 2;
+                line.position.set(0, 0.01, i);
+                scene.add(line); roadLines.push(line);
+            }
+            const poleGeo = new THREE.CylinderGeometry(0.2, 0.2, 5);
+            const poleMat = new THREE.MeshLambertMaterial({ color: 0x553311 });
+            for (let i = -2000; i < 2000; i += 50) {
+                const pole = new THREE.Mesh(poleGeo, poleMat);
+                pole.position.set(-10, 2.5, i); pole.castShadow = true; scene.add(pole); poles.push(pole);
+                const poleRight = new THREE.Mesh(poleGeo, poleMat);
+                poleRight.position.set(10, 2.5, i); poleRight.castShadow = true; scene.add(poleRight); poles.push(poleRight);
+            }
+        }
+
+        function createCircularTrack() {
+            const outerRadius = trackRadius + 5;
+            const lineGeo = new THREE.BoxGeometry(0.5, 0.1, 2);
+            const lineMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+            const numSegments = 60;
+            for(let i=0; i<numSegments; i++) {
+                const angle = (i / numSegments) * Math.PI * 2;
+                const line = new THREE.Mesh(lineGeo, lineMat);
+                line.position.set(Math.cos(angle) * trackRadius, 0.01, Math.sin(angle) * trackRadius);
+                line.rotation.y = -angle; 
+                scene.add(line); roadLines.push(line);
+
+                if (i % 3 === 0) {
+                    const poleGeo = new THREE.CylinderGeometry(0.2, 0.2, 5);
+                    const poleMat = new THREE.MeshLambertMaterial({ color: 0xcc0000 });
+                    const pole = new THREE.Mesh(poleGeo, poleMat);
+                    pole.position.set(Math.cos(angle) * (outerRadius+2), 2.5, Math.sin(angle) * (outerRadius+2));
+                    scene.add(pole); poles.push(pole);
+                }
+            }
+        }
+
+        let lastTime = 0;
+        
+        function checkStartCondition() {
+            if (!currentState.hasStarted) {
+                currentState.hasStarted = true;
+                // 鎖定設定 (Lock settings while driving)
+                [sceneSelect, passengerSelect, surfaceSelect].forEach(el => {
+                    el.disabled = true;
+                    el.classList.add('opacity-50', 'cursor-not-allowed');
+                });
+            }
+        }
+
+        function updatePhysics(dt) {
+            if (!currentState.hasStarted) {
+                updateDashboard(0);
+                return;
+            }
+
+            let currentMass = getTotalMass();
+
+            // 1. Calculate Forces
+            let engineForce = 0;
+            let targetPowerForce = ENGINE_POWER / Math.max(Math.abs(currentState.velocity), 2);
+            let maxCurrentForce = Math.min(MAX_TORQUE_FORCE, targetPowerForce);
+
+            if (currentState.cruiseControl.active) {
+                const speedError = currentState.cruiseControl.targetSpeed - currentState.velocity;
+                if (speedError > 0) engineForce = Math.min(speedError * 1000, maxCurrentForce);
+            } else {
+                engineForce = currentState.inputs.gas * maxCurrentForce;
+            }
+
+            // Fuel calculation
+            const power = Math.max(0, engineForce * Math.max(currentState.velocity, 2)); 
+            const baseIdle = 0.5; 
+            if (engineForce > 0) currentState.fuelConsumptionRate = baseIdle + (power / 30000);
+            else currentState.fuelConsumptionRate = (Math.abs(currentState.velocity) > 0.5) ? 0 : baseIdle;
+
+            // Braking
+            let brakingForce = currentState.inputs.brake * MAX_BRAKE_FORCE;
+            if (currentState.velocity > 0) brakingForce *= -1;
+            else if (currentState.velocity < 0) brakingForce *= 1; 
+            
+            // Aerodynamic drag
+            let dragForce = -AIR_DRAG_COEFFICIENT * currentState.velocity * Math.abs(currentState.velocity);
+
+            // Friction (Rolling resistance & Limits)
+            const normalForce = currentMass * 9.8;
+            const maxFrictionForce = normalForce * currentState.surfaceFriction;
+            
+            let rollingResistance = -ROLLING_RESISTANCE_COEF * normalForce;
+            if (currentState.velocity < 0) rollingResistance *= -1;
+            if (Math.abs(currentState.velocity) < 0.1) rollingResistance = 0; 
+            
+            // Engine braking (模擬未踩踏板時引擎的牽引阻力)
+            let engineBraking = 0;
+            if (currentState.inputs.gas === 0 && Math.abs(currentState.velocity) > 0.5) {
+                engineBraking = -Math.sign(currentState.velocity) * ENGINE_BRAKING_DRAG;
+            }
+
+            let netLongitudinalForce = engineForce + brakingForce + dragForce + rollingResistance + engineBraking;
+
+            // Apply friction limit 
+            if (Math.abs(netLongitudinalForce) > maxFrictionForce) {
+                netLongitudinalForce = Math.sign(netLongitudinalForce) * maxFrictionForce;
+            }
+            
+            // Stop completely if very slow
+            if (Math.abs(currentState.velocity) < 0.5 && engineForce === 0 && brakingForce !== 0) {
+                netLongitudinalForce = -currentState.velocity * currentMass / dt; 
+                currentState.velocity = 0;
+            }
+
+            // 2. Update Acceleration, Velocity, Position
+            currentState.acceleration = netLongitudinalForce / currentMass;
+            currentState.velocity += currentState.acceleration * dt;
+            if (currentState.velocity < -5) currentState.velocity = -5;
+
+            // 3. Handle Steering
+            const wheelbase = 2.5; 
+            if (Math.abs(currentState.steeringAngle) > 0.01 && Math.abs(currentState.velocity) > 0.1) {
+                let angularVelocity = (currentState.velocity * Math.tan(currentState.steeringAngle)) / wheelbase;
+                const requiredCentripetalForce = currentMass * Math.abs(currentState.velocity * angularVelocity);
+                
+                if (requiredCentripetalForce > maxFrictionForce) {
+                    angularVelocity = Math.sign(angularVelocity) * (maxFrictionForce / (currentMass * Math.abs(currentState.velocity)));
+                }
+                currentState.rotation += angularVelocity * dt;
+            }
+
+            const moveDistance = currentState.velocity * dt;
+            currentState.distanceTraveled += moveDistance;
+
+            currentState.position.x += Math.sin(currentState.rotation) * moveDistance;
+            currentState.position.z -= Math.cos(currentState.rotation) * moveDistance; 
+
+            camera.position.x = currentState.position.x;
+            camera.position.z = currentState.position.z;
+            const lookAtX = currentState.position.x + Math.sin(currentState.rotation) * 10;
+            const lookAtZ = currentState.position.z - Math.cos(currentState.rotation) * 10;
+            camera.lookAt(lookAtX, camera.position.y, lookAtZ);
+
+            if (currentState.scene === 'straight' && camera.position.z < -1000) {
+                camera.position.z += 1000;
+                currentState.position.z += 1000;
+            }
+            
+            updateDashboard(netLongitudinalForce);
+            updateGraphs(dt);
+        }
+
+        function updateDashboard(netForce) {
+            const speedKmh = Math.abs(currentState.velocity * 3.6).toFixed(0);
+            speedDisplay.textContent = speedKmh;
+            accelDisplay.textContent = `a: ${currentState.acceleration.toFixed(2)} m/s²`;
+            forcesDisplay.textContent = `合力: ${netForce.toFixed(0)} N`;
+            steeringWheel.style.transform = `rotate(${currentState.inputs.steering * 45}deg)`;
+            
+            // Update Fuel bar
+            fuelText.textContent = currentState.fuelConsumptionRate.toFixed(1) + ' cc/s';
+            // 將儀表板油耗視覺最大值設為 50 cc/s，重踩時即可達到滿格
+            const fuelPercent = Math.min(100, (currentState.fuelConsumptionRate / 50) * 100); 
+            fuelBar.style.width = fuelPercent + '%';
+        }
+
+        function getPedalIntensity(e, element) {
+            const rect = element.getBoundingClientRect();
+            const clientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
+            const relativeY = clientY - rect.top; 
+            const height = rect.height;
+            if (relativeY < height / 3) return 1.0;      
+            if (relativeY < 2 * height / 3) return 0.6;  
+            return 0.3;                                  
+        }
+
+        function handlePedal(element, inputType, intensity) {
+            if (intensity > 0) {
+                if (inputType === 'gas' || inputType === 'brake') checkStartCondition();
+                element.style.transform = `perspective(200px) rotateX(${15 * intensity}deg) translateY(${5 * intensity}px)`;
+                element.style.boxShadow = `0 ${2 * intensity}px ${5 * intensity}px rgba(0,0,0,0.5)`;
+                currentState.inputs[inputType] = intensity;
+                if (currentState.cruiseControl.active) toggleCruiseControl();
+            } else {
+                element.style.transform = '';
+                element.style.boxShadow = '';
+                currentState.inputs[inputType] = 0;
+            }
+        }
+
+        ['mousedown', 'touchstart'].forEach(evt => {
+            gasPedal.addEventListener(evt, (e) => { e.preventDefault(); handlePedal(gasPedal, 'gas', getPedalIntensity(e, gasPedal)); });
+            brakePedal.addEventListener(evt, (e) => { e.preventDefault(); handlePedal(brakePedal, 'brake', getPedalIntensity(e, brakePedal)); });
+        });
+        
+        ['mousemove', 'touchmove'].forEach(evt => {
+            gasPedal.addEventListener(evt, (e) => { if(currentState.inputs.gas > 0) { e.preventDefault(); handlePedal(gasPedal, 'gas', getPedalIntensity(e, gasPedal)); } });
+            brakePedal.addEventListener(evt, (e) => { if(currentState.inputs.brake > 0) { e.preventDefault(); handlePedal(brakePedal, 'brake', getPedalIntensity(e, brakePedal)); } });
+        });
+
+        ['mouseup', 'mouseleave', 'touchend'].forEach(evt => {
+            gasPedal.addEventListener(evt, (e) => { e.preventDefault(); handlePedal(gasPedal, 'gas', 0); });
+            brakePedal.addEventListener(evt, (e) => { e.preventDefault(); handlePedal(brakePedal, 'brake', 0); });
+        });
+
+        let isSteering = false;
+        function handleSteerMove(e) {
+            if (!isSteering) return;
+            e.preventDefault();
+            const rect = steeringWheel.getBoundingClientRect();
+            const centerX = rect.left + rect.width / 2;
+            const clientX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
+            let relativeX = Math.max(-1, Math.min(1, (clientX - centerX) / (rect.width / 2)));
+            currentState.inputs.steering = relativeX;
+            currentState.steeringAngle = relativeX * 0.5; 
+        }
+
+        ['mousedown', 'touchstart'].forEach(evt => {
+            steeringWheel.addEventListener(evt, (e) => { isSteering = true; handleSteerMove(e); });
+        });
+        
+        window.addEventListener('mousemove', handleSteerMove);
+        window.addEventListener('touchmove', handleSteerMove, {passive: false});
+        
+        ['mouseup', 'touchend'].forEach(evt => {
+            window.addEventListener(evt, () => {
+                isSteering = false;
+                currentState.inputs.steering = 0;
+                currentState.steeringAngle = 0;
+            });
+        });
+
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowUp' || e.key === 'w') { checkStartCondition(); handlePedal(gasPedal, 'gas', 1.0); }
+            if (e.key === 'ArrowDown' || e.key === 's') { checkStartCondition(); handlePedal(brakePedal, 'brake', 1.0); }
+            if (e.key === 'ArrowLeft' || e.key === 'a') { currentState.inputs.steering = -1; currentState.steeringAngle = -0.5; }
+            if (e.key === 'ArrowRight' || e.key === 'd') { currentState.inputs.steering = 1; currentState.steeringAngle = 0.5; }
+            if (e.key === 'c') toggleCruiseControl();
+        });
+        
+        window.addEventListener('keyup', (e) => {
+            if (e.key === 'ArrowUp' || e.key === 'w') handlePedal(gasPedal, 'gas', 0);
+            if (e.key === 'ArrowDown' || e.key === 's') handlePedal(brakePedal, 'brake', 0);
+            if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'ArrowRight' || e.key === 'd') {
+                currentState.inputs.steering = 0; currentState.steeringAngle = 0;
+            }
+        });
+
+        function toggleCruiseControl() {
+            currentState.cruiseControl.active = !currentState.cruiseControl.active;
+            if (currentState.cruiseControl.active) {
+                cruiseControlBtn.classList.add('active');
+                currentState.cruiseControl.targetSpeed = Math.max(currentState.velocity, 10);
+            } else { cruiseControlBtn.classList.remove('active'); }
+        }
+        cruiseControlBtn.addEventListener('click', toggleCruiseControl);
+
+        sceneSelect.addEventListener('change', (e) => { currentState.scene = e.target.value; resetSimulation(); });
+        surfaceSelect.addEventListener('change', (e) => { currentState.surfaceFriction = parseFloat(e.target.options[e.target.selectedIndex].getAttribute('data-friction')); createEnvironment(); });
+        passengerSelect.addEventListener('change', (e) => { currentState.passengers = parseInt(e.target.value); });
+
+        resetBtn.addEventListener('click', resetSimulation);
+
+        function resetSimulation() {
+            currentState.hasStarted = false;
+            currentState.position = { x: 0, y: 0.5, z: 0 };
+            currentState.velocity = 0;
+            currentState.acceleration = 0;
+            currentState.rotation = 0;
+            currentState.distanceTraveled = 0;
+            currentState.timeElapsed = 0;
+            currentState.fuelConsumptionRate = 0;
+            
+            // 解鎖設定 (Unlock settings)
+            [sceneSelect, passengerSelect, surfaceSelect].forEach(el => {
+                el.disabled = false;
+                el.classList.remove('opacity-50', 'cursor-not-allowed');
+            });
+            
+            if(currentState.scene === 'circular') {
+               currentState.position.x = 0; currentState.position.z = trackRadius; currentState.rotation = -Math.PI/2; 
+            }
+            if (currentState.cruiseControl.active) toggleCruiseControl();
+            createEnvironment();
+            clearGraphs();
+            
+            // 結束錄製狀態
+            if(isRecording) finishRecording();
+        }
+
+        let xtChart, vtChart, atChart;
+        let modalXtChart, modalVtChart, modalAtChart, modalFuelChart;
+        const maxRealTimePoints = 150; // 即時顯示約 15 秒 (dt=0.1)
+        let graphTimeAcc = 0;
+
+        // --- 紀錄與本地儲存系統 (Recording & LocalStorage) ---
+        let isRecording = false;
+        let recordTimer = 0;
+        const MAX_RECORD_TIME = 30;
+        let allRecords = [];
+        let currentRecord = null;
+        const EXPIRY_TIME = 180 * 60 * 1000; // 180分鐘 (ms)
+        const recordColors = ['#4bc0c0', '#ffcd56', '#ff6384', '#ab47bc', '#42a5f5', '#66bb6a', '#ffa726', '#ff7043'];
+
+        function saveRecords() {
+            localStorage.setItem('driving_records', JSON.stringify(allRecords));
+            localStorage.setItem('driving_records_timestamp', Date.now().toString());
+        }
+
+        function loadRecords() {
+            const timestamp = localStorage.getItem('driving_records_timestamp');
+            if (timestamp && (Date.now() - parseInt(timestamp) > EXPIRY_TIME)) {
+                localStorage.removeItem('driving_records');
+                localStorage.removeItem('driving_records_timestamp');
+                allRecords = [];
+            } else {
+                const stored = localStorage.getItem('driving_records');
+                if (stored) allRecords = JSON.parse(stored);
+            }
+        }
+
+        function getCommonOptions(titleText, displayX = false) {
+            return {
+                responsive: true, maintainAspectRatio: false, animation: false,
+                plugins: { legend: { display: false }, tooltip: {enabled: false} },
+                scales: {
+                    x: { display: displayX, grid: { color: '#333' } }, 
+                    y: { grid: { color: '#333' }, border: { display: false }, title: {display: true, text: titleText, color: '#aaa'} }
+                },
+                elements: { point: { radius: 0 }, line: { borderWidth: 2 } }
+            };
+        }
+
+        let isHoverSyncing = false;
+        function getModalOptions(titleText) {
+            return {
+                responsive: true, maintainAspectRatio: false, animation: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: { 
+                    legend: { display: false }, // 透過客製標籤顯示，隱藏預設圖例
+                    tooltip: { enabled: true } 
+                },
+                scales: {
+                    x: { display: true, grid: { color: '#333' } }, 
+                    y: { grid: { color: '#333' }, border: { display: false }, title: {display: true, text: titleText, color: '#aaa'} }
+                },
+                elements: { point: { radius: 0, hoverRadius: 5 }, line: { borderWidth: 2 } },
+                onHover: function(e, activeElements, chart) {
+                    if(isHoverSyncing) return;
+                    isHoverSyncing = true;
+                    if (e.type === 'mouseout') {
+                        [modalXtChart, modalVtChart, modalAtChart, modalFuelChart].forEach(c => {
+                            if (c) { c.tooltip.setActiveElements([], {x:0, y:0}); c.update(); }
+                        });
+                    } else if (activeElements && activeElements.length > 0) {
+                        const index = activeElements[0].index;
+                        [modalXtChart, modalVtChart, modalAtChart, modalFuelChart].forEach(c => {
+                            if (c && c !== chart) {
+                                const elementsToSet = [];
+                                c.data.datasets.forEach((ds, i) => {
+                                    if(ds.data[index] !== undefined) elementsToSet.push({datasetIndex: i, index: index});
+                                });
+                                const meta = c.getDatasetMeta(0);
+                                if(meta && meta.data && meta.data[index]) {
+                                    c.tooltip.setActiveElements(elementsToSet, {x: meta.data[index].x, y: meta.data[index].y});
+                                } else {
+                                    c.tooltip.setActiveElements(elementsToSet, {x: e.x, y: e.y});
+                                }
+                                c.update();
+                            }
+                        });
+                    }
+                    isHoverSyncing = false;
+                }
+            };
+        }
+
+        function initGraphs() {
+            Chart.defaults.color = '#fff'; Chart.defaults.font.size = 10;
+            
+            // 左側即時圖表
+            xtChart = new Chart(document.getElementById('xtChart').getContext('2d'), { type: 'line', data: { labels: [], datasets: [{ data: [], borderColor: '#4bc0c0' }] }, options: getCommonOptions('x-t (m)') });
+            vtChart = new Chart(document.getElementById('vtChart').getContext('2d'), { type: 'line', data: { labels: [], datasets: [{ data: [], borderColor: '#ffcd56' }] }, options: getCommonOptions('v-t (m/s)') });
+            atChart = new Chart(document.getElementById('atChart').getContext('2d'), { type: 'line', data: { labels: [], datasets: [{ data: [], borderColor: '#ff6384' }] }, options: getCommonOptions('a-t (m/s²)') });
+
+            // 模態框大圖表 (包含 X軸顯示與同步Hover)
+            modalXtChart = new Chart(document.getElementById('modalXtChart').getContext('2d'), { type: 'line', data: { labels: [], datasets: [] }, options: getModalOptions('位移 (m)') });
+            modalVtChart = new Chart(document.getElementById('modalVtChart').getContext('2d'), { type: 'line', data: { labels: [], datasets: [] }, options: getModalOptions('速度 (m/s)') });
+            modalAtChart = new Chart(document.getElementById('modalAtChart').getContext('2d'), { type: 'line', data: { labels: [], datasets: [] }, options: getModalOptions('加速度 (m/s²)') });
+            modalFuelChart = new Chart(document.getElementById('modalFuelChart').getContext('2d'), { type: 'line', data: { labels: [], datasets: [] }, options: getModalOptions('油耗 (cc/s)') });
+        }
+
+        // 開始紀錄按鈕
+        recordBtn.addEventListener('click', () => {
+            if(isRecording) {
+                finishRecording();
+                return;
+            }
+            isRecording = true;
+            recordTimer = 0;
+            currentRecord = {
+                id: Date.now(),
+                name: `紀錄 ${allRecords.length + 1}`,
+                color: recordColors[allRecords.length % recordColors.length],
+                data: { labels: [], x: [], v: [], a: [], f: [] }
+            };
+            
+            recordBtn.innerText = '⏹ 停止 (Stop)';
+            recordBtn.classList.remove('bg-blue-600', 'bg-green-600', 'hover:bg-blue-500');
+            recordBtn.classList.add('bg-red-600', 'hover:bg-red-500');
+        });
+
+        function finishRecording() {
+            if(!isRecording) return;
+            isRecording = false;
+            
+            if (currentRecord && currentRecord.data.labels.length > 0) {
+                allRecords.push(currentRecord);
+                saveRecords();
+            }
+
+            recordBtn.innerText = '開始紀錄 (Record 30s)';
+            recordBtn.classList.remove('bg-red-600', 'hover:bg-red-500');
+            recordBtn.classList.add('bg-blue-600', 'hover:bg-blue-500');
+            updateModalCharts();
+        }
+
+        function updateGraphs(dt) {
+            graphTimeAcc += dt;
+            if (graphTimeAcc < 0.1) return; // 10Hz 取樣率
+            graphTimeAcc = 0;
+
+            currentState.timeElapsed += dt;
+            const tLabel = currentState.timeElapsed.toFixed(1);
+
+            // 更新左側即時圖表 (Rolling Window)
+            xtChart.data.labels.push(tLabel); xtChart.data.datasets[0].data.push(currentState.distanceTraveled);
+            vtChart.data.labels.push(tLabel); vtChart.data.datasets[0].data.push(currentState.velocity);
+            atChart.data.labels.push(tLabel); atChart.data.datasets[0].data.push(currentState.acceleration);
+
+            if (xtChart.data.labels.length > maxRealTimePoints) {
+                xtChart.data.labels.shift(); xtChart.data.datasets[0].data.shift();
+                vtChart.data.labels.shift(); vtChart.data.datasets[0].data.shift();
+                atChart.data.labels.shift(); atChart.data.datasets[0].data.shift();
+            }
+            xtChart.update(); vtChart.update(); atChart.update();
+
+            // 處理錄製邏輯 (手動停止或自動30秒停止)
+            if (isRecording && currentRecord) {
+                recordTimer += 0.1; 
+                
+                if (recordTimer <= MAX_RECORD_TIME) {
+                    currentRecord.data.labels.push(tLabel);
+                    currentRecord.data.x.push(currentState.distanceTraveled);
+                    currentRecord.data.v.push(currentState.velocity);
+                    currentRecord.data.a.push(currentState.acceleration);
+                    currentRecord.data.f.push(currentState.fuelConsumptionRate);
+                    
+                    recordBtn.innerText = `⏹ 停止 (${recordTimer.toFixed(1)}s / 30s)`;
+                } else {
+                    finishRecording();
+                }
+            }
+        }
+
+        function clearGraphs() {
+            if(!xtChart) return;
+            xtChart.data.labels = []; xtChart.data.datasets[0].data = [];
+            vtChart.data.labels = []; vtChart.data.datasets[0].data = [];
+            atChart.data.labels = []; atChart.data.datasets[0].data = [];
+            xtChart.update(); vtChart.update(); atChart.update();
+        }
+
+        // 渲染紀錄標籤與刪除功能
+        function renderRecordTags() {
+            const container = document.getElementById('record-tags-container');
+            container.innerHTML = '';
+            
+            const clearBtn = document.getElementById('clear-all-btn');
+            if(allRecords.length > 0) clearBtn.classList.remove('hidden');
+            else clearBtn.classList.add('hidden');
+
+            allRecords.forEach((record) => {
+                const tag = document.createElement('div');
+                tag.className = 'flex items-center gap-2 px-3 py-1 rounded text-sm text-white font-bold shadow-md cursor-default';
+                tag.style.backgroundColor = record.color;
+                
+                tag.innerHTML = `
+                    <span>${record.name}</span>
+                    <button class="hover:text-red-900 ml-2 font-bold cursor-pointer" onclick="deleteRecord(${record.id})">✖</button>
+                `;
+                container.appendChild(tag);
+            });
+        }
+
+        window.deleteRecord = function(id) {
+            allRecords = allRecords.filter(r => r.id !== id);
+            saveRecords();
+            updateModalCharts();
+        };
+        
+        document.getElementById('clear-all-btn').addEventListener('click', () => {
+            if(confirm('確定要清除所有駕駛紀錄嗎？')) {
+                allRecords = [];
+                saveRecords();
+                updateModalCharts();
+            }
+        });
+
+        // 駕駛數據大面板切換 (多筆對照)
+        function updateModalCharts() {
+            let maxLen = 0;
+            let maxLabels = [];
+            allRecords.forEach(r => {
+                if(r.data.labels.length > maxLen) {
+                    maxLen = r.data.labels.length;
+                    maxLabels = r.data.labels;
+                }
+            });
+
+            const generateDatasets = (dataKey) => {
+                return allRecords.map(r => ({
+                    label: r.name,
+                    data: r.data[dataKey],
+                    borderColor: r.color,
+                    borderWidth: 2,
+                    pointRadius: 0,
+                    pointHoverRadius: 5,
+                    tension: 0.1
+                }));
+            };
+
+            modalXtChart.data.labels = maxLabels; modalXtChart.data.datasets = generateDatasets('x');
+            modalVtChart.data.labels = maxLabels; modalVtChart.data.datasets = generateDatasets('v');
+            modalAtChart.data.labels = maxLabels; modalAtChart.data.datasets = generateDatasets('a');
+            modalFuelChart.data.labels = maxLabels; modalFuelChart.data.datasets = generateDatasets('f');
+            
+            modalXtChart.update(); modalVtChart.update(); modalAtChart.update(); modalFuelChart.update();
+            renderRecordTags();
+        }
+
+        dataBtn.addEventListener('click', () => {
+            document.getElementById('data-modal').classList.add('active'); // 更改為加上 active
+            updateModalCharts();
+        });
+
+        document.getElementById('close-modal-btn').addEventListener('click', () => {
+            document.getElementById('data-modal').classList.remove('active'); // 更改為移除 active
+        });
+
+        function animate(time) {
+            requestAnimationFrame(animate);
+            let dt = (time - lastTime) / 1000;
+            lastTime = time;
+            if (dt > 0.1) dt = 0.1; // Cap
+            if (isNaN(dt)) dt = 0;
+
+            updatePhysics(dt);
+            renderer.render(scene, camera);
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = canvasContainer.clientWidth / canvasContainer.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(canvasContainer.clientWidth, canvasContainer.clientHeight);
+        });
+
+        window.onload = () => {
+            loadRecords();
+            createEnvironment();
+            initGraphs();
+            resetSimulation();
+            requestAnimationFrame(animate);
+        };
+
+    </script>
+</body>
+</html>
