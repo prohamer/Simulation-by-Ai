@@ -128,6 +128,13 @@
         #cruise-control { margin-top: 10px; padding: 8px 15px; background-color: #444; color: white; border: 2px solid #666; border-radius: 20px; cursor: pointer; font-weight: bold; transition: background-color 0.2s; }
         #cruise-control.active { background-color: #28a745; border-color: #1e7e34; }
 
+        #gear-btn {
+            margin-top: 8px; padding: 6px 16px; border-radius: 8px; font-weight: bold; font-size: 14px;
+            background: #1e7e34; color: white; border: 2px solid #28a745; cursor: pointer; transition: 0.2s;
+        }
+        #gear-btn.reverse { background: #b45309; border-color: #f59e0b; }
+        #gear-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
         #settings-panel {
             position: absolute; top: 10px; right: 10px; background: rgba(20, 20, 20, 0.8);
             padding: 15px; border-radius: 8px; border: 1px solid #444; color: white; z-index: 20;
@@ -223,6 +230,7 @@
                     <div id="steering-wheel"></div>
                 </div>
                 <div class="steering-labels"><span>左 (Left)</span><span>右 (Right)</span></div>
+                <button id="gear-btn">D 前進</button>
             </div>
 
             <div id="instruments">
@@ -231,6 +239,7 @@
                         <span class="speed-text" id="speed-display">0</span>
                         <span class="speed-unit">km/h</span>
                     </div>
+                    <div class="info-text" id="gear-display" style="color:#0f0;">檔位: D 前進</div>
                     <div class="info-text" id="accel-display">a: 0.00 m/s²</div>
                     <div class="info-text" id="forces-display">合力: 0 N</div>
                     <div class="grip-text" id="grip-display">抓地力使用: 0%</div>
@@ -312,6 +321,8 @@
         const MAX_TORQUE_FORCE = 9000;     // N，低速最大驅動力 → 空車 a ≈ 6.3 m/s²，重踩很有感
         const MAX_BRAKE_FORCE = 15000;     // N，最大煞車夾持力 (實際仍受抓地力限制)
         const FUEL_BAR_MAX = 35;           // 油耗長條的滿格對應值 (cc/s)，重踩即可頂滿
+        const REVERSE_MAX_SPEED = 8;       // m/s，倒車最高速 (~29 km/h)
+        const REVERSE_FORCE_FACTOR = 0.5;  // 倒車出力較小 (模擬倒車檔)
         const AIR_DRAG_COEFFICIENT = 1.0;  // 空氣阻力係數 (F = -k·v·|v|)
         // 滾動阻力係數：真實柏油路約 0.012~0.015。原版用 0.08 過高且與「冰面幾乎無阻力」矛盾，
         // 這裡改回真實值，滑行時的減速主要交給「引擎煞車 + 空氣阻力」負責 (更符合物理)。
@@ -332,6 +343,7 @@
             acceleration: 0,
             rotation: 0,       // 車頭朝向 θ (heading)
             velDir: 0,         // 速度方向 φ (velocity direction)；與 θ 分離才能表現側滑
+            refDir: 0,         // 起始正方向：位移(X-t)以此為正向做投影
             steeringAngle: 0,
             inputs: { gas: 0, brake: 0, steering: 0 },
             fuelConsumptionRate: 0,
@@ -342,7 +354,8 @@
             gripUsage: 0,          // 抓地力使用率 0~1 (摩擦圓)
             centripetalForce: 0,   // 目前向心力 (N)
             turnRadius: Infinity,  // 目前路徑半徑 (m)
-            sliding: false         // 是否處於側滑狀態
+            sliding: false,        // 是否處於側滑狀態
+            reverseMode: false     // 倒車檔 (只能在車速 0 時切換)
         };
 
         function getTotalMass() { return BASE_CAR_MASS + (currentState.passengers * PASSENGER_MASS); }
@@ -353,6 +366,8 @@
         const forcesDisplay = document.getElementById('forces-display');
         const gripDisplay = document.getElementById('grip-display');
         const centripetalDisplay = document.getElementById('centripetal-display');
+        const gearDisplay = document.getElementById('gear-display');
+        const gearBtn = document.getElementById('gear-btn');
         const fuelText = document.getElementById('fuel-text');
         const fuelBar = document.getElementById('fuel-bar');
 
@@ -504,21 +519,24 @@
             const aLongMax = Math.sqrt(Math.max(0, muG * muG - aLatActual * aLatActual));
             const longBudgetForce = aLongMax * m;
 
-            // ---- 3. 引擎驅動力 (低速受扭力限制、高速受功率限制) ----
+            // ---- 3. 引擎驅動力 (低速受扭力限制、高速受功率限制；倒車檔往後推) ----
             let engineForce = 0;
             const targetPowerForce = ENGINE_POWER / Math.max(speed, 2);
             const maxCurrentForce = Math.min(MAX_TORQUE_FORCE, targetPowerForce);
-            if (currentState.cruiseControl.active) {
+            const driveDir = currentState.reverseMode ? -1 : 1;             // D=+1, R=-1
+            const forceFactor = currentState.reverseMode ? REVERSE_FORCE_FACTOR : 1;
+            if (currentState.cruiseControl.active) {                        // 定速僅前進檔作用
                 const speedError = currentState.cruiseControl.targetSpeed - s;
                 if (speedError > 0) engineForce = Math.min(speedError * 1200, maxCurrentForce);
             } else {
-                engineForce = currentState.inputs.gas * maxCurrentForce;
+                engineForce = driveDir * currentState.inputs.gas * maxCurrentForce * forceFactor;
             }
 
-            // ---- 油耗：重踩即接近滿格；放油滑行時斷油 = 0 ----
+            // ---- 油耗：重踩即接近滿格；放油滑行時斷油 = 0 (前進/倒車皆耗油) ----
             const gas = currentState.cruiseControl.active ? (engineForce > 0 ? 0.6 : 0) : currentState.inputs.gas;
-            const power = Math.max(0, engineForce * Math.max(speed, 2));
-            if (engineForce > 0) currentState.fuelConsumptionRate = 0.8 + gas * 20 + power / 9000;
+            const driving = Math.abs(engineForce) > 0;
+            const power = Math.abs(engineForce) * Math.max(speed, 2);
+            if (driving) currentState.fuelConsumptionRate = 0.8 + gas * 20 + power / 9000;
             else currentState.fuelConsumptionRate = (speed > 0.5) ? 0 : 0.8;
 
             // ---- 4. 煞車力：只對抗運動方向，靜止時不產生推力 ----
@@ -535,7 +553,7 @@
             // ---- 5. 耗散阻力 (空氣/滾動/引擎煞車，不佔輪胎抓地力預算) ----
             const dragForce = -AIR_DRAG_COEFFICIENT * s * speed;   // 空氣阻力 ~ v²
             let rollingResistance = 0;
-            if (speed > 0.1) rollingResistance = -Math.sign(s) * ROLLING_RESISTANCE_COEF * N;
+            if (speed > 0.001) rollingResistance = -Math.sign(s) * ROLLING_RESISTANCE_COEF * N; // 低速仍作用，才能停住
             let engineBraking = 0;
             if (engineForce === 0 && speed > 0.5) engineBraking = -Math.sign(s) * ENGINE_BRAKING_DRAG;
 
@@ -546,11 +564,13 @@
             // ---- 6. 縱向積分 (semi-implicit Euler) ----
             currentState.acceleration = netLongitudinalForce / m;
             let sNew = s + currentState.acceleration * dt;
-            if (engineForce === 0) { // 耗散力不得把車推過零點反向 → 消除低速煞停抖動
+            if (engineForce === 0) { // 未踩油門：耗散力不得把車推過零點反向，且低速直接停住
                 if (s > 0 && sNew < 0) sNew = 0;
                 if (s < 0 && sNew > 0) sNew = 0;
+                if (Math.abs(sNew) < 0.06) sNew = 0; // 消除近乎無限慢的滑行尾巴
             }
             currentState.velocity = sNew;
+            if (currentState.velocity < -REVERSE_MAX_SPEED) currentState.velocity = -REVERSE_MAX_SPEED;
 
             // ---- 7. 車頭朝向依方向盤轉動 ----
             currentState.rotation += ((sNew * Math.tan(delta)) / wheelbase) * dt;
@@ -574,9 +594,11 @@
             currentState.turnRadius = Math.abs(actualOmega) > 1e-4 ? speed / Math.abs(actualOmega) : Infinity;
             currentState.sliding = sliding;
 
-            // ---- 9. 沿「速度方向 φ」位移 (側滑時與車頭 θ 分離) ----
+            // ---- 9. 位移與渲染 ----
             const moveDistance = sNew * dt;
-            currentState.distanceTraveled += moveDistance;
+            // 位移(X-t)：對「起始正方向 refDir」投影 → 掉頭往回開位移會變小，開過起點即為負
+            currentState.distanceTraveled += moveDistance * Math.cos(currentState.velDir - currentState.refDir);
+            // 場景中的實際移動仍沿速度方向 φ (側滑時與車頭 θ 分離)
             currentState.position.x += Math.sin(currentState.velDir) * moveDistance;
             currentState.position.z -= Math.cos(currentState.velDir) * moveDistance;
 
@@ -600,6 +622,21 @@
             speedDisplay.textContent = speedKmh;
             accelDisplay.textContent = `a: ${currentState.acceleration.toFixed(2)} m/s²`;
             forcesDisplay.textContent = `合力: ${netForce.toFixed(0)} N`;
+
+            // 檔位顯示 + 倒車時速度表變橘色
+            if (currentState.reverseMode) {
+                gearDisplay.textContent = '檔位: R 倒車';
+                gearDisplay.style.color = '#f59e0b';
+                speedDisplay.style.color = '#f59e0b';
+                speedDisplay.style.textShadow = '0 0 10px #f59e0b';
+            } else {
+                gearDisplay.textContent = '檔位: D 前進';
+                gearDisplay.style.color = '#0f0';
+                speedDisplay.style.color = '#0f0';
+                speedDisplay.style.textShadow = '0 0 10px #0f0';
+            }
+            // 只有停止時才允許切換排檔
+            gearBtn.disabled = Math.abs(currentState.velocity) > 0.1;
 
             const gripPct = (currentState.gripUsage * 100).toFixed(0);
             gripDisplay.textContent = `抓地力使用: ${gripPct}%`;
@@ -719,6 +756,24 @@
         }
         cruiseControlBtn.addEventListener('click', toggleCruiseControl);
 
+        function updateGearButton() {
+            if (currentState.reverseMode) {
+                gearBtn.textContent = 'R 倒車';
+                gearBtn.classList.add('reverse');
+            } else {
+                gearBtn.textContent = 'D 前進';
+                gearBtn.classList.remove('reverse');
+            }
+        }
+
+        function toggleGear() {
+            if (Math.abs(currentState.velocity) > 0.1) return; // 僅能在車速歸 0 時切換
+            currentState.reverseMode = !currentState.reverseMode;
+            if (currentState.cruiseControl.active) toggleCruiseControl(); // 倒車不定速
+            updateGearButton();
+        }
+        gearBtn.addEventListener('click', toggleGear);
+
         sceneSelect.addEventListener('change', (e) => { currentState.scene = e.target.value; resetSimulation(); });
         surfaceSelect.addEventListener('change', (e) => { currentState.surfaceFriction = parseFloat(e.target.options[e.target.selectedIndex].getAttribute('data-friction')); createEnvironment(); });
         passengerSelect.addEventListener('change', (e) => { currentState.passengers = parseInt(e.target.value); });
@@ -740,6 +795,7 @@
             currentState.centripetalForce = 0;
             currentState.turnRadius = Infinity;
             currentState.sliding = false;
+            currentState.reverseMode = false;
             graphTimeAcc = 0;
             physicsAccumulator = 0;
 
@@ -752,7 +808,9 @@
                 currentState.position.x = 0; currentState.position.z = trackRadius; currentState.rotation = -Math.PI / 2;
             }
             currentState.velDir = currentState.rotation; // 速度方向初始對齊車頭
+            currentState.refDir = currentState.rotation; // 以起始車頭方向作為位移正方向
             if (currentState.cruiseControl.active) toggleCruiseControl();
+            updateGearButton();
             createEnvironment();
             clearGraphs();
 
