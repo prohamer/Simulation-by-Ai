@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>mv-simulationV3</title>
+    <title>mv-simulation V4</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
@@ -29,6 +29,7 @@
 
         #canvas-container { cursor: grab; }
         #canvas-container:active { cursor: grabbing; }
+        #canvas-container canvas { display: block; max-width: 100%; }
 
         .glass-panel {
             background: rgba(255, 255, 255, 0.9);
@@ -62,12 +63,36 @@
             border-style: solid;
             border-color: rgba(0, 0, 0, 0.8) transparent transparent transparent;
         }
+        /* 物體上方常駐材質標籤 */
+        .mat-label {
+            position: absolute;
+            transform: translate(-50%, -100%);
+            background: rgba(255, 255, 255, 0.92);
+            border-left: 4px solid #9ca3af;
+            border-radius: 7px;
+            padding: 3px 9px;
+            font-size: 12px;
+            line-height: 1.3;
+            color: #1f2937;
+            pointer-events: none;
+            white-space: nowrap;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+            z-index: 40;
+        }
+        .mat-label .lbl-name { font-weight: 700; display: block; margin-bottom: 1px; }
+        .mat-label .lbl-val { font-family: 'Courier New', monospace; font-weight: 700; }
+        .mat-label .lbl-v { color: #2563eb; }
+        .mat-label .lbl-m { color: #dc2626; margin-left: 4px; }
+        .mat-label.is-current {
+            background: #eff6ff;
+            box-shadow: 0 0 0 2px #3b82f6, 0 2px 6px rgba(0,0,0,0.25);
+        }
     </style>
 </head>
 <body class="flex flex-col md:flex-row min-h-screen md:h-screen overflow-y-auto text-gray-800">
 
     <!-- 左側控制面板 -->
-    <div class="w-full md:w-[32%] lg:w-[26%] xl:w-[22%] md:h-full glass-panel z-10 flex flex-col p-3 md:overflow-y-auto">
+    <div class="w-full md:w-[32%] lg:w-[26%] xl:w-[22%] md:min-w-[230px] shrink-0 md:h-full glass-panel z-10 flex flex-col p-3 md:overflow-y-auto">
         <h1 class="text-lg font-bold mb-2 text-blue-800 flex items-center">
             <svg class="w-5 h-5 mr-2 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path></svg>
             M-V 關係模擬
@@ -172,11 +197,11 @@
     </div>
 
     <!-- 右側主要顯示區 -->
-    <div class="w-full md:flex-1 h-auto md:h-full flex flex-col">
+    <div class="w-full md:flex-1 min-w-0 h-auto md:h-full flex flex-col">
         <!-- 3D 預覽區 -->
-        <div class="h-[42vh] md:h-1/2 w-full bg-gradient-to-b from-gray-200 to-gray-300 relative border-b-2 border-gray-400 shadow-inner" id="canvas-container">
+        <div class="h-[42vh] md:h-1/2 w-full min-w-0 overflow-hidden bg-gradient-to-b from-gray-200 to-gray-300 relative border-b-2 border-gray-400 shadow-inner" id="canvas-container">
             <div class="absolute top-2 left-3 bg-white/80 px-2.5 py-0.5 rounded-full text-xs font-semibold text-gray-700 shadow-sm pointer-events-none z-10">
-                💡 拖曳旋轉 · 滾輪縮放 · 移至方塊看數值
+                💡 拖曳旋轉 · 縮放 · 點方塊可選取
             </div>
             <div id="tooltip-3d"></div>
         </div>
@@ -197,7 +222,7 @@
                     <input type="number" id="axis-max-m" value="4000" min="500" max="20000" step="500" class="w-20 p-1 border border-gray-300 rounded text-xs focus:ring-1 focus:ring-blue-500">
                 </div>
             </div>
-            <div id="chart-container" class="w-full flex-1 min-h-0 p-1"></div>
+            <div id="chart-container" class="w-full flex-1 min-h-0 min-w-0 p-1"></div>
         </div>
     </div>
 
@@ -205,17 +230,17 @@
         const materials = {
             'water': { id: 'water', name: '水 (Water)', density: 1.0, color: '#3b82f6', metalness: 0.1, roughness: 0.1, transparent: true, opacity: 0.8 },
             'wood': { id: 'wood', name: '木塊 (Wood)', density: 0.6, color: '#8B5A2B', metalness: 0.0, roughness: 0.9, transparent: false, opacity: 1 },
-            'aluminum': { id: 'aluminum', name: '鋁塊 (Aluminum)', density: 2.7, color: '#d1d5db', metalness: 0.6, roughness: 0.4, transparent: false, opacity: 1 },
-            'iron': { id: 'iron', name: '鐵塊 (Iron)', density: 7.87, color: '#575b63', metalness: 0.8, roughness: 0.5, transparent: false, opacity: 1 },
-            'copper': { id: 'copper', name: '銅塊 (Copper)', density: 8.96, color: '#b87333', metalness: 0.9, roughness: 0.3, transparent: false, opacity: 1 },
-            'silver': { id: 'silver', name: '銀塊 (Silver)', density: 10.49, color: '#c0c0c0', metalness: 1.0, roughness: 0.2, transparent: false, opacity: 1 },
-            'gold': { id: 'gold', name: '金塊 (Gold)', density: 19.3, color: '#ffd700', metalness: 1.0, roughness: 0.2, transparent: false, opacity: 1 },
-            'magnesium': { id: 'magnesium', name: '鎂塊 (Magnesium)', density: 1.74, color: '#e0e5e5', metalness: 0.5, roughness: 0.6, transparent: false, opacity: 1 },
-            'sodium': { id: 'sodium', name: '鈉塊 (Sodium)', density: 0.97, color: '#e8e8e8', metalness: 0.4, roughness: 0.7, transparent: false, opacity: 1 },
-            'potassium': { id: 'potassium', name: '鉀塊 (Potassium)', density: 0.86, color: '#dcdcdc', metalness: 0.3, roughness: 0.8, transparent: false, opacity: 1 },
-            'tin': { id: 'tin', name: '錫塊 (Tin)', density: 7.29, color: '#d3d4d5', metalness: 0.7, roughness: 0.4, transparent: false, opacity: 1 },
-            'tungsten': { id: 'tungsten', name: '鎢塊 (Tungsten)', density: 19.25, color: '#7a7a7a', metalness: 0.8, roughness: 0.5, transparent: false, opacity: 1 },
-            'rhenium': { id: 'rhenium', name: '錸塊 (Rhenium)', density: 21.02, color: '#a0a0a4', metalness: 0.9, roughness: 0.4, transparent: false, opacity: 1 }
+            'aluminum': { id: 'aluminum', name: '鋁塊 (Aluminum)', density: 2.7, color: '#d6d9dc', metalness: 0.45, roughness: 0.35, transparent: false, opacity: 1 },
+            'iron': { id: 'iron', name: '鐵塊 (Iron)', density: 7.87, color: '#8c9196', metalness: 0.45, roughness: 0.35, transparent: false, opacity: 1 },
+            'copper': { id: 'copper', name: '銅塊 (Copper)', density: 8.96, color: '#c87a45', metalness: 0.45, roughness: 0.35, transparent: false, opacity: 1 },
+            'silver': { id: 'silver', name: '銀塊 (Silver)', density: 10.49, color: '#d4d7db', metalness: 0.45, roughness: 0.3, transparent: false, opacity: 1 },
+            'gold': { id: 'gold', name: '金塊 (Gold)', density: 19.3, color: '#e3c04b', metalness: 0.45, roughness: 0.3, transparent: false, opacity: 1 },
+            'magnesium': { id: 'magnesium', name: '鎂塊 (Magnesium)', density: 1.74, color: '#c9ccc8', metalness: 0.4, roughness: 0.45, transparent: false, opacity: 1 },
+            'sodium': { id: 'sodium', name: '鈉塊 (Sodium)', density: 0.97, color: '#d8d9db', metalness: 0.4, roughness: 0.5, transparent: false, opacity: 1 },
+            'potassium': { id: 'potassium', name: '鉀塊 (Potassium)', density: 0.86, color: '#d2d2d0', metalness: 0.4, roughness: 0.5, transparent: false, opacity: 1 },
+            'tin': { id: 'tin', name: '錫塊 (Tin)', density: 7.29, color: '#cdd2d6', metalness: 0.45, roughness: 0.35, transparent: false, opacity: 1 },
+            'tungsten': { id: 'tungsten', name: '鎢塊 (Tungsten)', density: 19.25, color: '#9ca0a5', metalness: 0.45, roughness: 0.4, transparent: false, opacity: 1 },
+            'rhenium': { id: 'rhenium', name: '錸塊 (Rhenium)', density: 21.02, color: '#aab0b8', metalness: 0.45, roughness: 0.35, transparent: false, opacity: 1 }
         };
 
         const state = {
@@ -278,10 +303,15 @@
         controls.dampingFactor = 0.05;
         controls.maxPolarAngle = Math.PI / 2 - 0.01;
 
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.55);
         scene.add(ambientLight);
 
-        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        // 半球光：上方天空色、下方地面色，讓金屬固有色顯現並帶柔和明暗
+        const hemiLight = new THREE.HemisphereLight(0xffffff, 0x8a94a6, 0.5);
+        hemiLight.position.set(0, 30, 0);
+        scene.add(hemiLight);
+
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.75);
         dirLight.position.set(10, 25, 15);
         dirLight.castShadow = true;
         scene.add(dirLight);
@@ -295,39 +325,37 @@
         const mouse = new THREE.Vector2();
         const tooltip3D = document.getElementById('tooltip-3d');
 
-        canvasContainer.addEventListener('mousemove', (event) => {
+        // 觸控 / 滑鼠：點按方塊即選取該物體（拖曳旋轉、長按不會誤觸）
+        let _downX = 0, _downY = 0, _downT = 0;
+        canvasContainer.addEventListener('pointerdown', (e) => {
+            _downX = e.clientX; _downY = e.clientY; _downT = Date.now();
+        });
+        canvasContainer.addEventListener('pointerup', (e) => {
+            const moved = Math.hypot(e.clientX - _downX, e.clientY - _downY);
+            if (moved > 8 || Date.now() - _downT > 500) return; // 視為拖曳/長按，非點選
             const rect = canvasContainer.getBoundingClientRect();
-            mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-            mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-
+            mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+            mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
             raycaster.setFromCamera(mouse, camera);
-            const activeMeshes = state.activeMatIds.map(id => cubes[id]).filter(c => c);
-            const intersects = raycaster.intersectObjects(activeMeshes);
-
-            if (intersects.length > 0) {
-                const hitObj = intersects[0].object;
-                const matId = hitObj.userData.matId;
-                if (matId) {
-                    const data = state.matData[matId];
-                    const mat = materials[matId];
-                    tooltip3D.style.display = 'block';
-                    tooltip3D.style.left = (event.clientX - rect.left) + 'px';
-                    tooltip3D.style.top = (event.clientY - rect.top) + 'px';
-                    tooltip3D.innerHTML = `<b>${mat.name}</b><br>V: ${Number(data.v).toFixed(1)} cm³<br>M: ${Number(data.m).toFixed(1)} g`;
-                    canvasContainer.style.cursor = 'pointer';
+            const meshes = state.activeMatIds.map(id => cubes[id]).filter(Boolean);
+            const hits = raycaster.intersectObjects(meshes, false);
+            if (hits.length > 0) {
+                const matId = hits[0].object.userData.matId;
+                if (matId && matId !== state.currentMatId) {
+                    state.currentMatId = matId;
+                    handleStateChange();
                 }
-            } else {
-                tooltip3D.style.display = 'none';
-                canvasContainer.style.cursor = 'grab';
             }
         });
 
         function animate3D() {
             requestAnimationFrame(animate3D);
             controls.update();
+            positionLabels();
             renderer.render(scene, camera);
         }
-        animate3D();
+        // 注意：animate3D() 的啟動呼叫移到檔案最後（見「啟動」區塊），
+        // 以避免 positionLabels 在 labels 尚未初始化時被呼叫（TDZ 錯誤）。
 
         function resizeRenderer() {
             const w = canvasContainer.clientWidth, h = canvasContainer.clientHeight;
@@ -341,6 +369,52 @@
             resizeRenderer();
             updateChart();
         });
+
+        // ---- 物體上方常駐材質標籤（名稱 + V + M，多物體一眼分辨；平板免點即可看數值）----
+        const labels = {}; // matId -> div
+        const _lblVec = new THREE.Vector3();
+
+        function refreshLabels() {
+            Object.keys(labels).forEach(id => {
+                if (!state.activeMatIds.includes(id)) { labels[id].remove(); delete labels[id]; }
+            });
+            state.activeMatIds.forEach(id => {
+                if (!labels[id]) {
+                    const div = document.createElement('div');
+                    div.className = 'mat-label';
+                    div.innerHTML = '<span class="lbl-name"></span><span class="lbl-val lbl-v"></span><span class="lbl-val lbl-m"></span>';
+                    canvasContainer.appendChild(div);
+                    labels[id] = div;
+                }
+                labels[id].style.borderLeftColor = materials[id].color;
+            });
+        }
+
+        function updateLabelText() {
+            state.activeMatIds.forEach(id => {
+                const div = labels[id];
+                if (!div) return;
+                const d = state.matData[id];
+                div.querySelector('.lbl-name').textContent = materials[id].name;
+                div.querySelector('.lbl-v').textContent = 'V ' + Number(d.v).toFixed(1);
+                div.querySelector('.lbl-m').textContent = 'M ' + Number(d.m).toFixed(1);
+            });
+        }
+
+        function positionLabels() {
+            const w = canvasContainer.clientWidth, h = canvasContainer.clientHeight;
+            state.activeMatIds.forEach(id => {
+                const cube = cubes[id], div = labels[id];
+                if (!cube || !div || !cube.visible) { if (div) div.style.display = 'none'; return; }
+                const L = cube.scale.x;
+                _lblVec.set(cube.position.x, L + 2.5, cube.position.z).project(camera);
+                if (_lblVec.z > 1) { div.style.display = 'none'; return; }
+                div.style.display = '';
+                div.style.left = ((_lblVec.x * 0.5 + 0.5) * w) + 'px';
+                div.style.top = ((-_lblVec.y * 0.5 + 0.5) * h) + 'px';
+                div.classList.toggle('is-current', id === state.currentMatId);
+            });
+        }
 
         // ---- UI 更新：拆成「輕量數值」與「較重的清單重建」以減少滑桿拖曳負擔 ----
         function updateValues() {
@@ -394,17 +468,45 @@
         function renderAddSelect() {
             els.addSelect.innerHTML = '<option value="" disabled selected>+ 選擇並加入畫布...</option>';
             Object.keys(materials).forEach(key => {
-                if (!state.activeMatIds.includes(key)) {
-                    const opt = document.createElement('option');
-                    opt.value = key;
-                    opt.innerText = materials[key].name;
-                    els.addSelect.appendChild(opt);
-                }
+                // 只列出「基底」物質（略過重複加入時產生的副本），且不再因為已在畫布上就移除，
+                // 這樣同一物質可以重複加入做大小對比。
+                if (materials[key].baseId) return;
+                const opt = document.createElement('option');
+                opt.value = key;
+                opt.innerText = materials[key].name;
+                els.addSelect.appendChild(opt);
             });
             const customOpt = document.createElement('option');
             customOpt.value = 'custom';
             customOpt.innerText = '✨ 自訂新物質...';
             els.addSelect.appendChild(customOpt);
+        }
+
+        // 加入一個物質實例；若該物質已在畫布上，改為建立一個獨立副本（共用顏色/密度，但數值獨立）
+        let cloneCounter = 0;
+        function addMaterialInstance(baseKey) {
+            let idToAdd = baseKey;
+            if (state.activeMatIds.includes(baseKey)) {
+                cloneCounter++;
+                idToAdd = baseKey + '__' + cloneCounter;
+                const base = materials[baseKey];
+                const n = state.activeMatIds.filter(id => id === baseKey || materials[id].baseId === baseKey).length + 1;
+                materials[idToAdd] = Object.assign({}, base, {
+                    id: idToAdd,
+                    baseId: baseKey,
+                    name: base.name + ' #' + n
+                });
+            }
+            if (!state.activeMatIds.includes(idToAdd)) {
+                state.activeMatIds.push(idToAdd);
+                state.recordTargets.push(idToAdd);
+                if (!state.matData[idToAdd]) {
+                    state.matData[idToAdd] = { v: 50, h: 0, m: 50 * materials[idToAdd].density };
+                }
+                if (state.syncMode === 'v') updateFromV(state.matData[state.currentMatId].v, state.currentMatId);
+                if (state.syncMode === 'm') updateFromM(state.matData[state.currentMatId].m, state.currentMatId);
+            }
+            state.currentMatId = idToAdd;
         }
 
         function update3D() {
@@ -446,6 +548,23 @@
                     innerMesh.add(line);
                     cube.add(innerMesh);
                     cube.innerCavity = innerMesh;
+
+                    // 選取用的外框光暈：稍大一圈、加成混色的淡淡光暈，不改變物體本身外觀
+                    const outlineGeo = new THREE.BoxGeometry(1, 1, 1);
+                    const outlineMat = new THREE.MeshBasicMaterial({
+                        color: 0x60a5fa,
+                        transparent: true,
+                        opacity: 0.5,
+                        side: THREE.BackSide,
+                        blending: THREE.AdditiveBlending,
+                        depthWrite: false
+                    });
+                    const outline = new THREE.Mesh(outlineGeo, outlineMat);
+                    outline.scale.set(1.06, 1.06, 1.06);
+                    outline.renderOrder = 1;
+                    outline.visible = false;
+                    cube.add(outline);
+                    cube.outline = outline;
                 }
 
                 const cube = cubes[matId];
@@ -475,12 +594,9 @@
                 const targetX = index * spacing - offset;
                 cube.position.set(targetX, L / 2, 0);
 
-                if (matId === state.currentMatId) {
-                    cube.material.emissive.set(mat.color);
-                    cube.material.emissiveIntensity = 0.4;
-                } else {
-                    cube.material.emissiveIntensity = 0;
-                }
+                // 選取時只亮外框光暈，物體本身顏色維持不變
+                if (cube.outline) cube.outline.visible = (matId === state.currentMatId);
+                cube.material.emissiveIntensity = 0;
             });
         }
 
@@ -572,6 +688,8 @@
             updateValues();
             updateLists();
             update3D();
+            refreshLabels();
+            updateLabelText();
             scheduleChart();
         }
 
@@ -579,6 +697,7 @@
         function handleValueChange() {
             updateValues();
             update3D();
+            updateLabelText();
             scheduleChart();
         }
 
@@ -588,6 +707,11 @@
             // 一併清除該物質已紀錄的數據點（移除後圖上不再殘留）
             state.records = state.records.filter(r => r.matId !== id);
             if (cubes[id]) { scene.remove(cubes[id]); delete cubes[id]; }
+            // 若是重複加入產生的副本，連同其材質定義一起清掉，避免累積
+            if (materials[id] && materials[id].baseId) {
+                delete materials[id];
+                delete state.matData[id];
+            }
             if (state.activeMatIds.length === 0) {
                 state.activeMatIds.push('water');
                 state.recordTargets.push('water');
@@ -669,16 +793,7 @@
             if (selectedVal === 'custom') {
                 els.customFields.classList.remove('hidden');
             } else if (selectedVal) {
-                if (!state.activeMatIds.includes(selectedVal)) {
-                    state.activeMatIds.push(selectedVal);
-                    state.recordTargets.push(selectedVal);
-                    if (!state.matData[selectedVal]) {
-                        state.matData[selectedVal] = { v: 50, h: 0, m: 50 * materials[selectedVal].density };
-                    }
-                    if (state.syncMode === 'v') updateFromV(state.matData[state.currentMatId].v, state.currentMatId);
-                    if (state.syncMode === 'm') updateFromM(state.matData[state.currentMatId].m, state.currentMatId);
-                }
-                state.currentMatId = selectedVal;
+                addMaterialInstance(selectedVal);
                 els.customFields.classList.add('hidden');
                 renderAddSelect();
                 e.target.value = '';
@@ -699,14 +814,7 @@
                 metalness: 0.2, roughness: 0.8, transparent: false, opacity: 1
             };
 
-            state.activeMatIds.push(newId);
-            state.recordTargets.push(newId);
-            state.matData[newId] = { v: 50, h: 0, m: 50 * densityInput };
-
-            if (state.syncMode === 'v') updateFromV(state.matData[state.currentMatId].v, state.currentMatId);
-            if (state.syncMode === 'm') updateFromM(state.matData[state.currentMatId].m, state.currentMatId);
-
-            state.currentMatId = newId;
+            addMaterialInstance(newId);
             els.customFields.classList.add('hidden');
             renderAddSelect();
             els.addSelect.value = '';
@@ -803,6 +911,7 @@
         // ---- 啟動 ----
         renderAddSelect();
         applyAxisLimits(); // 啟動即同步滑桿上限與軸範圍（修正 M 滑桿初始只能到 3000 的問題）
+        animate3D();        // 所有變數（labels 等）已初始化，才啟動渲染迴圈
         // 版面套用後再校正一次 3D 畫布尺寸，避免初次量測到高度為 0
         requestAnimationFrame(resizeRenderer);
         setTimeout(resizeRenderer, 200);
