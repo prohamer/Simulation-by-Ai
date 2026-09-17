@@ -2,8 +2,8 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Let'sdrive</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Let's Drive</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -21,7 +21,8 @@
         #game-container {
             position: relative;
             width: 100%;
-            height: 100%;
+            height: 100vh;   /* 後備 */
+            height: 100dvh;  /* 手機/平板：對齊實際可視高度，避免被工具列蓋住 */
             display: flex;
             flex-direction: column;
         }
@@ -44,6 +45,7 @@
             justify-content: space-between;
             align-items: flex-end;
             padding: 10px;
+            padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
             box-sizing: border-box;
             z-index: 10;
         }
@@ -168,6 +170,19 @@
             #steering-container { width: 100px; height: 100px; }
             .pedal { height: 90px; }
             .modal-grid { grid-template-columns: 1fr; grid-template-rows: repeat(4, 1fr); overflow-y: auto; }
+        }
+
+        /* 較矮的視窗(含 iPad 橫向)：加高儀表板並收緊間距，避免下方控制項被裁切 */
+        @media (max-height: 820px) {
+            #dashboard { height: 46%; }
+            #steering-container { width: 110px; height: 110px; margin-bottom: 8px; }
+            #instruments { margin-bottom: 8px; }
+            .gauge-container { padding: 8px 18px; margin-bottom: 6px; }
+            .speed-text { font-size: 34px; }
+            #pedals-container { margin-bottom: 8px; }
+            .pedal { height: 96px; }
+            #cruise-control { margin-top: 6px; padding: 6px 12px; }
+            #gear-btn { margin-top: 6px; padding: 5px 12px; }
         }
 
         .pedal-zones { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; pointer-events: none; z-index: 0; }
@@ -811,6 +826,14 @@
             }
             currentState.velDir = currentState.rotation; // 速度方向初始對齊車頭
             currentState.refDir = currentState.rotation; // 以起始車頭方向作為位移正方向
+
+            // 相機立即回到重置後的位置與朝向 (未開始行駛前 updatePhysics 不會更新相機)
+            camera.position.x = currentState.position.x;
+            camera.position.z = currentState.position.z;
+            const rLookX = currentState.position.x + Math.sin(currentState.rotation) * 10;
+            const rLookZ = currentState.position.z - Math.cos(currentState.rotation) * 10;
+            camera.lookAt(rLookX, camera.position.y, rLookZ);
+
             if (currentState.cruiseControl.active) toggleCruiseControl();
             updateGearButton();
             createEnvironment();
@@ -862,7 +885,11 @@
                 plugins: { legend: { display: false }, tooltip: { enabled: false } },
                 scales: {
                     x: { display: displayX, grid: { color: '#333' } },
-                    y: { grid: { color: '#333' }, border: { display: false }, title: { display: true, text: titleText, color: '#aaa' } }
+                    y: {
+                        grid: { color: '#333' }, border: { display: false },
+                        ticks: { callback: (v) => (typeof v === 'number' ? v.toFixed(1) : v) },
+                        title: { display: true, text: titleText, color: '#aaa' }
+                    }
                 },
                 elements: { point: { radius: 0 }, line: { borderWidth: 2 } }
             };
@@ -873,10 +900,20 @@
             return {
                 responsive: true, maintainAspectRatio: false, animation: false,
                 interaction: { mode: 'index', intersect: false },
-                plugins: { legend: { display: false }, tooltip: { enabled: true } },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        enabled: true,
+                        callbacks: { label: (ctx) => `${ctx.dataset.label}: ${Number(ctx.parsed.y).toFixed(1)}` }
+                    }
+                },
                 scales: {
                     x: { display: true, grid: { color: '#333' }, title: { display: true, text: '時間 (s)', color: '#aaa' } },
-                    y: { grid: { color: '#333' }, border: { display: false }, title: { display: true, text: titleText, color: '#aaa' } }
+                    y: {
+                        grid: { color: '#333' }, border: { display: false },
+                        ticks: { callback: (v) => (typeof v === 'number' ? v.toFixed(1) : v) },
+                        title: { display: true, text: titleText, color: '#aaa' }
+                    }
                 },
                 elements: { point: { radius: 0, hoverRadius: 5 }, line: { borderWidth: 2 } },
                 onHover: function (e, activeElements, chart) {
