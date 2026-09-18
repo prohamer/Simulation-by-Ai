@@ -3,9 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>trolley_ticker</title>
+  <title>trolley_ticker V11</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
   <!-- 修正 1：載入 MathJax 讓 LaTeX 公式能正確渲染，同時啟用 \( \) 與 $ $ 兩種行內分隔符 -->
@@ -57,6 +59,8 @@
     main .space-y-3 > :not([hidden]) ~ :not([hidden]) { margin-top: 0.45rem !important; }
     main .space-y-2 > :not([hidden]) ~ :not([hidden]) { margin-top: 0.3rem !important; }
     .chart-container { height: 210px; max-height: 220px; }
+    .axis-in { width: 3.1rem; background: #0f172a; border: 1px solid #334155; border-radius: 0.25rem; padding: 0.05rem 0.3rem; color: #e2e8f0; font-family: monospace; font-size: 11px; }
+    .axis-in::placeholder { color: #475569; }
   </style>
 </head>
 <body class="bg-slate-950 text-slate-100 min-h-screen font-sans pb-12">
@@ -384,25 +388,55 @@
           </label>
           <span class="text-slate-600 mx-1 hidden md:inline">|</span>
           <button id="btnAddGroup" class="px-2.5 py-1 bg-emerald-950/70 border border-emerald-600/50 text-emerald-300 rounded hover:bg-emerald-900/70 transition font-semibold">➕ 加入新實驗組</button>
-          <button id="btnClearGroups" class="px-2.5 py-1 bg-slate-800 border border-slate-700 text-slate-300 rounded hover:bg-slate-700 transition">🗑 清除組別</button>
-          <span id="groupInfo" class="text-slate-400 font-mono">目前 0 組</span>
-          <span class="text-[11px] text-slate-500 hidden lg:inline">💡 移到任一點，四視圖同步高亮對應點</span>
+          <button id="btnClearGroups" class="px-2.5 py-1 bg-slate-800 border border-slate-700 text-slate-300 rounded hover:bg-slate-700 transition">🗑 清除全部</button>
+          <span id="groupInfo" class="text-slate-400 font-mono">0 組</span>
+          <span id="groupChips" class="flex flex-wrap items-center gap-1"></span>
         </div>
       </div>
 
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div class="bg-slate-950/60 border border-slate-800 rounded-xl p-3 space-y-2">
-          <h4 class="text-xs font-bold text-sky-300 flex items-center gap-1.5"><span>📊</span> 位移–時間 (x–t)</h4>
+          <div class="flex items-center justify-between gap-2">
+            <h4 class="text-xs font-bold text-sky-300 flex items-center gap-1.5"><span>📊</span> 位移–時間 (x–t)</h4>
+            <button data-axis="xt" class="axis-toggle px-1.5 py-0.5 text-[11px] bg-slate-800 border border-slate-700 rounded text-slate-300 hover:bg-slate-700 transition">⚙ 軸</button>
+          </div>
+          <div id="xtAxisPanel" class="hidden flex flex-wrap items-center gap-1 text-[11px] text-slate-400">
+            <span>X</span><input id="xtXmin" type="number" step="any" placeholder="min" class="axis-in"><span>~</span><input id="xtXmax" type="number" step="any" placeholder="max" class="axis-in">
+            <span class="ml-1">Y</span><input id="xtYmin" type="number" step="any" placeholder="min" class="axis-in"><span>~</span><input id="xtYmax" type="number" step="any" placeholder="max" class="axis-in">
+            <button data-axis="xt" class="axis-apply px-1.5 py-0.5 bg-sky-950/70 border border-sky-700/60 text-sky-300 rounded">套用</button>
+            <button data-axis="xt" class="axis-reset px-1.5 py-0.5 bg-slate-800 border border-slate-700 text-slate-300 rounded">重設</button>
+            <span class="text-slate-600 w-full mt-0.5">滾輪縮放軸 · 按住拖曳平移</span>
+          </div>
           <div class="chart-container"><canvas id="xtChart"></canvas></div>
           <div id="xtReadout" class="hidden text-[11px] font-mono text-slate-300 bg-slate-900/70 border border-sky-800/50 rounded-lg p-2 space-y-0.5"></div>
         </div>
         <div class="bg-slate-950/60 border border-slate-800 rounded-xl p-3 space-y-2">
-          <h4 class="text-xs font-bold text-amber-300 flex items-center gap-1.5"><span>📈</span> 速度–時間 (v–t)</h4>
+          <div class="flex items-center justify-between gap-2">
+            <h4 class="text-xs font-bold text-amber-300 flex items-center gap-1.5"><span>📈</span> 速度–時間 (v–t)</h4>
+            <button data-axis="vt" class="axis-toggle px-1.5 py-0.5 text-[11px] bg-slate-800 border border-slate-700 rounded text-slate-300 hover:bg-slate-700 transition">⚙ 軸</button>
+          </div>
+          <div id="vtAxisPanel" class="hidden flex flex-wrap items-center gap-1 text-[11px] text-slate-400">
+            <span>X</span><input id="vtXmin" type="number" step="any" placeholder="min" class="axis-in"><span>~</span><input id="vtXmax" type="number" step="any" placeholder="max" class="axis-in">
+            <span class="ml-1">Y</span><input id="vtYmin" type="number" step="any" placeholder="min" class="axis-in"><span>~</span><input id="vtYmax" type="number" step="any" placeholder="max" class="axis-in">
+            <button data-axis="vt" class="axis-apply px-1.5 py-0.5 bg-amber-950/70 border border-amber-700/60 text-amber-300 rounded">套用</button>
+            <button data-axis="vt" class="axis-reset px-1.5 py-0.5 bg-slate-800 border border-slate-700 text-slate-300 rounded">重設</button>
+            <span class="text-slate-600 w-full mt-0.5">滾輪縮放軸 · 按住拖曳平移</span>
+          </div>
           <div class="chart-container"><canvas id="vtChart"></canvas></div>
           <div id="vtReadout" class="hidden text-[11px] font-mono text-slate-300 bg-slate-900/70 border border-amber-800/50 rounded-lg p-2 space-y-0.5"></div>
         </div>
         <div class="bg-slate-950/60 border border-slate-800 rounded-xl p-3 space-y-2">
-          <h4 class="text-xs font-bold text-rose-300 flex items-center gap-1.5"><span>📉</span> 加速度–時間 (a–t)</h4>
+          <div class="flex items-center justify-between gap-2">
+            <h4 class="text-xs font-bold text-rose-300 flex items-center gap-1.5"><span>📉</span> 加速度–時間 (a–t)</h4>
+            <button data-axis="at" class="axis-toggle px-1.5 py-0.5 text-[11px] bg-slate-800 border border-slate-700 rounded text-slate-300 hover:bg-slate-700 transition">⚙ 軸</button>
+          </div>
+          <div id="atAxisPanel" class="hidden flex flex-wrap items-center gap-1 text-[11px] text-slate-400">
+            <span>X</span><input id="atXmin" type="number" step="any" placeholder="min" class="axis-in"><span>~</span><input id="atXmax" type="number" step="any" placeholder="max" class="axis-in">
+            <span class="ml-1">Y</span><input id="atYmin" type="number" step="any" placeholder="min" class="axis-in"><span>~</span><input id="atYmax" type="number" step="any" placeholder="max" class="axis-in">
+            <button data-axis="at" class="axis-apply px-1.5 py-0.5 bg-rose-950/70 border border-rose-700/60 text-rose-300 rounded">套用</button>
+            <button data-axis="at" class="axis-reset px-1.5 py-0.5 bg-slate-800 border border-slate-700 text-slate-300 rounded">重設</button>
+            <span class="text-slate-600 w-full mt-0.5">滾輪縮放軸 · 按住拖曳平移</span>
+          </div>
           <div class="chart-container"><canvas id="atChart"></canvas></div>
           <div id="atReadout" class="hidden text-[11px] font-mono text-slate-300 bg-slate-900/70 border border-rose-800/50 rounded-lg p-2 space-y-0.5"></div>
         </div>
@@ -653,13 +687,14 @@
     const handModeHint = document.getElementById('handModeHint');
 
     let vtChart, xtChart, atChart;
-    let highlightIdx = -1;          // 四視圖共同高亮的打點索引
+    let highlight = { gid: null, i: -1 };  // 四視圖共同高亮 (組, 索引)
     let showChartLine = false;      // 是否顯示連線（預設只有點）
     let chartAnalysisMode = false;  // 兩點量測模式
-    const chartSelections = { xt: [], vt: [], at: [] }; // 各圖已選取的兩個點（存打點索引）
+    const chartSelections = { xt: [], vt: [], at: [] }; // 各圖已選取的兩點，元素為 {gid, i}
 
     // 實驗組（多次結果疊圖）
-    let experimentGroups = [];      // {label, color, dots:[], period}
+    let experimentGroups = [];      // {id, label, color, dots:[], period}
+    let groupIdCounter = 0;
     const GROUP_COLORS = ['#22c55e', '#a855f7', '#ec4899', '#14b8a6', '#eab308', '#fb7185', '#60a5fa', '#f97316'];
 
     // 固定總質量模式
@@ -1221,25 +1256,27 @@
     // 運動圖表（x-t / v-t / a-t）：以打點資料為離散點
     // =========================================================================
     function chartKey(id) { return id === 'xtChart' ? 'xt' : id === 'vtChart' ? 'vt' : 'at'; }
+    function selMatch(key, gid, i) { return chartSelections[key].some(s => s.gid === gid && s.i === i); }
+    function isHi(gid, i) { return highlight.gid === gid && highlight.i === i; }
 
     function pointRadiusFor(ctx) {
       const raw = ctx.raw; if (!raw) return 3;
-      const key = chartKey(ctx.chart.canvas.id);
-      if (chartSelections[key].includes(raw.i)) return 6.5;
-      if (raw.i === highlightIdx) return 6;
+      const key = chartKey(ctx.chart.canvas.id), gid = ctx.dataset.gid;
+      if (selMatch(key, gid, raw.i)) return 6.5;
+      if (isHi(gid, raw.i)) return 6;
       return 3;
     }
     function pointColorFor(ctx, base) {
       const raw = ctx.raw; if (!raw) return base;
-      const key = chartKey(ctx.chart.canvas.id);
-      if (chartSelections[key].includes(raw.i)) return '#f59e0b'; // 選取=琥珀
-      if (raw.i === highlightIdx) return '#34d399';               // 高亮=翠綠
+      const key = chartKey(ctx.chart.canvas.id), gid = ctx.dataset.gid;
+      if (selMatch(key, gid, raw.i)) return '#f59e0b';
+      if (isHi(gid, raw.i)) return '#34d399';
       return base;
     }
     function pointBorderFor(ctx) {
       const raw = ctx.raw; if (!raw) return 'transparent';
-      const key = chartKey(ctx.chart.canvas.id);
-      if (chartSelections[key].includes(raw.i) || raw.i === highlightIdx) return '#0f172a';
+      const key = chartKey(ctx.chart.canvas.id), gid = ctx.dataset.gid;
+      if (selMatch(key, gid, raw.i) || isHi(gid, raw.i)) return '#0f172a';
       return 'transparent';
     }
 
@@ -1261,20 +1298,19 @@
           animation: false,
           interaction: { mode: 'nearest', intersect: true },
           onHover: (e, els, chart) => {
-            const hit = els && els.find(el => chart.data.datasets[el.datasetIndex].isLive);
-            if (hit) {
-              const p = chart.data.datasets[hit.datasetIndex].data[hit.index];
-              setHighlight(p ? p.i : -1);
+            if (els && els.length) {
+              const ds = chart.data.datasets[els[0].datasetIndex];
+              const p = ds.data[els[0].index];
+              setHighlight(ds.gid, p ? p.i : -1);
             } else {
-              setHighlight(-1);
+              setHighlight(null, -1);
             }
           },
           onClick: (e, els, chart) => {
-            if (!chartAnalysisMode || !els) return;
-            const hit = els.find(el => chart.data.datasets[el.datasetIndex].isLive);
-            if (!hit) return;
-            const p = chart.data.datasets[hit.datasetIndex].data[hit.index];
-            if (p) selectChartPoint(chart.canvas.id, p);
+            if (!chartAnalysisMode || !els || !els.length) return;
+            const ds = chart.data.datasets[els[0].datasetIndex];
+            const p = ds.data[els[0].index];
+            if (p) selectChartPoint(chart.canvas.id, ds.gid, p);
           },
           scales: {
             x: { type: 'linear', min: 0, title: { display: true, text: '時間 t (s)', color: '#94a3b8' }, ticks: { color: '#64748b', maxTicksLimit: 6, callback: tick2 }, grid: { color: '#1e293b' } },
@@ -1285,9 +1321,13 @@
             tooltip: {
               enabled: true,
               callbacks: {
-                title: (items) => items.length ? `#${items[0].raw.i} · t=${items[0].parsed.x.toFixed(3)}s` : '',
+                title: (items) => items.length ? `${items[0].dataset.label} · #${items[0].raw.i} · t=${items[0].parsed.x.toFixed(3)}s` : '',
                 label: (item) => `${yTitle}: ${item.parsed.y.toFixed(3)}`
               }
+            },
+            zoom: {
+              zoom: { wheel: { enabled: true }, pinch: { enabled: true }, drag: { enabled: false }, mode: 'xy' },
+              pan: { enabled: true, mode: 'xy' }
             }
           }
         }
@@ -1338,81 +1378,77 @@
       return pts.filter(p => p.a != null).map(p => ({ x: p.t, y: p.a, i: p.i }));
     }
 
-    const CHART_DEFS = [['xt', () => xtChart, '#38bdf8'], ['vt', () => vtChart, '#f59e0b'], ['at', () => atChart, '#f43f5e']];
+    const CHART_BASE = { xt: '#38bdf8', vt: '#f59e0b', at: '#f43f5e' };
+    function chartByKey(key) { return key === 'xt' ? xtChart : key === 'vt' ? vtChart : atChart; }
+
+    // 所有可比較的「組」：已存實驗組 + 目前這組（gid 'live'）
+    function allRuns() {
+      const runs = experimentGroups.map(g => ({ gid: g.id, label: g.label, color: g.color, dots: g.dots, period: g.period }));
+      runs.push({ gid: 'live', label: '目前', color: '#dc2626', dots: tapeDots, period: period });
+      return runs;
+    }
+    function runLabel(gid) {
+      if (gid === 'live') return '目前';
+      const g = experimentGroups.find(x => x.id === gid);
+      return g ? g.label : '?';
+    }
 
     function refreshCharts() {
       if (!xtChart) return;
-      const livePts = buildPointsFrom(tapeDots, period);
-      const groupPts = experimentGroups.map(g => ({ g, pts: buildPointsFrom(g.dots, g.period) }));
-
-      CHART_DEFS.forEach(([key, getC, baseColor]) => {
-        const chart = getC();
-        const datasets = [];
-        // 已存實驗組（靜態對照疊圖）
-        groupPts.forEach(({ g, pts }) => {
-          datasets.push({
-            label: g.label,
+      const runs = allRuns();
+      ['xt', 'vt', 'at'].forEach(key => {
+        const chart = chartByKey(key);
+        const baseColor = CHART_BASE[key];
+        chart.data.datasets = runs.map(run => {
+          const isLive = run.gid === 'live';
+          const col = isLive ? baseColor : run.color;
+          const pts = buildPointsFrom(run.dots, run.period);
+          return {
+            label: run.label,
+            gid: run.gid,
             data: seriesFor(key, pts),
-            borderColor: g.color,
-            backgroundColor: 'transparent',
-            borderWidth: 1.5,
+            borderColor: col,
+            backgroundColor: isLive ? col + '22' : 'transparent',
+            borderWidth: isLive ? 2 : 1.5,
             showLine: showChartLine,
             tension: 0.05,
-            pointRadius: 2.6,
-            pointHoverRadius: 4,
-            pointBackgroundColor: g.color,
-            pointBorderWidth: 0,
-            isLive: false
-          });
+            pointRadius: pointRadiusFor,
+            pointHoverRadius: 7,
+            pointBackgroundColor: (c) => pointColorFor(c, col),
+            pointBorderColor: pointBorderFor,
+            pointBorderWidth: (c) => (c.raw && (selMatch(key, c.dataset.gid, c.raw.i) || isHi(c.dataset.gid, c.raw.i))) ? 2 : 0
+          };
         });
-        // 目前這組（可高亮 / 兩點量測）
-        datasets.push({
-          label: '目前',
-          data: seriesFor(key, livePts),
-          borderColor: baseColor,
-          backgroundColor: baseColor + '22',
-          borderWidth: 2,
-          showLine: showChartLine,
-          tension: 0.05,
-          pointRadius: pointRadiusFor,
-          pointHoverRadius: 7,
-          pointBackgroundColor: (c) => pointColorFor(c, baseColor),
-          pointBorderColor: pointBorderFor,
-          pointBorderWidth: (c) => (c.raw && (chartSelections[key].includes(c.raw.i) || c.raw.i === highlightIdx)) ? 2 : 0,
-          isLive: true
-        });
-        chart.data.datasets = datasets;
         chart.options.plugins.legend.display = experimentGroups.length > 0;
         chart.update('none');
       });
       updateAllReadouts();
     }
 
-    // 四視圖共同高亮
-    function setHighlight(i) {
-      if (i === highlightIdx) return;
-      highlightIdx = i;
-      hoveredDotIndex = i;
-      if (isMultiTape()) hoveredTapeRow = experimentGroups.length; // live 列在最後
+    // 四視圖共同高亮 (組, 索引)
+    function setHighlight(gid, i) {
+      if (highlight.gid === gid && highlight.i === i) return;
+      highlight = { gid, i };
       drawTapeCanvas();
       [xtChart, vtChart, atChart].forEach(c => c && c.update('none'));
     }
 
-    // 兩點量測：選點
-    function selectChartPoint(canvasId, p) {
+    // 兩點量測：選點（兩點需同組，跨組自動以新組重新起算）
+    function selectChartPoint(canvasId, gid, p) {
       const key = chartKey(canvasId);
       const sel = chartSelections[key];
-      if (sel.length >= 2) sel.length = 0; // 第三次點擊重新開始
-      sel.push(p.i);
+      if (sel.length >= 2) sel.length = 0;
+      else if (sel.length === 1 && sel[0].gid !== gid) sel.length = 0;
+      sel.push({ gid, i: p.i });
       [xtChart, vtChart, atChart].forEach(c => c && c.update('none'));
       updateReadout(key);
     }
 
-    function readoutValueForKey(key, i) {
-      const chart = key === 'xt' ? xtChart : key === 'vt' ? vtChart : atChart;
-      const live = chart.data.datasets.find(ds => ds.isLive);
-      if (!live) return null;
-      const d = live.data.find(pt => pt.i === i);
+    function readoutPoint(key, gid, i) {
+      const chart = chartByKey(key);
+      const ds = chart.data.datasets.find(d => d.gid === gid);
+      if (!ds) return null;
+      const d = ds.data.find(pt => pt.i === i);
       return d ? { t: d.x, y: d.y } : null;
     }
 
@@ -1429,21 +1465,21 @@
       if (!chartAnalysisMode || sel.length === 0) { el.classList.add('hidden'); el.innerHTML = ''; return; }
 
       if (sel.length === 1) {
-        const p = readoutValueForKey(key, sel[0]);
+        const p = readoutPoint(key, sel[0].gid, sel[0].i);
         if (!p) { el.classList.add('hidden'); return; }
         el.classList.remove('hidden');
-        el.innerHTML = `已選 <b class="text-amber-300">A：#${sel[0]}</b>　t=${p.t.toFixed(3)}s　${meta.name}=${p.y.toFixed(3)}${meta.unit}<br><span class="text-slate-500">再點第二個點以計算差值…</span>`;
+        el.innerHTML = `已選 <b class="text-amber-300">A：${runLabel(sel[0].gid)} #${sel[0].i}</b>　t=${p.t.toFixed(3)}s　${meta.name}=${p.y.toFixed(3)}${meta.unit}<br><span class="text-slate-500">再點同組第二個點以計算差值…</span>`;
         return;
       }
-      const A = readoutValueForKey(key, sel[0]);
-      const B = readoutValueForKey(key, sel[1]);
+      const A = readoutPoint(key, sel[0].gid, sel[0].i);
+      const B = readoutPoint(key, sel[1].gid, sel[1].i);
       if (!A || !B) { el.classList.add('hidden'); return; }
       const dt = B.t - A.t;
       const dy = B.y - A.y;
       const slope = dt !== 0 ? meta.slopeFn(dy, dt) : NaN;
       el.classList.remove('hidden');
       el.innerHTML =
-        `<div class="text-slate-400">A #${sel[0]} (t=${A.t.toFixed(3)}, ${A.y.toFixed(3)}${meta.unit}) → B #${sel[1]} (t=${B.t.toFixed(3)}, ${B.y.toFixed(3)}${meta.unit})</div>` +
+        `<div class="text-slate-400">${runLabel(sel[0].gid)}：A #${sel[0].i} (t=${A.t.toFixed(3)}, ${A.y.toFixed(3)}${meta.unit}) → B #${sel[1].i} (t=${B.t.toFixed(3)}, ${B.y.toFixed(3)}${meta.unit})</div>` +
         `<div class="text-sky-300">Δt = ${dt.toFixed(3)} s</div>` +
         `<div class="text-emerald-300">${meta.dsym} = ${dy.toFixed(3)} ${meta.unit}</div>` +
         `<div class="text-amber-300">${meta.slopeName} = ${isFinite(slope) ? slope.toFixed(3) : '—'} ${meta.slopeUnit}</div>`;
@@ -1467,8 +1503,8 @@
     // 多組併排相關
     function isMultiTape() { return experimentGroups.length > 0; }
     function tapeRows() {
-      const rows = experimentGroups.map(gp => ({ label: gp.label, color: gp.color, dots: gp.dots, period: gp.period, isLive: false }));
-      rows.push({ label: '目前', color: '#dc2626', dots: tapeDots, period: period, isLive: true });
+      const rows = experimentGroups.map(gp => ({ gid: gp.id, label: gp.label, color: gp.color, dots: gp.dots, period: gp.period, isLive: false }));
+      rows.push({ gid: 'live', label: '目前', color: '#dc2626', dots: tapeDots, period: period, isLive: true });
       return rows;
     }
     const MT_LABEL_W = 62, MT_ROW_H = 54, MT_TOP = 12, MT_STRIP_H = 26;
@@ -1594,8 +1630,9 @@
       }
 
       // 5) hover 高亮：導引線 + 外環 + 粗體點號
-      if (hoveredDotIndex >= 0 && hoveredDotIndex < tapeDots.length) {
-        const hx = tapePixelX(tapeDots[hoveredDotIndex]);
+      const hiI = (highlight.gid === 'live' && highlight.i >= 0 && highlight.i < tapeDots.length) ? highlight.i : -1;
+      if (hiI >= 0) {
+        const hx = tapePixelX(tapeDots[hiI]);
         tapeCtx.strokeStyle = 'rgba(52,211,153,0.5)';
         tapeCtx.lineWidth = 1;
         tapeCtx.setLineDash([4, 4]);
@@ -1615,7 +1652,7 @@
         tapeCtx.arc(hx, TAPE_BAND_CENTER, 8, 0, Math.PI * 2);
         tapeCtx.stroke();
 
-        drawIndexLabel(hoveredDotIndex, hx, true);
+        drawIndexLabel(hiI, hx, true);
       }
     }
 
@@ -1679,8 +1716,8 @@
         }
 
         // hover 高亮
-        if (hoveredTapeRow === r && hoveredDotIndex >= 0 && hoveredDotIndex < row.dots.length) {
-          const hx = multiXOf(row.dots[hoveredDotIndex], w);
+        if (row.gid === highlight.gid && highlight.i >= 0 && highlight.i < row.dots.length) {
+          const hx = multiXOf(row.dots[highlight.i], w);
           tapeCtx.strokeStyle = '#34d399';
           tapeCtx.lineWidth = 2;
           tapeCtx.beginPath(); tapeCtx.arc(hx, dotY, 7, 0, Math.PI * 2); tapeCtx.stroke();
@@ -2249,8 +2286,7 @@
       dotCountDisp.textContent = tapeDots.length;
 
       // 清除兩點量測選取與高亮，並依目前打點重建圖表
-      highlightIdx = -1;
-      hoveredDotIndex = -1;
+      highlight = { gid: null, i: -1 };
       chartSelections.xt.length = 0;
       chartSelections.vt.length = 0;
       chartSelections.at.length = 0;
@@ -2441,27 +2477,22 @@
         const hit = findNearestInMulti(canvasX, canvasY);
         const rows = tapeRows();
         if (hit.row >= 0) {
-          hoveredTapeRow = hit.row;
-          hoveredDotIndex = hit.i;
-          if (hit.isLive) { highlightIdx = hit.i; [xtChart, vtChart, atChart].forEach(c => c && c.update('none')); }
-          drawTapeCanvas();
           const row = rows[hit.row];
+          setHighlight(row.gid, hit.i);
           showTapeTooltip(hit.i, e.clientX, e.clientY, row.dots, row.period, row.label);
         } else {
-          hoveredTapeRow = -1; hoveredDotIndex = -1;
-          drawTapeCanvas(); hideTapeTooltip();
+          setHighlight(null, -1);
+          hideTapeTooltip();
         }
         return;
       }
 
       const idx = findNearestDot(canvasX);
-      setHighlight(idx); // 同步高亮紙帶與三張圖
-      if (idx >= 0) { showTapeTooltip(idx, e.clientX, e.clientY); } else { hideTapeTooltip(); }
+      if (idx >= 0) { setHighlight('live', idx); showTapeTooltip(idx, e.clientX, e.clientY); }
+      else { setHighlight(null, -1); hideTapeTooltip(); }
     });
     tapeCanvas.addEventListener('mouseleave', () => {
-      hoveredTapeRow = -1;
-      setHighlight(-1);
-      if (isMultiTape()) drawTapeCanvas();
+      setHighlight(null, -1);
       hideTapeTooltip();
     });
     // 視窗大小改變時重新調整紙帶畫布寬度
@@ -2481,17 +2512,15 @@
         const hit = findNearestInMulti(canvasX, canvasY);
         const rows = tapeRows();
         if (hit.row >= 0) {
-          hoveredTapeRow = hit.row; hoveredDotIndex = hit.i;
-          if (hit.isLive) { highlightIdx = hit.i; [xtChart, vtChart, atChart].forEach(c => c && c.update('none')); }
-          drawTapeCanvas();
           const row = rows[hit.row];
+          setHighlight(row.gid, hit.i);
           showTapeTooltip(hit.i, t.clientX, t.clientY, row.dots, row.period, row.label);
-        } else { hoveredTapeRow = -1; hoveredDotIndex = -1; drawTapeCanvas(); hideTapeTooltip(); }
+        } else { setHighlight(null, -1); hideTapeTooltip(); }
         return;
       }
       const idx = findNearestDot(canvasX);
-      setHighlight(idx);
-      if (idx >= 0) showTapeTooltip(idx, t.clientX, t.clientY); else hideTapeTooltip();
+      if (idx >= 0) { setHighlight('live', idx); showTapeTooltip(idx, t.clientX, t.clientY); }
+      else { setHighlight(null, -1); hideTapeTooltip(); }
     }, { passive: true });
 
     // === 分析模式（計數點方法）===
@@ -2547,16 +2576,75 @@
       updateAllReadouts();
     });
 
+    // === 座標軸範圍自訂 / 重設（滾輪縮放與拖曳平移由 zoom 外掛提供）===
+    const axisInputs = {};
+    ['xt', 'vt', 'at'].forEach(k => {
+      axisInputs[k] = {
+        xmin: document.getElementById(k + 'Xmin'),
+        xmax: document.getElementById(k + 'Xmax'),
+        ymin: document.getElementById(k + 'Ymin'),
+        ymax: document.getElementById(k + 'Ymax'),
+        panel: document.getElementById(k + 'AxisPanel')
+      };
+    });
+    function applyAxis(key) {
+      const g = axisInputs[key], chart = chartByKey(key);
+      const num = (el) => { const v = parseFloat(el.value); return isFinite(v) ? v : undefined; };
+      const xmin = num(g.xmin), xmax = num(g.xmax), ymin = num(g.ymin), ymax = num(g.ymax);
+      chart.options.scales.x.min = (xmin !== undefined) ? xmin : 0;
+      chart.options.scales.x.max = xmax;
+      chart.options.scales.y.min = ymin;
+      chart.options.scales.y.max = ymax;
+      chart.options.scales.y.beginAtZero = (ymin === undefined);
+      chart.update('none');
+    }
+    function resetAxis(key) {
+      const g = axisInputs[key], chart = chartByKey(key);
+      g.xmin.value = ''; g.xmax.value = ''; g.ymin.value = ''; g.ymax.value = '';
+      if (chart.resetZoom) chart.resetZoom();
+      chart.options.scales.x.min = 0; chart.options.scales.x.max = undefined;
+      chart.options.scales.y.min = undefined; chart.options.scales.y.max = undefined; chart.options.scales.y.beginAtZero = true;
+      chart.update('none');
+    }
+    document.querySelectorAll('.axis-toggle').forEach(b => b.addEventListener('click', () => {
+      axisInputs[b.dataset.axis].panel.classList.toggle('hidden');
+    }));
+    document.querySelectorAll('.axis-apply').forEach(b => b.addEventListener('click', () => applyAxis(b.dataset.axis)));
+    document.querySelectorAll('.axis-reset').forEach(b => b.addEventListener('click', () => resetAxis(b.dataset.axis)));
+
     // === 實驗組（多次結果疊圖）===
     function updateGroupInfo() {
-      groupInfo.textContent = `目前 ${experimentGroups.length} 組`;
+      groupInfo.textContent = `${experimentGroups.length} 組`;
+      // 晶片列：每組色塊 + 名稱 + ✕（單獨移除）
+      groupChips.innerHTML = '';
+      experimentGroups.forEach(g => {
+        const chip = document.createElement('span');
+        chip.className = 'inline-flex items-center gap-1 px-1.5 py-0.5 rounded border border-slate-700 bg-slate-800/70';
+        chip.innerHTML = `<span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:${g.color}"></span>` +
+          `<span class="text-slate-200">${g.label}</span>` +
+          `<button data-remove="${g.id}" class="ml-0.5 text-slate-400 hover:text-rose-400 font-bold" title="移除此組">✕</button>`;
+        groupChips.appendChild(chip);
+      });
+      groupChips.querySelectorAll('[data-remove]').forEach(btn => {
+        btn.addEventListener('click', () => removeGroup(parseInt(btn.dataset.remove)));
+      });
+    }
+    function removeGroup(id) {
+      experimentGroups = experimentGroups.filter(g => g.id !== id);
+      // 清掉與該組有關的選取與高亮
+      ['xt', 'vt', 'at'].forEach(k => { chartSelections[k] = chartSelections[k].filter(s => s.gid !== id); });
+      if (highlight.gid === id) highlight = { gid: null, i: -1 };
+      updateGroupInfo();
+      refreshCharts();
+      applyTapeZoom();
     }
     btnAddGroup.addEventListener('click', () => {
       if (tapeDots.length < 3) { alert('目前資料太少，請先完成一次實驗（讓滑車運動打點）再加入實驗組。'); return; }
-      const idx = experimentGroups.length;
+      groupIdCounter++;
       experimentGroups.push({
-        label: `組${idx + 1}`,
-        color: GROUP_COLORS[idx % GROUP_COLORS.length],
+        id: groupIdCounter,
+        label: `組${groupIdCounter}`,
+        color: GROUP_COLORS[(groupIdCounter - 1) % GROUP_COLORS.length],
         dots: tapeDots.slice(),
         period: period
       });
@@ -2567,7 +2655,7 @@
     btnClearGroups.addEventListener('click', () => {
       if (experimentGroups.length === 0) return;
       experimentGroups = [];
-      hoveredTapeRow = -1;
+      if (highlight.gid !== 'live' && highlight.gid !== null) highlight = { gid: null, i: -1 };
       updateGroupInfo();
       refreshCharts();
       applyTapeZoom();  // 回復單條詳細紙帶、重算高度
