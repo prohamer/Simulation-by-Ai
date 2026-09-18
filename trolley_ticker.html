@@ -3,11 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>trolley_ticker V11</title>
+  <title>trolley_ticker V13</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7"></script>
   <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.2.0/dist/chartjs-plugin-zoom.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
   <!-- 修正 1：載入 MathJax 讓 LaTeX 公式能正確渲染，同時啟用 \( \) 與 $ $ 兩種行內分隔符 -->
@@ -332,13 +332,16 @@
       </div>
       <p class="text-[11px] text-slate-500">💡 滑鼠移到任一點可查看該點數據與車子位置快照 · 用 ＋ / − 或滑鼠滾輪縮放放大檢視 · 拖曳底部捲軸左右瀏覽</p>
 
-      <!-- 計數點分析結果表（僅分析模式顯示） -->
+      <!-- 計數點分析結果表（僅分析模式顯示；可收合） -->
       <div id="analysisResultWrap" class="hidden space-y-2">
         <div class="flex items-center gap-2 text-xs font-bold text-emerald-300">
-          <span>🔬</span> 計數點分析結果（間距 Δs / 總距 Σs / 區間速度 v / 逐差加速度 a）
+          <button id="analysisResultToggle" class="flex items-center gap-2 text-left hover:text-emerald-200 transition">
+            <span>🔬</span> 計數點分析結果（間距 Δs / 總距 Σs / 區間速度 v / 逐差加速度 a）
+            <span id="analysisResultChevron" class="text-slate-400 font-normal">▸</span>
+          </button>
           <button id="btnExportAnalysisCSV" class="ml-auto px-2 py-1 bg-emerald-950/80 border border-emerald-500/50 text-emerald-300 rounded hover:bg-emerald-900/80 transition text-[11px] font-semibold">📥 匯出分析 CSV</button>
         </div>
-        <div class="overflow-x-auto max-h-56 rounded-xl border border-emerald-800/40 bg-slate-950">
+        <div id="analysisResultBody" class="hidden overflow-x-auto max-h-56 rounded-xl border border-emerald-800/40 bg-slate-950">
           <table class="w-full text-left text-xs text-slate-300 font-mono">
             <thead class="bg-emerald-950/40 text-emerald-200 text-[11px] sticky top-0 backdrop-blur">
               <tr>
@@ -669,6 +672,9 @@
     const analysisResultWrap = document.getElementById('analysisResultWrap');
     const analysisTableBody = document.getElementById('analysisTableBody');
     const btnExportAnalysisCSV = document.getElementById('btnExportAnalysisCSV');
+    const analysisResultToggle = document.getElementById('analysisResultToggle');
+    const analysisResultChevron = document.getElementById('analysisResultChevron');
+    const analysisResultBody = document.getElementById('analysisResultBody');
 
     // 圖表元件與狀態
     const chkShowLine = document.getElementById('chkShowLine');
@@ -1314,7 +1320,7 @@
           },
           scales: {
             x: { type: 'linear', min: 0, title: { display: true, text: '時間 t (s)', color: '#94a3b8' }, ticks: { color: '#64748b', maxTicksLimit: 6, callback: tick2 }, grid: { color: '#1e293b' } },
-            y: { beginAtZero: true, title: { display: true, text: yTitle, color: '#94a3b8' }, ticks: { color: '#64748b', callback: tick2 }, grid: { color: '#1e293b' } }
+            y: { beginAtZero: true, grace: '8%', afterDataLimits: (axis) => { if (Math.abs(axis.max - axis.min) < 1e-9) { axis.max += 1; axis.min -= 1; } }, title: { display: true, text: yTitle, color: '#94a3b8' }, ticks: { color: '#64748b', callback: tick2 }, grid: { color: '#1e293b' } }
           },
           plugins: {
             legend: { display: false, labels: { color: '#cbd5e1', boxWidth: 12, font: { size: 10 } } },
@@ -2560,6 +2566,14 @@
       refreshAnalysis();
     });
     btnExportAnalysisCSV.addEventListener('click', exportAnalysisCSV);
+
+    // 計數點分析結果表：收合切換（預設收合）
+    let analysisResultOpen = false;
+    analysisResultToggle.addEventListener('click', () => {
+      analysisResultOpen = !analysisResultOpen;
+      analysisResultBody.classList.toggle('hidden', !analysisResultOpen);
+      analysisResultChevron.textContent = analysisResultOpen ? '▾' : '▸';
+    });
 
     // === 圖表控制：顯示連線 / 兩點量測 ===
     chkShowLine.addEventListener('change', () => {
