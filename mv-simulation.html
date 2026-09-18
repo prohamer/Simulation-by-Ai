@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>mv-simulation V4</title>
+    <title>mv-simulation V5</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
@@ -221,6 +221,8 @@
                     <label class="text-gray-600 font-medium">最大 M:</label>
                     <input type="number" id="axis-max-m" value="4000" min="500" max="20000" step="500" class="w-20 p-1 border border-gray-300 rounded text-xs focus:ring-1 focus:ring-blue-500">
                 </div>
+                <button id="reset-zoom" class="ml-auto bg-blue-600 hover:bg-blue-700 text-white font-semibold py-1 px-3 rounded text-xs shadow-sm transition-colors">↺ 回復預設</button>
+                <span class="text-xs text-gray-400 basis-full md:basis-auto">滾輪/雙指縮放（移到軸上可單獨縮放該軸）· 拖曳平移</span>
             </div>
             <div id="chart-container" class="w-full flex-1 min-h-0 min-w-0 p-1"></div>
         </div>
@@ -254,7 +256,9 @@
             records: [],
             recordTargets: ['water'],
             maxV: 400,
-            maxM: 4000
+            maxM: 4000,
+            userZoomed: false,      // 使用者是否手動縮放/平移過圖表
+            _suppressRelayout: false // 程式重畫時忽略 relayout 事件
         };
 
         for (const key in materials) {
@@ -282,7 +286,8 @@
             clearBtn: document.getElementById('clear-btn'),
             recordTargetsList: document.getElementById('record-targets-list'),
             axisMaxV: document.getElementById('axis-max-v'),
-            axisMaxM: document.getElementById('axis-max-m')
+            axisMaxM: document.getElementById('axis-max-m'),
+            resetZoomBtn: document.getElementById('reset-zoom')
         };
 
         const canvasContainer = document.getElementById('canvas-container');
@@ -663,17 +668,49 @@
                 });
             });
 
+            const gd = document.getElementById('chart-container');
+
+            // 預設軸範圍；若使用者已手動縮放/平移，沿用目前視圖（調整數值時不打斷縮放）
+            let xRange = [0, state.maxV * 1.05];
+            let yRange = [0, state.maxM];
+            if (state.userZoomed && gd && gd._fullLayout && gd._fullLayout.xaxis && gd._fullLayout.xaxis.range) {
+                xRange = gd._fullLayout.xaxis.range.slice();
+                yRange = gd._fullLayout.yaxis.range.slice();
+            }
+
             const layout = {
                 margin: { t: 15, r: 20, l: 55, b: 48 },
-                xaxis: { title: '體積 Volume (cm³)', range: [0, state.maxV * 1.05], gridcolor: '#e5e7eb', automargin: true },
-                yaxis: { title: '質量 Mass (g)', range: [0, state.maxM], gridcolor: '#e5e7eb', automargin: true },
+                xaxis: { title: '體積 Volume (cm³)', range: xRange, gridcolor: '#e5e7eb', automargin: true },
+                yaxis: { title: '質量 Mass (g)', range: yRange, gridcolor: '#e5e7eb', automargin: true },
                 paper_bgcolor: 'rgba(0,0,0,0)',
                 plot_bgcolor: 'rgba(250,250,250,0.8)',
                 hovermode: 'closest',
+                dragmode: 'pan', // 拖曳＝平移（不再框選放大）
                 legend: { orientation: 'v', y: 1, x: 1.02 }
             };
 
-            Plotly.react('chart-container', chartData, layout, { displayModeBar: false, responsive: true });
+            const config = {
+                displayModeBar: false,
+                responsive: true,
+                scrollZoom: true // 滾輪 / 雙指縮放（游標在某軸上時只縮該軸）
+            };
+
+            state._suppressRelayout = true;
+            Plotly.react('chart-container', chartData, layout, config);
+            setTimeout(() => { state._suppressRelayout = false; }, 0);
+
+            // 綁定一次：記錄使用者是否手動縮放/平移
+            if (gd && !gd._mvRelayoutBound) {
+                gd._mvRelayoutBound = true;
+                gd.on('plotly_relayout', (ev) => {
+                    if (state._suppressRelayout || !ev) return;
+                    if (ev['xaxis.autorange'] || ev['yaxis.autorange']) { state.userZoomed = false; return; }
+                    if (('xaxis.range[0]' in ev) || ('yaxis.range[0]' in ev) ||
+                        ('xaxis.range' in ev) || ('yaxis.range' in ev)) {
+                        state.userZoomed = true;
+                    }
+                });
+            }
         }
 
         // Plotly 較重，滑桿拖曳時用 rAF 節流，避免每一格都重繪造成卡頓
@@ -821,13 +858,14 @@
             handleStateChange();
         });
 
-        els.deleteCheck.addEventListener('change', (e) => { state.deleteMode = e.target.checked; handleStateChange(); });
-        els.trendCheck.addEventListener('change', (e) => { state.showTrendline = e.target.checked; updateChart(); });
+        els.deleteCheck.addEventListener('change', (e) => { state.deleteMode = e.target.checked; handleStateChange(); });        els.trendCheck.addEventListener('change', (e) => { state.showTrendline = e.target.checked; updateChart(); });
         els.densityCheck.addEventListener('change', (e) => { state.showDensity = e.target.checked; updateChart(); });
+        els.resetZoomBtn.addEventListener('click', () => { state.userZoomed = false; updateChart(); });
 
         function applyAxisLimits() {
             state.maxV = parseFloat(els.axisMaxV.value) || 400;
             state.maxM = parseFloat(els.axisMaxM.value) || 4000;
+            state.userZoomed = false; // 改變軸上限時回到預設範圍
 
             els.vSlider.max = state.maxV;
             els.vInput.max = state.maxV;
