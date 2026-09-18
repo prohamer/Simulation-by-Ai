@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Let's Drive V5</title>
+    <title>Let's Drive</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -142,6 +142,12 @@
             padding: 15px; border-radius: 8px; border: 1px solid #444; color: white; z-index: 20;
             display: flex; flex-direction: column; gap: 10px; width: 220px;
         }
+        #settings-header { display: flex; justify-content: space-between; align-items: center; cursor: pointer; user-select: none; font-weight: bold; font-size: 14px; }
+        #settings-body { display: flex; flex-direction: column; gap: 10px; }
+        #settings-chevron { transition: transform 0.2s; font-size: 12px; }
+        #settings-panel.collapsed { width: auto; }
+        #settings-panel.collapsed #settings-body { display: none; }
+        #settings-panel.collapsed #settings-chevron { transform: rotate(180deg); }
         select, button.setting-btn { background: #333; color: white; border: 1px solid #555; padding: 5px; border-radius: 4px; transition: 0.3s; }
 
         #graphs-panel {
@@ -166,10 +172,29 @@
 
         @media (max-width: 768px) {
             #graphs-panel { display: none; }
-            .speed-text { font-size: 32px; }
-            #steering-container { width: 100px; height: 100px; }
-            .pedal { height: 90px; }
             .modal-grid { grid-template-columns: 1fr; grid-template-rows: repeat(4, 1fr); overflow-y: auto; }
+
+            #dashboard { padding: 6px; padding-bottom: calc(6px + env(safe-area-inset-bottom, 0px)); }
+
+            /* 方向盤 + 排檔 (左) */
+            #steering-container { width: 84px; height: 84px; margin-left: 4px; margin-bottom: 6px; }
+            .steering-labels { font-size: 10px; }
+            #gear-btn { margin-top: 5px; padding: 4px 10px; font-size: 12px; }
+
+            /* 儀表板 (中，自動壓縮填滿剩餘寬度) */
+            #instruments { flex: 1; min-width: 0; margin: 0 4px 6px; }
+            .gauge-container { width: 100%; padding: 6px 8px; margin-bottom: 6px; }
+            .speed-text { font-size: 30px; }
+            .speed-unit { font-size: 12px; }
+            .info-text { font-size: 12px; }
+            .grip-text { font-size: 11px; }
+
+            /* 踏板 + 定速 (右) */
+            #pedals-container { gap: 8px; margin-right: 4px; margin-bottom: 6px; }
+            .pedal { width: 46px; height: 90px; }
+            #brake-pedal { width: 56px; }
+            .pedal-label { font-size: 11px; }
+            #cruise-control { margin-top: 6px; padding: 5px 8px; font-size: 12px; }
         }
 
         /* 較矮的視窗(含 iPad 橫向)：加高儀表板並收緊間距，避免下方控制項被裁切 */
@@ -207,6 +232,11 @@
         </div>
 
         <div id="settings-panel">
+            <div id="settings-header">
+                <span>⚙ 設定 (Settings)</span>
+                <span id="settings-chevron">▲</span>
+            </div>
+            <div id="settings-body">
             <div>
                 <label for="scene-select" class="text-xs text-gray-300">場景 (Scene):</label>
                 <select id="scene-select" class="w-full mt-1 text-sm">
@@ -237,6 +267,7 @@
             <button id="reset-btn" class="setting-btn bg-gray-600 hover:bg-gray-500 font-bold">重置場景 (Reset)</button>
             <button id="record-btn" class="setting-btn bg-blue-600 hover:bg-blue-500 font-bold text-sm">開始紀錄 (Record 30s)</button>
             <button id="data-btn" class="setting-btn bg-purple-600 hover:bg-purple-500 font-bold text-sm">駕駛數據 (Data View)</button>
+            </div>
         </div>
 
         <div id="dashboard">
@@ -797,6 +828,10 @@
 
         resetBtn.addEventListener('click', resetSimulation);
 
+        document.getElementById('settings-header').addEventListener('click', () => {
+            document.getElementById('settings-panel').classList.toggle('collapsed');
+        });
+
         function resetSimulation() {
             currentState.hasStarted = false;
             currentState.position = { x: 0, y: 0.5, z: 0 };
@@ -1010,14 +1045,14 @@
             xtChart.update(); vtChart.update(); atChart.update();
 
             if (isRecording && currentRecord) {
-                recordTimer += SAMPLE_INTERVAL;
                 if (recordTimer <= MAX_RECORD_TIME) {
-                    currentRecord.data.labels.push(tLabel);
+                    currentRecord.data.labels.push(recordTimer.toFixed(1)); // 時間軸從按下記錄起算 (0 開始)，多筆可對齊
                     currentRecord.data.x.push(currentState.distanceTraveled);
                     currentRecord.data.v.push(currentState.velocity);
                     currentRecord.data.a.push(currentState.acceleration);
                     currentRecord.data.f.push(currentState.fuelConsumptionRate);
                     recordBtn.innerText = `⏹ 停止 (${recordTimer.toFixed(1)}s / 30s)`;
+                    recordTimer += SAMPLE_INTERVAL;
                 } else {
                     finishRecording();
                 }
