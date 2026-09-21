@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-    <title>小恐龍數線任務</title>
+    <title>dinosaur_mission</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Noto+Sans+TC:wght@400;700;900&display=swap');
@@ -11,10 +11,26 @@
         :root { box-sizing: border-box; }
         *, *::before, *::after { box-sizing: inherit; }
 
+        /* 全面禁止文字選取 */
+        * {
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
+        }
+        /* 停用雙擊放大 (保留無障礙的雙指縮放) */
+        html, body, button, input, canvas, a {
+            touch-action: manipulation;
+        }
+        /* 自訂數值輸入框仍需可輸入/選取 */
+        #custom-value {
+            -webkit-user-select: text;
+            user-select: text;
+        }
+
         body {
             font-family: 'Noto Sans TC', sans-serif;
             background-color: #f7f7f7;
-            user-select: none; /* 防止連按按鈕時選取文字 */
             -webkit-tap-highlight-color: transparent;
         }
 
@@ -78,6 +94,17 @@
         /* 硬邊陰影，孔洞機台感 */
         #game-container {
             box-shadow: 8px 8px 0 rgba(31,41,55,0.9);
+            /* 讓整體高度貼齊視窗，iPad 等裝置一次看完不需捲動 */
+            height: calc(100vh - 2rem);
+            height: calc(100dvh - 2rem);
+            max-height: 820px;
+        }
+        /* 畫布絕對填滿其容器，高度改由 flex 分配 */
+        #gameCanvas {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
         }
         /* 模式選單按鈕 */
         .mode-btn {
@@ -90,7 +117,7 @@
         }
     </style>
 </head>
-<body class="min-h-screen flex items-center justify-center p-4">
+<body class="min-h-[100dvh] flex items-center justify-center p-4">
 
     <div id="game-container" class="w-full max-w-4xl rounded-2xl overflow-hidden flex flex-col border-4 border-gray-800 relative">
 
@@ -134,17 +161,27 @@
 
         <!-- 任務提示區 -->
         <div class="bg-yellow-100 p-4 border-b-4 border-gray-200">
-            <h2 class="text-lg font-bold text-gray-700 mb-2">任務指示：</h2>
-            <div class="flex flex-wrap gap-2 items-center text-lg">
-                <span>從起點出發，依序移動：</span>
-                <div id="mission-steps" class="flex flex-wrap gap-2 font-bold text-blue-600">
-                    <!-- 任務步驟將由 JS 生成 -->
+            <div class="flex flex-col md:flex-row md:items-center gap-3">
+                <div class="flex-1 min-w-0">
+                    <h2 class="text-lg font-bold text-gray-700 mb-2">任務指示：</h2>
+                    <div class="flex flex-wrap gap-2 items-center text-lg">
+                        <span>從起點出發，依序移動：</span>
+                        <div id="mission-steps" class="flex flex-wrap gap-2 font-bold text-blue-600">
+                            <!-- 任務步驟將由 JS 生成 -->
+                        </div>
+                    </div>
+                </div>
+                <div class="shrink-0 mx-auto md:mx-0">
+                    <div class="text-xs font-bold text-gray-500 mb-1 text-center">位置–時間圖 (x–t)</div>
+                    <div class="relative bg-white rounded-lg border-2 border-gray-300 w-[220px] max-w-full" style="height: 104px;">
+                        <canvas id="xtCanvas" class="block w-full h-full"></canvas>
+                    </div>
                 </div>
             </div>
         </div>
 
         <!-- 遊戲主畫面 (Canvas) -->
-        <div class="relative w-full" style="height: 320px;">
+        <div class="relative w-full flex-1 min-h-0">
             <canvas id="gameCanvas"></canvas>
 
             <!-- 回饋訊息疊加層 -->
@@ -228,11 +265,12 @@
         <!-- 成績單畫面 -->
         <div id="results-screen" class="absolute inset-0 z-30 bg-gray-900/95 hidden flex-col items-center justify-center text-white px-6 text-center">
             <h2 id="results-title" class="text-3xl font-bold mb-4"></h2>
-            <div class="bg-gray-800 rounded-xl border-4 border-gray-600 p-5 mb-6 space-y-3 w-full max-w-[260px]">
+            <div class="bg-gray-800 rounded-xl border-4 border-gray-600 p-5 mb-3 space-y-3 w-full max-w-[260px]">
                 <div class="flex justify-between items-center gap-6"><span>完成關數</span><span id="r-score" class="pixel-font text-green-400"></span></div>
                 <div class="flex justify-between items-center gap-6"><span>累計失誤</span><span id="r-errors" class="pixel-font text-red-400"></span></div>
                 <div class="flex justify-between items-center gap-6"><span id="r-time-label">用時</span><span id="r-time" class="pixel-font text-yellow-300"></span></div>
             </div>
+            <div id="r-datetime" class="text-cyan-300 text-sm mb-6"></div>
             <div class="flex gap-3">
                 <button id="r-again" class="bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-6 rounded-xl border-4 border-green-700 game-btn">再玩一次</button>
                 <button id="r-menu" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-xl border-4 border-blue-700 game-btn">選擇模式</button>
@@ -274,6 +312,8 @@
 
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
+        const xtCanvas = document.getElementById('xtCanvas');
+        const xtCtx = xtCanvas.getContext('2d');
 
         // UI 元素
         const missionStepsEl = document.getElementById('mission-steps');
@@ -303,6 +343,7 @@
         const rErrors = document.getElementById('r-errors');
         const rTimeLabel = document.getElementById('r-time-label');
         const rTime = document.getElementById('r-time');
+        const rDateTime = document.getElementById('r-datetime');
         const rAgainBtn = document.getElementById('r-again');
         const rMenuBtn = document.getElementById('r-menu');
 
@@ -374,6 +415,9 @@
             failCount: 0,           // 當前步驟答錯次數 (用於漸進式提示)
             cssWidth: 0,            // Canvas 的 CSS 寬 (非實體像素)
             cssHeight: 0,
+            xtData: [],             // x–t 圖的位置歷程 (t 為陣列索引)
+            xtW: 0,
+            xtH: 0,
             muted: false
         };
 
@@ -505,6 +549,11 @@
 
         // ---------- 時鐘 & 遊玩計時器 ----------
         const WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六'];
+        function formatDateTime(d) {
+            return `${d.getFullYear()}/${pad2(d.getMonth() + 1)}/${pad2(d.getDate())}` +
+                   ` (週${WEEKDAYS[d.getDay()]}) ` +
+                   `${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
+        }
         function fmtClock(totalSec) {
             const hh = Math.floor(totalSec / 3600);
             const mm = pad2(Math.floor((totalSec % 3600) / 60));
@@ -518,10 +567,7 @@
         }
         function updateClocks() {
             const now = new Date();
-            clockEl.textContent =
-                `${now.getFullYear()}/${pad2(now.getMonth() + 1)}/${pad2(now.getDate())}` +
-                ` (週${WEEKDAYS[now.getDay()]}) ` +
-                `${pad2(now.getHours())}:${pad2(now.getMinutes())}:${pad2(now.getSeconds())}`;
+            clockEl.textContent = formatDateTime(now);
 
             if (state.playStartTime === null || state.gameOver) return;
 
@@ -764,6 +810,101 @@
             ctx.closePath();
         }
 
+        // ---------- x–t 位置時間圖 ----------
+        function layoutXT() {
+            const wrap = xtCanvas.parentElement;
+            const dpr = window.devicePixelRatio || 1;
+            const w = wrap.clientWidth, h = wrap.clientHeight;
+            if (!w || !h) return;
+            xtCanvas.width = Math.round(w * dpr);
+            xtCanvas.height = Math.round(h * dpr);
+            xtCanvas.style.width = w + 'px';
+            xtCanvas.style.height = h + 'px';
+            xtCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            xtCtx.imageSmoothingEnabled = false;
+            state.xtW = w;
+            state.xtH = h;
+            drawXT();
+        }
+
+        function xtReset() {
+            state.xtData = [valueAt(state.currentIndex)];
+            drawXT();
+        }
+        function xtPush() {
+            state.xtData.push(valueAt(state.currentIndex));
+            drawXT();
+        }
+
+        function drawXT() {
+            const W = state.xtW, H = state.xtH;
+            if (!W || !H) return;
+            const c = xtCtx;
+            c.clearRect(0, 0, W, H);
+
+            const mL = 30, mR = 10, mT = 8, mB = 16;
+            const plotW = W - mL - mR, plotH = H - mT - mB;
+
+            const xMax = valueAt(GAME_CONFIG.numTicks - 1);
+            const xMin = valueAt(0);
+            const data = state.xtData || [];
+            const tMax = Math.max(6, data.length - 1);
+
+            const tx = (t) => mL + (t / tMax) * plotW;
+            const xy = (x) => mT + (1 - (x - xMin) / (xMax - xMin)) * plotH;
+
+            // 座標軸 (x 垂直、t 水平)
+            c.strokeStyle = '#94a3b8';
+            c.lineWidth = 1;
+            c.beginPath();
+            c.moveTo(mL, mT);
+            c.lineTo(mL, mT + plotH);
+            c.lineTo(mL + plotW, mT + plotH);
+            c.stroke();
+
+            // x = 0 零線
+            const y0 = xy(0);
+            c.strokeStyle = '#e2e8f0';
+            c.beginPath();
+            c.moveTo(mL, y0);
+            c.lineTo(mL + plotW, y0);
+            c.stroke();
+
+            // 軸標籤
+            c.fillStyle = '#94a3b8';
+            c.font = '9px "Noto Sans TC"';
+            c.textAlign = 'right';
+            c.textBaseline = 'middle';
+            c.fillText(String(xMax), mL - 3, xy(xMax));
+            c.fillText('0', mL - 3, y0);
+            c.fillText(String(xMin), mL - 3, xy(xMin));
+            c.textBaseline = 'top';
+            c.textAlign = 'left';
+            c.fillText('t=0', mL, mT + plotH + 3);
+            c.textAlign = 'right';
+            c.fillText('t=' + tMax, mL + plotW, mT + plotH + 3);
+
+            // 軌跡線 + 資料點
+            if (data.length > 0) {
+                c.strokeStyle = '#2563eb';
+                c.lineWidth = 2;
+                c.beginPath();
+                data.forEach((x, t) => {
+                    const px = tx(t), py = xy(x);
+                    if (t === 0) c.moveTo(px, py); else c.lineTo(px, py);
+                });
+                c.stroke();
+
+                c.fillStyle = '#2563eb';
+                data.forEach((x, t) => c.fillRect(tx(t) - 1.5, xy(x) - 1.5, 3, 3));
+
+                // 目前(最後)位置：綠色較大點
+                const lastT = data.length - 1;
+                c.fillStyle = '#059669';
+                c.fillRect(tx(lastT) - 3, xy(data[lastT]) - 3, 6, 6);
+            }
+        }
+
         // ---------- 模式 / 回合管理 ----------
         function updateScoreDisplay() {
             const target = MODES[state.mode].target;
@@ -887,6 +1028,7 @@
             resultsTitle.innerText = reason === 'timeup' ? '⏰ 時間到！' : '🏆 全部過關！';
             rScore.textContent = state.score;
             rErrors.textContent = state.totalErrors;
+            rDateTime.textContent = '完成於 ' + formatDateTime(new Date());
 
             if (MODES[state.mode].timeLimit !== null) {
                 rTimeLabel.textContent = '挑戰時間';
@@ -947,7 +1089,9 @@
             updateInfo();
             hideFeedback();
             enableControls();
+            state.xtData = [valueAt(state.currentIndex)];
             resizeCanvas();
+            layoutXT();
         }
 
         function renderMissions() {
@@ -1002,6 +1146,7 @@
             state.currentIndex = newIndex;
             updateInfo();
             updateMoveButtons();
+            xtPush();
             animateTo(newIndex);
         }
 
@@ -1120,6 +1265,7 @@
             hideFeedback();
             state.currentIndex = state.stepStartIndex;
             updateInfo();
+            xtPush();
             enableControls();
             animateTo(state.stepStartIndex);
         }
@@ -1219,13 +1365,14 @@
         });
 
         // 用 ResizeObserver 取代 setTimeout，處理初次載入與容器變化
-        const ro = new ResizeObserver(() => resizeCanvas());
+        const ro = new ResizeObserver(() => { resizeCanvas(); layoutXT(); });
         ro.observe(canvas.parentElement);
-        window.addEventListener('resize', resizeCanvas); // 備援 (含 DPR 變化)
+        new ResizeObserver(() => layoutXT()).observe(xtCanvas.parentElement);
+        window.addEventListener('resize', () => { resizeCanvas(); layoutXT(); }); // 備援 (含 DPR 變化)
 
         // 字型載入完成後重繪，避免量測寬度用到 fallback 字型
         if (document.fonts && document.fonts.ready) {
-            document.fonts.ready.then(() => drawScene());
+            document.fonts.ready.then(() => { drawScene(); drawXT(); });
         }
 
         // 啟動：預設無盡模式
