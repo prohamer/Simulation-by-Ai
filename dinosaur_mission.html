@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-    <title>dinosaur_mission</title>
+    <title>dinosaur_missionV3</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Noto+Sans+TC:wght@400;700;900&display=swap');
@@ -415,7 +415,8 @@
             failCount: 0,           // 當前步驟答錯次數 (用於漸進式提示)
             cssWidth: 0,            // Canvas 的 CSS 寬 (非實體像素)
             cssHeight: 0,
-            xtData: [],             // x–t 圖的位置歷程 (t 為陣列索引)
+            xtSamples: [],          // x–t 圖樣本 {t: 秒, x: 位置值}
+            xtStart: 0,             // 本題 x–t 計時起點 (performance.now)
             xtW: 0,
             xtH: 0,
             muted: false
@@ -828,11 +829,20 @@
         }
 
         function xtReset() {
-            state.xtData = [valueAt(state.currentIndex)];
+            state.xtStart = performance.now();
+            state.xtSamples = [{ t: 0, x: valueAt(state.currentIndex) }];
             drawXT();
         }
-        function xtPush() {
-            state.xtData.push(valueAt(state.currentIndex));
+        // 記錄一次移動：先水平保持在舊位置到「現在」，再於移動期間升/降到新位置
+        function xtRecordMove() {
+            if (!state.xtStart) return;
+            const now = (performance.now() - state.xtStart) / 1000;
+            const samples = state.xtSamples;
+            const xOld = samples.length ? samples[samples.length - 1].x : valueAt(state.currentIndex);
+            const xNew = valueAt(state.currentIndex);
+            const dur = LAYOUT.moveDuration / 1000;
+            samples.push({ t: now, x: xOld });        // 靜止段的結束
+            samples.push({ t: now + dur, x: xNew });  // 移動段(斜率=速度)
             drawXT();
         }
 
@@ -842,13 +852,15 @@
             const c = xtCtx;
             c.clearRect(0, 0, W, H);
 
-            const mL = 30, mR = 10, mT = 8, mB = 16;
+            const mL = 30, mR = 12, mT = 8, mB = 16;
             const plotW = W - mL - mR, plotH = H - mT - mB;
 
             const xMax = valueAt(GAME_CONFIG.numTicks - 1);
             const xMin = valueAt(0);
-            const data = state.xtData || [];
-            const tMax = Math.max(6, data.length - 1);
+            const samples = state.xtSamples || [];
+            const nowSec = state.xtStart ? (performance.now() - state.xtStart) / 1000 : 0;
+            const lastT = samples.length ? samples[samples.length - 1].t : 0;
+            const tMax = Math.max(5, Math.ceil(Math.max(nowSec, lastT)));
 
             const tx = (t) => mL + (t / tMax) * plotW;
             const xy = (x) => mT + (1 - (x - xMin) / (xMax - xMin)) * plotH;
@@ -880,28 +892,34 @@
             c.fillText(String(xMin), mL - 3, xy(xMin));
             c.textBaseline = 'top';
             c.textAlign = 'left';
-            c.fillText('t=0', mL, mT + plotH + 3);
+            c.fillText('0s', mL, mT + plotH + 3);
             c.textAlign = 'right';
-            c.fillText('t=' + tMax, mL + plotW, mT + plotH + 3);
+            c.fillText(tMax + 's', mL + plotW, mT + plotH + 3);
 
-            // 軌跡線 + 資料點
-            if (data.length > 0) {
+            // 繪圖點：樣本 + 即時延伸到「現在」的水平段
+            const pts = samples.slice();
+            if (samples.length && nowSec > lastT) {
+                pts.push({ t: nowSec, x: samples[samples.length - 1].x });
+            }
+
+            if (pts.length > 0) {
                 c.strokeStyle = '#2563eb';
                 c.lineWidth = 2;
                 c.beginPath();
-                data.forEach((x, t) => {
-                    const px = tx(t), py = xy(x);
-                    if (t === 0) c.moveTo(px, py); else c.lineTo(px, py);
+                pts.forEach((p, i) => {
+                    const px = tx(p.t), py = xy(p.x);
+                    if (i === 0) c.moveTo(px, py); else c.lineTo(px, py);
                 });
                 c.stroke();
 
+                // 樣本點(轉折處)標記
                 c.fillStyle = '#2563eb';
-                data.forEach((x, t) => c.fillRect(tx(t) - 1.5, xy(x) - 1.5, 3, 3));
+                samples.forEach((p) => c.fillRect(tx(p.t) - 1.5, xy(p.x) - 1.5, 3, 3));
 
-                // 目前(最後)位置：綠色較大點
-                const lastT = data.length - 1;
+                // 目前位置：綠色較大點
+                const cur = pts[pts.length - 1];
                 c.fillStyle = '#059669';
-                c.fillRect(tx(lastT) - 3, xy(data[lastT]) - 3, 6, 6);
+                c.fillRect(tx(cur.t) - 3, xy(cur.x) - 3, 6, 6);
             }
         }
 
@@ -1089,8 +1107,8 @@
             updateInfo();
             hideFeedback();
             enableControls();
-            state.xtData = [valueAt(state.currentIndex)];
             resizeCanvas();
+            xtReset();
             layoutXT();
         }
 
@@ -1146,7 +1164,7 @@
             state.currentIndex = newIndex;
             updateInfo();
             updateMoveButtons();
-            xtPush();
+            xtRecordMove();
             animateTo(newIndex);
         }
 
@@ -1265,7 +1283,7 @@
             hideFeedback();
             state.currentIndex = state.stepStartIndex;
             updateInfo();
-            xtPush();
+            xtRecordMove();
             enableControls();
             animateTo(state.stepStartIndex);
         }
@@ -1369,6 +1387,9 @@
         ro.observe(canvas.parentElement);
         new ResizeObserver(() => layoutXT()).observe(xtCanvas.parentElement);
         window.addEventListener('resize', () => { resizeCanvas(); layoutXT(); }); // 備援 (含 DPR 變化)
+
+        // 讓靜止時的水平線隨真實時間持續延伸
+        setInterval(() => { if (!playBlocked()) drawXT(); }, 150);
 
         // 字型載入完成後重繪，避免量測寬度用到 fallback 字型
         if (document.fonts && document.fonts.ready) {
