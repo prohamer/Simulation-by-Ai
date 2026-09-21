@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>trolley_ticker V13</title>
+  <title>trolley_tickerV14</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7"></script>
   <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js"></script>
@@ -244,14 +244,6 @@
           <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
           主 3D 物理動態模擬畫布 (Three.js WebGL 3D Lab)
         </h2>
-
-        <div class="flex items-center gap-1.5 text-xs">
-          <span class="text-slate-400 mr-1">🎥 視角:</span>
-          <button id="camDefault" class="px-2.5 py-1 bg-emerald-600/30 border border-emerald-500/50 text-emerald-300 rounded hover:bg-emerald-600/50 transition font-semibold">自由 3D</button>
-          <button id="camSide" class="px-2.5 py-1 bg-slate-800 border border-slate-700 text-slate-300 rounded hover:bg-slate-700 transition">側視特寫</button>
-          <button id="camFollow" class="px-2.5 py-1 bg-slate-800 border border-slate-700 text-slate-300 rounded hover:bg-slate-700 transition">追蹤滑車</button>
-          <button id="camTop" class="px-2.5 py-1 bg-slate-800 border border-slate-700 text-slate-300 rounded hover:bg-slate-700 transition">俯視概覽</button>
-        </div>
       </div>
 
       <!-- 場景背景色控制 -->
@@ -269,9 +261,26 @@
 
       <div id="canvasViewportWrapper" class="w-full overflow-hidden rounded-xl border border-slate-800 bg-slate-950 relative transition-transform duration-300">
         <div id="webglCanvas"></div>
-        <div class="absolute bottom-3 left-3 bg-slate-900/80 backdrop-blur px-3 py-1.5 rounded-lg border border-slate-800 text-[11px] text-slate-400 flex items-center gap-2">
-          <span id="camHint">💡 自由 3D 視角：左鍵旋轉 / 右鍵平移 / 滾輪縮放</span>
-          <span id="mirrorActiveTag" class="hidden text-amber-400 font-bold ml-2">🪞 鏡像模式啟用中</span>
+
+        <!-- 頂部視角提示（不擋下方畫面） -->
+        <div class="absolute top-2 left-2 right-2 flex pointer-events-none">
+          <div class="bg-slate-900/70 backdrop-blur px-2.5 py-1 rounded-lg border border-slate-700/60 text-[11px] text-slate-300 max-w-full">
+            <span id="camHint">💡 自由 3D 視角：左鍵旋轉 / 右鍵平移 / 滾輪縮放</span>
+            <span id="mirrorActiveTag" class="hidden text-amber-400 font-bold ml-2">🪞 鏡像模式啟用中</span>
+          </div>
+        </div>
+
+        <!-- 底部半透明視角與控制圖示列 -->
+        <div class="absolute bottom-2 left-2 right-2 flex flex-wrap items-center justify-center gap-1.5 pointer-events-none">
+          <button data-view="default" class="view-btn pointer-events-auto w-9 h-9 rounded-lg bg-slate-900/70 backdrop-blur border border-slate-700 text-slate-200 hover:bg-slate-800/90 active:scale-95 transition flex items-center justify-center text-base" title="自由 3D 視角">🧭</button>
+          <button data-view="tilt" class="view-btn pointer-events-auto w-9 h-9 rounded-lg bg-slate-900/70 backdrop-blur border border-slate-700 text-slate-200 hover:bg-slate-800/90 active:scale-95 transition flex items-center justify-center text-base" title="斜視（同時觀察紙帶與滑車）">📐</button>
+          <button data-view="side" class="view-btn pointer-events-auto w-9 h-9 rounded-lg bg-slate-900/70 backdrop-blur border border-slate-700 text-slate-200 hover:bg-slate-800/90 active:scale-95 transition flex items-center justify-center text-base" title="側視特寫">🎬</button>
+          <button data-view="follow" class="view-btn pointer-events-auto w-9 h-9 rounded-lg bg-slate-900/70 backdrop-blur border border-slate-700 text-slate-200 hover:bg-slate-800/90 active:scale-95 transition flex items-center justify-center text-base" title="追蹤滑車">🎯</button>
+          <button data-view="top" class="view-btn pointer-events-auto w-9 h-9 rounded-lg bg-slate-900/70 backdrop-blur border border-slate-700 text-slate-200 hover:bg-slate-800/90 active:scale-95 transition flex items-center justify-center text-base" title="俯視概覽">🛰️</button>
+          <span class="pointer-events-none w-px h-6 bg-slate-500/50 mx-0.5"></span>
+          <button id="btnViewLock" class="pointer-events-auto w-9 h-9 rounded-lg bg-slate-900/70 backdrop-blur border border-slate-700 text-slate-200 hover:bg-slate-800/90 active:scale-95 transition flex items-center justify-center" title="鎖定視角（鎖定後畫面不動）"></button>
+          <button id="btnViewReset" class="pointer-events-auto w-9 h-9 rounded-lg bg-slate-900/70 backdrop-blur border border-slate-700 text-slate-200 hover:bg-slate-800/90 active:scale-95 transition flex items-center justify-center" title="復原為預設視角"></button>
+          <button id="btnViewPan" class="pointer-events-auto w-9 h-9 rounded-lg bg-slate-900/70 backdrop-blur border border-slate-700 text-slate-200 hover:bg-slate-800/90 active:scale-95 transition flex items-center justify-center" title="平移模式（單指/左鍵拖曳平移）"></button>
         </div>
       </div>
     </section>
@@ -727,6 +736,8 @@
     let dots3DGroup, dot3DMeshes = [];
 
     let cameraMode = 'default';
+    let viewLocked = false; // 視角鎖定
+    let panMode = false;    // 平移模式（左鍵/單指拖曳＝平移）
     const TICKER_NEEDLE_X = TRACK_START_X - 0.04;
 
     class HelixCurve extends THREE.Curve {
@@ -1143,6 +1154,7 @@
     // 修正 3：相機模式改良。側視 / 追蹤僅平移追隨滑車 x，保留使用者滑鼠旋轉；
     // 自由 3D 與俯視為靜態，於按鈕點擊時設定一次，之後可自由旋轉。
     function updateCameraPosition() {
+      if (viewLocked) { controls.update(); return; } // 鎖定時不移動鏡頭
       if (cameraMode === 'side' || cameraMode === 'follow') {
         const tx = carGroup.position.x + (cameraMode === 'follow' ? 0.3 : 0);
         const dx = tx - controls.target.x;
@@ -1159,6 +1171,11 @@
         camera.position.set(-0.2, TABLE_Y + 1.4, 3.2);
         controls.target.set(0, TABLE_Y + 0.1, 0);
         camHint.textContent = '💡 自由 3D 視角：左鍵旋轉 / 右鍵平移 / 滾輪縮放';
+      } else if (mode === 'tilt') {
+        // 斜視約 40°：從前上方俯望軌道，同時清楚看到紙帶與滑車
+        camera.position.set(-0.05, TABLE_Y + 1.35, 1.75);
+        controls.target.set(-0.05, TABLE_Y + 0.02, 0);
+        camHint.textContent = '💡 斜視：約 40° 俯望，同時觀察紙帶與滑車';
       } else if (mode === 'side') {
         camera.position.set(carGroup.position.x, TABLE_Y + 0.4, 1.5);
         controls.target.set(carGroup.position.x, TABLE_Y + 0.1, 0);
@@ -1233,7 +1250,7 @@
       if (!handGrabbing) return;
       handGrabbing = false;
       isRunning = false;
-      controls.enabled = true;
+      controls.enabled = !viewLocked;
       if (carBodyMat) { carBodyMat.emissive = new THREE.Color(0x000000); carBodyMat.emissiveIntensity = 0; }
       startText.textContent = '手拉完成（可按重置再來）';
       startIcon.textContent = '✋';
@@ -2764,16 +2781,74 @@
       resetSim();
     });
 
-    const camButtons = { camDefault: 'default', camSide: 'side', camFollow: 'follow', camTop: 'top' };
-    Object.keys(camButtons).forEach(btnId => {
-      document.getElementById(btnId).addEventListener('click', (e) => {
-        cameraMode = camButtons[btnId];
-        Object.keys(camButtons).forEach(b => {
-          document.getElementById(b).className = 'px-2.5 py-1 bg-slate-800 border border-slate-700 text-slate-300 rounded hover:bg-slate-700 transition';
-        });
-        e.target.className = 'px-2.5 py-1 bg-emerald-600/40 border border-emerald-500/60 text-emerald-300 rounded transition font-semibold';
-        applyCameraPreset(cameraMode); // 只在切換時定位一次
+    // === 底部視角圖示列：視角切換 ===
+    const viewBtns = Array.from(document.querySelectorAll('.view-btn'));
+    function highlightViewBtn(mode) {
+      viewBtns.forEach(b => {
+        const on = b.dataset.view === mode;
+        b.classList.toggle('ring-2', on);
+        b.classList.toggle('ring-emerald-500', on);
+        b.classList.toggle('text-emerald-300', on);
+        b.classList.toggle('text-slate-200', !on);
       });
+    }
+    viewBtns.forEach(b => b.addEventListener('click', () => {
+      cameraMode = b.dataset.view;
+      applyCameraPreset(cameraMode);
+      highlightViewBtn(cameraMode);
+    }));
+    highlightViewBtn('default');
+
+    // === 鎖定 / 復原 / 平移 三個圖示鈕 ===
+    const LOCK_OPEN_SVG = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.9-1"/></svg>';
+    const LOCK_CLOSED_SVG = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>';
+    const RESET_SVG = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>';
+    const MOVE_SVG = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 4 12 1 15 4"/><polyline points="9 20 12 23 15 20"/><polyline points="4 9 1 12 4 15"/><polyline points="20 9 23 12 20 15"/><line x1="12" y1="1" x2="12" y2="23"/><line x1="1" y1="12" x2="23" y2="12"/></svg>';
+
+    const btnViewLock = document.getElementById('btnViewLock');
+    const btnViewReset = document.getElementById('btnViewReset');
+    const btnViewPan = document.getElementById('btnViewPan');
+    btnViewLock.innerHTML = LOCK_OPEN_SVG;
+    btnViewReset.innerHTML = RESET_SVG;
+    btnViewPan.innerHTML = MOVE_SVG;
+
+    function setViewActiveStyle(btn, on) {
+      btn.classList.toggle('ring-2', on);
+      btn.classList.toggle('ring-amber-500', on);
+      btn.classList.toggle('text-amber-300', on);
+      btn.classList.toggle('text-slate-200', !on);
+    }
+
+    btnViewLock.addEventListener('click', () => {
+      viewLocked = !viewLocked;
+      controls.enabled = !viewLocked && !handGrabbing;
+      btnViewLock.innerHTML = viewLocked ? LOCK_CLOSED_SVG : LOCK_OPEN_SVG;
+      setViewActiveStyle(btnViewLock, viewLocked);
+      camHint.textContent = viewLocked ? '🔒 視角已鎖定：畫面固定不動（再按一次解鎖）' : '💡 視角已解鎖，可自由操作';
+    });
+
+    btnViewReset.addEventListener('click', () => {
+      cameraMode = 'default';
+      applyCameraPreset('default');
+      highlightViewBtn('default');
+      // 復原時解除鎖定，回到可操作狀態
+      if (viewLocked) { viewLocked = false; controls.enabled = !handGrabbing; btnViewLock.innerHTML = LOCK_OPEN_SVG; setViewActiveStyle(btnViewLock, false); }
+    });
+
+    function applyPanMode() {
+      if (panMode) {
+        controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE };
+        controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_PAN };
+        camHint.textContent = '✥ 平移模式：左鍵/單指拖曳＝平移（再按一次切回旋轉）';
+      } else {
+        controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
+        controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
+      }
+    }
+    btnViewPan.addEventListener('click', () => {
+      panMode = !panMode;
+      applyPanMode();
+      setViewActiveStyle(btnViewPan, panMode);
     });
 
     window.addEventListener('load', () => {
