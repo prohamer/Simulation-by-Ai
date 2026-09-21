@@ -1,0 +1,1238 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>小恐龍數線任務</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Noto+Sans+TC:wght@400;700;900&display=swap');
+
+        :root { box-sizing: border-box; }
+        *, *::before, *::after { box-sizing: inherit; }
+
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+            background-color: #f7f7f7;
+            user-select: none; /* 防止連按按鈕時選取文字 */
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .pixel-font {
+            font-family: 'Press Start 2P', cursive;
+        }
+
+        /* 遊戲主要容器 */
+        #game-container {
+            background-color: #fff;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+        }
+
+        /* Canvas 樣式 */
+        canvas {
+            display: block;
+            width: 100%;
+            background-color: #f0f4f8; /* 淺藍色天空感 */
+            border-bottom: 4px solid #535353; /* 地板線 */
+            touch-action: manipulation;
+        }
+
+        /* 按鈕樣式增強 */
+        .game-btn {
+            transition: transform 0.08s, box-shadow 0.08s;
+            box-shadow: 0 4px 0 #000;
+        }
+        .game-btn:active:not(:disabled) {
+            transform: translateY(4px);
+            box-shadow: 0 0 0 #000;
+        }
+        .game-btn:disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
+            box-shadow: 0 4px 0 #ccc;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .game-btn { transition: none; }
+        }
+
+        /* 回饋文字加白色光暈，讓半透明背景下仍清楚可讀 */
+        #feedback-title, #feedback-text {
+            text-shadow: 0 1px 2px rgba(255,255,255,0.95),
+                         0 0 10px rgba(255,255,255,0.9);
+        }
+
+        /* ---------- 像素風強化 ---------- */
+        canvas {
+            image-rendering: pixelated;
+            image-rendering: crisp-edges;
+        }
+        /* 背景像素格點 */
+        body {
+            background-color: #dfe7ec;
+            background-image:
+                linear-gradient(rgba(83,83,83,0.06) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(83,83,83,0.06) 1px, transparent 1px);
+            background-size: 8px 8px;
+        }
+        /* 硬邊陰影，孔洞機台感 */
+        #game-container {
+            box-shadow: 8px 8px 0 rgba(31,41,55,0.9);
+        }
+        /* 模式選單按鈕 */
+        .mode-btn {
+            transition: transform 0.08s, box-shadow 0.08s;
+            box-shadow: 0 5px 0 rgba(0,0,0,0.6);
+        }
+        .mode-btn:active {
+            transform: translateY(5px);
+            box-shadow: 0 0 0 rgba(0,0,0,0.6);
+        }
+    </style>
+</head>
+<body class="min-h-screen flex items-center justify-center p-4">
+
+    <div id="game-container" class="w-full max-w-4xl rounded-2xl overflow-hidden flex flex-col border-4 border-gray-800 relative">
+
+        <!-- 頂部標題與狀態區 -->
+        <div class="bg-gray-800 text-white p-4 flex justify-between items-center gap-3">
+            <h1 class="text-lg md:text-2xl font-bold flex items-center gap-2 min-w-0">
+                <span class="pixel-font text-green-400 shrink-0">T-REX</span>
+                <span class="truncate">數線位移任務</span>
+            </h1>
+            <div class="flex items-center gap-2 shrink-0">
+                <button id="mode-btn" title="選擇模式"
+                    class="text-sm font-bold px-3 h-10 rounded-lg bg-gray-700 hover:bg-gray-600 flex items-center gap-1">☰ 模式</button>
+                <button id="mute-btn" aria-label="音效開關" title="音效開關"
+                    class="text-2xl leading-none w-10 h-10 rounded-lg bg-gray-700 hover:bg-gray-600 flex items-center justify-center">🔊</button>
+            </div>
+        </div>
+
+        <!-- Arcade HUD 狀態列 -->
+        <div class="bg-gray-900 text-white px-3 py-2 flex flex-wrap justify-center items-center gap-x-5 gap-y-2 text-sm border-b-2 border-gray-700">
+            <div class="flex items-center gap-1.5">
+                <span>🎮</span>
+                <span id="mode-display" class="text-fuchsia-300 font-bold">無盡</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+                <span>🗓️</span>
+                <span id="clock" class="text-cyan-300 tabular-nums font-bold">--</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+                <span>⏱️</span><span class="text-gray-400">遊玩</span>
+                <span id="play-timer" class="pixel-font text-yellow-300 text-xs">00:00</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+                <span>✅</span><span class="text-gray-400">完成</span>
+                <span id="score" class="pixel-font text-green-400 text-xs">0</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+                <span>❌</span><span class="text-gray-400">失誤</span>
+                <span id="errors" class="pixel-font text-red-400 text-xs">0</span>
+            </div>
+        </div>
+
+        <!-- 任務提示區 -->
+        <div class="bg-yellow-100 p-4 border-b-4 border-gray-200">
+            <h2 class="text-lg font-bold text-gray-700 mb-2">任務指示：</h2>
+            <div class="flex flex-wrap gap-2 items-center text-lg">
+                <span>從起點出發，依序移動：</span>
+                <div id="mission-steps" class="flex flex-wrap gap-2 font-bold text-blue-600">
+                    <!-- 任務步驟將由 JS 生成 -->
+                </div>
+            </div>
+        </div>
+
+        <!-- 遊戲主畫面 (Canvas) -->
+        <div class="relative w-full" style="height: 320px;">
+            <canvas id="gameCanvas"></canvas>
+
+            <!-- 回饋訊息疊加層 -->
+            <div id="feedback-overlay" class="absolute inset-0 bg-white/50 hidden flex-col items-center justify-center z-10 px-4">
+                <h3 id="feedback-title" class="text-3xl font-bold mb-4 text-center"></h3>
+                <p id="feedback-text" class="text-xl mb-6 text-gray-700 text-center max-w-lg"></p>
+                <button id="next-step-btn" class="hidden bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-8 rounded-full border-4 border-blue-700 game-btn text-lg">
+                    進入下一步 ➔
+                </button>
+                <button id="next-mission-btn" class="hidden bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-8 rounded-full border-4 border-green-700 game-btn text-lg">
+                    太棒了！下一題
+                </button>
+                <button id="retry-step-btn" class="hidden bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-3 px-8 rounded-full border-4 border-yellow-700 game-btn text-lg">
+                    重新挑戰此步
+                </button>
+            </div>
+        </div>
+
+        <!-- 資訊列 -->
+        <div class="bg-white px-6 py-3 flex flex-wrap justify-center gap-x-8 gap-y-1 text-gray-600 font-bold border-b border-gray-100">
+            <div>單位長度： <span id="unit-display" class="text-xl text-purple-600">1</span></div>
+            <div>目前位置： <span id="pos-display" class="text-xl text-emerald-600">0</span></div>
+            <div>本步已移動： <span id="moved-display" class="text-xl text-blue-600">0</span> 格</div>
+        </div>
+
+        <!-- 控制面板 -->
+        <div class="bg-gray-100 p-6 flex flex-col md:flex-row justify-center items-center gap-4">
+
+            <!-- 移動控制鈕 -->
+            <div class="flex gap-2 sm:gap-4 items-center">
+                <button id="reset-step-btn" class="bg-gray-400 hover:bg-gray-500 text-white font-bold py-3 px-4 rounded-xl border-4 border-gray-600 game-btn flex flex-col items-center text-sm md:text-base">
+                    <span>🔙</span>
+                    <span>回此步起點</span>
+                </button>
+                <button id="move-left-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-4 px-6 rounded-xl border-4 border-blue-700 game-btn flex flex-col items-center">
+                    <span class="text-2xl">◀</span>
+                    <span class="text-sm">向左 1 格</span>
+                </button>
+                <button id="move-right-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-4 px-6 rounded-xl border-4 border-blue-700 game-btn flex flex-col items-center">
+                    <span class="text-2xl">▶</span>
+                    <span class="text-sm">向右 1 格</span>
+                </button>
+            </div>
+
+            <!-- 送出檢查鈕 -->
+            <button id="submit-btn" class="bg-red-500 hover:bg-red-600 text-white font-bold py-4 px-8 rounded-xl border-4 border-red-700 game-btn text-xl shadow-lg">
+                ✅ 確認此步
+            </button>
+        </div>
+
+        <!-- 操作提示 -->
+        <div class="bg-gray-50 text-center text-xs text-gray-400 py-2 border-t border-gray-100">
+            鍵盤：← → 移動　Enter 確認　R 回起點
+        </div>
+
+        <!-- 模式選單畫面 -->
+        <div id="menu-screen" class="absolute inset-0 z-30 bg-gray-900/95 hidden flex-col items-center justify-center text-white px-6 text-center">
+            <div class="pixel-font text-green-400 text-2xl md:text-3xl mb-1">T-REX</div>
+            <h2 class="text-xl font-bold mb-6">選擇遊戲模式</h2>
+            <div class="flex flex-col gap-3 w-full max-w-xs">
+                <button data-mode="endless" class="mode-btn bg-blue-500 border-4 border-blue-700 rounded-xl py-3 px-4 text-white">
+                    <div class="font-bold text-lg">♾️ 無盡模式</div>
+                    <div class="text-xs opacity-90">無限練習，隨時挑戰</div>
+                </button>
+                <button data-mode="levels10" class="mode-btn bg-purple-500 border-4 border-purple-700 rounded-xl py-3 px-4 text-white">
+                    <div class="font-bold text-lg">🏁 10 關挑戰</div>
+                    <div class="text-xs opacity-90">闖完 10 關，比時間與失誤</div>
+                </button>
+                <button data-mode="timed5" class="mode-btn bg-red-500 border-4 border-red-700 rounded-xl py-3 px-4 text-white">
+                    <div class="font-bold text-lg">⏱️ 5 分鐘競賽</div>
+                    <div class="text-xs opacity-90">限時 5 分鐘，比完成關數</div>
+                </button>
+                <button id="open-custom-btn" class="mode-btn bg-amber-500 border-4 border-amber-700 rounded-xl py-3 px-4 text-white">
+                    <div class="font-bold text-lg">🛠️ 自訂模式</div>
+                    <div class="text-xs opacity-90">自己決定關卡數或時間</div>
+                </button>
+            </div>
+            <button id="menu-close" class="mt-6 text-sm text-gray-300 underline hover:text-white">取消，繼續目前遊戲</button>
+        </div>
+
+        <!-- 成績單畫面 -->
+        <div id="results-screen" class="absolute inset-0 z-30 bg-gray-900/95 hidden flex-col items-center justify-center text-white px-6 text-center">
+            <h2 id="results-title" class="text-3xl font-bold mb-4"></h2>
+            <div class="bg-gray-800 rounded-xl border-4 border-gray-600 p-5 mb-6 space-y-3 w-full max-w-[260px]">
+                <div class="flex justify-between items-center gap-6"><span>完成關數</span><span id="r-score" class="pixel-font text-green-400"></span></div>
+                <div class="flex justify-between items-center gap-6"><span>累計失誤</span><span id="r-errors" class="pixel-font text-red-400"></span></div>
+                <div class="flex justify-between items-center gap-6"><span id="r-time-label">用時</span><span id="r-time" class="pixel-font text-yellow-300"></span></div>
+            </div>
+            <div class="flex gap-3">
+                <button id="r-again" class="bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-6 rounded-xl border-4 border-green-700 game-btn">再玩一次</button>
+                <button id="r-menu" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-xl border-4 border-blue-700 game-btn">選擇模式</button>
+            </div>
+        </div>
+
+        <!-- 自訂模式設定畫面 -->
+        <div id="custom-screen" class="absolute inset-0 z-30 bg-gray-900/95 hidden flex-col items-center justify-center text-white px-6 text-center">
+            <h2 class="text-xl font-bold mb-5">🛠️ 自訂模式</h2>
+
+            <!-- 類型切換 -->
+            <div class="flex gap-2 mb-5">
+                <button id="ct-levels" class="ctype-btn font-bold py-2 px-5 rounded-lg border-2">🏁 闖關數</button>
+                <button id="ct-time" class="ctype-btn font-bold py-2 px-5 rounded-lg border-2">⏱️ 限時</button>
+            </div>
+
+            <!-- 數值調整 -->
+            <div class="mb-2 text-sm text-gray-300" id="custom-value-label">要闖幾關？</div>
+            <div class="flex items-center justify-center gap-2 mb-4">
+                <button id="custom-minus" class="w-11 h-11 rounded-lg bg-gray-700 hover:bg-gray-600 text-2xl font-bold flex items-center justify-center">−</button>
+                <input id="custom-value" type="number" inputmode="numeric"
+                    class="w-24 text-center text-2xl font-bold text-gray-900 rounded-lg py-2 border-2 border-gray-500" />
+                <button id="custom-plus" class="w-11 h-11 rounded-lg bg-gray-700 hover:bg-gray-600 text-2xl font-bold flex items-center justify-center">＋</button>
+                <span id="custom-unit" class="text-lg w-10 text-left">關</span>
+            </div>
+
+            <!-- 快速預設 -->
+            <div id="custom-presets" class="flex flex-wrap justify-center gap-2 mb-6"></div>
+
+            <div class="flex gap-3">
+                <button id="custom-start" class="bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-8 rounded-xl border-4 border-green-700 game-btn">開始</button>
+                <button id="custom-back" class="bg-gray-500 hover:bg-gray-600 text-white font-bold py-3 px-6 rounded-xl border-4 border-gray-700 game-btn">返回</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        "use strict";
+
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // UI 元素
+        const missionStepsEl = document.getElementById('mission-steps');
+        const unitDisplayEl = document.getElementById('unit-display');
+        const posDisplayEl = document.getElementById('pos-display');
+        const movedDisplayEl = document.getElementById('moved-display');
+        const feedbackOverlay = document.getElementById('feedback-overlay');
+        const feedbackTitle = document.getElementById('feedback-title');
+        const feedbackText = document.getElementById('feedback-text');
+        const nextStepBtn = document.getElementById('next-step-btn');
+        const nextMissionBtn = document.getElementById('next-mission-btn');
+        const retryStepBtn = document.getElementById('retry-step-btn');
+        const scoreEl = document.getElementById('score');
+        const muteBtn = document.getElementById('mute-btn');
+        const clockEl = document.getElementById('clock');
+        const playTimerEl = document.getElementById('play-timer');
+        const errorsEl = document.getElementById('errors');
+        const modeDisplayEl = document.getElementById('mode-display');
+        const modeBtn = document.getElementById('mode-btn');
+
+        // 選單 / 成績單畫面
+        const menuScreen = document.getElementById('menu-screen');
+        const menuCloseBtn = document.getElementById('menu-close');
+        const resultsScreen = document.getElementById('results-screen');
+        const resultsTitle = document.getElementById('results-title');
+        const rScore = document.getElementById('r-score');
+        const rErrors = document.getElementById('r-errors');
+        const rTimeLabel = document.getElementById('r-time-label');
+        const rTime = document.getElementById('r-time');
+        const rAgainBtn = document.getElementById('r-again');
+        const rMenuBtn = document.getElementById('r-menu');
+
+        // 自訂模式畫面
+        const openCustomBtn = document.getElementById('open-custom-btn');
+        const customScreen = document.getElementById('custom-screen');
+        const ctLevelsBtn = document.getElementById('ct-levels');
+        const ctTimeBtn = document.getElementById('ct-time');
+        const customValueLabel = document.getElementById('custom-value-label');
+        const customValueInput = document.getElementById('custom-value');
+        const customUnitEl = document.getElementById('custom-unit');
+        const customMinusBtn = document.getElementById('custom-minus');
+        const customPlusBtn = document.getElementById('custom-plus');
+        const customPresetsEl = document.getElementById('custom-presets');
+        const customStartBtn = document.getElementById('custom-start');
+        const customBackBtn = document.getElementById('custom-back');
+
+        // 控制按鈕
+        const btnResetStep = document.getElementById('reset-step-btn');
+        const btnLeft = document.getElementById('move-left-btn');
+        const btnRight = document.getElementById('move-right-btn');
+        const btnSubmit = document.getElementById('submit-btn');
+
+        // 遊戲設定
+        const GAME_CONFIG = {
+            numTicks: 11,                                   // 刻度總數 (奇數方便置中)
+            possibleUnits: [0.1, 0.2, 0.5, 1, 2, 5, 10, 50, 100],
+            numSteps: 4                                     // 任務步驟數
+        };
+
+        // 遊戲模式：無盡為預設
+        const MODES = {
+            endless:  { name: '無盡',       target: null, timeLimit: null },
+            levels10: { name: '10 關挑戰',  target: 10,   timeLimit: null },
+            timed5:   { name: '5 分鐘競賽', target: null, timeLimit: 300 },
+            custom:   { name: '自訂',       target: null, timeLimit: null } // 由設定畫面動態填入
+        };
+
+        // 自訂模式的設定範圍
+        const CUSTOM_LIMITS = {
+            levels: { min: 1, max: 99, default: 10, presets: [5, 10, 20, 30], unit: '關' },
+            time:   { min: 1, max: 60, default: 3,  presets: [1, 3, 5, 10],   unit: '分鐘' }
+        };
+
+        // 版面 / 繪圖常數 (集中管理，方便日後調整)
+        const LAYOUT = {
+            padding: 44,          // 數線左右邊距
+            baselineOffset: 46,   // 數線距離底部的距離
+            pixelSize: 2,         // 恐龍像素放大倍率
+            dinoFootCol: 12,      // 恐龍腳部所在的欄 (用於水平對齊)
+            jumpLift: 18,         // 跳躍時整體上移量
+            moveDuration: 170     // 每移動一格的動畫時間 (ms)
+        };
+
+        let state = {
+            mode: 'endless',     // 目前模式
+            gameOver: false,     // 該回合是否已結束 (10關破關 / 時間到)
+            unit: 1,
+            originalStartIndex: 0,  // 整個任務的最初起點
+            stepStartIndex: 0,      // 當前這個「步驟」的起點
+            currentIndex: 0,        // 恐龍邏輯所在索引 (整數)
+            renderIndex: 0,         // 恐龍畫面所在索引 (可為小數，供滑動動畫用)
+            missions: [],           // 每個步驟的格數 (正負整數)
+            currentMissionIndex: 0, // 目前進行到第幾步 (0~3)
+            score: 0,
+            totalErrors: 0,      // 整場累計失誤次數
+            playStartTime: null, // 開始遊玩的時間戳 (用於計時器)
+            isAnimating: false,
+            failCount: 0,           // 當前步驟答錯次數 (用於漸進式提示)
+            cssWidth: 0,            // Canvas 的 CSS 寬 (非實體像素)
+            cssHeight: 0,
+            muted: false
+        };
+
+        // ---------- 音效 (Web Audio，輕量、免檔案) ----------
+        let audioCtx = null;
+        function ensureAudio() {
+            if (!audioCtx) {
+                try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+                catch (e) { audioCtx = null; }
+            }
+            if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+        }
+        function tone(freq, start, dur, type, gainVal) {
+            if (!audioCtx) return;
+            const o = audioCtx.createOscillator();
+            const g = audioCtx.createGain();
+            o.type = type || 'square';
+            o.frequency.value = freq;
+            const t0 = audioCtx.currentTime + start;
+            g.gain.setValueAtTime(gainVal || 0.06, t0);
+            g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+            o.connect(g); g.connect(audioCtx.destination);
+            o.start(t0); o.stop(t0 + dur);
+        }
+        function sfx(name) {
+            if (state.muted) return;
+            ensureAudio();
+            if (!audioCtx) return;
+            if (name === 'move')       tone(520, 0, 0.08, 'square', 0.05);
+            else if (name === 'edge')  tone(150, 0, 0.12, 'sawtooth', 0.05);
+            else if (name === 'step')  { tone(660, 0, 0.1, 'square'); tone(880, 0.1, 0.12, 'square'); }
+            else if (name === 'error') { tone(200, 0, 0.18, 'sawtooth', 0.06); tone(150, 0.14, 0.2, 'sawtooth', 0.06); }
+            else if (name === 'final') { [523, 659, 784, 1047].forEach((f, i) => tone(f, i * 0.12, 0.16, 'square')); }
+        }
+
+        // ---------- 恐龍 sprite ----------
+        const DINO_STAND = [
+            "                 ########",
+            "                 # ######",
+            "                 ########",
+            "                 ########",
+            "                 ###     ",
+            "                 ####### ",
+            "                ######## ",
+            "               ######### ",
+            "#             ####   #   ",
+            "##           #######     ",
+            "###         ########     ",
+            " ##        #########     ",
+            " ###      ##########     ",
+            "  ###    ###########     ",
+            "  ####  ############     ",
+            "  ##### ############     ",
+            "   #################     ",
+            "    ################     ",
+            "     ##############      ",
+            "      ############       ",
+            "        ##########       ",
+            "         ########        ",
+            "          ######         ",
+            "           ##  #         ",
+            "           ##  #         ",
+            "           #   #         ",
+            "          ##  ##         "
+        ];
+        const DINO_JUMP = [
+            "                 ########",
+            "                 # ######",
+            "                 ########",
+            "                 ########",
+            "                 ###     ",
+            "                 ####### ",
+            "                ######## ",
+            "               ######### ",
+            "#             ####   #   ",
+            "##           #######     ",
+            "###         ########     ",
+            " ##        #########     ",
+            " ###      ##########     ",
+            "  ###    ###########     ",
+            "  ####  ############     ",
+            "  ##### ############     ",
+            "   #################     ",
+            "    ################     ",
+            "     ##############      ",
+            "      ############       ",
+            "        ##########       ",
+            "         ########        ",
+            "          ######         "
+        ];
+
+        // ---------- 場景裝飾 (像素風) ----------
+        const CLOUD = [
+            "  #####  ",
+            " ####### ",
+            "#########",
+            " ####### "
+        ];
+        const CACTUS = [
+            "  #  ",
+            "  #  ",
+            "# #  ",
+            "# # #",
+            "### #",
+            "  ###",
+            "  #  ",
+            "  #  ",
+            "  #  "
+        ];
+        // 依像素陣列在 (x,y) 左上角繪製 (y 為底部對齊時另計)
+        function blit(sprite, x, y, px, color) {
+            ctx.fillStyle = color;
+            for (let r = 0; r < sprite.length; r++) {
+                const row = sprite[r];
+                for (let c = 0; c < row.length; c++) {
+                    if (row[c] === '#') ctx.fillRect(x + c * px, y + r * px, px, px);
+                }
+            }
+        }
+
+        // ---------- 工具函式 ----------
+        const midIndex = () => Math.floor(GAME_CONFIG.numTicks / 2);
+        // 乾淨的數字顯示 (消除浮點誤差，例如 0.1*3)
+        const fmt = (v) => parseFloat(v.toPrecision(12));
+        // 索引 -> 數線上的數值
+        const valueAt = (idx) => fmt((idx - midIndex()) * state.unit);
+        const signStr = (v) => (v > 0 ? '+' : '');
+        const pad2 = (n) => String(n).padStart(2, '0');
+
+        // ---------- 時鐘 & 遊玩計時器 ----------
+        const WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六'];
+        function fmtClock(totalSec) {
+            const hh = Math.floor(totalSec / 3600);
+            const mm = pad2(Math.floor((totalSec % 3600) / 60));
+            const ss = pad2(totalSec % 60);
+            return hh > 0 ? `${pad2(hh)}:${mm}:${ss}` : `${mm}:${ss}`;
+        }
+        function setTimerUrgent(urgent) {
+            playTimerEl.classList.remove('text-yellow-300', 'text-red-500', 'animate-pulse');
+            if (urgent) playTimerEl.classList.add('text-red-500', 'animate-pulse');
+            else playTimerEl.classList.add('text-yellow-300');
+        }
+        function updateClocks() {
+            const now = new Date();
+            clockEl.textContent =
+                `${now.getFullYear()}/${pad2(now.getMonth() + 1)}/${pad2(now.getDate())}` +
+                ` (週${WEEKDAYS[now.getDay()]}) ` +
+                `${pad2(now.getHours())}:${pad2(now.getMinutes())}:${pad2(now.getSeconds())}`;
+
+            if (state.playStartTime === null || state.gameOver) return;
+
+            const elapsed = Math.floor((now.getTime() - state.playStartTime) / 1000);
+            const limit = MODES[state.mode].timeLimit;
+
+            if (limit !== null) {
+                // 倒數模式
+                let remaining = limit - elapsed;
+                if (remaining <= 0) {
+                    playTimerEl.textContent = '00:00';
+                    setTimerUrgent(true);
+                    endRun('timeup');
+                    return;
+                }
+                playTimerEl.textContent = fmtClock(remaining);
+                setTimerUrgent(remaining <= 30);
+            } else {
+                // 累加模式
+                playTimerEl.textContent = fmtClock(elapsed);
+                setTimerUrgent(false);
+            }
+        }
+        function startClocks() {
+            updateClocks();
+            setInterval(updateClocks, 1000);
+        }
+
+        // ---------- Canvas 尺寸 (含高解析度 DPR 修正) ----------
+        function resizeCanvas() {
+            const container = canvas.parentElement;
+            const dpr = window.devicePixelRatio || 1;
+            const w = container.clientWidth;
+            const h = container.clientHeight;
+            if (w === 0 || h === 0) return;
+
+            canvas.width = Math.round(w * dpr);
+            canvas.height = Math.round(h * dpr);
+            canvas.style.width = w + 'px';
+            canvas.style.height = h + 'px';
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0); // 之後都以 CSS 像素為座標系
+            ctx.imageSmoothingEnabled = false;       // 像素風：不平滑
+
+            state.cssWidth = w;
+            state.cssHeight = h;
+            drawScene();
+        }
+
+        // ---------- 繪製恐龍 ----------
+        function drawDino(x, y, isJumping) {
+            ctx.save();
+            const p = LAYOUT.pixelSize;
+            const sprite = isJumping ? DINO_JUMP : DINO_STAND;
+            const spriteHeight = sprite.length * p;
+
+            ctx.translate(x - (LAYOUT.dinoFootCol * p), y - spriteHeight);
+            if (isJumping) ctx.translate(0, -LAYOUT.jumpLift);
+
+            ctx.fillStyle = '#535353';
+            for (let r = 0; r < sprite.length; r++) {
+                const row = sprite[r];
+                for (let c = 0; c < row.length; c++) {
+                    if (row[c] === '#') ctx.fillRect(c * p, r * p, p, p);
+                }
+            }
+            ctx.restore();
+        }
+
+        // ---------- 繪製整個場景 ----------
+        // ---------- 繪製整個場景 ----------
+        function drawScenery(W, H, lineY) {
+            // 雲 (固定位置，隨寬度縮放)
+            blit(CLOUD, W * 0.16, 26, 3, '#c4d0da');
+            blit(CLOUD, W * 0.66, 46, 3, '#d2dce4');
+            blit(CLOUD, W * 0.40, 18, 2, '#d8e1e8');
+
+            // 仙人掌 (站在地面/數線基準線的最左側，避開刻度)
+            const cactusH = CACTUS.length * 3;
+            blit(CACTUS, 8, lineY - cactusH, 3, '#4b8b52');
+
+            // 地面碎石 (畫布底部的像素紋理)
+            ctx.fillStyle = 'rgba(83,83,83,0.35)';
+            for (let gx = 6; gx < W - 6; gx += 26) {
+                const jitter = (gx * 7) % 11; // 固定但看起來散亂
+                ctx.fillRect(gx + jitter, H - 6, 3, 3);
+                ctx.fillRect(gx + jitter + 10, H - 4, 2, 2);
+            }
+        }
+
+        function drawScene() {
+            const W = state.cssWidth, H = state.cssHeight;
+            if (!W || !H) return;
+
+            ctx.clearRect(0, 0, W, H);
+
+            const lineY = H - LAYOUT.baselineOffset;
+            const availableWidth = W - LAYOUT.padding * 2;
+            const tickSpacing = availableWidth / (GAME_CONFIG.numTicks - 1);
+            const mid = midIndex();
+            const xOf = (idx) => LAYOUT.padding + idx * tickSpacing;
+
+            // 背景像素場景 (雲、仙人掌、地面)
+            drawScenery(W, H, lineY);
+
+            // 主線 (像素方塊條)
+            ctx.fillStyle = '#333';
+            ctx.fillRect(LAYOUT.padding, lineY - 1, availableWidth, 3);
+
+            // 先算好所有標籤，並偵測是否需要旋轉 (避免手機上數字重疊)
+            ctx.font = 'bold 14px "Noto Sans TC"';
+            const labels = [];
+            let maxLabelW = 0;
+            for (let i = 0; i < GAME_CONFIG.numTicks; i++) {
+                const txt = String(fmt((i - mid) * state.unit));
+                labels.push(txt);
+                maxLabelW = Math.max(maxLabelW, ctx.measureText(txt).width);
+            }
+            const rotate = maxLabelW > tickSpacing - 6;
+            const fontPx = rotate ? 12 : 14;
+
+            // 刻度 + 數值
+            for (let i = 0; i < GAME_CONFIG.numTicks; i++) {
+                const x = xOf(i);
+
+                // 刻度 (像素方塊，0 的位置加粗加高)
+                ctx.fillStyle = (i === mid) ? '#111' : '#444';
+                if (i === mid) ctx.fillRect(Math.round(x) - 2, lineY - 9, 4, 18);
+                else ctx.fillRect(Math.round(x) - 1, lineY - 6, 2, 12);
+
+                // 數值標籤
+                ctx.save();
+                ctx.fillStyle = '#555';
+                ctx.font = `bold ${fontPx}px "Noto Sans TC"`;
+                if (rotate) {
+                    ctx.translate(x, lineY + 10);
+                    ctx.rotate(-Math.PI / 4);
+                    ctx.textAlign = 'right';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(labels[i], 0, 0);
+                } else {
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'top';
+                    ctx.fillText(labels[i], x, lineY + 10);
+                }
+                ctx.restore();
+            }
+
+            // 最初起點標記 (淡色三角，僅在與本步起點不同、且不在進行第一步時顯示)
+            if (state.originalStartIndex !== state.stepStartIndex) {
+                const ox = xOf(state.originalStartIndex);
+                ctx.fillStyle = 'rgba(120,120,120,0.55)';
+                ctx.beginPath();
+                ctx.moveTo(ox, lineY - 14);
+                ctx.lineTo(ox - 5, lineY - 22);
+                ctx.lineTo(ox + 5, lineY - 22);
+                ctx.closePath();
+                ctx.fill();
+                ctx.font = 'bold 10px "Noto Sans TC"';
+                ctx.fillStyle = 'rgba(120,120,120,0.75)';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'bottom';
+                ctx.fillText('最初起點', ox, lineY - 24);
+            }
+
+            // 本步起點標記 (紅色)
+            const sx = xOf(state.stepStartIndex);
+            ctx.fillStyle = '#ef4444';
+            ctx.beginPath();
+            ctx.arc(sx, lineY, 5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.font = 'bold 12px "Noto Sans TC"';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'top';
+            ctx.fillText('本步起點', sx, lineY + (rotate ? 34 : 30));
+
+            // 位移向量箭頭 (本步起點 → 目前位置)，隨滑動即時成長
+            const dinoX = xOf(state.renderIndex);
+            drawDisplacementArrow(sx, dinoX, lineY, state.renderIndex - state.stepStartIndex);
+
+            // 恐龍 + 頭上目前座標
+            drawDino(dinoX, lineY - 5, state.isAnimating);
+            drawPositionBadge(dinoX, lineY, state.isAnimating);
+        }
+
+        function drawDisplacementArrow(x0, x1, lineY, cellDelta) {
+            if (Math.abs(x1 - x0) < 2) return;
+            const y = lineY - 10;
+            const dir = x1 > x0 ? 1 : -1;
+            const headX = x1 - dir * 2;
+
+            ctx.save();
+            ctx.strokeStyle = '#2563eb';
+            ctx.fillStyle = '#2563eb';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(x0, y);
+            ctx.lineTo(headX, y);
+            ctx.stroke();
+            // 箭頭
+            ctx.beginPath();
+            ctx.moveTo(x1, y);
+            ctx.lineTo(x1 - dir * 9, y - 5);
+            ctx.lineTo(x1 - dir * 9, y + 5);
+            ctx.closePath();
+            ctx.fill();
+            ctx.restore();
+        }
+
+        function drawPositionBadge(x, lineY, isJumping) {
+            const p = LAYOUT.pixelSize;
+            const dinoTop = lineY - 5 - DINO_STAND.length * p - (isJumping ? LAYOUT.jumpLift : 0) - 8;
+            const txt = String(valueAt(Math.round(state.renderIndex)));
+
+            ctx.save();
+            ctx.font = 'bold 14px "Noto Sans TC"';
+            const w = ctx.measureText(txt).width + 16;
+            const h = 22;
+            let bx = x - w / 2;
+            // 避免超出畫布左右
+            bx = Math.max(4, Math.min(bx, state.cssWidth - w - 4));
+            const by = Math.max(2, dinoTop - h);
+
+            ctx.fillStyle = '#059669';
+            roundRect(bx, by, w, h, 6);
+            ctx.fill();
+            ctx.fillStyle = '#fff';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(txt, bx + w / 2, by + h / 2 + 1);
+            ctx.restore();
+        }
+
+        function roundRect(x, y, w, h, r) {
+            ctx.beginPath();
+            ctx.moveTo(x + r, y);
+            ctx.arcTo(x + w, y, x + w, y + h, r);
+            ctx.arcTo(x + w, y + h, x, y + h, r);
+            ctx.arcTo(x, y + h, x, y, r);
+            ctx.arcTo(x, y, x + w, y, r);
+            ctx.closePath();
+        }
+
+        // ---------- 模式 / 回合管理 ----------
+        function updateScoreDisplay() {
+            const target = MODES[state.mode].target;
+            scoreEl.textContent = target ? `${state.score}/${target}` : String(state.score);
+        }
+
+        function showMenu() {
+            // 遊戲進行中才顯示「取消」；破關/時間到後強制選模式
+            menuCloseBtn.classList.toggle('hidden', state.gameOver);
+            menuScreen.classList.remove('hidden');
+            menuScreen.classList.add('flex');
+        }
+        function hideMenu() {
+            menuScreen.classList.add('hidden');
+            menuScreen.classList.remove('flex');
+        }
+        function hideResults() {
+            resultsScreen.classList.add('hidden');
+            resultsScreen.classList.remove('flex');
+        }
+
+        // ---------- 自訂模式設定 ----------
+        let customType = 'levels'; // 'levels' | 'time'
+
+        function refreshCustomUI() {
+            const cfg = CUSTOM_LIMITS[customType];
+            customValueLabel.textContent = customType === 'levels' ? '要闖幾關？' : '限時幾分鐘？';
+            customUnitEl.textContent = cfg.unit;
+            customValueInput.min = cfg.min;
+            customValueInput.max = cfg.max;
+
+            const active = 'ctype-btn font-bold py-2 px-5 rounded-lg border-2 bg-amber-500 border-amber-300 text-white';
+            const idle = 'ctype-btn font-bold py-2 px-5 rounded-lg border-2 bg-gray-700 border-gray-500 text-gray-200';
+            ctLevelsBtn.className = customType === 'levels' ? active : idle;
+            ctTimeBtn.className = customType === 'time' ? active : idle;
+
+            customPresetsEl.innerHTML = '';
+            cfg.presets.forEach((v) => {
+                const b = document.createElement('button');
+                b.className = 'bg-gray-700 hover:bg-amber-600 border-2 border-gray-500 rounded-lg py-1 px-3 text-sm font-bold';
+                b.textContent = v + cfg.unit;
+                b.addEventListener('click', () => { customValueInput.value = v; });
+                customPresetsEl.appendChild(b);
+            });
+        }
+
+        function setCustomType(type) {
+            customType = type;
+            customValueInput.value = CUSTOM_LIMITS[type].default;
+            refreshCustomUI();
+        }
+
+        function clampCustom() {
+            const cfg = CUSTOM_LIMITS[customType];
+            let v = parseInt(customValueInput.value, 10);
+            if (isNaN(v)) v = cfg.default;
+            v = Math.max(cfg.min, Math.min(cfg.max, v));
+            customValueInput.value = v;
+            return v;
+        }
+
+        function adjustCustom(delta) {
+            const cfg = CUSTOM_LIMITS[customType];
+            let v = parseInt(customValueInput.value, 10);
+            if (isNaN(v)) v = cfg.default;
+            customValueInput.value = v + delta;
+            clampCustom();
+        }
+
+        function showCustom() {
+            hideMenu();
+            if (!customValueInput.value) customValueInput.value = CUSTOM_LIMITS[customType].default;
+            refreshCustomUI();
+            customScreen.classList.remove('hidden');
+            customScreen.classList.add('flex');
+        }
+        function hideCustom() {
+            customScreen.classList.add('hidden');
+            customScreen.classList.remove('flex');
+        }
+
+        function startCustomRun() {
+            const v = clampCustom();
+            if (customType === 'levels') {
+                MODES.custom.target = v;
+                MODES.custom.timeLimit = null;
+                MODES.custom.name = `自訂·${v}關`;
+            } else {
+                MODES.custom.target = null;
+                MODES.custom.timeLimit = v * 60;
+                MODES.custom.name = `自訂·${v}分`;
+            }
+            hideCustom();
+            startRun('custom');
+        }
+
+        function startRun(mode) {
+            state.mode = mode;
+            state.score = 0;
+            state.totalErrors = 0;
+            state.gameOver = false;
+            state.playStartTime = Date.now();
+
+            modeDisplayEl.textContent = MODES[mode].name;
+            errorsEl.innerText = 0;
+            updateScoreDisplay();
+            setTimerUrgent(false);
+
+            hideMenu();
+            hideResults();
+            initGame();
+            updateClocks();
+        }
+
+        function endRun(reason) {
+            if (state.gameOver) return;
+            state.gameOver = true;
+            disableControls();
+            hideFeedback();
+
+            resultsTitle.innerText = reason === 'timeup' ? '⏰ 時間到！' : '🏆 全部過關！';
+            rScore.textContent = state.score;
+            rErrors.textContent = state.totalErrors;
+
+            if (MODES[state.mode].timeLimit !== null) {
+                rTimeLabel.textContent = '挑戰時間';
+                rTime.textContent = fmtClock(MODES[state.mode].timeLimit);
+            } else {
+                const elapsed = Math.floor((Date.now() - state.playStartTime) / 1000);
+                rTimeLabel.textContent = '用時';
+                rTime.textContent = fmtClock(elapsed);
+            }
+
+            resultsScreen.classList.remove('hidden');
+            resultsScreen.classList.add('flex');
+        }
+
+        // 是否禁止操作 (選單/成績單/自訂畫面開啟或回合結束)
+        function playBlocked() {
+            return state.gameOver ||
+                   !menuScreen.classList.contains('hidden') ||
+                   !resultsScreen.classList.contains('hidden') ||
+                   !customScreen.classList.contains('hidden');
+        }
+
+        // ---------- 遊戲流程 ----------
+        function initGame() {
+            // 1. 隨機單位
+            state.unit = GAME_CONFIG.possibleUnits[Math.floor(Math.random() * GAME_CONFIG.possibleUnits.length)];
+
+            // 2. 隨機起點
+            const minStart = 3;
+            const maxStart = GAME_CONFIG.numTicks - 4;
+            state.originalStartIndex = Math.floor(Math.random() * (maxStart - minStart + 1)) + minStart;
+            state.stepStartIndex = state.originalStartIndex;
+            state.currentIndex = state.originalStartIndex;
+            state.renderIndex = state.originalStartIndex;
+            state.currentMissionIndex = 0;
+            state.failCount = 0;
+
+            // 3. 生成不出界的 4 步任務
+            state.missions = [];
+            let tempIndex = state.originalStartIndex;
+            for (let i = 0; i < GAME_CONFIG.numSteps; i++) {
+                const maxLeft = tempIndex;
+                const maxRight = (GAME_CONFIG.numTicks - 1) - tempIndex;
+                let move, valid = false;
+                while (!valid) {
+                    move = Math.floor(Math.random() * 9) - 4; // -4 ~ 4
+                    if (move === 0) continue;
+                    if (move < 0 && Math.abs(move) <= maxLeft) valid = true;
+                    if (move > 0 && move <= maxRight) valid = true;
+                }
+                state.missions.push(move);
+                tempIndex += move;
+            }
+
+            // 4. 更新畫面
+            unitDisplayEl.innerText = state.unit;
+            renderMissions();
+            updateInfo();
+            hideFeedback();
+            enableControls();
+            resizeCanvas();
+        }
+
+        function renderMissions() {
+            missionStepsEl.innerHTML = '';
+            state.missions.forEach((move, index) => {
+                const displayValue = fmt(move * state.unit);
+                const label = `${signStr(move)}${displayValue}`;
+                const span = document.createElement('span');
+
+                if (index < state.currentMissionIndex) {
+                    span.className = 'bg-green-100 text-green-700 px-2 py-1 rounded border-2 border-green-300 opacity-60';
+                    const s = document.createElement('s');
+                    s.textContent = label;
+                    span.appendChild(s);
+                } else if (index === state.currentMissionIndex) {
+                    span.className = 'bg-yellow-200 text-blue-800 px-3 py-1 rounded border-2 border-yellow-500 font-extrabold shadow-md transform scale-110';
+                    span.textContent = label;
+                } else {
+                    span.className = 'bg-white text-gray-400 px-2 py-1 rounded border-2 border-gray-200';
+                    span.textContent = label;
+                }
+                missionStepsEl.appendChild(span);
+
+                if (index < state.missions.length - 1) {
+                    const arrow = document.createElement('span');
+                    arrow.className = 'text-gray-300 text-sm self-center';
+                    arrow.textContent = '➔';
+                    missionStepsEl.appendChild(arrow);
+                }
+            });
+        }
+
+        // 更新資訊列 (目前位置、已移動格數)
+        function updateInfo() {
+            posDisplayEl.innerText = valueAt(state.currentIndex);
+            const moved = state.currentIndex - state.stepStartIndex;
+            movedDisplayEl.innerText = `${signStr(moved)}${moved}`;
+        }
+
+        // ---------- 平滑滑動 ----------
+        function moveDino(step) {
+            if (state.isAnimating || playBlocked()) return;
+            if (feedbackOverlay.classList.contains('hidden') === false) return;
+
+            const newIndex = state.currentIndex + step;
+            if (newIndex < 0 || newIndex >= GAME_CONFIG.numTicks) {
+                sfx('edge');
+                return; // 到邊界，出聲提示但不移動
+            }
+
+            sfx('move');
+            state.currentIndex = newIndex;
+            updateInfo();
+            updateMoveButtons();
+            animateTo(newIndex);
+        }
+
+        function animateTo(targetIndex) {
+            const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+            const start = state.renderIndex;
+            const dist = targetIndex - start;
+
+            if (reduce) {
+                state.renderIndex = targetIndex;
+                state.isAnimating = false;
+                drawScene();
+                return;
+            }
+
+            state.isAnimating = true;
+            const t0 = performance.now();
+            const dur = LAYOUT.moveDuration;
+
+            function frame(now) {
+                let t = Math.min((now - t0) / dur, 1);
+                const eased = 1 - Math.pow(1 - t, 3); // easeOutCubic
+                state.renderIndex = start + dist * eased;
+                drawScene();
+                if (t < 1) {
+                    requestAnimationFrame(frame);
+                } else {
+                    state.renderIndex = targetIndex;
+                    state.isAnimating = false;
+                    drawScene();
+                }
+            }
+            requestAnimationFrame(frame);
+        }
+
+        function checkAnswer() {
+            if (state.isAnimating || playBlocked()) return;
+            disableControls();
+
+            const targetOffset = state.missions[state.currentMissionIndex];
+            const targetIndex = state.stepStartIndex + targetOffset;
+            const actualOffset = state.currentIndex - state.stepStartIndex;
+
+            if (state.currentIndex === targetIndex) {
+                if (state.currentMissionIndex === GAME_CONFIG.numSteps - 1) {
+                    // 完成一整個任務
+                    state.score++;
+                    updateScoreDisplay();
+                    const target = MODES[state.mode].target;
+                    sfx('final');
+                    if (target && state.score >= target) {
+                        endRun('win'); // 10 關模式破關
+                    } else {
+                        showFeedback('final-success');
+                    }
+                } else {
+                    sfx('step');
+                    showFeedback('step-success');
+                }
+            } else {
+                state.failCount++;
+                state.totalErrors++;
+                errorsEl.innerText = state.totalErrors;
+                sfx('error');
+                showFeedback('error', { targetOffset, actualOffset });
+            }
+        }
+
+        function showFeedback(type, data) {
+            feedbackOverlay.classList.remove('hidden');
+            feedbackOverlay.classList.add('flex');
+            nextStepBtn.classList.add('hidden');
+            nextMissionBtn.classList.add('hidden');
+            retryStepBtn.classList.add('hidden');
+
+            if (type === 'step-success') {
+                feedbackTitle.innerText = '✅ 步驟過關！';
+                feedbackTitle.className = 'text-4xl font-bold mb-4 text-green-600 text-center';
+                feedbackText.innerHTML = '你正確完成了這個步驟，準備進行下一個移動。';
+                nextStepBtn.classList.remove('hidden');
+                nextStepBtn.focus();
+            } else if (type === 'final-success') {
+                feedbackTitle.innerText = '🎉 任務完全成功！';
+                feedbackTitle.className = 'text-4xl font-bold mb-4 text-blue-600 text-center';
+                const totalMove = fmt((state.currentIndex - state.originalStartIndex) * state.unit);
+                feedbackText.innerHTML =
+                    `你完成了全部 4 個步驟！<br>從最初起點到現在，總位移是 <strong>${signStr(totalMove)}${totalMove}</strong>`;
+                nextMissionBtn.classList.remove('hidden');
+                nextMissionBtn.focus();
+            } else if (type === 'error') {
+                feedbackTitle.innerText = '❌ 走錯囉！';
+                feedbackTitle.className = 'text-4xl font-bold mb-4 text-red-600 text-center';
+                // 漸進式提示：第一次給方法，之後給差幾格
+                let hint;
+                if (state.failCount <= 1) {
+                    hint = '再想想：<strong>位移量 ÷ 單位長度 = 要走幾格</strong>。回到本步起點試試看。';
+                } else {
+                    const diff = data.targetOffset - data.actualOffset;
+                    const dirTxt = diff > 0 ? '往右' : '往左';
+                    hint = `你這一步移動了 <strong>${signStr(data.actualOffset)}${data.actualOffset}</strong> 格，` +
+                           `離正確位置還差 <strong>${Math.abs(diff)}</strong> 格（要再${dirTxt}）。`;
+                }
+                feedbackText.innerHTML = hint;
+                retryStepBtn.classList.remove('hidden');
+                retryStepBtn.focus();
+            }
+        }
+
+        function hideFeedback() {
+            feedbackOverlay.classList.add('hidden');
+            feedbackOverlay.classList.remove('flex');
+        }
+
+        function resetToStepStart() {
+            if (state.isAnimating) return;
+            hideFeedback();
+            state.currentIndex = state.stepStartIndex;
+            updateInfo();
+            enableControls();
+            animateTo(state.stepStartIndex);
+        }
+
+        function advanceToNextStep() {
+            state.currentMissionIndex++;
+            state.stepStartIndex = state.currentIndex; // 下一步的起點
+            state.failCount = 0;
+            renderMissions();
+            updateInfo();
+            hideFeedback();
+            enableControls();
+            drawScene();
+        }
+
+        // ---------- 控制狀態 ----------
+        function disableControls() {
+            btnLeft.disabled = true;
+            btnRight.disabled = true;
+            btnSubmit.disabled = true;
+            btnResetStep.disabled = true;
+        }
+
+        function enableControls() {
+            btnSubmit.disabled = false;
+            btnResetStep.disabled = false;
+            updateMoveButtons();
+        }
+
+        // 依邊界即時開關左右鈕，避免「按了沒反應」的困惑
+        function updateMoveButtons() {
+            const overlayOpen = !feedbackOverlay.classList.contains('hidden');
+            if (overlayOpen) { btnLeft.disabled = true; btnRight.disabled = true; return; }
+            btnLeft.disabled = state.currentIndex <= 0;
+            btnRight.disabled = state.currentIndex >= GAME_CONFIG.numTicks - 1;
+        }
+
+        function setMuted(m) {
+            state.muted = m;
+            muteBtn.textContent = m ? '🔇' : '🔊';
+        }
+
+        // ---------- 事件綁定 ----------
+        btnLeft.addEventListener('click', () => moveDino(-1));
+        btnRight.addEventListener('click', () => moveDino(1));
+        btnSubmit.addEventListener('click', checkAnswer);
+        btnResetStep.addEventListener('click', resetToStepStart);
+        nextStepBtn.addEventListener('click', advanceToNextStep);
+        nextMissionBtn.addEventListener('click', initGame);
+        retryStepBtn.addEventListener('click', resetToStepStart);
+        muteBtn.addEventListener('click', () => { ensureAudio(); setMuted(!state.muted); });
+
+        // 模式選單
+        modeBtn.addEventListener('click', () => { ensureAudio(); showMenu(); });
+        menuCloseBtn.addEventListener('click', hideMenu);
+        menuScreen.querySelectorAll('[data-mode]').forEach((btn) => {
+            btn.addEventListener('click', () => { ensureAudio(); startRun(btn.dataset.mode); });
+        });
+
+        // 成績單
+        rAgainBtn.addEventListener('click', () => startRun(state.mode));
+        rMenuBtn.addEventListener('click', () => { hideResults(); showMenu(); });
+
+        // 自訂模式
+        openCustomBtn.addEventListener('click', () => { ensureAudio(); showCustom(); });
+        ctLevelsBtn.addEventListener('click', () => setCustomType('levels'));
+        ctTimeBtn.addEventListener('click', () => setCustomType('time'));
+        customMinusBtn.addEventListener('click', () => adjustCustom(-1));
+        customPlusBtn.addEventListener('click', () => adjustCustom(1));
+        customValueInput.addEventListener('change', clampCustom);
+        customStartBtn.addEventListener('click', () => { ensureAudio(); startCustomRun(); });
+        customBackBtn.addEventListener('click', () => { hideCustom(); showMenu(); });
+
+        // 鍵盤支援
+        window.addEventListener('keydown', (e) => {
+            // 自訂畫面：Enter 直接開始
+            if (!customScreen.classList.contains('hidden')) {
+                if (e.key === 'Enter') { e.preventDefault(); startCustomRun(); }
+                return;
+            }
+            // 選單或成績單開啟時，不處理遊戲按鍵
+            if (!menuScreen.classList.contains('hidden') || !resultsScreen.classList.contains('hidden')) return;
+
+            const overlayOpen = !feedbackOverlay.classList.contains('hidden');
+            if (overlayOpen) {
+                if (e.key === 'Enter') {
+                    if (!nextStepBtn.classList.contains('hidden')) { e.preventDefault(); advanceToNextStep(); }
+                    else if (!nextMissionBtn.classList.contains('hidden')) { e.preventDefault(); initGame(); }
+                    else if (!retryStepBtn.classList.contains('hidden')) { e.preventDefault(); resetToStepStart(); }
+                }
+                return;
+            }
+            if (e.key === 'ArrowLeft') { e.preventDefault(); moveDino(-1); }
+            else if (e.key === 'ArrowRight') { e.preventDefault(); moveDino(1); }
+            else if (e.key === 'Enter') { e.preventDefault(); checkAnswer(); }
+            else if (e.key === 'r' || e.key === 'R' || e.key === 'Backspace') { e.preventDefault(); resetToStepStart(); }
+        });
+
+        // 用 ResizeObserver 取代 setTimeout，處理初次載入與容器變化
+        const ro = new ResizeObserver(() => resizeCanvas());
+        ro.observe(canvas.parentElement);
+        window.addEventListener('resize', resizeCanvas); // 備援 (含 DPR 變化)
+
+        // 字型載入完成後重繪，避免量測寬度用到 fallback 字型
+        if (document.fonts && document.fonts.ready) {
+            document.fonts.ready.then(() => drawScene());
+        }
+
+        // 啟動：預設無盡模式
+        window.addEventListener('load', () => {
+            startClocks();
+            startRun('endless');
+        });
+    </script>
+</body>
+</html>
