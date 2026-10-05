@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>自由落體重力加速度計算與 V-t 圖</title>
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js for graphing -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- MathJax for rendering equations -->
+    <script>
+        MathJax = {
+            tex: { inlineMath: [['$', '$'], ['\\(', '\\)']] }
+        };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6; /* Tailwind gray-100 */
+        }
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.95);
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 1rem;
+            border: 1px solid rgba(255, 255, 255, 0.18);
+        }
+    </style>
+</head>
+<body class="min-h-screen flex items-center justify-center p-4">
+
+    <div class="glass-panel w-full max-w-4xl p-8 flex flex-col md:flex-row gap-8">
+        
+        <!-- Left Column: Input and Results -->
+        <div class="w-full md:w-1/3 flex flex-col gap-6">
+            <div>
+                <div class="flex items-center gap-2 mb-2">
+                    <h1 class="text-2xl font-bold text-gray-800">重力加速度測量</h1>
+                    <button id="helpBtn" type="button" class="text-blue-500 hover:text-blue-700 focus:outline-none rounded-full hover:bg-blue-50 p-1 transition-colors" title="實驗步驟">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6">
+                          <path stroke-linecap="round" stroke-linejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5.25h.008v.008H12v-.008z" />
+                        </svg>
+                    </button>
+                </div>
+                <p class="text-sm text-gray-600 mb-4">搭配 Phyphox 聲學碼表實驗</p>
+                <div class="bg-blue-50 border border-blue-200 text-blue-800 p-3 rounded-lg text-sm mb-4">
+                    <p class="font-semibold">實驗原理：</p>
+                    <p>利用公式 $h = \frac{1}{2}gt^2$ 計算 $g$ 值。</p>
+                    <p>$g = \frac{2h}{t^2}$</p>
+                </div>
+            </div>
+
+            <form id="calcForm" class="flex flex-col gap-4">
+                <div>
+                    <label for="heightInput" class="block text-sm font-medium text-gray-700 mb-1">墜落高度 (h)</label>
+                    <div class="relative">
+                        <input type="number" id="heightInput" step="0.01" min="0" required
+                            class="block w-full pl-3 pr-12 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                            placeholder="例如: 1.5">
+                        <div class="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                            <span class="text-gray-500 sm:text-sm">公尺 (m)</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <label for="timeInput" class="block text-sm font-medium text-gray-700 mb-1">測量時間 (t)</label>
+                    <div class="relative">
+                        <input type="number" id="timeInput" step="0.001" min="0" required
+                            class="block w-full pl-3 pr-12 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                            placeholder="例如: 0.55">
+                        <div class="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                            <span class="text-gray-500 sm:text-sm">秒 (s)</span>
+                        </div>
+                    </div>
+                </div>
+
+                <button type="submit"
+                    class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md transition duration-150 ease-in-out shadow-sm">
+                    新增數據與繪圖
+                </button>
+            </form>
+
+            <div id="dataListArea" class="hidden mt-4 bg-white border border-gray-200 rounded-lg overflow-hidden shadow-sm">
+                <div class="px-4 py-3 bg-gray-50 border-b border-gray-200 flex justify-between items-center">
+                    <h3 class="text-sm font-semibold text-gray-700">各組數據列表</h3>
+                    <button type="button" id="clearDataBtn" class="text-xs text-red-600 hover:text-red-800 font-medium px-2 py-1 bg-red-50 hover:bg-red-100 rounded transition-colors">清空全部</button>
+                </div>
+                <div class="max-h-56 overflow-y-auto">
+                    <table class="min-w-full divide-y divide-gray-200 text-sm">
+                        <thead class="bg-gray-50 sticky top-0">
+                            <tr>
+                                <th class="px-3 py-2 text-left text-xs font-medium text-gray-500">組別</th>
+                                <th class="px-3 py-2 text-left text-xs font-medium text-gray-500">h (m)</th>
+                                <th class="px-3 py-2 text-left text-xs font-medium text-gray-500">t (s)</th>
+                                <th class="px-3 py-2 text-left text-xs font-medium text-gray-500">g (m/s²)</th>
+                                <th class="px-3 py-2 text-center text-xs font-medium text-gray-500">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="dataTableBody" class="bg-white divide-y divide-gray-200">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+             <div id="errorMsg" class="hidden mt-4 p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm">
+             </div>
+        </div>
+
+        <!-- Right Column: Graph -->
+        <div class="w-full md:w-2/3 flex flex-col">
+            <div class="flex flex-col sm:flex-row justify-between items-center mb-4 gap-2">
+                <h2 class="text-xl font-bold text-gray-800">速度 - 時間 (V-t) 圖</h2>
+                <label class="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" id="toggleRefLine" class="sr-only peer">
+                    <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                    <span class="ml-3 text-sm font-medium text-gray-700">顯示 g=9.8 參考線</span>
+                </label>
+            </div>
+            <div class="flex-grow bg-white border border-gray-200 rounded-xl p-4 shadow-inner relative" style="min-height: 400px;">
+                 <canvas id="vtChart"></canvas>
+                 <div id="emptyGraphMsg" class="absolute inset-0 flex items-center justify-center text-gray-400">
+                     請輸入數據並點擊計算以顯示圖表
+                 </div>
+                 
+                 <!-- 點擊資料點時顯示的詳細資訊面板 -->
+                 <div id="highlightInfo" class="absolute top-4 left-4 bg-white/95 backdrop-blur-sm border border-gray-200 p-4 rounded-lg shadow-lg hidden pointer-events-none transition-opacity duration-300 z-10" style="max-width: 85%;">
+                    <h4 class="font-bold text-gray-800 mb-2 text-lg drop-shadow-sm" id="infoTitle">第 X 組數據</h4>
+                    <div class="text-sm text-gray-700 space-y-2">
+                        <p class="bg-blue-50 px-2 py-1 rounded inline-block text-blue-800">
+                            線下面積 (位移 $h$) = <span id="infoArea" class="font-semibold text-base"></span> 公尺
+                        </p>
+                        <hr class="my-2 border-gray-200">
+                        <p class="text-xs text-gray-500 font-medium">重力加速度 $g$ 換算：</p>
+                        <div id="infoFormula" class="bg-gray-50 p-3 rounded-md border border-gray-200 text-sm overflow-x-auto shadow-inner text-gray-800" style="min-width: 250px;">
+                            <!-- 公式將會動態注入於此 -->
+                        </div>
+                    </div>
+                 </div>
+            </div>
+            <div class="mt-4 text-sm text-gray-600">
+                <p><strong>圖表說明：</strong></p>
+                <ul class="list-disc list-inside">
+                    <li>此為各組數據的散佈圖，<strong>僅保留末速度 ($V$) 點</strong>。</li>
+                    <li>末速度計算方式：$V = g \times t = \frac{2h}{t}$。</li>
+                    <li>圖中同時繪製了標準重力加速度 ($g=9.8$) 的理論參考線，以利觀察各組偏差。</li>
+                </ul>
+            </div>
+        </div>
+
+    </div>
+
+    <div id="instructionModal" class="fixed inset-0 z-50 hidden bg-gray-900/50 backdrop-blur-sm flex items-center justify-center p-4 opacity-0 transition-opacity duration-300">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto transform scale-95 transition-transform duration-300" id="instructionModalContent">
+            <div class="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex justify-between items-center z-10">
+                <h3 class="text-xl font-bold text-gray-800">利用 Phyphox 測定重力加速度</h3>
+                <button id="closeModalBtn" class="text-gray-400 hover:text-gray-600 focus:outline-none p-1 rounded-md hover:bg-gray-100">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+            <div class="p-6 space-y-4 text-gray-700 text-sm md:text-base leading-relaxed">
+                <p>本實驗利用物體自由落體，以聲學碼表記錄時間，並帶入公式計算重力加速度 $g$。</p>
+                
+                <h4 class="font-bold text-lg text-blue-700 mt-4 border-l-4 border-blue-500 pl-2">1. 準備器材</h4>
+                <ul class="list-disc pl-6 space-y-1">
+                    <li>便當盒（或能發出響聲的金屬容器）</li>
+                    <li>硬幣一枚</li>
+                    <li>課本與一張紙</li>
+                    <li>智慧型手機（已安裝 <a href="https://phyphox.org/" target="_blank" class="text-blue-500 hover:text-blue-700 underline font-semibold">Phyphox</a> APP）</li>
+                </ul>
+
+                <h4 class="font-bold text-lg text-blue-700 mt-4 border-l-4 border-blue-500 pl-2">2. 實驗架設</h4>
+                <ul class="list-disc pl-6 space-y-1">
+                    <li>利用課本將紙張壓在桌緣，並將硬幣放在懸空的紙張上方。</li>
+                    <li>將便當盒放在硬幣正下方的地面上。</li>
+                    <li><strong>準確測量並記錄墜落高度 $h$（單位：公尺）</strong>。</li>
+                </ul>
+
+                <h4 class="font-bold text-lg text-blue-700 mt-4 border-l-4 border-blue-500 pl-2">3. 手機設定與測量操作</h4>
+                <ul class="list-disc pl-6 space-y-1">
+                    <li>開啟手機的 Phyphox，選擇 <strong>「聲學碼表 (Acoustic Stopwatch)」</strong> 功能。</li>
+                    <li>按下播放鍵開始收音。</li>
+                    <li><strong>用手向下拍擊桌緣的紙張</strong>。拍擊的「啪」聲會觸發碼表開始計時，同時紙張抽離，硬幣開始自由落下。</li>
+                    <li>硬幣落入便當盒發出「噹」聲，觸發碼表停止計時。</li>
+                    <li>記錄下測量到的時間 $t$（單位：秒）。</li>
+                </ul>
+
+                <h4 class="font-bold text-lg text-orange-600 mt-4 border-l-4 border-orange-500 pl-2">💡 常見問題與技巧</h4>
+                <ul class="list-disc pl-6 space-y-2 text-gray-600 bg-orange-50 p-4 rounded-lg border border-orange-100">
+                    <li><strong>太靈敏提早啟動？</strong> 可將 Phyphox 的「門檻值 (Threshold)」調高至 0.2 或 0.3。</li>
+                    <li><strong>紙張反彈提早停止？</strong> 導致測出 0.1~0.2 秒極短時間，請將「最小延遲 (Minimum delay)」調高至 0.2 秒。</li>
+                    <li><strong>高度建議</strong>：太高 (>1.5公尺) 較不好操作且誤差較大，建議可以各組分配不同高度測試。</li>
+                </ul>
+            </div>
+            <div class="border-t border-gray-100 px-6 py-4 bg-gray-50 text-right rounded-b-xl">
+                <button id="closeModalFooterBtn" class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-6 rounded-md shadow-sm transition-colors">我知道了</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // DOM Elements
+        const form = document.getElementById('calcForm');
+        const heightInput = document.getElementById('heightInput');
+        const timeInput = document.getElementById('timeInput');
+        const dataListArea = document.getElementById('dataListArea');
+        const dataTableBody = document.getElementById('dataTableBody');
+        const clearDataBtn = document.getElementById('clearDataBtn');
+        const errorMsg = document.getElementById('errorMsg');
+        const ctx = document.getElementById('vtChart').getContext('2d');
+        const emptyGraphMsg = document.getElementById('emptyGraphMsg');
+
+        const helpBtn = document.getElementById('helpBtn');
+        const instructionModal = document.getElementById('instructionModal');
+        const instructionModalContent = document.getElementById('instructionModalContent');
+        const closeModalBtn = document.getElementById('closeModalBtn');
+        const closeModalFooterBtn = document.getElementById('closeModalFooterBtn');
+        const toggleRefLine = document.getElementById('toggleRefLine');
+
+        let vtChartInstance = null;
+        let groupsData = []; // Store multiple groups' data
+        let highlightData = null; // 追蹤目前點選的數據組
+        let globalGroupCounter = 1; // 追蹤總組別編號，避免刪除後重複
+
+        // 定義各組不同的顏色清單
+        const colorPalette = [
+            '#ef4444', // Red
+            '#3b82f6', // Blue
+            '#10b981', // Green
+            '#f59e0b', // Yellow/Amber
+            '#8b5cf6', // Purple
+            '#ec4899', // Pink
+            '#14b8a6', // Teal
+            '#f97316', // Orange
+            '#6366f1'  // Indigo
+        ];
+
+        // Form Submit Handler
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            // Clear previous errors
+            errorMsg.classList.add('hidden');
+
+            const h = parseFloat(heightInput.value);
+            const t = parseFloat(timeInput.value);
+
+            // Validation
+            if (isNaN(h) || isNaN(t) || h <= 0 || t <= 0) {
+                showError('請輸入大於 0 的有效數字。');
+                return;
+            }
+
+            // Calculate g: h = 1/2 * g * t^2 => g = 2h / t^2
+            const g = (2 * h) / (t * t);
+
+            // Calculate final velocity: V = g * t
+            const vFinal = g * t;
+
+            // 為這組資料依序分配專屬顏色
+            const pointColor = colorPalette[(globalGroupCounter - 1) % colorPalette.length];
+
+            const uniqueId = Date.now() + Math.random(); // Unique identifier
+
+            // Add to array
+            groupsData.push({
+                id: uniqueId,
+                num: globalGroupCounter,
+                h: h,
+                t: t,
+                g: g,
+                v: vFinal,
+                color: pointColor
+            });
+            globalGroupCounter++;
+
+            // Update UI
+            updateTable();
+            drawChart();
+            
+            // Clear inputs for next entry
+            heightInput.value = '';
+            timeInput.value = '';
+            heightInput.focus();
+        });
+
+        clearDataBtn.addEventListener('click', function() {
+            groupsData = [];
+            highlightData = null;
+            globalGroupCounter = 1; // 重置計數器
+            document.getElementById('highlightInfo').classList.add('hidden');
+            updateTable();
+            if (vtChartInstance) {
+                vtChartInstance.destroy();
+                vtChartInstance = null;
+            }
+            emptyGraphMsg.style.display = 'flex';
+        });
+
+        window.deleteGroup = function(id) {
+            groupsData = groupsData.filter(d => d.id !== id);
+            
+            // If the deleted group was highlighted, clear highlight
+            if (highlightData && highlightData.id === id) {
+                highlightData = null;
+                document.getElementById('highlightInfo').classList.add('hidden');
+            }
+            
+            updateTable();
+            
+            if (groupsData.length === 0) {
+                if (vtChartInstance) {
+                    vtChartInstance.destroy();
+                    vtChartInstance = null;
+                }
+                emptyGraphMsg.style.display = 'flex';
+            } else {
+                drawChart();
+            }
+        };
+
+        // Modal Handlers
+        function openModal() {
+            instructionModal.classList.remove('hidden');
+            // Trigger reflow for transition
+            void instructionModal.offsetWidth;
+            instructionModal.classList.remove('opacity-0');
+            instructionModalContent.classList.remove('scale-95');
+            // 重新渲染 MathJax 以確保 Modal 內的公式正確顯示
+            if (window.MathJax) {
+                MathJax.typesetPromise([instructionModal]).catch(err => console.log(err));
+            }
+        }
+
+        function closeModal() {
+            instructionModal.classList.add('opacity-0');
+            instructionModalContent.classList.add('scale-95');
+            setTimeout(() => {
+                instructionModal.classList.add('hidden');
+            }, 300); // Wait for transition
+        }
+
+        helpBtn.addEventListener('click', openModal);
+        closeModalBtn.addEventListener('click', closeModal);
+        closeModalFooterBtn.addEventListener('click', closeModal);
+        instructionModal.addEventListener('click', function(e) {
+            if (e.target === instructionModal) closeModal();
+        });
+
+        // Toggle Reference Line Handler
+        toggleRefLine.addEventListener('change', drawChart);
+
+        function updateTable() {
+            if (groupsData.length === 0) {
+                dataListArea.classList.add('hidden');
+                return;
+            }
+            dataListArea.classList.remove('hidden');
+            
+            dataTableBody.innerHTML = '';
+            groupsData.forEach(data => {
+                const tr = document.createElement('tr');
+                
+                // Color code g values to show accuracy intuitively
+                let gColor = 'text-gray-900';
+                if (data.g < 8 || data.g > 11.5) gColor = 'text-red-600 font-bold';
+                else if (data.g >= 9.0 && data.g <= 10.6) gColor = 'text-green-600 font-bold';
+
+                tr.innerHTML = `
+                    <td class="px-3 py-2 whitespace-nowrap text-gray-500">第 ${data.num} 組</td>
+                    <td class="px-3 py-2 whitespace-nowrap">${data.h.toFixed(2)}</td>
+                    <td class="px-3 py-2 whitespace-nowrap">${data.t.toFixed(3)}</td>
+                    <td class="px-3 py-2 whitespace-nowrap ${gColor}">${data.g.toFixed(2)}</td>
+                    <td class="px-3 py-2 whitespace-nowrap text-center">
+                        <button type="button" onclick="deleteGroup(${data.id})" class="text-xs bg-white text-gray-500 hover:text-red-600 border border-gray-300 hover:border-red-300 px-2 py-1 rounded shadow-sm transition-colors">刪除</button>
+                    </td>
+                `;
+                dataTableBody.appendChild(tr);
+            });
+            // Auto-scroll to latest
+            const scrollContainer = dataTableBody.parentElement.parentElement;
+            scrollContainer.scrollTop = scrollContainer.scrollHeight;
+        }
+
+        // Function to display error message
+        function showError(message) {
+            errorMsg.textContent = message;
+            errorMsg.classList.remove('hidden');
+        }
+
+        // Function to draw the V-t Chart
+        function drawChart() {
+            if (groupsData.length === 0) return;
+            
+            // Hide the empty state message
+            emptyGraphMsg.style.display = 'none';
+
+            // Generate scatter data points
+            const scatterPoints = groupsData.map(d => ({
+                x: d.t,
+                y: d.v,
+                groupNum: d.num,
+                g: d.g,
+                h: d.h
+            }));
+
+            // 取得各點對應的顏色
+            const pointColors = groupsData.map(d => d.color);
+
+            // Find scale bounds to fit all points
+            const maxT = Math.max(...groupsData.map(d => d.t)) * 1.2;
+            const maxV = Math.max(...groupsData.map(d => d.v)) * 1.2;
+
+            // Theoretical line data points (V = 9.8 * t)
+            const theoreticalPoints = [
+                { x: 0, y: 0 },
+                { x: maxT, y: 9.8 * maxT }
+            ];
+
+            // 準備線下面積的 Dataset
+            let areaDataset = {
+                type: 'line',
+                label: '所選數據線下面積 (h)',
+                data: [],
+                fill: 'origin',
+                backgroundColor: 'rgba(0,0,0,0)',
+                borderColor: 'transparent',
+                pointRadius: 0,
+                pointHoverRadius: 0,
+                borderWidth: 1,
+                tension: 0,
+                order: 3 // 確保繪製在最底層，不遮擋圓點
+            };
+
+            // 如果有點擊某組資料點，設定透明的線下面積
+            if (highlightData) {
+                areaDataset.data = [
+                    { x: 0, y: 0 },
+                    { x: highlightData.t, y: highlightData.v }
+                ];
+                // 將 HEX 顏色轉換為半透明 RGBA 作為三角形填充色
+                const hexToRgba = (hex, alpha) => {
+                    let r = parseInt(hex.slice(1, 3), 16),
+                        g = parseInt(hex.slice(3, 5), 16),
+                        b = parseInt(hex.slice(5, 7), 16);
+                    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+                };
+                areaDataset.backgroundColor = hexToRgba(highlightData.color, 0.2);
+                areaDataset.borderColor = highlightData.color;
+            }
+
+            // Destroy old chart
+            if (vtChartInstance) {
+                vtChartInstance.destroy();
+            }
+
+            // Create new chart
+            vtChartInstance = new Chart(ctx, {
+                data: {
+                    datasets: [
+                        {
+                            type: 'scatter',
+                            label: '各組末速落點 (t, V)',
+                            data: scatterPoints,
+                            backgroundColor: pointColors,
+                            borderColor: 'white',
+                            borderWidth: 1.5,
+                            pointRadius: 7,
+                            pointHoverRadius: 10,
+                            order: 1 // 散佈點繪製在最上層
+                        },
+                        {
+                            type: 'line',
+                            label: '理論參考線 (g = 9.8 m/s²)',
+                            data: theoreticalPoints,
+                            borderColor: 'rgba(156, 163, 175, 0.8)', // 更改為灰色虛線以突顯學生各組顏色
+                            borderWidth: 2,
+                            borderDash: [5, 5],
+                            pointRadius: 0,
+                            pointHoverRadius: 0,
+                            fill: false,
+                            tension: 0,
+                            order: 2, // 參考線在中間
+                            hidden: !toggleRefLine.checked
+                        },
+                        areaDataset // 注入面積圖層
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: {
+                        duration: 300
+                    },
+                    onClick: (event, elements) => {
+                        // 處理圖表點擊事件
+                        if (elements.length > 0) {
+                            // 篩選出點擊的是散佈圖層 (index 0) 的點
+                            const scatterElements = elements.filter(e => e.datasetIndex === 0);
+                            if(scatterElements.length > 0) {
+                                const dataIndex = scatterElements[0].index;
+                                const clickedGroup = groupsData[dataIndex];
+                                highlightData = clickedGroup;
+                                showHighlightInfo(clickedGroup);
+                                drawChart(); // 重新繪製圖表以顯示該組的透明面積
+                            }
+                        } else {
+                            // 點擊空白處則清除選取狀態
+                            highlightData = null;
+                            document.getElementById('highlightInfo').classList.add('hidden');
+                            drawChart();
+                        }
+                    },
+                    scales: {
+                        x: {
+                            type: 'linear',
+                            title: {
+                                display: true,
+                                text: '墜落時間 t (s)',
+                                font: { size: 14, weight: 'bold' }
+                            },
+                            min: 0,
+                            max: maxT
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: '末速度 V (m/s)',
+                                font: { size: 14, weight: 'bold' }
+                            },
+                            min: 0,
+                            max: Math.max(maxV, 9.8 * maxT * 0.9) // Ensure theoretical line is visible
+                        }
+                    },
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    if (context.datasetIndex === 1) return `理論值 (V = 9.8t)`; 
+                                    if (context.datasetIndex === 2) return `線下面積 (h = ${highlightData.h}m)`; 
+                                    const raw = context.raw;
+                                    return `第 ${raw.groupNum} 組: 時間 ${raw.x.toFixed(3)}s, 末速 ${raw.y.toFixed(2)}m/s (點擊查看詳情)`;
+                                }
+                            }
+                        },
+                        legend: {
+                            display: true,
+                            position: 'top',
+                            labels: {
+                                filter: function(item, chart) {
+                                    // 隱藏圖例中多出來的面積 Dataset 標籤
+                                    return item.datasetIndex !== 2;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // 顯示點選的詳細資訊面板，並更新動態帶入的數學算式
+        function showHighlightInfo(data) {
+            const infoBox = document.getElementById('highlightInfo');
+            const title = document.getElementById('infoTitle');
+            const area = document.getElementById('infoArea');
+            const formula = document.getElementById('infoFormula');
+
+            title.textContent = `第 ${data.num} 組數據`;
+            title.style.color = data.color;
+            area.textContent = data.h.toFixed(2);
+            
+            // 組合包含動態數字帶入的 LaTeX 算式字串
+            const latexString = `\\( g = \\frac{2h}{t^2} = \\frac{2 \\times ${data.h}}{${data.t}^2} = ${data.g.toFixed(2)} \\text{ (m/s}^2\\text{)} \\)`;
+            formula.innerHTML = latexString;
+            
+            infoBox.classList.remove('hidden');
+
+            // 呼叫 MathJax 重新渲染動態插入的算式區塊
+            if (window.MathJax) {
+                MathJax.typesetPromise([formula]).catch(function (err) {
+                    console.log('MathJax 渲染失敗:', err.message);
+                });
+            }
+        }
+    </script>
+</body>
+</html>
