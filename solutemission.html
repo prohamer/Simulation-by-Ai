@@ -1,0 +1,1065 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>🧪 溶液配製虛擬實驗室 Pro Max</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+    
+    <style>
+        body {
+            font-family: 'Nunito', 'Microsoft JhengHei', sans-serif;
+            background-color: #f8fafc;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: manipulation;
+            overflow: hidden; 
+        }
+
+        .digital-font { font-family: 'Share Tech Mono', monospace; }
+
+        .btn-press { transition: transform 0.1s, box-shadow 0.1s; }
+        .btn-press:active { transform: translateY(3px); box-shadow: 0 0 0 transparent !important; }
+
+        input[type="number"]::-webkit-inner-spin-button, 
+        input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+        
+        .beaker {
+            background: linear-gradient(to right, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.4) 15%, rgba(255,255,255,0.05) 100%);
+            backdrop-filter: blur(2px);
+        }
+        
+        .precipitate {
+            background-image: radial-gradient(#d97706 15%, transparent 20%);
+            background-size: 10px 10px;
+            background-color: #fcd34d;
+        }
+
+        .input-active {
+            border-color: #3b82f6 !important;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3) !important;
+            background-color: #eff6ff !important;
+        }
+
+        #reference-sidebar { transition: transform 0.3s ease-in-out; }
+        .sidebar-open { transform: translateX(0); }
+        .sidebar-closed { transform: translateX(100%); }
+
+        @keyframes fall {
+            0% { top: -10%; opacity: 1; transform: scale(1); }
+            80% { opacity: 1; }
+            100% { top: 95%; opacity: 0; transform: scale(0.5); }
+        }
+        .particle {
+            position: absolute;
+            width: 7px;
+            height: 7px;
+            background-color: #fef08a;
+            border-radius: 50%;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.3);
+            pointer-events: none;
+            z-index: 5;
+        }
+
+        @keyframes drop-fall {
+            0% { top: -10%; transform: scale(0.8); opacity: 0; }
+            15% { opacity: 1; }
+            90% { opacity: 1; }
+            100% { top: 90%; transform: scale(1.2); opacity: 0; }
+        }
+        .water-drop {
+            position: absolute;
+            width: 10px;
+            height: 14px;
+            background-color: #38bdf8;
+            border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%;
+            box-shadow: inset -2px -2px 4px rgba(0,0,0,0.1);
+            pointer-events: none;
+            z-index: 5;
+        }
+
+        @keyframes steam-rise {
+            0% { transform: translateY(0) scale(1); opacity: 0.8; }
+            100% { transform: translateY(-120px) scale(2.5) rotate(15deg); opacity: 0; }
+        }
+        .steam-cloud {
+            position: absolute;
+            width: 25px;
+            height: 25px;
+            background-color: rgba(255, 255, 255, 0.8);
+            border-radius: 50%;
+            filter: blur(5px);
+            pointer-events: none;
+            z-index: 6;
+        }
+
+        @keyframes flicker {
+            0%, 100% { opacity: 1; transform: scale(1) translateY(0); }
+            50% { opacity: 0.8; transform: scale(1.1) translateY(-5px); }
+        }
+        .animate-flicker { animation: flicker 0.5s infinite alternate; }
+    </style>
+</head>
+<body class="h-screen w-screen flex flex-col box-border text-slate-800">
+
+    <header class="bg-white shadow-sm p-3 flex justify-between items-center shrink-0 border-b-4 border-blue-400 z-20">
+        <h1 class="text-xl md:text-2xl font-black text-blue-900 flex items-center gap-2">
+            🧪 溶液配製實驗室
+        </h1>
+        <button onclick="toggleSidebar()" class="bg-indigo-100 text-indigo-700 hover:bg-indigo-200 border-2 border-indigo-300 font-bold py-2 px-4 rounded-full flex items-center gap-2 btn-press shadow-[0_3px_0_#818cf8]">
+            <span>📚</span> 溶解度圖表
+        </button>
+    </header>
+
+    <div class="flex-1 flex flex-col lg:flex-row min-h-0 relative">
+        
+        <div class="w-full lg:w-5/12 bg-slate-100 flex flex-col border-r-2 border-slate-300 shadow-[inset_-5px_0_10px_rgba(0,0,0,0.03)] z-10 overflow-y-auto">
+            
+            <div class="flex-1 p-2 flex flex-col items-center justify-center relative min-h-[420px]">
+                
+                <div class="absolute top-2 right-4 z-20 bg-white/90 p-1.5 rounded-lg shadow border border-slate-300">
+                    <label class="text-xs font-bold text-slate-500 mr-1">溶質:</label>
+                    <select id="lab-substance" onchange="changeLabSubstance()" class="text-sm font-bold text-blue-900 bg-transparent outline-none cursor-pointer">
+                        <option value="KNO3">硝酸鉀 (KNO₃)</option>
+                        <option value="NaCl">氯化鈉 (NaCl)</option>
+                        <option value="NaNO3">硝酸鈉 (NaNO₃)</option>
+                        <option value="KCl">氯化鉀 (KCl)</option>
+                        <option value="Sugar" selected>蔗糖</option>
+                    </select>
+                </div>
+
+                <div class="relative w-64 h-[260px] border-8 border-t-0 border-white beaker shadow-2xl rounded-b-3xl mt-2">
+                    
+                    <div class="absolute left-0 bottom-[20%] w-6 border-b-4 border-slate-400/50 z-10"></div>
+                    <div class="absolute left-0 bottom-[40%] w-10 border-b-4 border-slate-400/50 z-10"></div>
+                    <div class="absolute left-0 bottom-[60%] w-6 border-b-4 border-slate-400/50 z-10"></div>
+                    <div class="absolute left-0 bottom-[80%] w-10 border-b-4 border-slate-400/50 z-10"></div>
+                    
+                    <div id="liquid-level" class="absolute bottom-0 w-full bg-sky-300/80 transition-all duration-700 ease-in-out overflow-hidden rounded-b-[20px]" style="height: 0%;">
+                        <canvas id="brownian-canvas" class="absolute inset-0 w-full h-full pointer-events-none"></canvas>
+                        <div id="precipitate-level" class="absolute bottom-0 w-full precipitate transition-all duration-700 ease-in-out z-10 border-t border-amber-500/30" style="height: 0%;"></div>
+                    </div>
+
+                    <div id="particle-container" class="absolute inset-0 overflow-visible pointer-events-none rounded-b-[20px] z-20"></div>
+                    
+                    <div class="absolute -left-12 bottom-2 w-5 h-48 bg-white/90 border-2 border-slate-300 rounded-full flex flex-col justify-end p-[2px] shadow-md z-20">
+                        <div class="absolute -top-7 left-1/2 -translate-x-1/2 text-sm font-black text-slate-700 whitespace-nowrap drop-shadow-sm">
+                            <span id="thermo-text">25</span>°C
+                        </div>
+                        <div class="absolute w-full h-full py-2 pointer-events-none opacity-30 flex flex-col justify-between">
+                            <div class="border-b-2 border-black w-2"></div>
+                            <div class="border-b-2 border-black w-1"></div>
+                            <div class="border-b-2 border-black w-2"></div>
+                            <div class="border-b-2 border-black w-1"></div>
+                            <div class="border-b-2 border-black w-2"></div>
+                        </div>
+                        <div id="thermo-liquid" class="w-full bg-rose-500 rounded-full transition-all duration-100 ease-linear" style="height: 25%;"></div>
+                    </div>
+                </div>
+
+                <div id="burner" class="h-6 w-56 bg-slate-700 rounded-b-xl mx-auto flex justify-center items-start relative mt-[-4px] shadow-lg">
+                    <div id="heat-indicator" class="absolute -top-12 text-5xl hidden animate-flicker drop-shadow-md">🔥</div>
+                    <div id="cool-indicator" class="absolute -top-12 text-5xl hidden animate-pulse drop-shadow-[0_0_10px_rgba(56,189,248,0.8)]">❄️</div>
+                </div>
+                
+                <div class="w-11/12 mt-5 bg-white px-4 py-3 rounded-2xl shadow-md border-2 border-blue-100 relative">
+                    <div class="text-xs font-black text-slate-500 mb-1 flex justify-between">
+                        <span>⚖️ 溶液巨觀與微觀質量</span>
+                        <span id="sim-total-volume" class="text-indigo-400">體積估算: 0 mL</span>
+                    </div>
+                    
+                    <div class="flex items-center justify-center flex-wrap gap-y-1 text-base lg:text-lg font-black text-blue-900 bg-blue-50/50 py-2 px-1 rounded-xl border border-blue-200">
+                        <span class="text-slate-600 mr-1">溶液重 =</span>
+                        <div class="flex items-center text-sky-600">
+                            <span>溶劑</span>
+                            <span id="sim-solvent-val" class="ml-1 bg-sky-100 px-1.5 rounded digital-font">0</span>
+                        </div>
+                        <span class="mx-1.5 text-slate-400">+</span>
+                        <div class="flex items-center text-emerald-600">
+                            <span>已溶溶質</span>
+                            <span id="sim-dissolved-val" class="ml-1 bg-emerald-100 px-1.5 rounded digital-font">0</span>
+                        </div>
+                        <span class="mx-1.5 text-slate-400">=</span>
+                        <span id="sim-solution-weight" class="text-blue-600 digital-font text-2xl underline decoration-blue-300">0</span>
+                        <span class="ml-1 text-sm text-slate-500">g</span>
+                    </div>
+
+                    <div id="precipitate-warn" class="absolute -right-3 -top-3 bg-rose-500 text-white text-xs px-3 py-1.5 rounded-full shadow-md border-2 border-white flex flex-col items-center transition-all duration-300 opacity-0 transform scale-90 pointer-events-none">
+                        <span class="font-bold animate-pulse">有沉澱析出！</span>
+                        <span id="sim-precipitate-val" class="text-[11px] font-bold text-rose-100">未溶: 0g</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white p-3 border-t-2 border-slate-200 shrink-0 shadow-[0_-5px_15px_rgba(0,0,0,0.05)]">
+                <div class="grid grid-cols-4 gap-1.5 mb-2">
+                    <div class="flex flex-col">
+                        <label class="text-[11px] font-bold text-slate-500 mb-0.5 text-center">加溶質(g)</label>
+                        <input type="text" id="input-solute" readonly onclick="setActiveInput('solute')" placeholder="空" class="input-active w-full bg-slate-50 border-2 border-slate-300 rounded p-1.5 text-center font-black text-sm lg:text-base cursor-pointer">
+                    </div>
+                    <div class="flex flex-col">
+                        <label class="text-[11px] font-bold text-slate-500 mb-0.5 text-center">總水量(g)</label>
+                        <input type="text" id="input-solvent" readonly onclick="setActiveInput('solvent')" placeholder="空" class="w-full bg-slate-50 border-2 border-slate-300 rounded p-1.5 text-center font-black text-sm lg:text-base cursor-pointer">
+                    </div>
+                    <div class="flex flex-col">
+                        <label class="text-[11px] font-bold text-rose-500 mb-0.5 text-center">目標水溫(°C)</label>
+                        <input type="text" id="input-temp" readonly onclick="setActiveInput('temp')" class="w-full bg-rose-50 border-2 border-rose-300 rounded p-1.5 text-center font-black text-rose-700 text-sm lg:text-base cursor-pointer">
+                    </div>
+                    <div class="flex flex-col relative group">
+                        <label class="text-[11px] font-bold text-orange-500 mb-0.5 text-center">蒸發量(g)</label>
+                        <div class="relative w-full h-full">
+                            <input type="text" id="input-evap" readonly onclick="setActiveInput('evap')" placeholder="0" class="w-full h-full bg-orange-50 border-2 border-orange-300 rounded p-1.5 pr-7 text-center font-black text-orange-700 text-sm lg:text-base cursor-pointer">
+                            <button onclick="executeEvaporate()" class="absolute right-0 top-0 h-full w-8 bg-orange-500 hover:bg-orange-600 text-white rounded-r border-2 border-orange-500 font-bold text-xs flex items-center justify-center transition-colors btn-press">GO</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-3 gap-1.5">
+                    <button onclick="keypadPress('1')" class="bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold py-2 rounded text-base btn-press shadow-[0_2px_0_#94a3b8]">1</button>
+                    <button onclick="keypadPress('2')" class="bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold py-2 rounded text-base btn-press shadow-[0_2px_0_#94a3b8]">2</button>
+                    <button onclick="keypadPress('3')" class="bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold py-2 rounded text-base btn-press shadow-[0_2px_0_#94a3b8]">3</button>
+                    
+                    <button onclick="keypadPress('4')" class="bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold py-2 rounded text-base btn-press shadow-[0_2px_0_#94a3b8]">4</button>
+                    <button onclick="keypadPress('5')" class="bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold py-2 rounded text-base btn-press shadow-[0_2px_0_#94a3b8]">5</button>
+                    <button onclick="keypadPress('6')" class="bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold py-2 rounded text-base btn-press shadow-[0_2px_0_#94a3b8]">6</button>
+                    
+                    <button onclick="keypadPress('7')" class="bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold py-2 rounded text-base btn-press shadow-[0_2px_0_#94a3b8]">7</button>
+                    <button onclick="keypadPress('8')" class="bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold py-2 rounded text-base btn-press shadow-[0_2px_0_#94a3b8]">8</button>
+                    <button onclick="keypadPress('9')" class="bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold py-2 rounded text-base btn-press shadow-[0_2px_0_#94a3b8]">9</button>
+                    
+                    <button onclick="keypadPress('.')" class="bg-slate-300 hover:bg-slate-400 text-slate-800 font-black py-2 rounded text-base btn-press shadow-[0_2px_0_#94a3b8]">.</button>
+                    <button onclick="keypadPress('0')" class="bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold py-2 rounded text-base btn-press shadow-[0_2px_0_#94a3b8]">0</button>
+                    <button onclick="keypadPress('DEL')" class="bg-slate-300 hover:bg-slate-400 text-slate-700 font-bold py-2 rounded text-base btn-press shadow-[0_2px_0_#94a3b8]">⌫</button>
+                    
+                    <button onclick="keypadPress('C')" class="col-span-3 bg-rose-100 hover:bg-rose-200 text-rose-700 font-black py-2 rounded text-base btn-press shadow-[0_2px_0_#fda4af]">清除資料 (C)</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="w-full lg:w-7/12 flex flex-col bg-slate-50 overflow-y-auto">
+            
+            <div class="bg-blue-900 text-white p-3 md:p-4 shrink-0 flex flex-col xl:flex-row gap-3 border-b-8 border-blue-950">
+                <div class="flex-2 bg-blue-800 rounded-lg p-2 shadow-inner">
+                    <div class="text-blue-300 text-[10px] font-bold mb-1">📐 計算公式 (連等式概念)</div>
+                    <div class="flex items-center justify-center h-12 font-bold text-sm lg:text-base text-center tracking-wide whitespace-nowrap overflow-x-auto pb-1">
+                        <span class="text-yellow-400">P%</span> &nbsp;=&nbsp; 
+                        <div class="flex flex-col items-center mx-1">
+                            <span class="border-b-[2px] border-white px-2 pb-0.5 leading-tight">溶質重</span>
+                            <span class="px-2 pt-0.5 leading-tight text-blue-100">溶液重</span>
+                        </div>
+                        &nbsp;× 100% &nbsp;<span class="text-yellow-400 font-black">=</span>&nbsp;
+                        <div class="flex flex-col items-center mx-1">
+                            <span class="border-b-[2px] border-white px-2 pb-0.5 leading-tight">溶質重</span>
+                            <span class="px-2 pt-0.5 leading-tight text-emerald-200">(溶劑 + 溶質)重</span>
+                        </div>
+                        &nbsp;× 100%
+                    </div>
+                </div>
+                
+                <div class="flex-1 bg-blue-950 rounded-lg p-2 shadow-inner border border-blue-700 relative">
+                    <div class="text-blue-300 text-[10px] font-bold mb-1">🔢 帶入數據 <span class="text-emerald-400">(依實際溶解量)</span></div>
+                    <div class="flex items-center justify-center h-12 font-bold text-base lg:text-xl text-center digital-font text-emerald-300" id="dynamic-formula">
+                        等待輸入...
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex-1 p-4 md:p-6 flex flex-col relative">
+                
+                <div class="flex justify-between items-center mb-4 bg-white p-3 rounded-xl shadow-sm border border-slate-200">
+                    <div>
+                        <h2 class="text-lg md:text-xl font-extrabold text-blue-900" id="level-title">第 1 關：重量百分濃度</h2>
+                    </div>
+                    <div class="flex flex-col items-end">
+                        <div class="flex gap-1 text-xl" id="stars-container"></div>
+                        <span class="text-xs font-bold text-slate-500 mt-1" id="score-text">進度 0 / 5</span>
+                    </div>
+                </div>
+
+                <div class="bg-white border-2 border-blue-100 rounded-2xl p-6 shadow-sm flex-1 flex flex-col justify-center items-center text-center relative overflow-hidden">
+                    <p id="question-text" class="text-xl md:text-2xl font-bold text-slate-700 mb-8 leading-relaxed z-10">
+                        題目載入中...
+                    </p>
+                    
+                    <div class="flex flex-col sm:flex-row gap-4 items-center z-10">
+                        <div class="relative">
+                            <input type="text" id="input-quiz" readonly onclick="setActiveInput('quiz')" placeholder="點此輸入答案"
+                                class="w-48 text-center text-2xl font-black p-3 border-4 border-slate-300 rounded-xl focus:outline-none cursor-pointer bg-slate-50 text-blue-900 transition-colors">
+                            <span class="absolute right-4 top-4 font-bold text-slate-400" id="quiz-unit">%</span>
+                        </div>
+                        <button onclick="submitQuiz()" class="bg-emerald-500 hover:bg-emerald-600 text-white font-black text-xl py-3 px-8 rounded-xl btn-press shadow-[0_5px_0_#059669]">
+                            送出答案
+                        </button>
+                    </div>
+
+                    <div id="hint-box" class="hidden mt-6 bg-rose-50 border-2 border-rose-200 text-rose-700 p-3 rounded-xl w-full max-w-md text-left text-sm font-bold z-10">
+                        💡 <span id="hint-text"></span>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- ================= 參考資料側邊欄 ================= -->
+    <div id="reference-sidebar" class="sidebar-closed fixed inset-y-0 right-0 w-full md:w-[420px] bg-white shadow-2xl z-50 flex flex-col border-l-4 border-indigo-400">
+        <div class="bg-indigo-600 text-white p-4 flex justify-between items-center shrink-0">
+            <h2 class="text-xl font-bold flex items-center gap-2">📚 物質溶解度查詢</h2>
+            <button onclick="toggleSidebar()" class="text-white hover:text-indigo-200 text-2xl font-black">&times;</button>
+        </div>
+        <div class="p-4 flex-1 flex flex-col overflow-y-auto bg-slate-50">
+            <label class="font-bold text-slate-700 mb-2">選擇查詢物質：</label>
+            <select id="substance-select" onchange="syncTemp('num')" class="w-full p-2 border-2 border-indigo-200 rounded-lg mb-4 bg-white font-bold text-indigo-900 focus:outline-none focus:border-indigo-500">
+                <option value="KNO3">硝酸鉀 (KNO₃)</option>
+                <option value="NaCl">氯化鈉 (NaCl)</option>
+                <option value="NaNO3">硝酸鈉 (NaNO₃)</option>
+                <option value="KCl">氯化鉀 (KCl)</option>
+                <option value="Sugar" selected>蔗糖</option>
+            </select>
+            
+            <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 mb-6 relative">
+                <h3 class="text-sm font-bold text-center text-slate-500 mb-2">溶解度曲線圖 (g/100g 水)</h3>
+                <canvas id="solubility-chart" width="350" height="220" class="w-full h-auto bg-slate-50 rounded border"></canvas>
+            </div>
+            
+            <div class="bg-indigo-50 p-4 rounded-xl border-2 border-indigo-100 flex flex-col items-center">
+                <h3 class="font-bold text-indigo-900 mb-3">溫度快速查詢</h3>
+                <div class="flex items-center gap-3 mb-2 w-full px-2">
+                    <span class="font-bold text-slate-600 shrink-0">水溫</span>
+                    <input type="range" id="query-temp-slider" min="0" max="90" step="1" value="25" oninput="syncTemp('slider')" class="w-full accent-indigo-600">
+                    <input type="number" id="query-temp" value="25" min="0" max="90" oninput="syncTemp('num')" class="w-16 p-1 text-center border-2 border-slate-300 rounded-lg font-bold text-lg shrink-0">
+                    <span class="font-bold text-slate-600 shrink-0">°C</span>
+                </div>
+                <div class="text-center mt-4">
+                    <div class="text-sm text-slate-500 font-bold">該溫度下的最大溶解度</div>
+                    <div class="text-3xl font-black text-rose-600 mt-1"><span id="query-result">39.5</span> <span class="text-base text-slate-600">g / 100g 水</span></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="sidebar-overlay" onclick="toggleSidebar()" class="hidden fixed inset-0 bg-black/50 z-40 backdrop-blur-sm"></div>
+    <div id="victory-screen" class="hidden fixed inset-0 bg-blue-900/95 z-[60] flex-col items-center justify-center p-8 text-center backdrop-blur-md">
+        <h1 class="text-6xl md:text-8xl mb-4 animate-bounce">🏆</h1>
+        <h2 class="text-4xl md:text-6xl font-black text-yellow-400 mb-6 tracking-wider">完美通關！</h2>
+        <p class="text-white text-xl md:text-3xl font-bold mb-8">你已精通溶液配製的所有秘訣！</p>
+        <button onclick="location.reload()" class="bg-white text-blue-900 px-8 py-4 rounded-full font-black text-2xl hover:bg-blue-100 btn-press shadow-[0_6px_0_#93c5fd]">
+            重新開始挑戰
+        </button>
+    </div>
+
+    <script>
+        let activeInputId = 'solute'; 
+        
+        const state = {
+            substance: 'Sugar', 
+            solute: NaN, 
+            solvent: NaN, 
+            targetTemp: 25,
+            currentTemp: 25
+        };
+
+        const quizState = { level: 1, score: 0, target: 5, currentQ: null };
+
+        const solubilityData = {
+            'KNO3': (T) => {
+                if(T <= 0) return 13;
+                if(T <= 20) return 13 + ((32-13)/20)*T;
+                if(T <= 40) return 32 + ((64-32)/20)*(T-20);
+                if(T <= 60) return 64 + ((110-64)/20)*(T-40);
+                if(T <= 80) return 110 + ((169-110)/20)*(T-60);
+                return 169 + ((246-169)/20)*(T-80);
+            },
+            'NaCl': (T) => 35.7 + 0.03 * T,
+            'NaNO3': (T) => {
+                if(T <= 20) return 73 + ((88-73)/20)*T;
+                if(T <= 40) return 88 + ((104-88)/20)*(T-20);
+                if(T <= 60) return 104 + ((124-104)/20)*(T-40);
+                if(T <= 80) return 124 + ((148-124)/20)*(T-60);
+                return 148 + ((175-148)/20)*(T-80);
+            },
+            'KCl': (T) => {
+                if(T <= 20) return 28 + ((34-28)/20)*T;
+                if(T <= 40) return 34 + ((40-34)/20)*(T-20);
+                if(T <= 60) return 40 + ((45-40)/20)*(T-40);
+                if(T <= 80) return 45 + ((51-45)/20)*(T-60);
+                return 51 + ((57-51)/20)*(T-80);
+            },
+            'Sugar': (T) => { 
+                if(T <= 20) return 179 + ((204-179)/20)*T;
+                if(T <= 40) return 204 + ((238-204)/20)*(T-20);
+                if(T <= 60) return 238 + ((287-238)/20)*(T-40);
+                if(T <= 80) return 287 + ((362-287)/20)*(T-60);
+                return 362 + ((450-362)/20)*(T-80);
+            }
+        };
+
+        const substanceNames = { 'KNO3': '硝酸鉀', 'NaCl': '氯化鈉', 'NaNO3': '硝酸鈉', 'KCl': '氯化鉀', 'Sugar': '蔗糖' };
+
+        const canvas = document.getElementById('brownian-canvas');
+        const ctx = canvas.getContext('2d');
+        let brownianParticles = [];
+        let targetDissolved = 0;
+
+        function initCanvas() {
+            const resize = () => {
+                canvas.width = canvas.clientWidth;
+                canvas.height = canvas.clientHeight;
+            };
+            window.addEventListener('resize', resize);
+            resize();
+            requestAnimationFrame(updateBrownian);
+        }
+
+        function updateBrownian() {
+            if(canvas.width !== canvas.clientWidth || canvas.height !== canvas.clientHeight) {
+                canvas.width = canvas.clientWidth;
+                canvas.height = canvas.clientHeight;
+            }
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            let targetCount = Math.min(250, Math.floor(targetDissolved * 1.5));
+            
+            if (brownianParticles.length < targetCount) {
+                brownianParticles.push({
+                    x: Math.random() * canvas.width,
+                    y: Math.random() * canvas.height,
+                    vx: (Math.random() - 0.5) * 1.2,
+                    vy: (Math.random() - 0.5) * 1.2,
+                    size: Math.random() * 1.5 + 1
+                });
+            } else if (brownianParticles.length > targetCount) {
+                brownianParticles.pop();
+            }
+
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+            brownianParticles.forEach(p => {
+                p.x += p.vx + (Math.random() - 0.5) * 0.5; 
+                p.y += p.vy + (Math.random() - 0.5) * 0.5;
+
+                if (p.x < 0) { p.x = 0; p.vx *= -1; }
+                if (p.x > canvas.width) { p.x = canvas.width; p.vx *= -1; }
+                if (p.y < 0) { p.y = 0; p.vy *= -1; }
+                if (p.y > canvas.height) { p.y = canvas.height; p.vy *= -1; }
+
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                ctx.fill();
+            });
+
+            requestAnimationFrame(updateBrownian);
+        }
+
+        window.onload = () => {
+            document.getElementById('input-solute').value = '';
+            document.getElementById('input-solvent').value = '';
+            document.getElementById('input-temp').value = '25';
+            document.getElementById('input-evap').value = '';
+            
+            window.addEventListener('keydown', handlePhysicalKeyboard);
+            
+            initCanvas();
+            startTemperatureSimulation();
+            
+            updateLabVisuals();
+            nextQuestion();
+            drawChart();
+            querySolubility();
+        };
+
+        function changeLabSubstance() {
+            state.substance = document.getElementById('lab-substance').value;
+            document.getElementById('substance-select').value = state.substance;
+            syncTemp('num');
+            updateLabVisuals();
+        }
+
+        function startTemperatureSimulation() {
+            setInterval(() => {
+                if (Math.abs(state.currentTemp - state.targetTemp) > 0.1) {
+                    let diff = state.targetTemp - state.currentTemp;
+                    let step = diff > 0 ? 0.3 : -0.3; 
+                    if(Math.abs(diff) > 30) step *= 3;
+                    else if(Math.abs(diff) > 10) step *= 2;
+
+                    state.currentTemp += step;
+                    
+                    if((step > 0 && state.currentTemp >= state.targetTemp) ||
+                       (step < 0 && state.currentTemp <= state.targetTemp)) {
+                        state.currentTemp = state.targetTemp;
+                    }
+
+                    document.getElementById('thermo-text').innerText = Math.round(state.currentTemp);
+                    let thermoHeight = (state.currentTemp / 100) * 100; 
+                    if(thermoHeight < 5) thermoHeight = 5;
+                    document.getElementById('thermo-liquid').style.height = `${thermoHeight}%`;
+
+                    if (diff > 0 && state.currentTemp !== state.targetTemp) {
+                        document.getElementById('heat-indicator').classList.remove('hidden');
+                        document.getElementById('cool-indicator').classList.add('hidden');
+                    } else if (diff < 0 && state.currentTemp !== state.targetTemp) {
+                        document.getElementById('heat-indicator').classList.add('hidden');
+                        document.getElementById('cool-indicator').classList.remove('hidden');
+                    } else {
+                        document.getElementById('heat-indicator').classList.add('hidden');
+                        document.getElementById('cool-indicator').classList.add('hidden');
+                    }
+                    updateLabVisuals();
+                } else {
+                    document.getElementById('heat-indicator').classList.add('hidden');
+                    document.getElementById('cool-indicator').classList.add('hidden');
+                }
+            }, 50);
+        }
+
+        function setActiveInput(id) {
+            activeInputId = id;
+            ['solute', 'solvent', 'temp', 'evap', 'quiz'].forEach(type => {
+                const el = document.getElementById(`input-${type}`);
+                if (el) {
+                    if (type === id) el.classList.add('input-active');
+                    else el.classList.remove('input-active');
+                }
+            });
+            
+            const quizEl = document.getElementById('input-quiz');
+            if (id === 'quiz') {
+                quizEl.classList.remove('border-slate-300');
+                quizEl.classList.add('border-emerald-400', 'bg-emerald-50');
+            } else {
+                quizEl.classList.add('border-slate-300');
+                quizEl.classList.remove('border-emerald-400', 'bg-emerald-50');
+            }
+        }
+
+        function spawnParticles(type, amount) {
+            const container = document.getElementById('particle-container');
+            let numParticles = Math.min(25, Math.ceil(amount)); 
+            if (numParticles <= 0) numParticles = 1;
+            
+            for(let i=0; i<numParticles; i++) {
+                let p = document.createElement('div');
+                p.className = type === 'water' ? 'water-drop' : 'particle';
+                p.style.left = (30 + Math.random() * 40) + '%'; 
+                p.style.animationDuration = type === 'water' ? (0.3 + Math.random() * 0.2) + 's' : (0.4 + Math.random() * 0.3) + 's';
+                p.style.animationTimingFunction = type === 'water' ? 'ease-in' : 'linear';
+                p.style.animationName = type === 'water' ? 'drop-fall' : 'fall';
+                
+                container.appendChild(p);
+                setTimeout(() => { if(p.parentNode) p.remove(); }, 800);
+            }
+        }
+
+        function executeEvaporate() {
+            let inputEl = document.getElementById('input-evap');
+            let evapAmt = parseFloat(inputEl.value) || 0;
+            let currentSolvent = isNaN(state.solvent) ? 0 : state.solvent;
+
+            if (evapAmt > 0 && currentSolvent > 0) {
+                let actualEvap = Math.min(evapAmt, currentSolvent);
+                state.solvent = currentSolvent - actualEvap;
+                document.getElementById('input-solvent').value = state.solvent === 0 ? '' : state.solvent;
+                
+                const container = document.getElementById('particle-container');
+                for(let i=0; i<15; i++) {
+                    let s = document.createElement('div');
+                    s.className = 'steam-cloud';
+                    s.style.left = (20 + Math.random() * 60) + '%';
+                    s.style.bottom = '20%'; 
+                    s.style.animationDuration = (1 + Math.random()) + 's';
+                    s.style.animationName = 'steam-rise';
+                    container.appendChild(s);
+                    setTimeout(() => { if(s.parentNode) s.remove(); }, 2000);
+                }
+
+                inputEl.value = ''; 
+                updateLabVisuals();
+            }
+        }
+
+        function keypadPress(key) {
+            const inputEl = document.getElementById(`input-${activeInputId}`);
+            if (!inputEl) return;
+
+            let oldVal = parseFloat(inputEl.value) || 0;
+            let currentVal = inputEl.value.toString();
+
+            if (key === 'C') {
+                currentVal = '';
+            } else if (key === 'DEL') {
+                currentVal = currentVal.slice(0, -1);
+            } else if (key === '.') {
+                if (!currentVal.includes('.')) {
+                    currentVal += currentVal === '' ? '0.' : '.';
+                }
+            } else {
+                if (currentVal === '0' && key !== '0') currentVal = key;
+                else if (currentVal === '0' && key === '0') currentVal = '0';
+                else if (currentVal.length < 5) currentVal += key;
+            }
+
+            if (activeInputId === 'temp') {
+                let checkVal = parseFloat(currentVal);
+                if (checkVal > 90) currentVal = '90';
+            }
+            if (['solute', 'solvent', 'evap'].includes(activeInputId)) {
+                if (parseFloat(currentVal) > 2000) currentVal = '2000'; 
+            }
+
+            inputEl.value = currentVal;
+            let newVal = parseFloat(currentVal); 
+
+            if (['solute', 'solvent', 'temp'].includes(activeInputId)) {
+                if (!isNaN(newVal) && newVal > oldVal) {
+                    if(activeInputId === 'solute') spawnParticles('solute', newVal - oldVal);
+                    if(activeInputId === 'solvent') spawnParticles('water', newVal - oldVal);
+                }
+                
+                if (activeInputId === 'temp') {
+                    state.targetTemp = isNaN(newVal) ? 25 : newVal; 
+                } else {
+                    state[activeInputId] = newVal;
+                }
+                
+                if(activeInputId !== 'temp') updateLabVisuals();
+            }
+        }
+
+        function handlePhysicalKeyboard(e) {
+            if(document.activeElement.id === 'query-temp' || document.activeElement.id === 'query-temp-slider') return;
+
+            if (e.key >= '0' && e.key <= '9') {
+                keypadPress(e.key);
+            } else if (e.key === '.') {
+                keypadPress('.');
+            } else if (e.key === 'Backspace') {
+                keypadPress('DEL');
+            } else if (e.key === 'Escape' || e.key === 'Delete' || e.key.toLowerCase() === 'c') {
+                keypadPress('C');
+            } else if (e.key === 'Enter') {
+                if (activeInputId === 'quiz') submitQuiz();
+                if (activeInputId === 'evap') executeEvaporate();
+            }
+        }
+
+        function updateLabVisuals() {
+            let solute = isNaN(state.solute) ? 0 : state.solute;
+            let solvent = isNaN(state.solvent) ? 0 : state.solvent;
+            let currentTemp = state.currentTemp;
+            let substance = state.substance;
+            
+            const maxSolubility100g = solubilityData[substance](currentTemp);
+            const maxDissolvable = solvent === 0 ? 0 : (maxSolubility100g * solvent / 100);
+            
+            let dissolved = Math.min(solute, maxDissolvable);
+            targetDissolved = dissolved; 
+            let precipitate = solute - dissolved;
+            let totalWeight = solvent + solute;
+            
+            let densityFactor = substance === 'Sugar' ? 0.6 : 0.4;
+            let volumeContribution = dissolved * densityFactor + precipitate * densityFactor;
+            let totalVolume = solvent + volumeContribution;
+            
+            document.getElementById('sim-total-volume').innerText = `體積估算: ${totalVolume.toFixed(1)} mL`;
+
+            const MAX_CAPACITY = 2000; 
+            let liquidPct = (totalVolume / MAX_CAPACITY) * 100;
+            if(liquidPct > 90) liquidPct = 90; 
+            
+            let precipPct = 0;
+            const warnBox = document.getElementById('precipitate-warn');
+            if (precipitate > 0.1) {
+                warnBox.style.opacity = '1';
+                warnBox.style.transform = 'scale(1)';
+                document.getElementById('sim-precipitate-val').innerText = `未溶: ${precipitate.toFixed(1)}g`;
+                
+                precipPct = (precipitate / solute) * 20; 
+                if(precipPct > 20) precipPct = 20;
+                if(precipPct < 4 && precipitate > 0) precipPct = 4;
+            } else {
+                warnBox.style.opacity = '0';
+                warnBox.style.transform = 'scale(0.9)';
+            }
+
+            document.getElementById('liquid-level').style.height = `${liquidPct}%`;
+            document.getElementById('precipitate-level').style.height = `${precipPct}%`;
+
+            updateFormulas(solute, solvent, dissolved, precipitate, totalWeight);
+        }
+
+        function updateFormulas(solute, solvent, dissolved, precipitate, totalWeight) {
+            const d_str = Number.isInteger(dissolved) ? dissolved : dissolved.toFixed(1);
+            const s_str = Number.isInteger(solvent) ? solvent : solvent.toFixed(1);
+            const w_str = Number.isInteger(solvent + dissolved) ? (solvent + dissolved) : (solvent + dissolved).toFixed(1);
+
+            document.getElementById('sim-solvent-val').innerText = s_str;
+            document.getElementById('sim-dissolved-val').innerText = d_str;
+            document.getElementById('sim-solution-weight').innerText = w_str;
+
+            const fDyn = document.getElementById('dynamic-formula');
+            if (solvent === 0 && solute === 0) {
+                fDyn.innerHTML = `<span class="text-slate-400 text-sm">請輸入溶質與水量</span>`;
+                return;
+            }
+
+            const solutionWeight = solvent + dissolved;
+            let percent = 0;
+            if (solutionWeight > 0) {
+                percent = (dissolved / solutionWeight) * 100;
+            }
+            percent = Math.round(percent * 10) / 10; 
+
+            let html = `<div class="flex items-center">`;
+            html += `<div class="flex flex-col items-center mx-2 text-white text-lg">
+                        <span class="border-b-2 border-emerald-400 px-3 pb-0.5 text-emerald-300 drop-shadow">${d_str}</span>
+                        <span class="px-2 pt-0.5 text-emerald-200 drop-shadow whitespace-nowrap text-base">
+                            ${s_str} <span class="text-slate-400 mx-1">+</span> <span class="text-emerald-300">${d_str}</span>
+                        </span>
+                     </div>`;
+            html += ` <span class="text-white mx-1 text-base">× 100%</span> `;
+            html += ` <span class="text-yellow-400 ml-2 drop-shadow text-2xl"> = ${percent}%</span>`;
+            
+            html += `</div>`;
+            fDyn.innerHTML = html;
+        }
+
+        const levelData = [
+            { id: 1, title: "第 1 關：重量百分濃度", unit: "%" },
+            { id: 2, title: "第 2 關：體積百分濃度", unit: "%" },
+            { id: 3, title: "第 3 關：百萬分點 (ppm)", unit: "ppm" },
+            { id: 4, title: "第 4 關：溶解度與降溫結晶", unit: "g" },
+            { id: 5, title: "第 5 關：綜合大挑戰", unit: "" }
+        ];
+
+        function nextQuestion() {
+            let type = quizState.level;
+            if(type === 5) type = Math.floor(Math.random() * 4) + 1;
+
+            let q = { text: '', ans: 0, hint: '', unit: '' };
+            let envTemp = Math.floor(Math.random() * 6 + 2) * 10; 
+
+            if (type === 1) { 
+                let subsArray = ['KNO3', 'NaCl', 'NaNO3', 'KCl', 'Sugar'];
+                let sub = subsArray[Math.floor(Math.random() * subsArray.length)];
+                let subName = substanceNames[sub];
+
+                let solute = Math.floor(Math.random() * 5 + 1) * 10; 
+                let solventOptions = [10, 20, 40, 50, 100];
+                let solvent = solventOptions[Math.floor(Math.random() * solventOptions.length)];
+
+                let maxSolubility100g = solubilityData[sub](envTemp);
+                let maxDissolvable = (maxSolubility100g * solvent / 100);
+                let dissolved = Math.min(solute, maxDissolvable);
+                let totalWeight = solvent + dissolved;
+                
+                q.ans = Math.round((dissolved / totalWeight) * 100 * 10) / 10;
+                
+                q.text = `請查閱「參考資料」。<br>在 <span class="text-rose-600">${envTemp}°C</span> 下，將 <span class="text-amber-600">${solute}g</span> <span class="text-amber-700 font-black underline">${subName}</span> 加入 <span class="text-sky-600">${solvent}g</span> 水中充分攪拌。<br>此溶液的重量百分濃度是多少？`;
+                
+                if (solute > maxDissolvable) {
+                    let max_str = maxDissolvable % 1 === 0 ? maxDissolvable : maxDissolvable.toFixed(1);
+                    let d_str = dissolved % 1 === 0 ? dissolved : dissolved.toFixed(1);
+                    q.hint = `⚠️ 注意：超過溶解度，有沉澱發生！<br>1. 查表得知 ${envTemp}°C 時 ${solvent}g 水最多溶 ${max_str}g。<br>2. 實際溶解量 = ${d_str}g。<br>3. 濃度 = 溶質 ÷ (水+溶質) = ${d_str} ÷ (${solvent}+${d_str}) × 100% = ${q.ans}%`;
+                } else {
+                    q.hint = `未達飽和，可完全溶解。<br>濃度 = 溶質 ÷ (水+溶質) × 100%。<br>計算：${solute} ÷ (${solvent}+${solute}) × 100% = ${q.ans}%`;
+                }
+                q.unit = "%";
+            } 
+            else if (type === 2) { 
+                let total = [100, 200, 500][Math.floor(Math.random() * 3)];
+                let ans = [5, 10, 20, 25][Math.floor(Math.random() * 4)];
+                let solute = total * ans / 100;
+                let solvent = total - solute;
+                
+                q.ans = ans;
+                q.text = `將 <span class="text-purple-600">${solute}mL</span> 酒精與 <span class="text-sky-600">${solvent}mL</span> 水混合<span class="text-sm text-slate-400">(假設體積具加成性)</span>。<br>體積百分濃度是多少？`;
+                q.hint = `濃度 = 溶質體積 ÷ (總體積) × 100%。<br>總體積 = ${solute}+${solvent} = ${total} mL。<br>計算：${solute} ÷ ${total} × 100 = ${q.ans}%`;
+                q.unit = "%";
+            }
+            else if (type === 3) { 
+                let kg = [2, 5, 10][Math.floor(Math.random() * 3)];
+                let ans = [3, 4, 5, 8][Math.floor(Math.random() * 4)];
+                let mg = kg * ans;
+                
+                q.ans = ans;
+                q.text = `在 <span class="text-emerald-600">${kg} 公斤</span> 的水源中，驗出微量 <span class="text-rose-600">${mg} 毫克</span> 雜質。<br>雜質濃度為多少 ppm？`;
+                q.hint = `ppm = 溶質質量(mg) ÷ 溶液總質量(kg)。<br>計算：${mg} ÷ ${kg} = ${q.ans} ppm`;
+                q.unit = "ppm";
+            }
+            else if (type === 4) { 
+                let isCooling = Math.random() > 0.4;
+                let subsArray = ['KNO3', 'NaNO3', 'KCl'];
+                let sub = subsArray[Math.floor(Math.random() * subsArray.length)];
+                let subName = substanceNames[sub];
+
+                if(!isCooling) {
+                    let temp = [20, 40, 60][Math.floor(Math.random() * 3)];
+                    let max = Math.round(solubilityData[sub](temp));
+                    let water = [50, 100, 200][Math.floor(Math.random() * 3)];
+                    
+                    q.ans = Math.round((max * (water/100)) * 10) / 10;
+                    q.text = `查閱「參考資料」。<br>在 <span class="text-rose-600">${temp}°C</span> 時，<span class="text-sky-600">${water}g</span> 的水最多能溶解多少 g <span class="text-amber-700 underline">${subName}</span>？`;
+                    q.hint = `1. 查表得知 ${temp}°C 時 100g 水可溶 ${max}g。<br>2. 目前水量為 ${water}g。<br>3. ${max} × (${water}/100) = ${q.ans}g。`;
+                } else {
+                    let tHigh = [60, 80][Math.floor(Math.random() * 2)];
+                    let tLow = [20, 40][Math.floor(Math.random() * 2)];
+                    let water = [50, 100][Math.floor(Math.random() * 2)];
+                    
+                    let maxHigh = Math.round(solubilityData[sub](tHigh));
+                    let maxLow = Math.round(solubilityData[sub](tLow));
+                    let diff = maxHigh - maxLow;
+                    
+                    q.ans = Math.round((diff * (water/100)) * 10) / 10;
+                    q.text = `查閱「參考資料」。<br>將 <span class="text-rose-600">${tHigh}°C</span> 下 <span class="text-sky-600">${water}g</span> 水的 <span class="text-amber-700">${subName}</span> 飽和溶液，<br>降溫至 <span class="text-blue-600">${tLow}°C</span>，會析出多少克結晶？`;
+                    q.hint = `1. ${tHigh}°C溶解度為 ${maxHigh}g，${tLow}°C為 ${maxLow}g。<br>2. 100g水降溫會析出 ${maxHigh} - ${maxLow} = ${diff}g。<br>3. 依水量比例：${diff} × (${water}/100) = ${q.ans}g。`;
+                }
+                q.unit = "g";
+            }
+
+            quizState.currentQ = q;
+            document.getElementById('question-text').innerHTML = q.text;
+            document.getElementById('input-quiz').value = '';
+            document.getElementById('quiz-unit').innerText = q.unit;
+            document.getElementById('hint-box').classList.add('hidden');
+            
+            setActiveInput('quiz');
+        }
+
+        function submitQuiz() {
+            let inputEl = document.getElementById('input-quiz');
+            let val = inputEl.value.trim();
+            if(val === '') return;
+
+            let userAns = parseFloat(val);
+            let targetAns = quizState.currentQ.ans;
+
+            if(Math.abs(userAns - targetAns) < 0.05) {
+                inputEl.classList.remove('bg-slate-50', 'bg-rose-50', 'border-emerald-400');
+                inputEl.classList.add('bg-emerald-200', 'border-emerald-500', 'text-emerald-900');
+                
+                quizState.score++;
+                updateQuizUI();
+
+                if(quizState.score >= quizState.target) {
+                    setTimeout(() => levelUp(), 500);
+                } else {
+                    setTimeout(() => {
+                        inputEl.classList.remove('bg-emerald-200', 'border-emerald-500', 'text-emerald-900');
+                        inputEl.classList.add('bg-slate-50', 'text-blue-900');
+                        nextQuestion();
+                    }, 800);
+                }
+            } else {
+                inputEl.classList.remove('bg-slate-50', 'bg-emerald-200', 'border-emerald-400');
+                inputEl.classList.add('bg-rose-100', 'border-rose-500', 'text-rose-900');
+                
+                document.getElementById('hint-text').innerHTML = quizState.currentQ.hint;
+                document.getElementById('hint-box').classList.remove('hidden');
+                
+                setTimeout(() => {
+                    inputEl.classList.remove('bg-rose-100', 'border-rose-500', 'text-rose-900');
+                    inputEl.classList.add('bg-slate-50', 'border-emerald-400', 'text-blue-900');
+                }, 1000);
+            }
+        }
+
+        function levelUp() {
+            if(quizState.level >= 5) {
+                document.getElementById('victory-screen').classList.remove('hidden');
+                document.getElementById('victory-screen').classList.add('flex');
+                return;
+            }
+            quizState.level++;
+            quizState.score = 0;
+            updateQuizUI();
+            
+            const inputEl = document.getElementById('input-quiz');
+            inputEl.classList.remove('bg-emerald-200', 'border-emerald-500', 'text-emerald-900');
+            inputEl.classList.add('bg-slate-50', 'border-emerald-400', 'text-blue-900');
+            
+            // --- 核心更新：過關時完全重置模擬區狀態 ---
+            state.solute = NaN;
+            state.solvent = NaN;
+            state.targetTemp = 25;
+            state.currentTemp = 25; // 瞬間恢復至 25 度
+            state.substance = 'Sugar'; // 恢復預設為蔗糖
+            
+            // UI 更新
+            document.getElementById('input-solute').value = '';
+            document.getElementById('input-solvent').value = '';
+            document.getElementById('input-temp').value = '25';
+            document.getElementById('input-evap').value = '';
+            document.getElementById('lab-substance').value = 'Sugar';
+            document.getElementById('substance-select').value = 'Sugar';
+            
+            updateLabVisuals();
+            drawChart();
+            querySolubility();
+            // ------------------------------------------
+
+            nextQuestion();
+        }
+
+        function updateQuizUI() {
+            let info = levelData[quizState.level - 1];
+            document.getElementById('level-title').innerText = info.title;
+            document.getElementById('score-text').innerText = `進度 ${quizState.score} / ${quizState.target}`;
+            
+            const stars = document.getElementById('stars-container');
+            stars.innerHTML = '';
+            for(let i=1; i<=quizState.target; i++) {
+                if(i <= quizState.score) {
+                    stars.innerHTML += `<span class="text-yellow-400 drop-shadow text-2xl">⭐</span>`;
+                } else {
+                    stars.innerHTML += `<span class="text-slate-200 grayscale text-2xl">⭐</span>`;
+                }
+            }
+        }
+
+        function toggleSidebar() {
+            const sidebar = document.getElementById('reference-sidebar');
+            const overlay = document.getElementById('sidebar-overlay');
+            
+            if(sidebar.classList.contains('sidebar-closed')) {
+                sidebar.classList.remove('sidebar-closed');
+                sidebar.classList.add('sidebar-open');
+                overlay.classList.remove('hidden');
+                drawChart(); 
+            } else {
+                sidebar.classList.remove('sidebar-open');
+                sidebar.classList.add('sidebar-closed');
+                overlay.classList.add('hidden');
+                setActiveInput('quiz');
+            }
+        }
+
+        function syncTemp(source) {
+            let val;
+            if(source === 'slider') {
+                val = document.getElementById('query-temp-slider').value;
+                document.getElementById('query-temp').value = val;
+            } else {
+                val = document.getElementById('query-temp').value;
+                if(val > 90) val = 90;
+                if(val < 0) val = 0;
+                document.getElementById('query-temp').value = val;
+                document.getElementById('query-temp-slider').value = val;
+            }
+            querySolubility();
+            drawChart();
+        }
+
+        function querySolubility() {
+            let sub = document.getElementById('substance-select').value;
+            let T = parseFloat(document.getElementById('query-temp').value) || 0;
+            let val = solubilityData[sub](T);
+            document.getElementById('query-result').innerText = val.toFixed(1);
+        }
+
+        function drawChart() {
+            const canvas = document.getElementById('solubility-chart');
+            if(!canvas) return;
+            const ctx = canvas.getContext('2d');
+            const sub = document.getElementById('substance-select').value;
+            const currentT = parseFloat(document.getElementById('query-temp').value) || 0;
+            
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            const padding = 35;
+            const width = canvas.width - padding * 2;
+            const height = canvas.height - padding * 2;
+            const MAX_T = 100;
+            const MAX_S = sub === 'Sugar' ? 450 : 200; 
+            
+            ctx.beginPath();
+            ctx.strokeStyle = '#e2e8f0';
+            ctx.lineWidth = 1;
+            for(let i=0; i<=5; i++) {
+                let y = padding + height - (i/5)*height;
+                ctx.moveTo(padding, y);
+                ctx.lineTo(canvas.width - padding + 10, y);
+                
+                let x = padding + (i/5)*width;
+                ctx.moveTo(x, padding);
+                ctx.lineTo(x, canvas.height - padding);
+            }
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.strokeStyle = '#64748b';
+            ctx.lineWidth = 2;
+            ctx.moveTo(padding, padding);
+            ctx.lineTo(padding, canvas.height - padding);
+            ctx.lineTo(canvas.width - padding + 10, canvas.height - padding);
+            ctx.stroke();
+
+            ctx.fillStyle = '#64748b';
+            ctx.font = '11px Arial';
+            ctx.textAlign = 'right';
+            ctx.fillText(MAX_S + 'g', padding-5, padding+5);
+            ctx.fillText('0', padding-5, canvas.height-padding+5);
+            ctx.textAlign = 'center';
+            ctx.fillText('100°C', canvas.width-padding+10, canvas.height-padding+15);
+            ctx.fillText('溫度(°C)', canvas.width/2, canvas.height-5);
+            
+            ctx.save();
+            ctx.translate(10, canvas.height/2);
+            ctx.rotate(-Math.PI/2);
+            ctx.fillText('溶解度', 0, 0);
+            ctx.restore();
+
+            ctx.beginPath();
+            ctx.strokeStyle = '#3b82f6';
+            if(sub === 'KNO3') ctx.strokeStyle = '#ec4899';
+            if(sub === 'Sugar') ctx.strokeStyle = '#f59e0b';
+            if(sub === 'NaNO3') ctx.strokeStyle = '#8b5cf6';
+            ctx.lineWidth = 3;
+            
+            for(let T=0; T<=MAX_T; T+=5) {
+                let S = solubilityData[sub](T);
+                if(S > MAX_S) S = MAX_S; 
+                
+                let x = padding + (T/MAX_T) * width;
+                let y = padding + height - (S/MAX_S) * height;
+                
+                if(T===0) ctx.moveTo(x,y);
+                else ctx.lineTo(x,y);
+            }
+            ctx.stroke();
+            
+            ctx.fillStyle = ctx.strokeStyle;
+            ctx.fillRect(padding + 10, padding + 10, 10, 10);
+            ctx.fillStyle = '#334155';
+            ctx.textAlign = 'left';
+            ctx.fillText(substanceNames[sub], padding + 25, padding + 19);
+
+            let currentS = solubilityData[sub](currentT);
+            if(currentS > MAX_S) currentS = MAX_S;
+            
+            let px = padding + (currentT/MAX_T) * width;
+            let py = padding + height - (currentS/MAX_S) * height;
+
+            ctx.beginPath();
+            ctx.setLineDash([5, 5]);
+            ctx.strokeStyle = '#94a3b8';
+            ctx.lineWidth = 1.5;
+            ctx.moveTo(px, py);
+            ctx.lineTo(px, canvas.height - padding);
+            ctx.moveTo(px, py);
+            ctx.lineTo(padding, py);
+            ctx.stroke();
+            ctx.setLineDash([]); 
+
+            ctx.beginPath();
+            ctx.arc(px, py, 6, 0, Math.PI * 2);
+            ctx.fillStyle = '#ef4444'; 
+            ctx.fill();
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = '#fff';
+            ctx.stroke();
+        }
+    </script>
+</body>
+</html>
