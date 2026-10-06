@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>🧪 溶液配製</title>
+    <title>溶液配製實驗室</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
     
@@ -116,6 +116,22 @@
             50% { opacity: 0.8; transform: scale(1.1) translateY(-5px); }
         }
         .animate-flicker { animation: flicker 0.5s infinite alternate; }
+
+        .trace-particle {
+            position: absolute;
+            width: 5px;
+            height: 5px;
+            background-color: #f43f5e;
+            border-radius: 50%;
+            box-shadow: 0 0 3px rgba(244,63,94,0.8);
+            pointer-events: none;
+            z-index: 5;
+        }
+
+        /* 手機 / 平板直式：上下堆疊時允許整頁捲動 */
+        @media (max-width: 1023px) {
+            body { overflow: auto !important; height: auto !important; min-height: 100vh; }
+        }
     </style>
 </head>
 <body class="h-screen w-screen flex flex-col box-border text-slate-800">
@@ -146,10 +162,11 @@
                         <option value="KCl">氯化鉀 (KCl)</option>
                         <option value="Sugar" selected>蔗糖</option>
                         <option value="Alcohol" class="text-purple-600 font-black bg-purple-50">酒精 (Alcohol)</option>
+                        <option value="Trace" class="text-rose-600 font-black bg-rose-50">微量雜質 (ppm)</option>
                     </select>
                 </div>
 
-                <div class="z-20 mb-3 mt-4 bg-indigo-700 text-white px-5 py-1.5 rounded-full text-sm font-black shadow-md border-2 border-indigo-300 tracking-wider flex items-center gap-2">
+                <div class="z-10 mb-3 mt-12 bg-indigo-700 text-white px-5 py-1.5 rounded-full text-sm font-black shadow-md border-2 border-indigo-300 tracking-wider flex items-center gap-2">
                     <span>🔬 目前溶質：</span>
                     <span id="current-substance-display" class="text-yellow-300 text-lg">蔗糖</span>
                 </div>
@@ -196,7 +213,7 @@
                         <span id="sim-total-volume" class="text-indigo-400">體積估算: 0 mL</span>
                     </div>
                     
-                    <div class="flex items-center justify-center flex-wrap gap-y-1 text-base lg:text-lg font-black text-blue-900 bg-blue-50/50 py-2 px-1 rounded-xl border border-blue-200">
+                    <div id="mass-panel" class="flex items-center justify-center flex-wrap gap-y-1 text-base lg:text-lg font-black text-blue-900 bg-blue-50/50 py-2 px-1 rounded-xl border border-blue-200">
                         <span id="panel-sum-type" class="text-slate-600 mr-1">溶液重 =</span>
                         <div class="flex items-center text-sky-600">
                             <span>溶劑</span>
@@ -210,6 +227,30 @@
                         <span class="mx-1.5 text-slate-400">=</span>
                         <span id="sim-solution-weight" class="text-blue-600 digital-font text-2xl underline decoration-blue-300">0</span>
                         <span id="panel-unit-sum" class="ml-1 text-sm text-slate-500">g</span>
+                    </div>
+
+                    <!-- ppm 模式專用看板 -->
+                    <div id="ppm-panel" class="hidden">
+                        <div class="flex items-center justify-center flex-wrap gap-y-1 text-base lg:text-lg font-black text-rose-900 bg-rose-50/60 py-2 px-1 rounded-xl border border-rose-200">
+                            <span class="text-slate-600 mr-1">ppm =</span>
+                            <div class="flex items-center text-rose-600">
+                                <span>雜質</span>
+                                <span id="ppm-mg-val" class="ml-1 bg-rose-100 px-1.5 rounded digital-font">0</span>
+                                <span class="ml-0.5 text-sm">mg</span>
+                            </div>
+                            <span class="mx-1.5 text-slate-400">÷</span>
+                            <div class="flex items-center text-sky-600">
+                                <span>溶液</span>
+                                <span id="ppm-kg-val" class="ml-1 bg-sky-100 px-1.5 rounded digital-font">0</span>
+                                <span class="ml-0.5 text-sm">kg</span>
+                            </div>
+                            <span class="mx-1.5 text-slate-400">=</span>
+                            <span id="ppm-result" class="text-rose-600 digital-font text-2xl underline decoration-rose-300">0</span>
+                            <span class="ml-1 text-sm text-slate-500">ppm</span>
+                        </div>
+                        <div id="ppm-note" class="text-[11px] font-bold text-slate-500 mt-1.5 leading-snug text-center">
+                            雜質極少，溶液質量 ≈ 水的質量
+                        </div>
                     </div>
 
                     <div id="precipitate-warn" class="absolute -right-3 -top-3 bg-rose-500 text-white text-xs px-3 py-1.5 rounded-full shadow-md border-2 border-white flex flex-col items-center transition-all duration-300 opacity-0 transform scale-90 pointer-events-none">
@@ -232,7 +273,10 @@
                     </div>
                     <div class="flex flex-col">
                         <label class="text-[11px] font-bold text-rose-500 mb-0.5 text-center">目標水溫(°C)</label>
-                        <input type="text" id="input-temp" readonly onclick="setActiveInput('temp')" class="w-full bg-rose-50 border-2 border-rose-300 rounded p-1.5 text-center font-black text-rose-700 text-sm lg:text-base cursor-pointer">
+                        <div class="relative w-full h-full">
+                            <input type="text" id="input-temp" readonly onclick="setActiveInput('temp')" class="w-full h-full bg-rose-50 border-2 border-rose-300 rounded p-1.5 pr-7 text-center font-black text-rose-700 text-sm lg:text-base cursor-pointer">
+                            <button onclick="applyTemp()" class="absolute right-0 top-0 h-full w-8 bg-rose-500 hover:bg-rose-600 text-white rounded-r border-2 border-rose-500 font-bold text-xs flex items-center justify-center transition-colors btn-press">GO</button>
+                        </div>
                     </div>
                     <div class="flex flex-col relative group">
                         <label id="label-evap" class="text-[11px] font-bold text-orange-500 mb-0.5 text-center">蒸發量(g)</label>
@@ -270,41 +314,41 @@
         <div class="w-full lg:w-7/12 flex flex-col bg-slate-50 overflow-y-auto">
             
             <div class="bg-blue-900 text-white p-3 md:p-4 shrink-0 flex flex-col xl:flex-row gap-3 border-b-8 border-blue-950">
-                <div class="flex-2 bg-blue-800 rounded-lg p-2 shadow-inner">
+                <div class="flex-[2] bg-blue-800 rounded-lg p-2 shadow-inner">
                     <div id="formula-title-1" class="text-blue-300 text-[10px] font-bold mb-1">📐 計算公式 (連等式概念)</div>
                     <div class="flex items-center justify-center h-12 font-bold text-sm lg:text-base text-center tracking-wide whitespace-nowrap overflow-x-auto pb-1">
-                        <span class="text-yellow-400">P%</span> &nbsp;=&nbsp; 
+                        <span id="formula-lhs" class="text-yellow-400">P%</span> &nbsp;=&nbsp; 
                         <div class="flex flex-col items-center mx-1">
                             <span id="formula-top-1" class="border-b-[2px] border-white px-2 pb-0.5 leading-tight">溶質重</span>
                             <span id="formula-bot-1" class="px-2 pt-0.5 leading-tight text-blue-100">溶液重</span>
                         </div>
-                        &nbsp;× 100% &nbsp;<span class="text-yellow-400 font-black">=</span>&nbsp;
+                        &nbsp;<span id="formula-mult-1">× 100%</span> &nbsp;<span class="text-yellow-400 font-black">=</span>&nbsp;
                         <div class="flex flex-col items-center mx-1">
                             <span id="formula-top-2" class="border-b-[2px] border-white px-2 pb-0.5 leading-tight">溶質重</span>
                             <span id="formula-bot-2" class="px-2 pt-0.5 leading-tight text-emerald-200">(溶劑 + 溶質)重</span>
                         </div>
-                        &nbsp;× 100%
+                        &nbsp;<span id="formula-mult-2">× 100%</span>
                     </div>
                 </div>
                 
                 <div class="flex-[1.2] bg-blue-950 rounded-lg p-2 shadow-inner border border-blue-700 relative">
                     <div id="dynamic-formula-title" class="text-blue-300 text-[10px] font-bold mb-1 flex justify-between items-center">
-                        <span>🔢 濃度計算機 <span class="text-emerald-400">(點擊下方空格自行帶入數據)</span></span>
+                        <span>🔢 濃度計算機 <span id="calc-hint" class="text-emerald-400">(點擊下方空格自行帶入數據)</span></span>
                         <button onclick="clearCustomFormula()" class="bg-blue-800 hover:bg-blue-700 text-white text-[10px] px-2 py-0.5 rounded border border-blue-600 transition-colors">清空算式</button>
                     </div>
                     <div class="flex items-center justify-center h-16 font-bold text-base lg:text-xl text-center digital-font">
                         <div class="flex flex-col items-center mx-1 text-white text-lg">
                             <input type="text" id="input-form-top" readonly onclick="setActiveInput('form-top')" placeholder="溶質" class="w-16 bg-blue-900/50 border-2 border-blue-600 rounded text-emerald-300 text-center focus:outline-none placeholder-blue-400/50 cursor-pointer py-0.5 mb-1 transition-colors">
                             <div class="flex items-center">
-                                <span class="text-slate-400 mr-1 text-sm">(</span>
+                                <span class="calc-sum-part text-slate-400 mr-1 text-sm">(</span>
                                 <input type="text" id="input-form-bot1" readonly onclick="setActiveInput('form-bot1')" placeholder="溶劑" class="w-14 bg-blue-900/50 border-2 border-blue-600 rounded text-emerald-200 text-center focus:outline-none placeholder-blue-400/50 cursor-pointer py-0.5 transition-colors">
-                                <span class="text-slate-400 mx-1 text-sm">+</span>
-                                <input type="text" id="input-form-bot2" readonly onclick="setActiveInput('form-bot2')" placeholder="溶質" class="w-14 bg-blue-900/50 border-2 border-blue-600 rounded text-emerald-300 text-center focus:outline-none placeholder-blue-400/50 cursor-pointer py-0.5 transition-colors">
-                                <span class="text-slate-400 ml-1 text-sm">)</span>
+                                <span class="calc-sum-part text-slate-400 mx-1 text-sm">+</span>
+                                <input type="text" id="input-form-bot2" readonly onclick="setActiveInput('form-bot2')" placeholder="溶質" class="calc-sum-part w-14 bg-blue-900/50 border-2 border-blue-600 rounded text-emerald-300 text-center focus:outline-none placeholder-blue-400/50 cursor-pointer py-0.5 transition-colors">
+                                <span class="calc-sum-part text-slate-400 ml-1 text-sm">)</span>
                             </div>
                         </div>
-                        <span class="text-white mx-2 text-sm lg:text-base">× 100%</span>
-                        <span class="text-slate-500 ml-1 drop-shadow text-xl lg:text-2xl w-24 text-right" id="custom-formula-result">= ? %</span>
+                        <span id="calc-mult" class="text-white mx-2 text-sm lg:text-base">× 100%</span>
+                        <span class="text-slate-500 ml-1 drop-shadow text-xl lg:text-2xl min-w-[6rem] whitespace-nowrap text-right" id="custom-formula-result">= ? %</span>
                     </div>
                 </div>
             </div>
@@ -314,6 +358,7 @@
                 <div class="flex justify-between items-center mb-4 bg-white p-3 rounded-xl shadow-sm border border-slate-200">
                     <div>
                         <h2 class="text-lg md:text-xl font-extrabold text-blue-900" id="level-title">第 1 關：重量百分濃度</h2>
+                        <span id="level-subtag" class="hidden text-xs font-bold text-indigo-600 bg-indigo-50 border border-indigo-200 rounded-full px-2 py-0.5 mt-1 inline-block"></span>
                     </div>
                     <div class="flex flex-col items-end">
                         <div class="flex gap-1 text-xl" id="stars-container"></div>
@@ -328,8 +373,8 @@
                     
                     <div class="flex flex-col sm:flex-row gap-4 items-center z-10">
                         <div class="relative">
-                            <input type="text" id="input-quiz" readonly onclick="setActiveInput('quiz')" placeholder="點此輸入答案"
-                                class="w-48 text-center text-2xl font-black p-3 border-4 border-slate-300 rounded-xl focus:outline-none cursor-pointer bg-slate-50 text-blue-900 transition-colors">
+                            <input type="text" id="input-quiz" readonly onclick="setActiveInput('quiz')" placeholder="輸入答案"
+                                class="w-56 text-center text-2xl font-black p-3 pr-16 border-4 border-slate-300 rounded-xl focus:outline-none cursor-pointer bg-slate-50 text-blue-900 transition-colors">
                             <span class="absolute right-4 top-4 font-bold text-slate-400" id="quiz-unit">%</span>
                         </div>
                         <button onclick="submitQuiz()" class="bg-emerald-500 hover:bg-emerald-600 text-white font-black text-xl py-3 px-8 rounded-xl btn-press shadow-[0_5px_0_#059669]">
@@ -339,6 +384,9 @@
 
                     <div id="hint-box" class="hidden mt-6 bg-rose-50 border-2 border-rose-200 text-rose-700 p-3 rounded-xl w-full max-w-md text-left text-sm font-bold z-10">
                         💡 <span id="hint-text"></span>
+                        <div class="text-right mt-3">
+                            <button onclick="goNextAfterWrong()" class="bg-rose-500 hover:bg-rose-600 text-white font-black py-2 px-5 rounded-lg btn-press shadow-[0_3px_0_#be123c]">看懂了，下一題 ▶</button>
+                        </div>
                     </div>
                 </div>
 
@@ -378,7 +426,7 @@
                 </div>
                 <div class="text-center mt-4">
                     <div class="text-sm text-slate-500 font-bold">該溫度下的最大溶解度</div>
-                    <div class="text-3xl font-black text-rose-600 mt-1"><span id="query-result">39.5</span> <span class="text-base text-slate-600">g / 100g 水</span></div>
+                    <div class="text-3xl font-black text-rose-600 mt-1"><span id="query-result">212.5</span> <span class="text-base text-slate-600">g / 100g 水</span></div>
                 </div>
             </div>
         </div>
@@ -395,13 +443,14 @@
     </div>
 
     <script>
-        let activeInputId = 'solute'; 
-        let isWaitingForNext = false; // 防止答錯時連續點擊
-        
+        let activeInputId = 'solute';
+        let isWaitingForNext = false; // 防止連續點擊 / 重複送出
+        let isFirstQuestion = true;
+
         const state = {
-            substance: 'Sugar', 
-            solute: NaN, 
-            solvent: NaN, 
+            substance: 'Sugar',
+            solute: NaN,
+            solvent: NaN,
             targetTemp: 25,
             currentTemp: 25,
             evapVal: NaN
@@ -433,22 +482,39 @@
                 if(T <= 80) return 45 + ((51-45)/20)*(T-60);
                 return 51 + ((57-51)/20)*(T-80);
             },
-            'Sugar': (T) => { 
+            'Sugar': (T) => {
                 if(T <= 20) return 179 + ((204-179)/20)*T;
                 if(T <= 40) return 204 + ((238-204)/20)*(T-20);
                 if(T <= 60) return 238 + ((287-238)/20)*(T-40);
                 if(T <= 80) return 287 + ((362-287)/20)*(T-60);
                 return 362 + ((450-362)/20)*(T-80);
             },
-            'Alcohol': (T) => Infinity // 酒精無限互溶
+            'Alcohol': (T) => Infinity, // 酒精與水任意比例互溶
+            'Trace': (T) => Infinity    // 微量雜質，不考慮飽和
         };
 
-        const substanceNames = { 'KNO3': '硝酸鉀', 'NaCl': '氯化鈉', 'NaNO3': '硝酸鈉', 'KCl': '氯化鉀', 'Sugar': '蔗糖', 'Alcohol': '酒精' };
+        const substanceNames = { 'KNO3': '硝酸鉀', 'NaCl': '氯化鈉', 'NaNO3': '硝酸鈉', 'KCl': '氯化鉀', 'Sugar': '蔗糖', 'Alcohol': '酒精', 'Trace': '微量雜質' };
+
+        // 實驗區的「單位系統」：g（重量百分濃度）/ mL（體積百分濃度）/ ppm（mg 與 kg）
+        function unitMode(sub) {
+            if (sub === 'Alcohol') return 'vol';
+            if (sub === 'Trace') return 'ppm';
+            return 'mass';
+        }
+
+        // 與側邊欄查詢顯示一致（取到小數第一位），讓學生查表的數字和答案算法一致
+        function tableSolubility(sub, T) {
+            return Math.round(solubilityData[sub](T) * 10) / 10;
+        }
+
+        function fmt(n, digits = 2) {
+            return parseFloat(Number(n).toFixed(digits)).toString();
+        }
 
         const canvas = document.getElementById('brownian-canvas');
         const ctx = canvas.getContext('2d');
         let brownianParticles = [];
-        let targetDissolved = 0;
+        let targetParticleCount = 0;
 
         function initCanvas() {
             const resize = () => {
@@ -467,30 +533,35 @@
             }
 
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            
-            let targetCount = Math.min(250, Math.floor(targetDissolved * 1.5));
-            
-            if (brownianParticles.length < targetCount) {
-                brownianParticles.push({
-                    x: Math.random() * canvas.width,
-                    y: Math.random() * canvas.height,
-                    vx: (Math.random() - 0.5) * 1.2,
-                    vy: (Math.random() - 0.5) * 1.2,
-                    size: Math.random() * 1.5 + 1
-                });
-            } else if (brownianParticles.length > targetCount) {
-                brownianParticles.pop();
+
+            let targetCount = targetParticleCount;
+
+            // ppm 模式粒子數量需立即到位，其他模式逐顆增減
+            let steps = state.substance === 'Trace' ? 20 : 1;
+            for (let k = 0; k < steps; k++) {
+                if (brownianParticles.length < targetCount) {
+                    brownianParticles.push({
+                        x: Math.random() * canvas.width,
+                        y: Math.random() * canvas.height,
+                        vx: (Math.random() - 0.5) * 1.2,
+                        vy: (Math.random() - 0.5) * 1.2,
+                        size: Math.random() * 1.5 + 1
+                    });
+                } else if (brownianParticles.length > targetCount) {
+                    brownianParticles.pop();
+                }
             }
 
-            // 酒精粒子變紫色，其他維持白色
             if (state.substance === 'Alcohol') {
-                ctx.fillStyle = 'rgba(216, 180, 254, 0.6)'; 
+                ctx.fillStyle = 'rgba(216, 180, 254, 0.6)';
+            } else if (state.substance === 'Trace') {
+                ctx.fillStyle = 'rgba(225, 29, 72, 0.9)';
             } else {
                 ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
             }
 
             brownianParticles.forEach(p => {
-                p.x += p.vx + (Math.random() - 0.5) * 0.5; 
+                p.x += p.vx + (Math.random() - 0.5) * 0.5;
                 p.y += p.vy + (Math.random() - 0.5) * 0.5;
 
                 if (p.x < 0) { p.x = 0; p.vx *= -1; }
@@ -499,7 +570,7 @@
                 if (p.y > canvas.height) { p.y = canvas.height; p.vy *= -1; }
 
                 ctx.beginPath();
-                ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                ctx.arc(p.x, p.y, state.substance === 'Trace' ? p.size + 0.8 : p.size, 0, Math.PI * 2);
                 ctx.fill();
             });
 
@@ -511,93 +582,133 @@
             document.getElementById('input-solvent').value = '';
             document.getElementById('input-temp').value = '25';
             document.getElementById('input-evap').value = '';
-            
+
             window.addEventListener('keydown', handlePhysicalKeyboard);
-            
+
             initCanvas();
             startTemperatureSimulation();
             updateDynamicLabels();
-            updateLabVisuals();
+            renderThermometer();
+            updateQuizUI();
             nextQuestion();
+            updateLabVisuals();
             drawChart();
             querySolubility();
         };
 
-        function resetToDefault() {
-            state.substance = 'Sugar';
+        function clearLabAmounts() {
             state.solute = NaN;
             state.solvent = NaN;
-            state.targetTemp = 25;
-            state.currentTemp = 25; 
             state.evapVal = NaN;
-            
-            document.getElementById('lab-substance').value = 'Sugar';
-            document.getElementById('substance-select').value = 'Sugar';
             document.getElementById('input-solute').value = '';
             document.getElementById('input-solvent').value = '';
-            document.getElementById('input-temp').value = '25';
             document.getElementById('input-evap').value = '';
+        }
+
+        function resetToDefault() {
+            state.substance = 'Sugar';
+            clearLabAmounts();
+            state.targetTemp = 25;
+            state.currentTemp = 25;
+
+            document.getElementById('lab-substance').value = 'Sugar';
+            document.getElementById('substance-select').value = 'Sugar';
+            document.getElementById('input-temp').value = '25';
             document.getElementById('current-substance-display').innerText = '蔗糖';
-            
+
             updateDynamicLabels();
             clearCustomFormula();
+            renderThermometer();   // 直接把溫度設為 25 時，模擬迴圈不會更新溫度計，需手動重繪
             updateLabVisuals();
             drawChart();
             querySolubility();
         }
 
-        // --- 動態更新單位標籤 (Alcohol = mL, Others = g) ---
+        // --- 動態更新單位標籤 (mass = g / vol = mL / ppm = mg、kg) ---
         function updateDynamicLabels() {
-            const isVol = state.substance === 'Alcohol';
-            document.getElementById('label-solute').innerText = isVol ? '加酒精(mL)' : '加溶質(g)';
-            document.getElementById('label-solvent').innerText = isVol ? '總水量(mL)' : '總水量(g)';
-            document.getElementById('label-evap').innerText = isVol ? '蒸發量(mL)' : '蒸發量(g)';
-            
-            document.getElementById('panel-title-mass').innerText = isVol ? '📏 溶液巨觀與微觀體積' : '⚖️ 溶液巨觀與微觀質量';
+            const mode = unitMode(state.substance);
+            const isVol = mode === 'vol';
+            const isPpm = mode === 'ppm';
+
+            document.getElementById('label-solute').innerText = isPpm ? '加雜質(mg)' : (isVol ? '加酒精(mL)' : '加溶質(g)');
+            document.getElementById('label-solvent').innerText = isPpm ? '總水量(kg)' : (isVol ? '總水量(mL)' : '總水量(g)');
+            document.getElementById('label-evap').innerText = isPpm ? '蒸發量(kg)' : (isVol ? '蒸發量(mL)' : '蒸發量(g)');
+
+            document.getElementById('panel-title-mass').innerText = isPpm ? '🔬 微量濃度：百萬分點 (ppm)' : (isVol ? '📏 溶液巨觀與微觀體積' : '⚖️ 溶液巨觀與微觀質量');
             document.getElementById('panel-sum-type').innerText = isVol ? '溶液體積 =' : '溶液重 =';
             document.getElementById('panel-unit-sum').innerText = isVol ? 'mL' : 'g';
-            
-            document.getElementById('formula-title-1').innerText = isVol ? '📐 計算公式 (體積百分濃度)' : '📐 計算公式 (連等式概念)';
-            document.getElementById('formula-top-1').innerText = isVol ? '溶質體積' : '溶質重';
-            document.getElementById('formula-bot-1').innerText = isVol ? '溶液體積' : '溶液重';
-            document.getElementById('formula-top-2').innerText = isVol ? '溶質體積' : '溶質重';
-            document.getElementById('formula-bot-2').innerText = isVol ? '(水 + 酒精)體積' : '(溶劑 + 溶質)重';
-            document.getElementById('dynamic-formula-title').innerHTML = isVol ? '🔢 濃度計算機 <span class="text-emerald-400">(點擊下方空格自行帶入數據)</span>' : '🔢 濃度計算機 <span class="text-emerald-400">(點擊下方空格自行帶入數據)</span>';
+            document.getElementById('mass-panel').classList.toggle('hidden', isPpm);
+            document.getElementById('ppm-panel').classList.toggle('hidden', !isPpm);
 
-            document.getElementById('input-form-top').placeholder = isVol ? '酒精' : '溶質';
-            document.getElementById('input-form-bot1').placeholder = isVol ? '水' : '溶劑';
+            // 公式列
+            document.getElementById('formula-lhs').innerText = isPpm ? 'ppm' : 'P%';
+            document.getElementById('formula-title-1').innerText = isPpm ? '📐 計算公式 (百萬分點濃度)' : (isVol ? '📐 計算公式 (體積百分濃度)' : '📐 計算公式 (連等式概念)');
+            document.getElementById('formula-top-1').innerText = isPpm ? '溶質質量' : (isVol ? '溶質體積' : '溶質重');
+            document.getElementById('formula-bot-1').innerText = isPpm ? '溶液質量' : (isVol ? '溶液體積' : '溶液重');
+            document.getElementById('formula-mult-1').innerText = isPpm ? '× 10⁶' : '× 100%';
+            document.getElementById('formula-top-2').innerText = isPpm ? '溶質 (mg)' : (isVol ? '溶質體積' : '溶質重');
+            document.getElementById('formula-bot-2').innerText = isPpm ? '溶液 (kg)' : (isVol ? '(水 + 酒精)體積' : '(溶劑 + 溶質)重');
+            document.getElementById('formula-mult-2').innerText = isPpm ? '' : '× 100%';
+
+            // 濃度計算機
+            document.getElementById('input-form-top').placeholder = isPpm ? 'mg' : (isVol ? '酒精' : '溶質');
+            document.getElementById('input-form-bot1').placeholder = isPpm ? 'kg' : (isVol ? '水' : '溶劑');
             document.getElementById('input-form-bot2').placeholder = isVol ? '酒精' : '溶質';
+            document.getElementById('calc-mult').innerText = isPpm ? '' : '× 100%';
+            document.getElementById('calc-hint').innerText = isPpm ? '(雜質 mg ÷ 溶液 kg)' : '(點擊下方空格自行帶入數據)';
+            document.querySelectorAll('.calc-sum-part').forEach(el => el.classList.toggle('hidden', isPpm));
+            if (isPpm) document.getElementById('input-form-bot2').value = '';
+            updateCustomFormula();
         }
 
         function changeLabSubstance() {
+            const prevMode = unitMode(state.substance);
             state.substance = document.getElementById('lab-substance').value;
-            document.getElementById('substance-select').value = state.substance;
+            if (state.substance !== 'Trace') {
+                document.getElementById('substance-select').value = state.substance;
+            }
             document.getElementById('current-substance-display').innerText = substanceNames[state.substance];
-            
+
+            // 單位系統不同（g ↔ mL ↔ mg/kg），舊數值沒有意義，直接清空
+            if (unitMode(state.substance) !== prevMode) {
+                clearLabAmounts();
+                clearCustomFormula();
+            }
+
             updateDynamicLabels();
             syncTemp('num');
             updateLabVisuals();
+        }
+
+        function setLabSubstance(sub) {
+            if (state.substance === sub) return;
+            document.getElementById('lab-substance').value = sub;
+            changeLabSubstance();
+        }
+
+        function renderThermometer() {
+            document.getElementById('thermo-text').innerText = Math.round(state.currentTemp);
+            let thermoHeight = state.currentTemp;
+            if(thermoHeight < 5) thermoHeight = 5;
+            document.getElementById('thermo-liquid').style.height = `${thermoHeight}%`;
         }
 
         function startTemperatureSimulation() {
             setInterval(() => {
                 if (Math.abs(state.currentTemp - state.targetTemp) > 0.1) {
                     let diff = state.targetTemp - state.currentTemp;
-                    let step = diff > 0 ? 0.3 : -0.3; 
+                    let step = diff > 0 ? 0.3 : -0.3;
                     if(Math.abs(diff) > 30) step *= 3;
                     else if(Math.abs(diff) > 10) step *= 2;
 
                     state.currentTemp += step;
-                    
+
                     if((step > 0 && state.currentTemp >= state.targetTemp) ||
                        (step < 0 && state.currentTemp <= state.targetTemp)) {
                         state.currentTemp = state.targetTemp;
                     }
 
-                    document.getElementById('thermo-text').innerText = Math.round(state.currentTemp);
-                    let thermoHeight = (state.currentTemp / 100) * 100; 
-                    if(thermoHeight < 5) thermoHeight = 5;
-                    document.getElementById('thermo-liquid').style.height = `${thermoHeight}%`;
+                    renderThermometer();
 
                     if (diff > 0 && state.currentTemp !== state.targetTemp) {
                         document.getElementById('heat-indicator').classList.remove('hidden');
@@ -617,9 +728,20 @@
             }, 50);
         }
 
+        // 目標水溫：輸入完按 GO / Enter（或點別的欄位）才開始加熱或冷卻
+        function applyTemp() {
+            const el = document.getElementById('input-temp');
+            let v = parseFloat(el.value);
+            if (isNaN(v)) v = 25;
+            v = Math.max(0, Math.min(90, v));
+            el.value = v;
+            state.targetTemp = v;
+        }
+
         function setActiveInput(id) {
+            if (activeInputId === 'temp' && id !== 'temp') applyTemp();
             activeInputId = id;
-            
+
             const standardInputs = ['solute', 'solvent', 'temp', 'evap', 'quiz'];
             standardInputs.forEach(type => {
                 const el = document.getElementById(`input-${type}`);
@@ -655,17 +777,20 @@
 
         function spawnParticles(type, amount) {
             const container = document.getElementById('particle-container');
-            let numParticles = Math.min(25, Math.ceil(amount)); 
+            let numParticles = Math.min(25, Math.ceil(amount));
             if (numParticles <= 0) numParticles = 1;
-            
+
+            const classMap = { water: 'water-drop', alcohol: 'alcohol-drop', trace: 'trace-particle', solute: 'particle' };
+            const isSolid = type === 'solute' || type === 'trace';
+
             for(let i=0; i<numParticles; i++) {
                 let p = document.createElement('div');
-                p.className = type === 'water' ? 'water-drop' : (type === 'alcohol' ? 'alcohol-drop' : 'particle');
-                p.style.left = (30 + Math.random() * 40) + '%'; 
-                p.style.animationDuration = type === 'solute' ? (0.4 + Math.random() * 0.3) + 's' : (0.3 + Math.random() * 0.2) + 's';
-                p.style.animationTimingFunction = type === 'solute' ? 'linear' : 'ease-in';
-                p.style.animationName = type === 'solute' ? 'fall' : 'drop-fall';
-                
+                p.className = classMap[type] || 'particle';
+                p.style.left = (30 + Math.random() * 40) + '%';
+                p.style.animationDuration = isSolid ? (0.4 + Math.random() * 0.3) + 's' : (0.3 + Math.random() * 0.2) + 's';
+                p.style.animationTimingFunction = isSolid ? 'linear' : 'ease-in';
+                p.style.animationName = isSolid ? 'fall' : 'drop-fall';
+
                 container.appendChild(p);
                 setTimeout(() => { if(p.parentNode) p.remove(); }, 800);
             }
@@ -678,22 +803,22 @@
 
             if (evapAmt > 0 && currentSolvent > 0) {
                 let actualEvap = Math.min(evapAmt, currentSolvent);
-                state.solvent = currentSolvent - actualEvap;
+                state.solvent = Math.round((currentSolvent - actualEvap) * 1000) / 1000;
                 document.getElementById('input-solvent').value = state.solvent === 0 ? '' : state.solvent;
-                
+
                 const container = document.getElementById('particle-container');
                 for(let i=0; i<15; i++) {
                     let s = document.createElement('div');
                     s.className = 'steam-cloud';
                     s.style.left = (20 + Math.random() * 60) + '%';
-                    s.style.bottom = '20%'; 
+                    s.style.bottom = '20%';
                     s.style.animationDuration = (1 + Math.random()) + 's';
                     s.style.animationName = 'steam-rise';
                     container.appendChild(s);
                     setTimeout(() => { if(s.parentNode) s.remove(); }, 2000);
                 }
 
-                inputEl.value = ''; 
+                inputEl.value = '';
                 updateLabVisuals();
             }
         }
@@ -704,6 +829,7 @@
 
             let oldVal = parseFloat(inputEl.value) || 0;
             let currentVal = inputEl.value.toString();
+            const maxLen = activeInputId === 'quiz' ? 8 : 6;
 
             if (key === 'C') {
                 currentVal = '';
@@ -716,7 +842,7 @@
             } else {
                 if (currentVal === '0' && key !== '0') currentVal = key;
                 else if (currentVal === '0' && key === '0') currentVal = '0';
-                else if (currentVal.length < 5) currentVal += key;
+                else if (currentVal.length < maxLen) currentVal += key;
             }
 
             if (activeInputId === 'temp') {
@@ -724,30 +850,26 @@
                 if (checkVal > 90) currentVal = '90';
             }
             if (['solute', 'solvent', 'evap'].includes(activeInputId)) {
-                if (parseFloat(currentVal) > 2000) currentVal = '2000'; 
+                if (parseFloat(currentVal) > 2000) currentVal = '2000';
             }
 
             inputEl.value = currentVal;
-            let newVal = parseFloat(currentVal); 
+            let newVal = parseFloat(currentVal);
 
             if (activeInputId.startsWith('form-')) {
                 updateCustomFormula();
-            } else if (['solute', 'solvent', 'temp'].includes(activeInputId)) {
+            } else if (['solute', 'solvent'].includes(activeInputId)) {
                 if (!isNaN(newVal) && newVal > oldVal) {
                     if(activeInputId === 'solute') {
-                        spawnParticles(state.substance === 'Alcohol' ? 'alcohol' : 'solute', newVal - oldVal);
+                        const t = state.substance === 'Alcohol' ? 'alcohol' : (state.substance === 'Trace' ? 'trace' : 'solute');
+                        spawnParticles(t, newVal - oldVal);
                     }
-                    if(activeInputId === 'solvent') spawnParticles('water', newVal - oldVal);
+                    if(activeInputId === 'solvent') spawnParticles('water', state.substance === 'Trace' ? (newVal - oldVal) * 5 : newVal - oldVal);
                 }
-                
-                if (activeInputId === 'temp') {
-                    state.targetTemp = isNaN(newVal) ? 25 : newVal; 
-                } else {
-                    state[activeInputId] = newVal;
-                }
-                
-                if(activeInputId !== 'temp') updateLabVisuals();
+                state[activeInputId] = newVal;
+                updateLabVisuals();
             }
+            // temp：只更新輸入框，按 GO / Enter 才套用
         }
 
         function handlePhysicalKeyboard(e) {
@@ -762,27 +884,34 @@
             } else if (e.key === 'Escape' || e.key === 'Delete' || e.key.toLowerCase() === 'c') {
                 keypadPress('C');
             } else if (e.key === 'Enter') {
+                e.preventDefault();
+                if (wrongPending) { goNextAfterWrong(); return; }
                 if (activeInputId === 'quiz') submitQuiz();
                 if (activeInputId === 'evap') executeEvaporate();
+                if (activeInputId === 'temp') applyTemp();
             }
         }
 
         function updateCustomFormula() {
-            let top = parseFloat(document.getElementById('input-form-top').value) || 0;
+            const isPpm = unitMode(state.substance) === 'ppm';
+            const topStr = document.getElementById('input-form-top').value;
+            let top = parseFloat(topStr) || 0;
             let bot1 = parseFloat(document.getElementById('input-form-bot1').value) || 0;
-            let bot2 = parseFloat(document.getElementById('input-form-bot2').value) || 0;
+            let bot2 = isPpm ? 0 : (parseFloat(document.getElementById('input-form-bot2').value) || 0);
 
             let totalBot = bot1 + bot2;
             let resEl = document.getElementById('custom-formula-result');
 
-            if (totalBot > 0 && document.getElementById('input-form-top').value !== '') {
-                let percent = (top / totalBot) * 100;
-                percent = Math.round(percent * 10) / 10;
-                resEl.innerText = `= ${percent}%`;
+            if (totalBot > 0 && topStr !== '') {
+                if (isPpm) {
+                    resEl.innerText = `= ${fmt(top / totalBot, 2)} ppm`;
+                } else {
+                    resEl.innerText = `= ${fmt((top / totalBot) * 100, 1)}%`;
+                }
                 resEl.classList.remove('text-slate-500');
                 resEl.classList.add('text-yellow-400');
             } else {
-                resEl.innerText = `= ? %`;
+                resEl.innerText = isPpm ? '= ? ppm' : '= ? %';
                 resEl.classList.remove('text-yellow-400');
                 resEl.classList.add('text-slate-500');
             }
@@ -798,43 +927,71 @@
         function updateLabVisuals() {
             let solute = isNaN(state.solute) ? 0 : state.solute;
             let solvent = isNaN(state.solvent) ? 0 : state.solvent;
-            let currentTemp = state.currentTemp;
             let substance = state.substance;
-            
-            let maxSolubility100g = 0;
-            if (substance === 'Alcohol') {
-                maxSolubility100g = Infinity;
-            } else {
-                maxSolubility100g = solubilityData[substance](currentTemp);
+            const mode = unitMode(substance);
+            const warnBox = document.getElementById('precipitate-warn');
+
+            // ---------- ppm 模式：雜質 mg、水 kg ----------
+            if (mode === 'ppm') {
+                warnBox.style.opacity = '0';
+                warnBox.style.transform = 'scale(0.9)';
+                document.getElementById('precipitate-level').style.height = '0%';
+
+                let ppm = solvent > 0 ? solute / solvent : 0;   // mg ÷ kg
+                // 每 1 ppm 畫 5 顆紅點（上限 250），讓學生看出「濃度」而不是「總量」
+                targetParticleCount = (solvent > 0 && solute > 0) ? Math.max(1, Math.min(250, Math.round(ppm * 5))) : 0;
+
+                const MAX_KG = 12;
+                let liquidPct = (solvent / MAX_KG) * 100;
+                if (liquidPct > 90) liquidPct = 90;
+                document.getElementById('liquid-level').style.height = `${liquidPct}%`;
+                document.getElementById('sim-total-volume').innerText = `體積估算: ${fmt(solvent, 2)} L`;
+
+                document.getElementById('ppm-mg-val').innerText = fmt(solute, 2);
+                document.getElementById('ppm-kg-val').innerText = fmt(solvent, 3);
+                document.getElementById('ppm-result').innerText = solvent > 0 ? fmt(ppm, 2) : '—';
+
+                const note = document.getElementById('ppm-note');
+                if (solvent > 0 && solute > 0) {
+                    note.innerHTML = `${fmt(solute, 2)} mg = ${fmt(solute / 1e6, 8)} kg，小到可忽略 → 溶液 ≈ 水 ${fmt(solvent, 3)} kg<br>` +
+                        `意義：每 1 kg 溶液中含 ${fmt(ppm, 2)} mg 雜質（重量百分濃度 = ${fmt(ppm / 10000, 6)} %）`;
+                } else {
+                    note.innerHTML = '雜質極少，溶液質量 ≈ 水的質量；1 ppm = 每 1 kg 溶液含 1 mg 溶質';
+                }
+                return;
             }
-            
-            const maxDissolvable = solvent === 0 ? 0 : (maxSolubility100g * solvent / 100);
-            
-            let dissolved = Math.min(solute, maxDissolvable);
-            targetDissolved = dissolved; 
-            let precipitate = solute - dissolved;
-            let totalWeight = solvent + solute;
-            
-            let densityFactor = substance === 'Alcohol' ? 1 : (substance === 'Sugar' ? 0.6 : 0.4);
-            let volumeContribution = dissolved * densityFactor + precipitate * densityFactor;
-            let totalVolume = solvent + volumeContribution;
-            
+
+            // ---------- 一般模式 ----------
+            let dissolved, precipitate;
+            if (mode === 'vol') {
+                dissolved = solute;          // 酒精與水任意比例互溶，不會沉澱
+                precipitate = 0;
+            } else {
+                const maxSolubility100g = solubilityData[substance](state.currentTemp);
+                const maxDissolvable = solvent === 0 ? 0 : (maxSolubility100g * solvent / 100);
+                dissolved = Math.min(solute, maxDissolvable);
+                precipitate = solute - dissolved;
+            }
+            targetParticleCount = Math.min(250, Math.floor(dissolved * 1.5));
+
+            let densityFactor = mode === 'vol' ? 1 : (substance === 'Sugar' ? 0.6 : 0.4);
+            let totalVolume = solvent + solute * densityFactor;
+
             document.getElementById('sim-total-volume').innerText = `體積估算: ${totalVolume.toFixed(1)} mL`;
 
-            const MAX_CAPACITY = 2000; 
+            const MAX_CAPACITY = 500;
             let liquidPct = (totalVolume / MAX_CAPACITY) * 100;
-            if(liquidPct > 90) liquidPct = 90; 
-            
+            if(liquidPct > 90) liquidPct = 90;
+
             let precipPct = 0;
-            const warnBox = document.getElementById('precipitate-warn');
             if (precipitate > 0.1) {
                 warnBox.style.opacity = '1';
                 warnBox.style.transform = 'scale(1)';
                 document.getElementById('sim-precipitate-val').innerText = `未溶: ${precipitate.toFixed(1)}g`;
-                
-                precipPct = (precipitate / solute) * 20; 
+
+                precipPct = (precipitate / solute) * 20;
                 if(precipPct > 20) precipPct = 20;
-                if(precipPct < 4 && precipitate > 0) precipPct = 4;
+                if(precipPct < 4) precipPct = 4;
             } else {
                 warnBox.style.opacity = '0';
                 warnBox.style.transform = 'scale(0.9)';
@@ -843,13 +1000,9 @@
             document.getElementById('liquid-level').style.height = `${liquidPct}%`;
             document.getElementById('precipitate-level').style.height = `${precipPct}%`;
 
-            const d_str = Number.isInteger(dissolved) ? dissolved : dissolved.toFixed(1);
-            const s_str = Number.isInteger(solvent) ? solvent : solvent.toFixed(1);
-            const w_str = Number.isInteger(solvent + dissolved) ? (solvent + dissolved) : (solvent + dissolved).toFixed(1);
-
-            document.getElementById('sim-solvent-val').innerText = s_str;
-            document.getElementById('sim-dissolved-val').innerText = d_str;
-            document.getElementById('sim-solution-weight').innerText = w_str;
+            document.getElementById('sim-solvent-val').innerText = fmt(solvent, 1);
+            document.getElementById('sim-dissolved-val').innerText = fmt(dissolved, 1);
+            document.getElementById('sim-solution-weight').innerText = fmt(solvent + dissolved, 1);
         }
 
         const levelData = [
@@ -859,109 +1012,153 @@
             { id: 4, title: "第 4 關：溶解度與降溫結晶", unit: "g" },
             { id: 5, title: "第 5 關：綜合大挑戰", unit: "" }
         ];
+        const typeNames = { 1: '重量百分濃度', 2: '體積百分濃度', 3: '百萬分點 ppm', 4: '溶解度與結晶' };
+
+        const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
         function nextQuestion() {
             let type = quizState.level;
             if(type === 5) type = Math.floor(Math.random() * 4) + 1;
 
-            // --- 關卡智能連動：自動切換模擬物質 ---
-            if (type === 2 && state.substance !== 'Alcohol') {
-                document.getElementById('lab-substance').value = 'Alcohol';
-                changeLabSubstance();
-            } else if (type !== 2 && state.substance === 'Alcohol') {
-                document.getElementById('lab-substance').value = 'Sugar';
-                changeLabSubstance();
-            }
+            let q = { text: '', ans: 0, hint: '', unit: '', labSub: 'Sugar' };
 
-            let q = { text: '', ans: 0, hint: '', unit: '' };
-            let envTemp = Math.floor(Math.random() * 6 + 2) * 10; 
-
-            if (type === 1) { 
-                let subsArray = ['KNO3', 'NaCl', 'NaNO3', 'KCl', 'Sugar'];
-                let sub = subsArray[Math.floor(Math.random() * subsArray.length)];
+            if (type === 1) {
+                let envTemp = Math.floor(Math.random() * 6 + 2) * 10; // 20~70°C
+                let sub = pick(['KNO3', 'NaCl', 'NaNO3', 'KCl', 'Sugar']);
                 let subName = substanceNames[sub];
 
-                let solute = Math.floor(Math.random() * 5 + 1) * 10; 
-                let solventOptions = [10, 20, 40, 50, 100];
-                let solvent = solventOptions[Math.floor(Math.random() * solventOptions.length)];
+                let solute = Math.floor(Math.random() * 5 + 1) * 10;
+                let solvent = pick([10, 20, 40, 50, 100]);
 
-                let maxSolubility100g = solubilityData[sub](envTemp);
-                let maxDissolvable = (maxSolubility100g * solvent / 100);
+                let S = tableSolubility(sub, envTemp);           // 與查表顯示相同
+                let maxDissolvable = Math.round(S * solvent) / 100;
                 let dissolved = Math.min(solute, maxDissolvable);
                 let totalWeight = solvent + dissolved;
-                
-                q.ans = Math.round((dissolved / totalWeight) * 100 * 10) / 10;
-                
-                q.text = `請查閱「參考資料」。<br>在 <span class="text-rose-600">${envTemp}°C</span> 下，將 <span class="text-amber-600">${solute}g</span> <span class="text-amber-700 font-black underline">${subName}</span> 加入 <span class="text-sky-600">${solvent}g</span> 水中充分攪拌。<br>此溶液的重量百分濃度是多少？`;
-                
+
+                q.ans = Math.round((dissolved / totalWeight) * 1000) / 10;
+                q.labSub = sub;
+
+                q.text = `請查閱「溶解度圖表」。<br>在 <span class="text-rose-600">${envTemp}°C</span> 下，將 <span class="text-amber-600">${solute}g</span> <span class="text-amber-700 font-black underline">${subName}</span> 加入 <span class="text-sky-600">${solvent}g</span> 水中充分攪拌。<br>此溶液的重量百分濃度是多少？<span class="text-sm text-slate-400">(取到小數第一位)</span>`;
+
                 if (solute > maxDissolvable) {
-                    let max_str = maxDissolvable % 1 === 0 ? maxDissolvable : maxDissolvable.toFixed(1);
-                    let d_str = dissolved % 1 === 0 ? dissolved : dissolved.toFixed(1);
-                    q.hint = `⚠️ 注意：超過溶解度，有沉澱發生！<br>1. 查表得知 ${envTemp}°C 時 ${solvent}g 水最多溶 ${max_str}g。<br>2. 實際溶解量 = ${d_str}g。<br>3. 濃度 = 溶質 ÷ (水+溶質) = ${d_str} ÷ (${solvent}+${d_str}) × 100% = ${q.ans}%`;
+                    q.hint = `⚠️ 注意：超過溶解度，有沉澱發生！<br>1. 查表得知 ${envTemp}°C 時 100g 水最多溶 ${fmt(S,1)}g，${solvent}g 水最多溶 ${fmt(S,1)} × ${solvent}/100 = ${fmt(maxDissolvable)}g。<br>2. 實際溶解量 = ${fmt(maxDissolvable)}g（沉澱不算溶質）。<br>3. 濃度 = ${fmt(dissolved)} ÷ (${solvent}+${fmt(dissolved)}) × 100% ≈ ${q.ans}%`;
                 } else {
-                    q.hint = `未達飽和，可完全溶解。<br>濃度 = 溶質 ÷ (水+溶質) × 100%。<br>計算：${solute} ÷ (${solvent}+${solute}) × 100% = ${q.ans}%`;
+                    q.hint = `未達飽和（${solvent}g 水最多可溶 ${fmt(maxDissolvable)}g），可完全溶解。<br>濃度 = 溶質 ÷ (水+溶質) × 100%。<br>計算：${solute} ÷ (${solvent}+${solute}) × 100% ≈ ${q.ans}%`;
                 }
                 q.unit = "%";
-            } 
-            else if (type === 2) { 
-                let total = [100, 200, 500][Math.floor(Math.random() * 3)];
-                let ans = [5, 10, 20, 25][Math.floor(Math.random() * 4)];
+            }
+            else if (type === 2) {
+                let total = pick([100, 200, 500]);
+                let ans = pick([5, 10, 20, 25]);
                 let solute = total * ans / 100;
                 let solvent = total - solute;
-                
+
                 q.ans = ans;
+                q.labSub = 'Alcohol';
                 q.text = `將 <span class="text-purple-600">${solute}mL</span> 酒精與 <span class="text-sky-600">${solvent}mL</span> 水混合<span class="text-sm text-slate-400">(假設體積具加成性)</span>。<br>體積百分濃度是多少？`;
                 q.hint = `濃度 = 溶質體積 ÷ (總體積) × 100%。<br>總體積 = ${solute}+${solvent} = ${total} mL。<br>計算：${solute} ÷ ${total} × 100 = ${q.ans}%`;
                 q.unit = "%";
             }
-            else if (type === 3) { 
-                let kg = [2, 5, 10][Math.floor(Math.random() * 3)];
-                let ans = [3, 4, 5, 8][Math.floor(Math.random() * 4)];
-                let mg = kg * ans;
-                
-                q.ans = ans;
-                q.text = `在 <span class="text-emerald-600">${kg} 公斤</span> 的水源中，驗出微量 <span class="text-rose-600">${mg} 毫克</span> 雜質。<br>雜質濃度為多少 ppm？`;
-                q.hint = `ppm = 溶質質量(mg) ÷ 溶液總質量(kg)。<br>計算：${mg} ÷ ${kg} = ${q.ans} ppm`;
-                q.unit = "ppm";
+            else if (type === 3) {
+                q.labSub = 'Trace';
+                let variant = pick(['basic', 'basic', 'gram', 'reverse']);
+                let impurity = pick(['鉛', '汞', '砷', '氟']);
+
+                if (variant === 'basic') {
+                    // mg 與 kg 直接相除
+                    let kg = pick([2, 4, 5, 10, 20]);
+                    let ans = pick([2, 3, 4, 5, 8, 10]);
+                    let mg = kg * ans;
+                    q.ans = ans;
+                    q.unit = "ppm";
+                    q.text = `在 <span class="text-emerald-600">${kg} 公斤</span> 的水樣中，驗出 <span class="text-rose-600">${mg} 毫克</span> 的${impurity}。<br>${impurity}的濃度為多少 ppm？`;
+                    q.hint = `雜質極少，溶液質量 ≈ 水的質量。<br>1 ppm = 每 1 kg 溶液含 1 mg 溶質，所以 ppm = 溶質(mg) ÷ 溶液(kg)。<br>計算：${mg} ÷ ${kg} = ${q.ans} ppm<br>🔬 可在左邊實驗區輸入「加雜質 ${mg} mg、總水量 ${kg} kg」驗證。`;
+                } else if (variant === 'gram') {
+                    // 給 g，需要 × 10^6
+                    let g = pick([200, 500, 1000]);
+                    let ans = pick([2, 4, 5, 10, 20]);
+                    let soluteG = parseFloat((g * ans / 1e6).toFixed(6));
+                    q.ans = ans;
+                    q.unit = "ppm";
+                    q.text = `某 <span class="text-emerald-600">${g} 公克</span> 的溶液中，含有 <span class="text-rose-600">${soluteG} 公克</span> 的${impurity}。<br>此溶液中${impurity}的濃度為多少 ppm？`;
+                    q.hint = `ppm = 溶質質量 ÷ 溶液質量 × 10⁶（兩者單位要相同）。<br>計算：${soluteG} ÷ ${g} × 1000000 = ${q.ans} ppm<br>或換單位：${soluteG} g = ${fmt(soluteG*1000, 3)} mg，${g} g = ${g/1000} kg → ${fmt(soluteG*1000, 3)} ÷ ${g/1000} = ${q.ans} ppm`;
+                } else {
+                    // 反求溶質 mg
+                    let kg = pick([2, 3, 5, 10]);
+                    let ppm = pick([2, 4, 5, 8, 10]);
+                    q.ans = kg * ppm;
+                    q.unit = "mg";
+                    q.text = `某水樣中${impurity}的濃度為 <span class="text-rose-600">${ppm} ppm</span>，<br>則 <span class="text-emerald-600">${kg} 公斤</span> 的水樣中含有多少毫克 (mg) 的${impurity}？`;
+                    q.hint = `${ppm} ppm 代表每 1 kg 溶液中含 ${ppm} mg 溶質。<br>計算：${ppm} mg/kg × ${kg} kg = ${q.ans} mg<br>🔬 可在實驗區輸入水量 ${kg} kg，調整雜質量直到顯示 ${ppm} ppm。`;
+                }
             }
-            else if (type === 4) { 
+            else if (type === 4) {
                 let isCooling = Math.random() > 0.4;
-                let subsArray = ['KNO3', 'NaNO3', 'KCl'];
-                let sub = subsArray[Math.floor(Math.random() * subsArray.length)];
+                let sub = pick(['KNO3', 'NaNO3', 'KCl']);
                 let subName = substanceNames[sub];
+                q.labSub = sub;
 
                 if(!isCooling) {
-                    let temp = [20, 40, 60][Math.floor(Math.random() * 3)];
-                    let max = Math.round(solubilityData[sub](temp));
-                    let water = [50, 100, 200][Math.floor(Math.random() * 3)];
-                    
-                    q.ans = Math.round((max * (water/100)) * 10) / 10;
-                    q.text = `查閱「參考資料」。<br>在 <span class="text-rose-600">${temp}°C</span> 時，<span class="text-sky-600">${water}g</span> 的水最多能溶解多少 g <span class="text-amber-700 underline">${subName}</span>？`;
-                    q.hint = `1. 查表得知 ${temp}°C 時 100g 水可溶 ${max}g。<br>2. 目前水量為 ${water}g。<br>3. ${max} × (${water}/100) = ${q.ans}g。`;
+                    let temp = pick([20, 40, 60]);
+                    let max = tableSolubility(sub, temp);
+                    let water = pick([50, 100, 200]);
+
+                    q.ans = Math.round(max * water) / 100;
+                    q.text = `查閱「溶解度圖表」。<br>在 <span class="text-rose-600">${temp}°C</span> 時，<span class="text-sky-600">${water}g</span> 的水最多能溶解多少 g <span class="text-amber-700 underline">${subName}</span>？`;
+                    q.hint = `1. 查表得知 ${temp}°C 時 100g 水可溶 ${fmt(max,1)}g。<br>2. 目前水量為 ${water}g。<br>3. ${fmt(max,1)} × (${water}/100) = ${fmt(q.ans)}g。`;
                 } else {
-                    let tHigh = [60, 80][Math.floor(Math.random() * 2)];
-                    let tLow = [20, 40][Math.floor(Math.random() * 2)];
-                    let water = [50, 100][Math.floor(Math.random() * 2)];
-                    
-                    let maxHigh = Math.round(solubilityData[sub](tHigh));
-                    let maxLow = Math.round(solubilityData[sub](tLow));
-                    let diff = maxHigh - maxLow;
-                    
-                    q.ans = Math.round((diff * (water/100)) * 10) / 10;
-                    q.text = `查閱「參考資料」。<br>將 <span class="text-rose-600">${tHigh}°C</span> 下 <span class="text-sky-600">${water}g</span> 水的 <span class="text-amber-700">${subName}</span> 飽和溶液，<br>降溫至 <span class="text-blue-600">${tLow}°C</span>，會析出多少克結晶？`;
-                    q.hint = `1. ${tHigh}°C溶解度為 ${maxHigh}g，${tLow}°C為 ${maxLow}g。<br>2. 100g水降溫會析出 ${maxHigh} - ${maxLow} = ${diff}g。<br>3. 依水量比例：${diff} × (${water}/100) = ${q.ans}g。`;
+                    let tHigh = pick([60, 80]);
+                    let tLow = pick([20, 40]);
+                    let water = pick([50, 100]);
+
+                    let maxHigh = tableSolubility(sub, tHigh);
+                    let maxLow = tableSolubility(sub, tLow);
+                    let diff = Math.round((maxHigh - maxLow) * 10) / 10;
+                    let soluteHigh = Math.round(maxHigh * water) / 100;
+
+                    q.ans = Math.round(diff * water) / 100;
+                    q.text = `查閱「溶解度圖表」。<br>將 <span class="text-rose-600">${tHigh}°C</span> 時，以 <span class="text-sky-600">${water}g</span> 水配成的 <span class="text-amber-700">${subName}</span> 飽和溶液，<br>降溫至 <span class="text-blue-600">${tLow}°C</span>（水量不變），會析出多少克結晶？`;
+                    q.hint = `1. ${tHigh}°C 溶解度為 ${fmt(maxHigh,1)}g，${tLow}°C 為 ${fmt(maxLow,1)}g（每 100g 水）。<br>2. 100g 水降溫會析出 ${fmt(maxHigh,1)} − ${fmt(maxLow,1)} = ${fmt(diff,1)}g。<br>3. 依水量比例：${fmt(diff,1)} × (${water}/100) = ${fmt(q.ans)}g。<br>🔬 實驗區驗證：選${subName}、水 ${water}g、溶質 ${fmt(soluteHigh)}g、水溫 ${tHigh}°C 按 GO，再改成 ${tLow}°C 按 GO，看沉澱量。`;
                 }
                 q.unit = "g";
             }
 
+            q.type = type;
             quizState.currentQ = q;
+
+            // --- 關卡連動：實驗區切換到題目用的物質 / 單位模式 ---
+            setLabSubstance(q.labSub);
+            if (q.labSub !== 'Trace' && q.labSub !== 'Alcohol') {
+                document.getElementById('substance-select').value = q.labSub;
+                querySolubility();
+                drawChart();
+            }
+
             document.getElementById('question-text').innerHTML = q.text;
             document.getElementById('input-quiz').value = '';
             document.getElementById('quiz-unit').innerText = q.unit;
             document.getElementById('hint-box').classList.add('hidden');
-            
-            setActiveInput('quiz');
+
+            const tag = document.getElementById('level-subtag');
+            if (quizState.level === 5) {
+                tag.innerText = `本題題型：${typeNames[type]}`;
+                tag.classList.remove('hidden');
+            } else {
+                tag.classList.add('hidden');
+            }
+
+            // 只有第一次載入、或學生本來就在作答欄時才把游標移到答案欄，避免搶走實驗區的輸入焦點
+            if (isFirstQuestion || activeInputId === 'quiz') setActiveInput('quiz');
+            isFirstQuestion = false;
         }
+
+        // 容錯：至少 ±0.15，或答案的 1%（查圖、四捨五入造成的小誤差不判錯）
+        function isCorrect(user, target) {
+            const tol = Math.max(0.15, Math.abs(target) * 0.01);
+            return Math.abs(user - target) <= tol;
+        }
+
+        let wrongPending = false;
 
         function submitQuiz() {
             if (isWaitingForNext) return;
@@ -972,17 +1169,18 @@
             let userAns = parseFloat(val);
             let targetAns = quizState.currentQ.ans;
 
-            if(Math.abs(userAns - targetAns) < 0.05) {
-                inputEl.classList.remove('bg-slate-50', 'bg-rose-50', 'border-emerald-400');
+            isWaitingForNext = true;   // 立刻鎖住，避免連按 Enter 重複計分或跳關
+
+            if(isCorrect(userAns, targetAns)) {
+                inputEl.classList.remove('bg-slate-50', 'bg-rose-50', 'border-emerald-400', 'bg-emerald-50');
                 inputEl.classList.add('bg-emerald-200', 'border-emerald-500', 'text-emerald-900');
-                
+
                 quizState.score++;
                 updateQuizUI();
 
                 if(quizState.score >= quizState.target) {
-                    setTimeout(() => levelUp(), 500);
+                    setTimeout(() => { levelUp(); isWaitingForNext = false; }, 700);
                 } else {
-                    isWaitingForNext = true;
                     setTimeout(() => {
                         inputEl.classList.remove('bg-emerald-200', 'border-emerald-500', 'text-emerald-900');
                         inputEl.classList.add('bg-slate-50', 'border-emerald-400', 'text-blue-900');
@@ -992,23 +1190,28 @@
                     }, 800);
                 }
             } else {
-                inputEl.classList.remove('bg-slate-50', 'bg-emerald-200', 'border-emerald-400');
+                inputEl.classList.remove('bg-slate-50', 'bg-emerald-200', 'border-emerald-400', 'bg-emerald-50');
                 inputEl.classList.add('bg-rose-100', 'border-rose-500', 'text-rose-900');
-                
-                // 答錯顯示 Hint，並在 3.5 秒後自動刷新下一題，不計分
-                document.getElementById('hint-text').innerHTML = quizState.currentQ.hint + "<br><br><span class='text-rose-600 animate-pulse'>💡 答錯囉！這題不算分，3秒後自動換下一題...</span>";
+
+                // 答錯：顯示解題步驟，讓學生看完再自己按「下一題」（或按 Enter）
+                document.getElementById('hint-text').innerHTML = `正確答案：<span class="text-rose-800 text-base">${fmt(targetAns)} ${quizState.currentQ.unit}</span><br>` +
+                    quizState.currentQ.hint + "<br><br><span class='text-rose-600'>這題不算分，看懂後按下方按鈕（或 Enter）換下一題。</span>";
                 document.getElementById('hint-box').classList.remove('hidden');
-                
-                isWaitingForNext = true;
-                setTimeout(() => {
-                    inputEl.classList.remove('bg-rose-100', 'border-rose-500', 'text-rose-900');
-                    inputEl.classList.add('bg-slate-50', 'border-emerald-400', 'text-blue-900');
-                    document.getElementById('hint-box').classList.add('hidden');
-                    inputEl.value = '';
-                    isWaitingForNext = false;
-                    nextQuestion();
-                }, 3500);
+                wrongPending = true;
             }
+        }
+
+        function goNextAfterWrong() {
+            if (!wrongPending) return;
+            wrongPending = false;
+            const inputEl = document.getElementById('input-quiz');
+            inputEl.classList.remove('bg-rose-100', 'border-rose-500', 'text-rose-900');
+            inputEl.classList.add('bg-slate-50', 'text-blue-900');
+            document.getElementById('hint-box').classList.add('hidden');
+            inputEl.value = '';
+            isWaitingForNext = false;
+            nextQuestion();
+            setActiveInput('quiz');
         }
 
         function levelUp() {
@@ -1020,11 +1223,11 @@
             quizState.level++;
             quizState.score = 0;
             updateQuizUI();
-            
+
             const inputEl = document.getElementById('input-quiz');
             inputEl.classList.remove('bg-emerald-200', 'border-emerald-500', 'text-emerald-900');
             inputEl.classList.add('bg-slate-50', 'border-emerald-400', 'text-blue-900');
-            
+
             resetToDefault();
             nextQuestion();
         }
@@ -1033,7 +1236,7 @@
             let info = levelData[quizState.level - 1];
             document.getElementById('level-title').innerText = info.title;
             document.getElementById('score-text').innerText = `進度 ${quizState.score} / ${quizState.target}`;
-            
+
             const stars = document.getElementById('stars-container');
             stars.innerHTML = '';
             for(let i=1; i<=quizState.target; i++) {
@@ -1048,17 +1251,16 @@
         function toggleSidebar() {
             const sidebar = document.getElementById('reference-sidebar');
             const overlay = document.getElementById('sidebar-overlay');
-            
+
             if(sidebar.classList.contains('sidebar-closed')) {
                 sidebar.classList.remove('sidebar-closed');
                 sidebar.classList.add('sidebar-open');
                 overlay.classList.remove('hidden');
-                drawChart(); 
+                drawChart();
             } else {
                 sidebar.classList.remove('sidebar-open');
                 sidebar.classList.add('sidebar-closed');
                 overlay.classList.add('hidden');
-                setActiveInput('quiz');
             }
         }
 
@@ -1081,12 +1283,11 @@
         function querySolubility() {
             let sub = document.getElementById('substance-select').value;
             let T = parseFloat(document.getElementById('query-temp').value) || 0;
-            
+
             if(sub === 'Alcohol') {
                 document.getElementById('query-result').innerText = '∞ (無限)';
             } else {
-                let val = solubilityData[sub](T);
-                document.getElementById('query-result').innerText = val.toFixed(1);
+                document.getElementById('query-result').innerText = tableSolubility(sub, T).toFixed(1);
             }
         }
 
@@ -1096,7 +1297,7 @@
             const ctx = canvas.getContext('2d');
             const sub = document.getElementById('substance-select').value;
             const currentT = parseFloat(document.getElementById('query-temp').value) || 0;
-            
+
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
             if (sub === 'Alcohol') {
@@ -1107,95 +1308,103 @@
                 ctx.fillText('(無溶解度上限)', canvas.width/2, canvas.height/2 + 15);
                 return;
             }
-            
-            const padding = 35;
-            const width = canvas.width - padding * 2;
-            const height = canvas.height - padding * 2;
+
+            const padL = 42, padR = 18, padT = 18, padB = 34;
+            const width = canvas.width - padL - padR;
+            const height = canvas.height - padT - padB;
             const MAX_T = 100;
-            const MAX_S = sub === 'Sugar' ? 450 : 200; 
-            
+            const MAX_S = sub === 'Sugar' ? 500 : (sub === 'KNO3' ? 250 : 200);
+            const yStep = MAX_S / 5;
+
+            // 格線
             ctx.beginPath();
             ctx.strokeStyle = '#e2e8f0';
             ctx.lineWidth = 1;
             for(let i=0; i<=5; i++) {
-                let y = padding + height - (i/5)*height;
-                ctx.moveTo(padding, y);
-                ctx.lineTo(canvas.width - padding + 10, y);
-                
-                let x = padding + (i/5)*width;
-                ctx.moveTo(x, padding);
-                ctx.lineTo(x, canvas.height - padding);
+                let y = padT + height - (i/5)*height;
+                ctx.moveTo(padL, y);
+                ctx.lineTo(padL + width, y);
+            }
+            for(let T=0; T<=MAX_T; T+=20) {
+                let x = padL + (T/MAX_T)*width;
+                ctx.moveTo(x, padT);
+                ctx.lineTo(x, padT + height);
             }
             ctx.stroke();
 
+            // 軸
             ctx.beginPath();
             ctx.strokeStyle = '#64748b';
             ctx.lineWidth = 2;
-            ctx.moveTo(padding, padding);
-            ctx.lineTo(padding, canvas.height - padding);
-            ctx.lineTo(canvas.width - padding + 10, canvas.height - padding);
+            ctx.moveTo(padL, padT);
+            ctx.lineTo(padL, padT + height);
+            ctx.lineTo(padL + width, padT + height);
             ctx.stroke();
 
+            // 刻度標籤
             ctx.fillStyle = '#64748b';
             ctx.font = '11px Arial';
             ctx.textAlign = 'right';
-            ctx.fillText(MAX_S + 'g', padding-5, padding+5);
-            ctx.fillText('0', padding-5, canvas.height-padding+5);
+            for(let i=0; i<=5; i++) {
+                let y = padT + height - (i/5)*height;
+                ctx.fillText(String(i * yStep), padL - 5, y + 4);
+            }
             ctx.textAlign = 'center';
-            ctx.fillText('100°C', canvas.width-padding+10, canvas.height-padding+15);
-            ctx.fillText('溫度(°C)', canvas.width/2, canvas.height-5);
-            
+            for(let T=0; T<=MAX_T; T+=20) {
+                let x = padL + (T/MAX_T)*width;
+                ctx.fillText(String(T), x, padT + height + 14);
+            }
+            ctx.fillText('溫度 (°C)', padL + width/2, canvas.height - 3);
+
             ctx.save();
-            ctx.translate(10, canvas.height/2);
+            ctx.translate(11, padT + height/2);
             ctx.rotate(-Math.PI/2);
-            ctx.fillText('溶解度', 0, 0);
+            ctx.fillText('溶解度 (g)', 0, 0);
             ctx.restore();
 
+            // 曲線
             ctx.beginPath();
             ctx.strokeStyle = '#3b82f6';
             if(sub === 'KNO3') ctx.strokeStyle = '#ec4899';
             if(sub === 'Sugar') ctx.strokeStyle = '#f59e0b';
             if(sub === 'NaNO3') ctx.strokeStyle = '#8b5cf6';
+            if(sub === 'KCl') ctx.strokeStyle = '#10b981';
             ctx.lineWidth = 3;
-            
-            for(let T=0; T<=MAX_T; T+=5) {
-                let S = solubilityData[sub](T);
-                if(S > MAX_S) S = MAX_S; 
-                
-                let x = padding + (T/MAX_T) * width;
-                let y = padding + height - (S/MAX_S) * height;
-                
+
+            for(let T=0; T<=MAX_T; T+=2) {
+                let S = Math.min(solubilityData[sub](T), MAX_S);
+                let x = padL + (T/MAX_T) * width;
+                let y = padT + height - (S/MAX_S) * height;
                 if(T===0) ctx.moveTo(x,y);
                 else ctx.lineTo(x,y);
             }
             ctx.stroke();
-            
+
             ctx.fillStyle = ctx.strokeStyle;
-            ctx.fillRect(padding + 10, padding + 10, 10, 10);
+            ctx.fillRect(padL + 10, padT + 6, 10, 10);
             ctx.fillStyle = '#334155';
             ctx.textAlign = 'left';
-            ctx.fillText(substanceNames[sub], padding + 25, padding + 19);
+            ctx.fillText(substanceNames[sub], padL + 25, padT + 15);
 
-            let currentS = solubilityData[sub](currentT);
-            if(currentS > MAX_S) currentS = MAX_S;
-            
-            let px = padding + (currentT/MAX_T) * width;
-            let py = padding + height - (currentS/MAX_S) * height;
+            // 查詢點
+            let currentS = Math.min(solubilityData[sub](currentT), MAX_S);
+            let px = padL + (currentT/MAX_T) * width;
+            let py = padT + height - (currentS/MAX_S) * height;
 
             ctx.beginPath();
             ctx.setLineDash([5, 5]);
             ctx.strokeStyle = '#94a3b8';
             ctx.lineWidth = 1.5;
             ctx.moveTo(px, py);
-            ctx.lineTo(px, canvas.height - padding);
+            ctx.lineTo(px, padT + height);
             ctx.moveTo(px, py);
-            ctx.lineTo(padding, py);
+            ctx.lineTo(padL, py);
             ctx.stroke();
-            ctx.setLineDash([]); 
+            ctx.setLineDash([]);
 
             ctx.beginPath();
             ctx.arc(px, py, 6, 0, Math.PI * 2);
-            ctx.fillStyle = '#ef4444'; 
+            ctx.fillStyle = '#ef4444';
             ctx.fill();
             ctx.lineWidth = 2;
             ctx.strokeStyle = '#fff';
