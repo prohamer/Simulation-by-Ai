@@ -1,0 +1,896 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>金屬導體電子流動模擬</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.7.0/chart.min.js"></script>
+    <!-- 保留原有的 style 部分 -->
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            font-family: Arial, sans-serif;
+            background-color: #f0f0f0;
+            margin: 0;
+            padding: 5px;
+        }
+        .main-container {
+            width: 100%;
+            max-width: 1200px;
+        }
+        .control-panel {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+            background: white;
+            padding: 5px;
+            border-radius: 4px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .control-group {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            min-width: 100px;
+        }
+        .canvas-container {
+            background: white;
+            border-radius: 4px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            padding: 20px;
+            margin-bottom: 10px;
+            position: relative;
+            height: 300px;
+        }
+        .graph-container {
+            background: white;
+            padding: 5px;
+            border-radius: 4px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            position: relative;
+            height: 150px;
+        }
+        .current-value {
+            text-align: center;
+            padding: 10px;
+            font-size: 16px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            margin-bottom: 10px;
+        }
+        .material-info {
+            background: white;
+            padding: 5px;
+            border-radius: 4px;
+            margin-top: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 5px;
+            margin-top: 5px;
+        }
+        .stat-item {
+            background: #f5f5f5;
+            padding: 5px;
+            border-radius: 2px;
+        }
+        .parameters-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 5px;
+            margin-top: 5px;
+        }
+        .parameter-item {
+            background: #f5f5f5;
+            padding: 5px;
+            border-radius: 2px;
+        }
+        label {
+            min-width: 50px;
+        }
+        select, input[type="range"] {
+            flex: 1;
+        }
+        button {
+            padding: 4px 8px;
+            background: #2196F3;
+            color: white;
+            border: none;
+            border-radius: 2px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #1976D2;
+        }
+        canvas {
+            width: 100%;
+            height: 100%;
+        }
+        .info-container {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="main-container">
+        <!-- 控制面板 -->
+        <div class="control-panel">
+            <div class="control-group">
+                <label>材料選擇:</label>
+                <select id="material">
+                    <option value="Cu">銅 (Cu) - FCC</option>
+                    <option value="Fe">鐵 (Fe) - BCC</option>
+                    <option value="Al">鋁 (Al) - FCC</option>
+                    <option value="W">鎢 (W) - BCC</option>
+                    <option value="Ti">鈦 (Ti) - HCP</option>
+                </select>
+            </div>
+            <div class="control-group">
+                <label>溫度 (K):</label>
+                <input type="range" id="temperature" min="0" max="1000" value="300">
+                <span id="tempValue">300</span>
+            </div>
+            <div class="control-group">
+				<label>電壓 (V):</label>
+				<button id="decreaseVoltage" style="padding: 0 8px">-</button>
+				<input type="range" id="field" min="0" max="5" step="0.1" value="0">
+				<button id="increaseVoltage" style="padding: 0 8px">+</button>
+				<span id="fieldValue">0</span>
+			</div>
+            <div class="control-group">
+				<label>導體長度(%):</label>
+				<button id="decreaseLength" style="padding: 0 8px">-</button>
+				<input type="range" id="conductorLength" min="20" max="100" value="100">
+				<button id="increaseLength" style="padding: 0 8px">+</button>
+				<span id="lengthValue">100</span>
+			</div>
+
+			<div class="control-group">
+				<label>導體寬度(%):</label>
+				<button id="decreaseWidth" style="padding: 0 8px">-</button>
+				<input type="range" id="conductorWidth" min="20" max="100" value="100">
+				<button id="increaseWidth" style="padding: 0 8px">+</button>
+				<span id="widthValue">100</span>
+			</div>
+            <div class="control-group">
+                <button id="toggle">開始/停止</button>
+                <button id="reset">重置</button>
+            </div>
+        </div>
+
+        <!-- 模擬視窗 -->
+        <div class="canvas-container">
+            <canvas id="canvas"></canvas>
+        </div>
+
+        <!-- 即時數據和圖表 -->
+        <div class="current-value">
+            電子流量: <span id="electronCount">0</span> 個/秒
+        </div>
+        <div class="graph-container">
+            <canvas id="chartCanvas"></canvas>
+        </div>
+
+        <!-- 資訊顯示區 -->
+        <div class="info-container">
+            <div class="material-info">
+                <h3>材料特性</h3>
+                <div id="materialProperties"></div>
+            </div>
+            <div class="physics-parameters">
+                <h3>即時物理參數</h3>
+                <div class="parameters-grid">
+                    <div class="parameter-item">
+                        <div class="parameter-label">導體長度</div>
+                        <div class="parameter-value"><span id="conductorLength">0</span> μm</div>
+                    </div>
+                    <div class="parameter-item">
+                        <div class="parameter-label">截面積</div>
+                        <div class="parameter-value"><span id="crossSection">0</span> μm²</div>
+                    </div>
+                    <div class="parameter-item">
+                        <div class="parameter-label">電流密度</div>
+                        <div class="parameter-value"><span id="currentDensity">0</span> A/m²</div>
+                    </div>
+                    <div class="parameter-item">
+                        <div class="parameter-label">平均漂移速度</div>
+                        <div class="parameter-value"><span id="driftVelocity">0</span> m/s</div>
+                    </div>
+                    <div class="parameter-item">
+                        <div class="parameter-label">電子平均自由程</div>
+                        <div class="parameter-value"><span id="meanFreePath">0</span> nm</div>
+                    </div>
+                    <div class="parameter-item">
+                        <div class="parameter-label">散射時間</div>
+                        <div class="parameter-value"><span id="scatteringTime">0</span> fs</div>
+                    </div>
+                    <div class="parameter-item">
+                        <div class="parameter-label">X方向原子數</div>
+                        <div class="parameter-value"><span id="nucleiCountX">0</span></div>
+                    </div>
+                    <div class="parameter-item">
+                        <div class="parameter-label">總原子數</div>
+                        <div class="parameter-value"><span id="nucleiCountTotal">0</span></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>
+         // 全局變量
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const chartCanvas = document.getElementById('chartCanvas');
+        let isRunning = false;
+        let nuclei = [];
+        let electrons = [];
+        let electronCount = 0;
+        let lastTime = Date.now();
+        let spacing = 30;
+        let fieldChart = null;
+		
+		        // 材料特性
+        const materialProperties = {
+			Cu: {
+				name: '銅',
+				structure: 'FCC',
+				latticeConstant: 3.61,
+				conductivity: 5.96e7,
+				resistivity: 1.68e-8,
+				atomicRadius: 0.1278,  // nm
+				color: '#FFA07A',
+				electronConfig: '[Ar]3d¹⁰4s¹',
+				thermalConductivity: 401,
+				nuclearColor: '#B87333',
+				electronColor: '#FF3333'
+			},
+			Fe: {
+				name: '鐵',
+				structure: 'BCC',
+				latticeConstant: 2.87,
+				conductivity: 1.00e7,
+				resistivity: 9.71e-8,
+				atomicRadius: 0.1241,  // nm
+				color: '#A0522D',
+				electronConfig: '[Ar]3d⁶4s²',
+				thermalConductivity: 80,
+				nuclearColor: '#8B4513',
+				electronColor: '#FF3333'
+			},
+			Al: {
+				name: '鋁',
+				structure: 'FCC',
+				latticeConstant: 4.05,
+				conductivity: 3.77e7,
+				resistivity: 2.65e-8,
+				atomicRadius: 0.1431,  // nm
+				color: '#C0C0C0',
+				electronConfig: '[Ne]3s²3p¹',
+				thermalConductivity: 237,
+				nuclearColor: '#848484',
+				electronColor: '#FF3333'
+			},
+			W: {
+				name: '鎢',
+				structure: 'BCC',
+				latticeConstant: 3.16,
+				conductivity: 1.79e7,
+				resistivity: 5.60e-8,
+				atomicRadius: 0.1371,  // nm
+				color: '#808080',
+				electronConfig: '[Xe]4f¹⁴5d⁴6s²',
+				thermalConductivity: 173,
+				nuclearColor: '#696969',
+				electronColor: '#FF3333'
+			},
+			Ti: {
+				name: '鈦',
+				structure: 'HCP',
+				latticeConstant: {a: 2.95, c: 4.68},
+				conductivity: 2.38e6,
+				resistivity: 4.20e-7,
+				atomicRadius: 0.1445,  // nm
+				color: '#A0A0A0',
+				electronConfig: '[Ar]3d²4s²',
+				thermalConductivity: 21.9,
+				nuclearColor: '#708090',
+				electronColor: '#FF3333'
+			}
+		};
+
+        // 初始化圖表
+        // 初始化圖表
+	function initializeChart() {
+		fieldChart = new Chart(chartCanvas.getContext('2d'), {
+			type: 'line',
+			data: {
+				labels: [],
+				datasets: [{
+					label: '電子流量',
+					data: [],
+					borderColor: '#2196F3',
+					tension: 0.4,
+					fill: false,
+					pointRadius: 1
+				}]
+			},
+			options: {
+				responsive: true,
+				maintainAspectRatio: false,
+				animation: false,
+				scales: {
+					x: {
+						title: {
+							display: true,
+							text: '電壓 (V)'
+						}
+					},
+					y: {
+						title: {
+							display: true,
+							text: '電子數/秒',
+							padding: 10
+						}
+					}
+				},
+				plugins: {
+					legend: {
+						display: false
+					}
+				}
+			}
+		});
+	}
+
+	// 更新圖表數據
+	function updateChart(voltage, current) {
+		if (!fieldChart) return;
+		
+		// 添加新的數據點
+		fieldChart.data.labels.push(voltage.toFixed(1));
+		fieldChart.data.datasets[0].data.push(current);
+
+		// 只保留最後50筆數據
+		if (fieldChart.data.labels.length > 50) {
+			fieldChart.data.labels.shift();
+			fieldChart.data.datasets[0].data.shift();
+		}
+
+		fieldChart.update('none');
+	}
+
+        // 設置畫布尺寸
+        function resizeCanvas() {
+            const container = canvas.parentElement;
+            canvas.width = container.offsetWidth - 40;
+            canvas.height = 300;
+            
+            const material = document.getElementById('material').value;
+            createLattice(material);
+            createElectrons();
+        }
+
+        // 創建晶格結構
+        function createLattice(material) {
+            const prop = materialProperties[material];
+            nuclei = [];
+            spacing = prop.structure === 'HCP' ? 25 : 30;
+            
+            switch(prop.structure) {
+                case 'FCC':
+                    createFCCLattice(spacing);
+                    break;
+                case 'BCC':
+                    createBCCLattice(spacing);
+                    break;
+                case 'HCP':
+                    createHCPLattice(spacing);
+                    break;
+            }
+        }
+
+        function createBCCLattice(spacing) {
+		   const material = document.getElementById('material').value;
+		   const radiusRatio = (materialProperties[material].atomicRadius / materialProperties.Cu.atomicRadius).toFixed(1);
+		   const actualSpacing = spacing * radiusRatio * 1;  // 根據原子半徑比例調整間距並保留微調空間
+		   const offset = actualSpacing / 2;  // 加入 offset 宣告
+		   
+		   const rows = Math.floor(canvas.height / actualSpacing);
+		   const cols = Math.floor((canvas.width - actualSpacing) / actualSpacing);
+		   let xAxisNuclei = cols;
+		   let totalNuclei = 0;
+
+		   // 簡單的方格排列
+		   for(let i = 0; i < cols; i++) {
+			   for(let j = 0; j < rows; j++) {
+				   nuclei.push({
+					   x: i * actualSpacing + offset,
+					   y: j * actualSpacing + offset,
+					   baseX: i * actualSpacing + offset,
+					   baseY: j * actualSpacing + offset,
+					   type: 'corner'
+				   });
+				   totalNuclei++;
+			   }
+		   }
+
+		   document.getElementById('nucleiCountX').textContent = xAxisNuclei;
+		   document.getElementById('nucleiCountTotal').textContent = totalNuclei;
+		}
+
+		function createFCCLattice(spacing) {
+		   const material = document.getElementById('material').value;
+		   const radiusRatio = (materialProperties[material].atomicRadius / materialProperties.Cu.atomicRadius).toFixed(1);
+		   const actualSpacing = spacing * radiusRatio * 1;  // 根據原子半徑比例調整間距並保留微調空間
+		   const offset = actualSpacing / 2;  // 加入 offset 宣告
+		   
+		   const rows = Math.floor(canvas.height / actualSpacing);
+		   const cols = Math.floor((canvas.width - actualSpacing) / actualSpacing);
+		   let xAxisNuclei = cols + (cols-1);
+		   let totalNuclei = 0;
+
+		   // 頂點原子
+		   for(let i = 0; i < cols; i++) {
+			   for(let j = 0; j < rows; j++) {
+				   nuclei.push({
+					   x: i * actualSpacing + offset,
+					   y: j * actualSpacing + offset,
+					   baseX: i * actualSpacing + offset,
+					   baseY: j * actualSpacing + offset
+				   });
+				   totalNuclei++;
+			   }
+		   }
+
+		   // 面心原子
+		   for(let i = 0; i < cols - 1; i++) {
+			   for(let j = 0; j < rows - 1; j++) {
+				   nuclei.push({
+					   x: (i + 0.5) * actualSpacing + offset,
+					   y: (j + 0.5) * actualSpacing + offset,
+					   baseX: (i + 0.5) * actualSpacing + offset,
+					   baseY: (j + 0.5) * actualSpacing + offset
+				   });
+				   totalNuclei++;
+			   }
+		   }
+
+		   document.getElementById('nucleiCountX').textContent = xAxisNuclei;
+		   document.getElementById('nucleiCountTotal').textContent = totalNuclei;
+		}
+
+        function createHCPLattice(spacing) {
+			const material = document.getElementById('material').value;
+			const radiusRatio = (materialProperties[material].atomicRadius / materialProperties.Cu.atomicRadius).toFixed(1);
+			const actualSpacing = spacing * radiusRatio * 1.4;  // 根據原子半徑比例調整間距
+			const yOffset = actualSpacing * Math.sqrt(3) / 2;
+			const offset = actualSpacing / 2;
+			
+			const rows = Math.floor(canvas.height / actualSpacing);
+			const cols = Math.floor((canvas.width - actualSpacing) / actualSpacing);
+			let xAxisNuclei = Math.ceil(cols * 1.5);
+			let totalNuclei = 0;
+
+			const totalLayers = Math.ceil(canvas.height / (yOffset)) + 1;
+
+			for(let j = 0; j < totalLayers; j++) {
+				const isEvenLayer = j % 2 === 0;
+				for(let i = 0; i < cols; i++) {
+					const yPos = j * yOffset + offset;
+					if (yPos < canvas.height) {
+						nuclei.push({
+							x: i * actualSpacing + (isEvenLayer ? 0 : actualSpacing/2) + offset,
+							y: yPos,
+							baseX: i * actualSpacing + (isEvenLayer ? 0 : actualSpacing/2) + offset,
+							baseY: yPos
+						});
+						totalNuclei++;
+
+						if(i < cols - 1 && j < totalLayers - 1) {
+							const midY = yPos + yOffset/2;
+							if (midY < canvas.height) {
+								nuclei.push({
+									x: (i + 0.5) * actualSpacing + (isEvenLayer ? 0 : actualSpacing/2) + offset,
+									y: midY,
+									baseX: (i + 0.5) * actualSpacing + (isEvenLayer ? 0 : actualSpacing/2) + offset,
+									baseY: midY
+								});
+								totalNuclei++;
+							}
+						}
+					}
+				}
+			}
+
+			document.getElementById('nucleiCountX').textContent = xAxisNuclei;
+			document.getElementById('nucleiCountTotal').textContent = totalNuclei;
+		}
+
+        function createElectrons() {
+			electrons = [];
+			const material = document.getElementById('material').value;
+			const prop = materialProperties[material];
+			const lengthRatio = parseInt(document.getElementById('conductorLength').value) / 100;
+			const widthRatio = parseInt(document.getElementById('conductorWidth').value) / 100;
+			const effectiveWidth = (canvas.width - spacing) * lengthRatio;
+			const effectiveHeight = canvas.height * widthRatio;
+			
+			const conductorLength = effectiveWidth * 0.1;
+			const conductorHeight = effectiveHeight * 0.1;
+			const conductorArea = conductorLength * conductorHeight;
+			
+			const baseElectronsPerArea = 0.5;
+			const conductivityRatio = prop.conductivity / materialProperties.Cu.conductivity;
+			const count = Math.floor(
+				conductorArea * baseElectronsPerArea * conductivityRatio
+			);
+			const actualCount = Math.min(count, 3000);
+
+			// 收集有效原子位置
+			let availablePositions = [];
+			nuclei.forEach(nucleus => {
+				if(nucleus.x <= effectiveWidth && nucleus.y <= effectiveHeight) {
+					availablePositions.push({
+						x: nucleus.x,
+						y: nucleus.y
+					});
+				}
+			});
+
+			if(availablePositions.length === 0) return;
+
+			// 打亂可用位置的順序
+			availablePositions = availablePositions.sort(() => Math.random() - 0.5);
+
+			// 為每個位置分配電子
+			for(let i = 0; i < actualCount; i++) {
+				const posIndex = i % availablePositions.length;
+				const basePos = availablePositions[posIndex];
+				
+				const angle = Math.random() * Math.PI * 2;
+				const radius = Math.random() * spacing * 0.3;
+				
+				const x = basePos.x + Math.cos(angle) * radius;
+				const y = basePos.y + Math.sin(angle) * radius;
+
+				if(x <= effectiveWidth && y <= effectiveHeight && x >= 0 && y >= 0) {
+					electrons.push({
+						x: x,
+						y: y,
+						vx: (Math.random() - 0.5) * 2,
+						vy: (Math.random() - 0.5) * 2
+					});
+				}
+			}
+		}
+		
+        function updateElectronMotion(electron, temperature, voltage) {
+            const lengthRatio = parseInt(document.getElementById('conductorLength').value) / 100;
+            const widthRatio = parseInt(document.getElementById('conductorWidth').value) / 100;
+            const effectiveWidth = (canvas.width - spacing) * lengthRatio;
+            const effectiveHeight = canvas.height * widthRatio;
+            const length = effectiveWidth * 0.1 * 1e-6; // 換算成米
+            
+            // 計算電場強度 E = V/L，但電子加速效應需要調整
+            const fieldStrength = voltage / length;
+            
+            if(voltage > 0) {
+                // 調整加速效應，避免與長度形成平方反比
+                const fieldEffect = (fieldStrength * 1e-5 * lengthRatio) * (1 - temperature / 5000);
+                electron.vx += fieldEffect;
+                
+                if(electron.x > effectiveWidth) {
+					// 修改這裡：不要直接設為 0，而是在左側一定範圍內隨機分布
+					const resetRange = Math.min(spacing * 3, effectiveWidth * 0.1); // 左側重置範圍
+					electron.x = Math.random() * resetRange;
+					electronCount++;
+				}
+            } else {
+                if(electron.x > effectiveWidth || electron.x < 0) {
+                    electron.vx *= -1;
+                }
+            }
+
+            // 其他物理效應保持不變
+            const interactionRadius = 10 + (temperature / 200);
+            nuclei.forEach(nucleus => {
+                if(nucleus.x <= effectiveWidth && nucleus.y <= effectiveHeight) {
+                    const dx = electron.x - nucleus.x;
+                    const dy = electron.y - nucleus.y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    if(distance < interactionRadius) {
+                        const angle = Math.atan2(dy, dx);
+                        const repulsion = (1 / (distance + 1)) * (1 + temperature / 1000);
+                        electron.vx += Math.cos(angle) * repulsion;
+                        electron.vy += Math.sin(angle) * repulsion;
+                    }
+                }
+            });
+
+            // 熱運動效應
+            const randomFactor = Math.pow(temperature / 300, 1.2);
+            electron.vx += (Math.random() - 0.5) * randomFactor;
+            electron.vy += (Math.random() - 0.5) * randomFactor;
+
+            // 散射效應
+            const scatteringProbability = temperature / 20000;
+            if (Math.random() < scatteringProbability) {
+                const randomAngle = Math.random() * Math.PI * 2;
+                const velocity = Math.sqrt(electron.vx * electron.vx + electron.vy * electron.vy);
+                electron.vx = Math.cos(randomAngle) * velocity * 0.9;
+                electron.vy = Math.sin(randomAngle) * velocity * 0.9;
+            }
+
+            // 更新位置
+            electron.x += electron.vx;
+            electron.y += electron.vy;
+
+            // 邊界檢查
+            if(electron.y > effectiveHeight || electron.y < 0) {
+                electron.vy *= -1;
+            }
+
+            // 速度衰減
+            const dampingFactor = 0.99 - (temperature / 5000);
+            electron.vx *= dampingFactor;
+            electron.vy *= dampingFactor;
+        }
+		
+        function updateMaterialInfo() {
+            const material = document.getElementById('material').value;
+            const prop = materialProperties[material];
+            const info = document.getElementById('materialProperties');
+            
+            info.innerHTML = `
+                <div class="stats">
+                    <div class="stat-item">晶格結構: ${prop.structure}</div>
+                    <div class="stat-item">晶格常數: ${typeof prop.latticeConstant === 'object' ? 
+                        `a=${prop.latticeConstant.a}Å, c=${prop.latticeConstant.c}Å` : 
+                        `${prop.latticeConstant}Å`}</div>
+                    <div class="stat-item">電阻率: ${prop.resistivity} Ω·m</div>
+                    <div class="stat-item">熱導率: ${prop.thermalConductivity} W/(m·K)</div>
+                    <div class="stat-item">電子構型: ${prop.electronConfig}</div>
+                </div>
+            `;
+        }
+
+        
+        // 更新函數
+        // 更新函數
+		function update() {
+			const material = document.getElementById('material').value;
+			const prop = materialProperties[material];
+			const temperature = parseInt(document.getElementById('temperature').value);
+			const voltage = parseFloat(document.getElementById('field').value);
+			const vibration = temperature / 100 * (prop.thermalConductivity / 401);
+
+			nuclei.forEach(nucleus => {
+				nucleus.x = nucleus.baseX + (Math.random() - 0.5) * vibration;
+				nucleus.y = nucleus.baseY + (Math.random() - 0.5) * vibration;
+			});
+
+			electrons.forEach(electron => {
+				updateElectronMotion(electron, temperature, voltage);
+			});
+
+			const now = Date.now();
+			if(now - lastTime >= 1000) {
+				// 這裡改用 voltage 而不是 field
+				updateMeasurements(prop, voltage, temperature);
+				lastTime = now;
+			}
+
+			draw();
+		}
+
+        // 更新測量值
+        function updateMeasurements(prop, voltage, temperature) {
+            const lengthRatio = parseInt(document.getElementById('conductorLength').value) / 100;
+            const widthRatio = parseInt(document.getElementById('conductorWidth').value) / 100;
+            const length = (canvas.width * 0.1 * lengthRatio * 1e-6); // 轉換為米
+            const fieldStrength = voltage / length;
+            const height = (canvas.height * 0.1).toFixed(1);
+            const crossSection = (canvas.height * 0.1 * widthRatio).toFixed(1);
+            
+            // 電流密度計算
+            const currentDensity = (electronCount * 1.602e-19 / (crossSection * 1e-12)).toFixed(2);
+            
+            // 更新飄移速度顯示，考慮長度比例
+            const driftVelocity = (fieldStrength * prop.conductivity / (1.602e-19 * 8.5e28)).toFixed(4);
+            const meanFreePath = (prop.conductivity * 1.602e-19 / 
+                (8.5e28 * Math.sqrt(3 * 1.38e-23 * temperature / (9.1e-31)))).toFixed(2);
+            const scatteringTime = (meanFreePath / 
+                (Math.sqrt(3 * 1.38e-23 * temperature / (9.1e-31)))).toFixed(2);
+
+            // 更新顯示
+            document.getElementById('electronCount').textContent = Math.floor(electronCount * widthRatio);
+            document.getElementById('conductorLength').textContent = (length * 1e6).toFixed(1);
+            document.getElementById('crossSection').textContent = crossSection;
+            document.getElementById('currentDensity').textContent = currentDensity;
+            document.getElementById('driftVelocity').textContent = driftVelocity;
+            document.getElementById('meanFreePath').textContent = meanFreePath;
+            document.getElementById('scatteringTime').textContent = scatteringTime;
+
+            // 更新圖表
+            updateChart(voltage, electronCount * widthRatio);
+            electronCount = 0;
+        }
+
+        function draw() {
+			ctx.clearRect(0, 0, canvas.width, canvas.height);
+			const material = document.getElementById('material').value;
+			const prop = materialProperties[material];
+			
+			// 獲取長寬比例
+			const lengthRatio = parseInt(document.getElementById('conductorLength').value) / 100;
+			const widthRatio = parseInt(document.getElementById('conductorWidth').value) / 100;
+			
+			// 計算有效區域
+			const effectiveWidth = (canvas.width - spacing) * lengthRatio;
+			const effectiveHeight = canvas.height * widthRatio;
+
+			// 繪製有效區域邊界
+			ctx.strokeStyle = '#ddd';
+			ctx.beginPath();
+			ctx.moveTo(effectiveWidth, 0);
+			ctx.lineTo(effectiveWidth, effectiveHeight);
+			ctx.stroke();
+
+			// 繪製原子核
+			ctx.fillStyle = prop.nuclearColor;  // 設置原子核顏色
+			nuclei.forEach(nucleus => {
+				if(nucleus.x <= effectiveWidth && nucleus.y <= effectiveHeight) {
+					ctx.beginPath();
+					ctx.arc(nucleus.x, nucleus.y, 4, 0, Math.PI * 2);
+					ctx.fill();
+				}
+			});
+
+			// 繪製電子
+			ctx.fillStyle = prop.electronColor;
+			electrons.forEach(electron => {
+				if(electron.x <= effectiveWidth && electron.y <= effectiveHeight) {
+					ctx.beginPath();
+					ctx.arc(electron.x, electron.y, 2, 0, Math.PI * 2);
+					ctx.fill();
+				}
+			});
+		}
+
+        // 動畫循環
+        function animate() {
+            if (!isRunning) return;
+            update();
+            requestAnimationFrame(animate);
+        }
+
+        // 事件監聽器
+        document.getElementById('toggle').addEventListener('click', () => {
+            isRunning = !isRunning;
+            if (isRunning) animate();
+        });
+
+        document.getElementById('reset').addEventListener('click', () => {
+			const material = document.getElementById('material').value;
+			
+			// 重置溫度到 300K
+			const tempInput = document.getElementById('temperature');
+			tempInput.value = 300;
+			document.getElementById('tempValue').textContent = '300';
+			
+			// 重置電場強度到 0
+			const fieldInput = document.getElementById('field');
+			fieldInput.value = 0;
+			document.getElementById('fieldValue').textContent = '0';
+			
+			createLattice(material);
+			createElectrons();
+			electronCount = 0;
+			
+			if (fieldChart) {
+				fieldChart.data.labels = [];
+				fieldChart.data.datasets[0].data = [];
+				fieldChart.update();
+			}
+
+			draw(); // 立即重繪狀態
+		});
+		
+			document.getElementById('conductorLength').addEventListener('input', function() {
+			document.getElementById('lengthValue').textContent = this.value;
+		});
+
+		document.getElementById('conductorWidth').addEventListener('input', function() {
+			document.getElementById('widthValue').textContent = this.value;
+		});
+
+        document.getElementById('material').addEventListener('change', () => {
+            const material = document.getElementById('material').value;
+            createLattice(material);
+            createElectrons();
+            updateMaterialInfo();
+        });
+
+        document.getElementById('temperature').addEventListener('input', function() {
+            document.getElementById('tempValue').textContent = this.value;
+        });
+
+        document.getElementById('field').addEventListener('input', function() {
+        document.getElementById('fieldValue').textContent = this.value;
+        });
+		
+		document.getElementById('decreaseVoltage').addEventListener('click', () => {
+			const fieldInput = document.getElementById('field');
+			const currentValue = parseFloat(fieldInput.value);
+			const newValue = Math.max(0, currentValue - 0.1);
+			fieldInput.value = newValue;
+			document.getElementById('fieldValue').textContent = newValue.toFixed(1);
+		});
+
+		document.getElementById('increaseVoltage').addEventListener('click', () => {
+			const fieldInput = document.getElementById('field');
+			const currentValue = parseFloat(fieldInput.value);
+			const newValue = Math.min(5, currentValue + 0.1);
+			fieldInput.value = newValue;
+			document.getElementById('fieldValue').textContent = newValue.toFixed(1);
+		});
+		
+		document.getElementById('decreaseLength').addEventListener('click', () => {
+			const lengthInput = document.getElementById('conductorLength');
+			const currentValue = parseInt(lengthInput.value);
+			const newValue = Math.max(20, currentValue - 1);
+			lengthInput.value = newValue;
+			document.getElementById('lengthValue').textContent = newValue;
+			createLattice(document.getElementById('material').value);
+			createElectrons();
+		});
+
+		document.getElementById('increaseLength').addEventListener('click', () => {
+			const lengthInput = document.getElementById('conductorLength');
+			const currentValue = parseInt(lengthInput.value);
+			const newValue = Math.min(100, currentValue + 1);
+			lengthInput.value = newValue;
+			document.getElementById('lengthValue').textContent = newValue;
+			createLattice(document.getElementById('material').value);
+			createElectrons();
+		});
+
+		document.getElementById('decreaseWidth').addEventListener('click', () => {
+			const widthInput = document.getElementById('conductorWidth');
+			const currentValue = parseInt(widthInput.value);
+			const newValue = Math.max(20, currentValue - 1);
+			widthInput.value = newValue;
+			document.getElementById('widthValue').textContent = newValue;
+			createLattice(document.getElementById('material').value);
+			createElectrons();
+		});
+
+		document.getElementById('increaseWidth').addEventListener('click', () => {
+			const widthInput = document.getElementById('conductorWidth');
+			const currentValue = parseInt(widthInput.value);
+			const newValue = Math.min(100, currentValue + 1);
+			widthInput.value = newValue;
+			document.getElementById('widthValue').textContent = newValue;
+			createLattice(document.getElementById('material').value);
+			createElectrons();
+		});
+
+        // 初始化
+        window.addEventListener('load', () => {
+            initializeChart();
+            updateMaterialInfo();
+            resizeCanvas();
+            draw(); // 立即繪製初始狀態
+        });
+
+        window.addEventListener('resize', resizeCanvas);
+    </script>
+</body>
+</html>
