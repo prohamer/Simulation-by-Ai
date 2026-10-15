@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PipemanV3.4</title>
+    <title>PipemanV3.5</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
     <style>
@@ -321,6 +321,17 @@
         .snap-tick.labeled::before { background: #fbbf24; height: 7px; }
         .snap-tick:hover { color: #fde68a; }
 
+        /* ---- 可收合區塊 ---- */
+        .collapse-head {
+            width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 6px;
+            background: transparent; border: none; color: inherit; font: inherit; text-align: left;
+            padding: 0; cursor: pointer;
+        }
+        .collapse-arrow { color: var(--accent); font-weight: 700; }
+        .collapse-body { display: none; }
+        .collapse-body.open { display: flex; }
+        #height-body.open { display: block; margin-top: 4px; }
+
         /* ---- v3.4 additions ---- */
         .floating-label.meter { border-color: #a78bfa; color: #ede9fe; }
         .floating-label.warn { border-color: #ef4444; color: #fecaca; background: rgba(127, 29, 29, 0.92); }
@@ -374,6 +385,8 @@
 
 <!-- Edit Toolbar -->
 <div class="edit-bar">
+    <button class="btn" id="btn-height" onclick="toggleHeightMode()" title="管件高度＝電位：幫浦上坡、電阻下坡、導線水平">🏔️ 電位高度模式</button>
+    <span class="bar-sep"></span>
     <button class="btn" id="btn-multi" onclick="toggleMultiMode()" title="觸控白板也能多選：點選加入/移除，空白處拖曳框選">☑️ 多選模式</button>
     <button class="btn" onclick="duplicateSelection()" title="複製選取的元件並放置 (Ctrl+C → Ctrl+V)">📄 複製</button>
     <button class="btn" onclick="deleteSelectedBlock()" title="Delete">🗑️ 刪除選取</button>
@@ -391,7 +404,7 @@
 <!-- Top Bar -->
 <div class="top-bar">
     <div class="title-group">
-        <h1>🎮 3D 平面水路與自由電子類比沙盒 v3.4</h1>
+        <h1>🎮 3D 平面水路與自由電子類比沙盒 v3.5</h1>
         <p>幫浦＝3 號鹼性電池 (1.5 V、內阻 0.2 Ω) ｜ 電阻以 Ω 為單位 ｜ 未連接的開口自動加上封口蓋</p>
     </div>
     <div class="preset-group">
@@ -515,6 +528,19 @@
 <div class="right-panel">
     <div class="section-title">迴路導通與物理狀態</div>
     <div id="circuit-badge" style="padding:7px 10px; border-radius:6px; font-size:0.78rem; font-weight:600;"></div>
+    <div id="height-note" style="display:none; padding:8px 10px; border-radius:8px; background:rgba(14,165,233,0.12); border:1px solid #0ea5e9; font-size:0.74rem; color:#e0f2fe; line-height:1.55;">
+        <button class="collapse-head" onclick="toggleCollapse('height-body')"><span>🏔️ <b>電位高度模式</b>：高度＝電位</span><span class="collapse-arrow" id="height-body-arrow">▾</span></button>
+        <div class="collapse-body open" id="height-body">
+            • <b>幫浦是上坡</b>：把水抬高（端電壓 ε − Ir）<br>
+            • <b>電阻是下坡</b>：坡度越陡，電壓降越大<br>
+            • <b>導線幾乎水平</b>：沒有電阻就沒有落差<br>
+            • 一圈走回來，上坡總和＝下坡總和（克希荷夫電壓定律）
+        </div>
+        <div id="height-scale-row" class="control-row" style="display:none; margin-top:6px;">
+            <label><span>高度比例</span><span id="height-scale-txt" style="color:var(--accent); font-weight:700;">每 1 V ＝ 0.9 格高</span></label>
+            <input type="range" min="0.3" max="1.8" step="0.1" value="0.9" oninput="setHeightScale(this.value)">
+        </div>
+    </div>
     <div class="stat-card" style="padding:6px 8px;">
         <div class="stat-title" style="margin-bottom:4px;">各迴路讀數（點一列可選取該幫浦）</div>
         <div id="circuit-table"></div>
@@ -537,8 +563,8 @@
         <div id="insp-r-wrap" class="logctl" style="display:none; margin-top:8px;"></div>
     </div>
 
-    <div class="section-title">教學說明</div>
-    <div style="font-size:0.75rem; color:#cbd5e1; line-height:1.55; display:flex; flex-direction:column; gap:6px;">
+    <button class="adv-toggle" onclick="toggleCollapse('teach-body')"><span>教學說明</span><span class="collapse-arrow" id="teach-body-arrow">▸</span></button>
+    <div class="collapse-body" id="teach-body" style="font-size:0.75rem; color:#cbd5e1; line-height:1.55; flex-direction:column; gap:6px;">
         <div>🔹 <b>幫浦＝3 號鹼性電池：</b>每顆 ε = 1.5 V、內阻 r = 0.2 Ω。接上數十 Ω 的電阻時，端電壓會略低於 ε（例如 2.96 V）；需要整數讀數時，到「進階設定」把電池內阻點到「理想」。</div>
         <div>🔹 <b>短路：</b>用空管直接接回幫浦，電流衝到 ε/r ≈ 7.5 A，端電壓接近 0，能量變成電池內部的熱 (I²r)，幫浦發紅。</div>
         <div>🔹 <b>封口蓋：</b>灰色＝開口空著；<span style="color:#fca5a5;">紅色＝旁邊有管子但開口沒對上</span>，提醒學生「看起來接上了其實沒有」。</div>
@@ -942,6 +968,7 @@ function buildBlockMesh(block) {
             archGroup.add(ramp);
         });
         group.add(archGroup);
+        block.archGroup = archGroup;
     } else {
         group.add(new THREE.Mesh(new THREE.SphereGeometry(pipeR * 1.03, 16, 16), glassMat));
         for (let d = 0; d < 4; d++) {
@@ -1714,6 +1741,29 @@ function toggleAdvanced() {
     body.classList.toggle('open', open);
     document.getElementById('adv-arrow').textContent = open ? '▾' : '▸';
 }
+// 可收合區塊（教學說明、電位高度說明）；展開狀態記在瀏覽器裡
+const STORAGE_COLLAPSE = 'hydraulicSandbox.collapse.v3';
+function toggleCollapse(id, force) {
+    const body = document.getElementById(id);
+    if (!body) return;
+    const open = force !== undefined ? force : !body.classList.contains('open');
+    body.classList.toggle('open', open);
+    const arrow = document.getElementById(`${id}-arrow`);
+    if (arrow) arrow.textContent = open ? '▾' : '▸';
+    if (force === undefined) {
+        try {
+            const st = JSON.parse(localStorage.getItem(STORAGE_COLLAPSE) || '{}');
+            st[id] = open;
+            localStorage.setItem(STORAGE_COLLAPSE, JSON.stringify(st));
+        } catch (e) { }
+    }
+}
+function restoreCollapseStates() {
+    try {
+        const st = JSON.parse(localStorage.getItem(STORAGE_COLLAPSE) || '{}');
+        Object.entries(st).forEach(([id, open]) => toggleCollapse(id, !!open));
+    } catch (e) { }
+}
 function resetCameraView() {
     camera.position.set(0, 21, 15.5);
     controls.target.set(0.5, 0, 0);
@@ -1740,6 +1790,8 @@ function pickWeighted(dirs, weights) {
 }
 
 const animateHooks = [];   // 後續版本的額外動畫（例如電表指針）
+const preAnimateHooks = [];  // 在粒子計算前執行（例如電位高度模式調整管件高度）
+const _pVec = new THREE.Vector3();
 
 function animate() {
     requestAnimationFrame(animate);
@@ -1761,6 +1813,8 @@ function animate() {
     const halfTile = TILE_SIZE / 2;
     let instIdx = 0;
     const effMaxV = Math.max(1.5, nominalPumpV);
+
+    preAnimateHooks.forEach(fn => fn(dt, elapsed));
 
     for (const b of blocks) {
         const shapeDef = PIPE_SHAPES[b.pipeShape];
@@ -1821,9 +1875,9 @@ function animate() {
             else if (fl > 1e-7) { outLocalDirs.push(ld); outW.push(fl); }
         }
 
-        const bw = gridToWorld(b.gx, b.gz);
-        const rotY = -b.rot * (Math.PI / 2);
-        const cosR = Math.cos(rotY), sinR = Math.sin(rotY);
+        // 粒子座標用方塊本身的世界矩陣換算，因此會跟著高度模式的抬升與傾斜
+        b.meshGroup.updateMatrixWorld();
+        const archLift = b.archLift || 0;
         const isResistor = isResistorAddon(b.addon);
         const rv = isResistor ? resistorVisual(b.R).t : 0;
 
@@ -1869,9 +1923,10 @@ function animate() {
                 lx += -L.dz * perp; lz += L.dx * perp;
             }
             if (shapeDef.isBridge && (pt.localDir === 1 || pt.localDir === 3)) {
-                ly += Math.sin((1.0 - pt.dist / halfTile) * Math.PI * 0.5) * 0.62;
+                ly += Math.sin((1.0 - pt.dist / halfTile) * Math.PI * 0.5) * 0.62 + archLift;
             }
-            dummyObj.position.set(bw.x + (lx * cosR + lz * sinR), 0.55 + ly, bw.z + (-lx * sinR + lz * cosR));
+            _pVec.set(lx, ly, lz).applyMatrix4(b.meshGroup.matrixWorld);
+            dummyObj.position.copy(_pVec);
             dummyObj.updateMatrix();
             particleInstMesh.setMatrixAt(instIdx++, dummyObj.matrix);
         }
@@ -2830,7 +2885,8 @@ function leadEnd(m, which) {
     const t = m[which];
     if (t && t.block && blocks.includes(t.block)) {
         const w = gridToWorld(t.block.gx, t.block.gz);
-        return new THREE.Vector3(w.x, 1.02, w.z);
+        const y = t.block.meshGroup ? t.block.meshGroup.position.y : 0.55;
+        return new THREE.Vector3(w.x, y + 0.47, w.z);
     }
     return new THREE.Vector3(m.x + (which === 'plus' ? 0.7 : -0.7), 0.05, m.z + 0.9);
 }
@@ -3361,6 +3417,242 @@ function initMeterControls() {
 }
 
 // ============================================================================
+// 13. v3.5 電位高度模式：管件的高度＝該處的電位
+//     幫浦是上坡（把水抬高 ε）、電阻是下坡（坡度＝電壓降）、導線水平（幾乎沒有電壓降）
+// ============================================================================
+const STORAGE_HEIGHT = 'hydraulicSandbox.heightMode.v3';
+let heightMode = false;
+let heightScale = 0.9;   // 每 1 V 對應的高度（世界單位）
+const BASE_Y = 0.55;
+
+// 方塊某個開口（世界方向 wd）的接點電位：中心電位 ＋ 幫浦推力 − 流出電流 × 半格電阻
+function junctionV(b, wd) {
+    let v = b.V;
+    if (b.addon === 'pump') {
+        const E = nominalPumpV * springScale();
+        const outDir = b.rot % 4;
+        if (wd === outDir) v += E / 2;
+        else if (wd === (outDir + 2) % 4) v -= E / 2;
+    }
+    const R = getEffectiveBlockR(b);
+    return v - (b.worldFlows[wd] || 0) * R / 2;
+}
+
+// 計算每格的目標高度與傾斜角；只有直管會傾斜（電阻、幫浦、電表都只能裝在直管）
+function heightTargets(b) {
+    if (!heightMode) return { lift: 0, tilt: 0, arch: 0 };
+    let hc = b.V * heightScale;
+    let tilt = 0;
+    if (b.pipeShape === 'pipe_straight') {
+        const vE = junctionV(b, b.rot % 4);          // 本地東側
+        const vW = junctionV(b, (b.rot + 2) % 4);    // 本地西側
+        const hE = vE * heightScale, hW = vW * heightScale;
+        // 兩端平均就是中心（電阻左右各一半），讓坡道連續
+        hc = (hE + hW) / 2;
+        const low = Math.min(hE, hW);
+        if (low < 0) hc -= low;                       // 沒接好的幫浦不要沉到地面以下
+        tilt = Math.atan2(hE - hW, TILE_SIZE);
+    }
+    const arch = PIPE_SHAPES[b.pipeShape].isBridge ? (b.V_arch - b.V) * heightScale : 0;
+    return { lift: Math.max(0, hc), tilt, arch };
+}
+
+// 支柱：從地面撐到管件底部，讓高度一目了然
+const pillarMesh = new THREE.InstancedMesh(
+    new THREE.CylinderGeometry(0.07, 0.07, 1, 8).translate(0, 0.5, 0),
+    new THREE.MeshStandardMaterial({ color: 0x64748b, transparent: true, opacity: 0.45, depthWrite: false }),
+    MAX_BLOCKS
+);
+pillarMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+pillarMesh.visible = false;
+scene.add(pillarMesh);
+const _pillarDummy = new THREE.Object3D();
+
+// 0 V 參考面：半透明地板，讓學生知道高度從哪裡量起
+const zeroPlane = new THREE.Mesh(
+    new THREE.PlaneGeometry(60 * TILE_SIZE, 60 * TILE_SIZE).rotateX(-Math.PI / 2),
+    new THREE.MeshBasicMaterial({ color: 0x0ea5e9, transparent: true, opacity: 0.05, depthWrite: false })
+);
+zeroPlane.position.set(TILE_SIZE / 2, 0.02, TILE_SIZE / 2);
+zeroPlane.visible = false;
+scene.add(zeroPlane);
+
+// 轉折接頭：相鄰兩格坡度不同時，在接口放一顆玻璃球接頭，補滿斜切後的楔形縫隙
+const jointMesh = new THREE.InstancedMesh(new THREE.SphereGeometry(0.455, 20, 14), glassMat, MAX_BLOCKS * 2);
+jointMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+jointMesh.visible = false;
+scene.add(jointMesh);
+const jointRingMesh = new THREE.InstancedMesh(new THREE.TorusGeometry(0.47, 0.045, 10, 24), flangeMat, MAX_BLOCKS * 2);
+jointRingMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+jointRingMesh.visible = false;
+scene.add(jointRingMesh);
+const _jDummy = new THREE.Object3D();
+const _jA = new THREE.Vector3(), _jB = new THREE.Vector3(), _jDir = new THREE.Vector3();
+
+// 某格在開口 wd 的端點世界座標，以及管子從中心往外的方向
+function portEndWorld(b, wd, outPos, outDir) {
+    const ld = (wd - b.rot + 4) % 4;
+    const half = TILE_SIZE / 2;
+    const y = (b.archGroup && ld % 2 === 1) ? (b.archLift || 0) : 0;
+    outPos.set(DIRS[ld].dx * half, y, DIRS[ld].dz * half).applyMatrix4(b.meshGroup.matrixWorld);
+    if (outDir) {
+        const c = new THREE.Vector3(0, y, 0).applyMatrix4(b.meshGroup.matrixWorld);
+        outDir.copy(outPos).sub(c).normalize();
+    }
+}
+const _dirA = new THREE.Vector3(), _dirB = new THREE.Vector3();
+function updateJoints() {
+    let n = 0;
+    if (heightMode) {
+        blocks.forEach(b => {
+            if (!b.meshGroup) return;
+            for (let d = 0; d < 4; d++) {
+                if (!areConnected(b, d)) continue;
+                const nb = blockMap.get(`${b.gx + DIRS[d].dx},${b.gz + DIRS[d].dz}`);
+                if (!nb || !nb.meshGroup || nb.id < b.id) continue;   // 每個接口只算一次
+                portEndWorld(b, d, _jA, _dirA);
+                portEndWorld(nb, (d + 2) % 4, _jB, _dirB);
+                // 兩邊管子方向若沒有對成一直線（或端點錯開），就需要接頭
+                const bend = _dirA.dot(_dirB) > -0.9995 || _jA.distanceTo(_jB) > 0.02;
+                if (!bend || n >= jointMesh.count) continue;
+                _jDummy.position.copy(_jA).add(_jB).multiplyScalar(0.5);
+                _jDummy.rotation.set(0, 0, 0);
+                _jDummy.scale.setScalar(1);
+                _jDummy.updateMatrix();
+                jointMesh.setMatrixAt(n, _jDummy.matrix);
+                // 法蘭環垂直於兩管平均方向
+                _jDir.copy(_dirA).sub(_dirB).normalize();
+                _jDummy.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), _jDir);
+                _jDummy.updateMatrix();
+                jointRingMesh.setMatrixAt(n, _jDummy.matrix);
+                n++;
+            }
+        });
+    }
+    _jDummy.position.set(0, -999, 0);
+    _jDummy.quaternion.identity();
+    _jDummy.scale.setScalar(0.0001);
+    _jDummy.updateMatrix();
+    for (let i = n; i < jointMesh.count; i++) { jointMesh.setMatrixAt(i, _jDummy.matrix); jointRingMesh.setMatrixAt(i, _jDummy.matrix); }
+    jointMesh.instanceMatrix.needsUpdate = true;
+    jointRingMesh.instanceMatrix.needsUpdate = true;
+    jointMesh.visible = jointRingMesh.visible = heightMode && n > 0;
+    return n;
+}
+
+preAnimateHooks.push((dt) => {
+    const k = Math.min(1, dt * 6);   // 平滑過渡
+    let n = 0;
+    blocks.forEach(b => {
+        if (!b.meshGroup) return;
+        const t = heightTargets(b);
+        b.liftCur = (b.liftCur || 0) + (t.lift - (b.liftCur || 0)) * k;
+        b.tiltCur = (b.tiltCur || 0) + (t.tilt - (b.tiltCur || 0)) * k;
+        b.archLift = (b.archLift || 0) + (t.arch - (b.archLift || 0)) * k;
+        const g = b.meshGroup;
+        g.rotation.order = 'YXZ';
+        g.rotation.z = b.tiltCur;
+        g.scale.x = 1 / Math.max(0.3, Math.cos(b.tiltCur));   // 傾斜後仍頭尾相接
+        const w = gridToWorld(b.gx, b.gz);
+        g.position.set(w.x, BASE_Y + b.liftCur, w.z);
+        if (b.archGroup) b.archGroup.position.y = b.archLift;
+        if (heightMode && n < MAX_BLOCKS) {
+            const h = BASE_Y + b.liftCur - 0.44;
+            if (h > 0.05) {
+                _pillarDummy.position.set(w.x, 0, w.z);
+                _pillarDummy.scale.set(1, h, 1);
+                _pillarDummy.updateMatrix();
+                pillarMesh.setMatrixAt(n++, _pillarDummy.matrix);
+            }
+        }
+    });
+    _pillarDummy.scale.set(1, 0.0001, 1);
+    _pillarDummy.position.set(0, -999, 0);
+    _pillarDummy.updateMatrix();
+    for (let i = n; i < MAX_BLOCKS; i++) pillarMesh.setMatrixAt(i, _pillarDummy.matrix);
+    pillarMesh.instanceMatrix.needsUpdate = true;
+    blocks.forEach(b => { if (b.meshGroup) b.meshGroup.updateMatrixWorld(); });
+    updateJoints();
+});
+
+function setHeightMode(on, moveCamera = true) {
+    heightMode = !!on;
+    const btn = document.getElementById('btn-height');
+    if (btn) {
+        btn.classList.toggle('toggle-on', heightMode);
+        btn.textContent = heightMode ? '🏔️ 電位高度模式：開' : '🏔️ 電位高度模式';
+    }
+    pillarMesh.visible = heightMode;
+    zeroPlane.visible = heightMode;
+    document.getElementById('height-note').style.display = heightMode ? 'block' : 'none';
+    document.getElementById('height-scale-row').style.display = heightMode ? 'flex' : 'none';
+    try { localStorage.setItem(STORAGE_HEIGHT, heightMode ? '1' : '0'); } catch (e) { }
+    if (moveCamera) {
+        // 開啟時把視角放低，才看得出高低差；關閉時回到俯視
+        const tgt = controls.target.clone();
+        const dist = camera.position.distanceTo(tgt);
+        const dir = heightMode ? new THREE.Vector3(0, 0.5, 0.87) : new THREE.Vector3(0, 0.8, 0.6);
+        camera.position.copy(tgt.add(dir.normalize().multiplyScalar(dist)));
+    }
+    updatePumpLiftLabels();
+}
+function toggleHeightMode() { setHeightMode(!heightMode); }
+function setHeightScale(v) {
+    heightScale = parseFloat(v);
+    document.getElementById('height-scale-txt').textContent = `每 1 V ＝ ${heightScale.toFixed(1)} 格高`;
+}
+function updatePumpLiftLabels() { /* 標籤文字在動畫鉤子中更新 */ }
+
+// 幫浦標籤：高度模式下顯示「把水抬高多少」
+animateHooks.push(() => {
+    if (!heightMode) return;
+    blocks.forEach(b => {
+        if (b.addon !== 'pump' || !b.labelEl) return;
+        const lift = junctionV(b, b.rot % 4) - junctionV(b, (b.rot + 2) % 4);
+        b.labelEl.textContent = `⬆️ 幫浦把水抬高 ${lift.toFixed(2)} V（ε = ${(nominalPumpV * springScale()).toFixed(1)} V）`;
+    });
+});
+
+function initHeightMode() {
+    let saved = false;
+    try { saved = localStorage.getItem(STORAGE_HEIGHT) === '1'; } catch (e) { }
+    setHeightMode(saved, false);
+    if (saved) {
+        const tgt = controls.target.clone();
+        const dist = camera.position.distanceTo(tgt);
+        camera.position.copy(tgt.add(new THREE.Vector3(0, 0.5, 0.87).normalize().multiplyScalar(dist)));
+    }
+}
+
+// 情境：電位高度教學
+SCENES.heightSeries = {
+    name: '🏔️ 電位高度：串聯分壓 (20 Ω＋10 Ω)',
+    make: () => seriesLoop([20, null, 10]),
+    after: () => { if (!heightMode) setHeightMode(true, false); }
+};
+SCENES.heightCompare = {
+    name: '🏔️ 電位高度：正常、開路、短路對照',
+    make: () => combineSideBySide([seriesLoop([10]), seriesLoop([10], { valveClosed: true }), seriesLoop([], { noMeter: true })], 3),
+    after: () => { if (!heightMode) setHeightMode(true, false); }
+};
+SCENES.heightParallel = {
+    name: '🏔️ 電位高度：並聯 (各支路落差相同)',
+    make: () => parallelLoop([10, 20, 40]),
+    after: () => { if (!heightMode) setHeightMode(true, false); }
+};
+const _fitBeforeHeight = fitCameraToBlocks;
+fitCameraToBlocks = function () {
+    _fitBeforeHeight();
+    if (heightMode) {
+        const tgt = controls.target.clone();
+        const dist = camera.position.distanceTo(tgt) * 0.85;
+        tgt.y = 1.2;
+        controls.target.copy(tgt);
+        camera.position.copy(tgt.clone().add(new THREE.Vector3(0, 0.5, 0.87).normalize().multiplyScalar(dist)));
+    }
+};
+
+// ============================================================================
 // 10. 預設教學迴路與初始化
 // ============================================================================
 function loadPreset(name, btnEl) {
@@ -3481,6 +3773,8 @@ setHint();
 if (!tryRestoreAutosave()) { loadPreset('series'); fitCameraToBlocks(); }
 undoStack.length = 0;
 updateUndoButtons();
+initHeightMode();
+restoreCollapseStates();
 animate();
 
 </script>
