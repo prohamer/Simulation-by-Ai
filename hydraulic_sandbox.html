@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"><meta name="apple-mobile-web-app-capable" content="yes">
-    <title>PipemanV3.7</title>
+    <title>PipemanV3.7.2</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
     <style>
@@ -547,7 +547,7 @@
 <!-- Top Bar -->
 <div class="top-bar">
     <div class="title-group">
-        <h1>水路與電流類比v3.7 <button class="help-btn" onclick="openHelp()" title="使用說明" aria-label="使用說明">?</button></h1>
+        <h1>水路與電流類比v3.7.2 <button class="help-btn" onclick="openHelp()" title="使用說明" aria-label="使用說明">?</button></h1>
         <p>水流＝電流（正電荷的流動方向）｜ 幫浦＝3 號電池 (1.5 V、內阻 0.2 Ω) ｜ 可切換電子流觀點</p>
     </div>
     <div class="preset-group">
@@ -675,7 +675,7 @@
         <button class="collapse-head" onclick="toggleCollapse('height-body')"><span>🏔️ <b>電位高度模式</b>：高度＝電位</span><span class="collapse-arrow" id="height-body-arrow">▾</span></button>
         <div class="collapse-body open" id="height-body">
             <div class="current-only">
-            • <b>幫浦是上坡</b>：把水抬高（端電壓 ε − Ir）<br>
+            • <b>幫浦內部</b>：螺旋把水抬高 ε，再經內電阻落差 I·r，出口＝端電壓<br>
             • <b>電阻是下坡</b>：坡度越陡，電壓降越大<br>
             • <b>導線幾乎水平</b>：沒有電阻就沒有落差<br>
             • 一圈走回來，上坡總和＝下坡總和（克希荷夫電壓定律）
@@ -691,6 +691,7 @@
         <div id="height-scale-row" class="control-row" style="display:none; margin-top:6px;">
             <label><span>高度比例</span><span id="height-scale-txt" style="color:var(--accent); font-weight:700;">每 1 V ＝ 0.9 格高</span></label>
             <input type="range" min="0.3" max="1.8" step="0.1" value="0.9" oninput="setHeightScale(this.value)">
+            <button class="btn" id="btn-ruler" onclick="toggleRuler()" style="margin-top:6px; justify-content:center; padding:5px 8px; font-size:0.74rem;" title="顯示或隱藏電路旁的電位／電子位能刻度尺">📏 刻度尺：隱藏</button>
         </div>
     </div>
     <div class="stat-card" style="padding:6px 8px;">
@@ -797,7 +798,8 @@
         <h3>顯示與模式</h3>
         <ul>
           <li><b>上方「數字」</b>：分別開關水壓、流量、電阻、電池、電表的數字標籤。「👆 點選揭曉」開著時，數字隱藏也能點選單一元件看它的數字，適合讓學生先預測再揭曉。</li>
-          <li><b>🏔️ 電位高度模式</b>：管件離地的高度＝電位。幫浦是上坡、電阻是下坡、導線水平；一圈走回來上坡總和＝下坡總和。旁邊的刻度尺標出電位與正、負極位置，可在右側調整「高度比例」。</li>
+          <li><b>🏔️ 電位高度模式</b>：管件離地的高度＝電位。幫浦是上坡、電阻是下坡、導線水平；一圈走回來上坡總和＝下坡總和。右側說明框可調整「高度比例」，也可用「📏 刻度尺」開關電路旁的電位／電子位能刻度尺（預設隱藏）。</li>
+          <li><b>高度模式中的幫浦內部</b>：負極入口先接一段上坡，裡面的<b>阿基米德螺旋</b>由把手帶動、主動把水抬高 ε（電動勢）；越過頂點後是一段下坡，裡面的<b>螺旋填充物</b>代表內電阻，被水流推著轉、落差 I·r 並發熱；坡底就是正極的端電壓（ε − I·r）。開路時沒有落差；短路時水被抬到 ε 又幾乎全部摔回來，所以外電路貼近地面。</li>
           <li><b>右側「各迴路讀數」</b>：每個幫浦一列，顯示 ε、電流與端電壓；點一列可選取該幫浦。</li>
           <li><b>發條模式</b>：「手動發條」會隨使用逐漸沒電，短路時耗盡得特別快。</li>
         </ul>
@@ -2232,6 +2234,7 @@ function animate() {
             if (shapeDef.isBridge && (pt.localDir === 1 || pt.localDir === 3)) {
                 ly += Math.sin((1.0 - pt.dist / halfTile) * Math.PI * 0.5) * 0.62 + archLift;
             }
+            if (b.pathY) ly += b.pathY(lx);   // 高度模式的幫浦：沿「上坡螺旋＋下坡內阻」的中心線
             _pVec.set(lx, ly, lz).applyMatrix4(b.meshGroup.matrixWorld);
             dummyObj.position.copy(_pVec);
             dummyObj.updateMatrix();
@@ -2810,7 +2813,7 @@ function fitCameraToBlocks() {
     if (!blocks.length) { resetCameraView(); return; }
     let minx = Infinity, maxx = -Infinity, minz = Infinity, maxz = -Infinity;
     blocks.forEach(b => { minx = Math.min(minx, b.gx); maxx = Math.max(maxx, b.gx); minz = Math.min(minz, b.gz); maxz = Math.max(maxz, b.gz); });
-    if (typeof heightMode !== 'undefined' && heightMode) minx -= 2.6;   // 把左側的電位刻度尺也框進來
+    if (typeof heightMode !== 'undefined' && heightMode && typeof showRuler !== 'undefined' && showRuler) minx -= 2.6;   // 把左側的電位刻度尺也框進來
     if (typeof probes !== 'undefined') probes.forEach(m => {
         const gx = m.x / TILE_SIZE, gz = m.z / TILE_SIZE - 0.8;   // 錶頭懸在上方，往畫面上緣多留一些
         minx = Math.min(minx, gx); maxx = Math.max(maxx, gx); minz = Math.min(minz, gz); maxz = Math.max(maxz, gz);
@@ -3828,10 +3831,17 @@ const _jA = new THREE.Vector3(), _jB = new THREE.Vector3(), _jDir = new THREE.Ve
 function portEndWorld(b, wd, outPos, outDir) {
     const ld = (wd - b.rot + 4) % 4;
     const half = TILE_SIZE / 2;
-    const y = (b.archGroup && ld % 2 === 1) ? (b.archLift || 0) : 0;
+    let y = (b.archGroup && ld % 2 === 1) ? (b.archLift || 0) : 0;
+    let innerY = y, innerX = 0;
+    if (b.pathY) {   // 幫浦內部：端點高度與管子方向依中心線計算
+        const x = DIRS[ld].dx * half;
+        y = b.pathY(x);
+        innerX = x * 0.8;
+        innerY = b.pathY(innerX);
+    }
     outPos.set(DIRS[ld].dx * half, y, DIRS[ld].dz * half).applyMatrix4(b.meshGroup.matrixWorld);
     if (outDir) {
-        const c = new THREE.Vector3(0, y, 0).applyMatrix4(b.meshGroup.matrixWorld);
+        const c = new THREE.Vector3(innerX, innerY, 0).applyMatrix4(b.meshGroup.matrixWorld);
         outDir.copy(outPos).sub(c).normalize();
     }
 }
@@ -4106,6 +4116,18 @@ meterInspectorHTML = function (mv) {
 };
 
 // ---------------- 高度模式的雙刻度尺 ----------------
+// 刻度尺預設不顯示（畫面較乾淨），可在右側高度模式說明框切換；狀態記在瀏覽器裡
+const STORAGE_RULER = 'hydraulicSandbox.ruler.v3';
+let showRuler = false;
+try { showRuler = localStorage.getItem(STORAGE_RULER) === '1'; } catch (e) { }
+function setShowRuler(on) {
+    showRuler = !!on;
+    try { localStorage.setItem(STORAGE_RULER, showRuler ? '1' : '0'); } catch (e) { }
+    const b = document.getElementById('btn-ruler');
+    if (b) { b.classList.toggle('toggle-on', showRuler); b.textContent = showRuler ? '📏 刻度尺：顯示' : '📏 刻度尺：隱藏'; }
+    rulerKey = '';
+}
+function toggleRuler() { setShowRuler(!showRuler); }
 const rulerGroup = new THREE.Group();
 scene.add(rulerGroup);
 let rulerKey = '';
@@ -4119,7 +4141,7 @@ function clearRuler() {
     }
 }
 function updateRuler() {
-    if (!heightMode || !blocks.length) { rulerGroup.visible = false; rulerKey = ''; return; }
+    if (!heightMode || !showRuler || !blocks.length) { rulerGroup.visible = false; rulerKey = ''; return; }
     let minx = Infinity, minz = Infinity, maxz = -Infinity;
     blocks.forEach(b => { minx = Math.min(minx, b.gx); minz = Math.min(minz, b.gz); maxz = Math.max(maxz, b.gz); });
     const E = nominalPumpV * springScale();
@@ -4171,7 +4193,172 @@ function initFlowMode() {
     try { saved = localStorage.getItem(STORAGE_FLOW) === '1'; } catch (e) { }
     electronFlow = saved;
     applyFlowLook();
+    setShowRuler(showRuler);
 }
+
+// ============================================================================
+// 17. 高度模式的幫浦內部：阿基米德螺旋（電動勢 ε）＋內阻螺旋填充物（I·r）
+//   負極入口 ──(把手帶動螺旋，主動把水抬高 ε)──▶ 頂點 ──(水流推動填充物，落差 I·r)──▶ 正極出口
+//   開路：落差 0，出口＝ε；短路：落差 ≈ ε，出口貼近地面，填充物狂轉發紅
+//   電子流觀點下同一結構上下翻轉（頂點變谷底），由 heightOfV() 統一處理
+// ============================================================================
+const PUMP_KNEE_X = 0.25;                  // 頂點在幫浦格內的位置（本地 x）
+const PUMP_HALF = TILE_SIZE / 2;
+const pumpScrewMat = new THREE.MeshStandardMaterial({ color: 0xfbbf24, metalness: 0.6, roughness: 0.3 });
+SHARED_MATS.add(pumpScrewMat);
+const _unitCylGeo = new THREE.CylinderGeometry(0.44, 0.44, 1, 20, 1, true).rotateZ(-Math.PI / 2);   // 沿 +x、長度 1
+const _screwGeo = (() => {
+    // 單位長度的螺旋葉片（沿 +x），用細管畫出 4 圈
+    const pts = [];
+    for (let i = 0; i <= 160; i++) {
+        const t = i / 160, a = t * Math.PI * 2 * 4;
+        pts.push(new THREE.Vector3(t - 0.5, Math.cos(a) * 0.27, Math.sin(a) * 0.27));
+    }
+    return new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 220, 0.055, 6, false);
+})();
+const _axleGeo = new THREE.CylinderGeometry(0.06, 0.06, 1, 8).rotateZ(-Math.PI / 2);
+
+// 在 ADDON_BUILDERS.pump（+／− 標示）之後，再建立內部結構（預設隱藏）
+const _pumpBuilderBeforeInterior = ADDON_BUILDERS.pump;
+ADDON_BUILDERS.pump = function (block, group, pipeR) {
+    // 平面模式用的原本零件（高度模式時隱藏）：除了把手與 +／− 標示以外的全部
+    block.pumpStdParts = group.children.filter(o => o !== block.turbine);
+    _pumpBuilderBeforeInterior(block, group, pipeR);
+    block.pumpMarkers = group.children.filter(o => o.isSprite);
+
+    const g = new THREE.Group();
+    g.visible = false;
+    // 上坡：玻璃管＋阿基米德螺旋
+    const up = new THREE.Group();
+    up.add(new THREE.Mesh(_unitCylGeo, glassMat));
+    const screw = new THREE.Group();
+    screw.add(new THREE.Mesh(_screwGeo, pumpScrewMat));
+    screw.add(new THREE.Mesh(_axleGeo, flangeMat));
+    up.add(screw);
+    g.add(up);
+    // 頂點接頭
+    const knee = new THREE.Mesh(new THREE.SphereGeometry(0.46, 18, 12), glassMat);
+    g.add(knee);
+    // 下坡：帶色玻璃管＋內阻螺旋填充物
+    const down = new THREE.Group();
+    const downMat = new THREE.MeshPhysicalMaterial({ color: 0xfca5a5, transparent: true, opacity: 0.3, roughness: 0.2, depthWrite: false });
+    down.add(new THREE.Mesh(_unitCylGeo, downMat));
+    const rotorMat = new THREE.MeshStandardMaterial({ color: 0xfbbf24, metalness: 0.5, roughness: 0.35, emissive: 0x000000, side: THREE.DoubleSide });
+    const rotors = [];
+    for (let k = 0; k < 5; k++) {
+        const r = createHelicalRotorMesh(0.35, rotorMat);
+        down.add(r);
+        rotors.push(r);
+    }
+    g.add(down);
+    // 文字小牌
+    const tagUp = textSprite('電動勢 ε', 0.34, { color: '#fde68a', bg: 'rgba(66,32,6,0.9)', border: '#f59e0b', font: 'bold 28px sans-serif' });
+    const tagDown = textSprite('內電阻 I·r', 0.34, { color: '#fecaca', bg: 'rgba(127,29,29,0.9)', border: '#ef4444', font: 'bold 28px sans-serif' });
+    g.add(tagUp); g.add(tagDown);
+    group.add(g);
+    block.pumpInt = { g, up, screw, knee, down, downMat, rotorMat, rotors, tagUp, tagDown, cur: null };
+};
+
+// 中心線三點（本地座標，相對於方塊原點）：入口、頂點、出口的高度
+function pumpProfile(b) {
+    const E = nominalPumpV * springScale();
+    const inV = junctionV(b, (b.rot + 2) % 4);
+    const outV = junctionV(b, b.rot % 4);
+    const hIn = heightOfV(inV) * heightScale;
+    const hKnee = heightOfV(inV + E) * heightScale;
+    const hOut = heightOfV(outV) * heightScale;
+    return { hIn, hKnee, hOut };
+}
+
+// 高度模式：幫浦不整格傾斜，方塊原點放在入口高度，內部結構另外畫
+const _heightTargetsBeforePump = heightTargets;
+heightTargets = function (b) {
+    if (heightMode && b.addon === 'pump' && b.pipeShape === 'pipe_straight' && b.pumpInt) {
+        const p = pumpProfile(b);
+        return { lift: Math.max(0, p.hIn), tilt: 0, arch: 0 };
+    }
+    return _heightTargetsBeforePump(b);
+};
+
+function placeAlong(obj, a, c) {   // 把沿 +x、長度 1 的物件擺在 a→c 之間
+    const d = new THREE.Vector3().subVectors(c, a);
+    const len = Math.max(1e-3, d.length());
+    obj.position.copy(a).add(c).multiplyScalar(0.5);
+    obj.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), d.normalize());
+    obj.scale.set(len, 1, 1);
+    return len;
+}
+
+preAnimateHooks.push((dt, elapsed) => {
+    const k = Math.min(1, dt * 6);
+    blocks.forEach(b => {
+        const pi = b.pumpInt;
+        if (!pi) return;
+        const on = heightMode && b.pipeShape === 'pipe_straight';
+        pi.g.visible = on;
+        (b.pumpStdParts || []).forEach(o => { o.visible = !on; });
+        if (!on) {
+            b.pathY = null;
+            pi.cur = null;
+            if (b.turbine) b.turbine.position.set(0, 0, 0.58);
+            (b.pumpMarkers || []).forEach(m => { m.position.y = 0.85; });
+            return;
+        }
+        const t = pumpProfile(b);
+        const lift = b.liftCur || 0;
+        const tgt = { knee: t.hKnee - Math.max(0, t.hIn), out: t.hOut - Math.max(0, t.hIn) };
+        if (!pi.cur) pi.cur = { knee: 0, out: 0 };
+        pi.cur.knee += (tgt.knee - pi.cur.knee) * k;
+        pi.cur.out += (tgt.out - pi.cur.out) * k;
+        const P0 = new THREE.Vector3(-PUMP_HALF, 0, 0);
+        const P1 = new THREE.Vector3(PUMP_KNEE_X, pi.cur.knee, 0);
+        const P2 = new THREE.Vector3(PUMP_HALF, pi.cur.out, 0);
+        // 中心線給粒子與接頭使用
+        const yK = pi.cur.knee, yO = pi.cur.out;
+        b.pathY = x => x <= PUMP_KNEE_X
+            ? yK * (x + PUMP_HALF) / (PUMP_KNEE_X + PUMP_HALF)
+            : yK + (yO - yK) * (x - PUMP_KNEE_X) / (PUMP_HALF - PUMP_KNEE_X);
+        placeAlong(pi.up, P0, P1);
+        // 縮放只拉長管子與螺旋的長度方向；螺旋隨把手轉動（把手帶動螺旋把水抬高）
+        if (b.turbine) {
+            pi.screw.rotation.x = -b.turbine.rotation.z * 2.5;
+            const base = P0.clone().lerp(P1, 0.22);
+            b.turbine.position.set(base.x, base.y, 0.62);
+        }
+        pi.knee.position.copy(P1);
+        const lenDown = placeAlong(pi.down, P1, P2);
+        // 內阻填充物：沿下坡均勻排列，由水流推動旋轉；發熱時變紅
+        const spin = visualSpeed(b.I_mag) * 6 * dt * flowSign();
+        pi.rotors.forEach((r, i) => {
+            r.position.set((i + 0.5) / pi.rotors.length - 0.5, 0, 0);
+            r.scale.set(0.9 / Math.max(0.05, lenDown), 0.9, 0.9);   // 抵銷下坡管在長度方向的縮放
+            r.rotation.x += spin * (i % 2 ? -1 : 1);
+        });
+        const h = Math.min(1, Math.sqrt(b.heatRatio || 0));
+        pi.rotorMat.emissive.setRGB(h, 0.15 * h, 0);
+        pi.rotorMat.emissiveIntensity = h * 1.3;
+        pi.downMat.color.setRGB(0.99, 0.65 - 0.4 * h, 0.65 - 0.5 * h);
+        pi.downMat.opacity = 0.3 + 0.25 * h;
+        // 標示牌與 +／− 位置
+        pi.tagUp.position.copy(P0.clone().lerp(P1, 0.5)).add(new THREE.Vector3(-0.35, 0.75, 0.3));
+        pi.tagDown.position.copy(P1.clone().lerp(P2, 0.5)).add(new THREE.Vector3(0.35, 0.75, 0.3));
+        (b.pumpMarkers || []).forEach(m => {
+            const atOutlet = m.position.x > 0;
+            m.position.y = (atOutlet ? yO : 0) + 0.85;
+        });
+    });
+});
+
+// 高度模式下幫浦標籤：同時說明 ε、I·r 與端電壓
+animateHooks.push(() => {
+    if (!heightMode) return;
+    blocks.forEach(b => {
+        if (b.addon !== 'pump' || !b.labelEl) return;
+        const E = nominalPumpV * springScale();
+        const drop = b.I_mag * pumpInternalR();
+        b.labelEl.textContent = `ε ${E.toFixed(2)} − I·r ${drop.toFixed(2)} ＝ 端電壓 ${(E - drop).toFixed(2)} V`;
+    });
+});
 
 // ============================================================================
 // 14. v3.6 iPad／觸控最佳化
