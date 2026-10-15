@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Piper</title>
+    <title>PipemanV3.4</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
     <style>
@@ -321,6 +321,19 @@
         .snap-tick.labeled::before { background: #fbbf24; height: 7px; }
         .snap-tick:hover { color: #fde68a; }
 
+        /* ---- v3.4 additions ---- */
+        .floating-label.meter { border-color: #a78bfa; color: #ede9fe; }
+        .floating-label.warn { border-color: #ef4444; color: #fecaca; background: rgba(127, 29, 29, 0.92); }
+        .meter-reading {
+            font-size: 1.45rem; font-weight: 800; text-align: center; padding: 6px; border-radius: 8px;
+            background: #0f172a; border: 1px solid #334155; margin-bottom: 6px; font-variant-numeric: tabular-nums; color: #f8fafc;
+        }
+        .meter-reading.over, .meter-reading.reverse, .meter-reading.blown { color: #f87171; border-color: #b91c1c; }
+        .range-row { display: flex; gap: 4px; margin-top: 8px; }
+        .range-btn { flex: 1; justify-content: center; padding: 5px 4px; font-size: 0.74rem; }
+        .meter-ok { margin-top: 8px; padding: 6px 8px; border-radius: 6px; background: rgba(21, 128, 61, 0.25); border: 1px solid #16a34a; font-size: 0.72rem; color: #bbf7d0; }
+        .meter-warn { margin-top: 8px; padding: 6px 8px; border-radius: 6px; background: rgba(127, 29, 29, 0.35); border: 1px solid #b91c1c; font-size: 0.72rem; color: #fecaca; }
+
         /* ---- v3.3 additions ---- */
         .edit-bar {
             position: absolute; top: 82px; left: 327px; right: 337px; z-index: 10;
@@ -378,7 +391,7 @@
 <!-- Top Bar -->
 <div class="top-bar">
     <div class="title-group">
-        <h1>🎮 3D 平面水路與自由電子類比沙盒 v3.3</h1>
+        <h1>🎮 3D 平面水路與自由電子類比沙盒 v3.4</h1>
         <p>幫浦＝3 號鹼性電池 (1.5 V、內阻 0.2 Ω) ｜ 電阻以 Ω 為單位 ｜ 未連接的開口自動加上封口蓋</p>
     </div>
     <div class="preset-group">
@@ -388,6 +401,7 @@
             <button class="chip" id="chip-flow" onclick="toggleLabelCat('flow')">🧭 流量</button>
             <button class="chip" id="chip-resistor" onclick="toggleLabelCat('resistor')">🌀 電阻</button>
             <button class="chip" id="chip-pump" onclick="toggleLabelCat('pump')">🔋 電池</button>
+            <button class="chip" id="chip-meter" onclick="toggleLabelCat('meter')">📟 電表</button>
             <button class="chip on" id="chip-reveal" onclick="toggleReveal()" title="數字隱藏時，點選元件只揭曉它自己的數字">👆 點選揭曉</button>
         </div>
         <button class="btn" onclick="fitCameraToBlocks()">🎯 視角置中</button>
@@ -448,7 +462,24 @@
         </div>
     </div>
 
-    <div class="section-title">3. 發條幫浦驅動設定</div>
+    <div class="section-title">3. 教學用電表</div>
+    <div class="adv-note" style="margin-top:-4px;">伏特計 3／15／30 V、安培計 50 mA／500 mA／5 A，可在右側面板切換量程。兩種接法都能用，方便示範「接錯」的後果。</div>
+    <div class="palette-grid">
+        <div class="palette-item" onpointerdown="startPaletteDrag(event, 'probe_volt')">
+            <span class="palette-icon">🔵</span><span>伏特計 (探針側接)</span><span class="palette-sub">正確：並聯在兩點間</span>
+        </div>
+        <div class="palette-item" onpointerdown="startPaletteDrag(event, 'ammeter')">
+            <span class="palette-icon">🟠</span><span>安培計 (管內串接)</span><span class="palette-sub">正確：串聯在電路中</span>
+        </div>
+        <div class="palette-item" onpointerdown="startPaletteDrag(event, 'voltmeter')">
+            <span class="palette-icon">🔷</span><span>伏特計 (管內串接)</span><span class="palette-sub" style="color:#fca5a5;">錯誤示範：串聯</span>
+        </div>
+        <div class="palette-item" onpointerdown="startPaletteDrag(event, 'probe_amp')">
+            <span class="palette-icon">🔶</span><span>安培計 (探針側接)</span><span class="palette-sub" style="color:#fca5a5;">錯誤示範：並聯</span>
+        </div>
+    </div>
+
+    <div class="section-title">4. 發條幫浦驅動設定</div>
     <div class="spring-box">
         <div style="display:flex; gap:5px; margin-bottom:6px;">
             <button class="btn active" id="mode-cont" style="flex:1; justify-content:center; padding:5px;" onclick="setPumpMode('continuous')">⚙️ 恆定發條</button>
@@ -468,12 +499,15 @@
         </div>
     </div>
 
-    <button class="adv-toggle" id="adv-toggle" onclick="toggleAdvanced()"><span>4. 進階設定 (等效內阻)</span><span id="adv-arrow">▸</span></button>
+    <button class="adv-toggle" id="adv-toggle" onclick="toggleAdvanced()"><span>5. 進階設定 (等效內阻)</span><span id="adv-arrow">▸</span></button>
     <div class="adv-body" id="adv-body">
         <div class="adv-note">滑桿為對數刻度。點刻度下方的標記可直接跳到真實情境的數值；右側輸入框接受 4.7k、0.2、10M、20m（毫歐）這類寫法。</div>
         <div class="logctl" id="ctl-wire"></div>
         <div class="logctl" id="ctl-cell"></div>
         <div class="logctl" id="ctl-flow"></div>
+        <div class="logctl" id="ctl-volt"></div>
+        <div class="logctl" id="ctl-amp"></div>
+        <div class="adv-note">電表內阻為常見指針表的估計值；若學校電表錶面或說明書有標示，請依實際數值調整。</div>
     </div>
 </div>
 
@@ -509,6 +543,7 @@
         <div>🔹 <b>短路：</b>用空管直接接回幫浦，電流衝到 ε/r ≈ 7.5 A，端電壓接近 0，能量變成電池內部的熱 (I²r)，幫浦發紅。</div>
         <div>🔹 <b>封口蓋：</b>灰色＝開口空著；<span style="color:#fca5a5;">紅色＝旁邊有管子但開口沒對上</span>，提醒學生「看起來接上了其實沒有」。</div>
         <div>🔹 <b>沒有電流時把手不轉</b>，但出口箭頭仍發亮：電池兩端還是有電壓，只是迴路沒接通。</div>
+        <div>🔹 <b>教學用電表：</b>伏特計＝錶頭串聯大電阻，要<b>並聯</b>在兩點間；安培計＝錶頭並聯粗分流管，要<b>串聯</b>在電路中。量程選太小會「爆表」，正負接反指針打到左邊；安培計電流超過量程 3 倍會熔斷保險絲。量電阻兩端電壓時，探針夾在電阻左右兩格。</div>
         <div>🔹 <b>範本：</b>上方「➕ 加入電路範本」選好後，綠色預覽跟著滑鼠，點一下放下（R 旋轉、Esc 取消）。框選自己的電路可「⭐ 存成我的範本」；「💾 匯出」可把課前準備好的電路帶到教室。</div>
     </div>
 </div>
@@ -586,7 +621,7 @@ function pumpInternalR() { return settings.cellR * cellCount; }
 function springScale() { return pumpMode === 'windup' ? springEnergy : 1.0; }
 
 // 數字標籤分類顯示
-const labelShow = { pressure: false, flow: false, resistor: false, pump: false };
+const labelShow = { pressure: false, flow: false, resistor: false, pump: false, meter: false };
 let revealOnSelect = true;
 
 function getRotatedPorts(block) {
@@ -855,12 +890,15 @@ function pressureToColor(v, maxV) {
 }
 
 function labelCategoryOf(addon) {
+    if (addon === 'ammeter' || addon === 'voltmeter') return 'meter';
     if (addon === 'pressure') return 'pressure';
     if (addon === 'flow') return 'flow';
     if (addon === 'pump') return 'pump';
     if (isResistorAddon(addon) || addon === 'valve') return 'resistor';
     return null;
 }
+
+const ADDON_BUILDERS = {};   // v3.4 電表等附加元件的模型建構函式
 
 function buildBlockMesh(block) {
     if (block.meshGroup) { scene.remove(block.meshGroup); disposeGroup(block.meshGroup); }
@@ -1040,6 +1078,8 @@ function buildBlockMesh(block) {
         createLabel(block, block.valveOpen ? '閥門: 開啟' : '閥門: 關閉(斷路)');
     }
 
+    if (ADDON_BUILDERS[addon]) ADDON_BUILDERS[addon](block, group, pipeR);
+
     block.particles = [];
     const openLocalDirs = [];
     for (let d = 0; d < 4; d++) if (basePorts[d]) openLocalDirs.push(d);
@@ -1116,9 +1156,11 @@ function getEffectiveBlockR(b) {
     if (b.addon === 'pump') return pumpInternalR();
     if (isResistorAddon(b.addon)) return b.R;
     if (b.addon === 'flow') return settings.flowR;
+    if (b.addon === 'ammeter' || b.addon === 'voltmeter') return meterR(b.addon === 'ammeter' ? 'amp' : 'volt', b.range || 0);
     return settings.wireR;   // 空管、水壓計、開啟的閥門
 }
-function isClosedValve(b) { return b.addon === 'valve' && !b.valveOpen; }
+// 斷路的方塊：關閉的閥門、保險絲熔斷的安培計
+function isClosedValve(b) { return (b.addon === 'valve' && !b.valveOpen) || (b.addon === 'ammeter' && b.blown); }
 
 // 額外的「兩節點間元件」掛點（v3.4 電表探針使用）；回傳 [{a:{block,dir}, b:{block,dir}, R, tag}]
 let extraEdgeProviders = [];
@@ -1245,7 +1287,7 @@ function solveNetwork() {
         x.e.I_ref = x.G * (V[x.u] - V[x.v]);  // 由 a 流向 b 的電流
         x.e.dV_ref = V[x.u] - V[x.v];
     });
-    lastSolve = { comps, extraEdges };
+    lastSolve = { comps, extraEdges, nodes, nodeOf };
     applySpringScale();
 }
 
@@ -1468,6 +1510,8 @@ function handleDropAtGrid(gx, gz, itemKey) {
             existing.addon = itemKey;
             if (isResistorAddon(itemKey)) existing.R = ADDON_DEFS[itemKey].defaultR;
             existing.valveOpen = true;
+            existing.range = 2;
+            existing.blown = false;
             buildBlockMesh(existing);
             selectBlock(existing);
             solveNetwork();
@@ -1500,6 +1544,8 @@ function createOrUpdateBlock(gx, gz, pipeShape, addon = 'none', rot = 0, customR
         rot: ((rot % 4) + 4) % 4,
         R,
         valveOpen: opts.valveOpen !== undefined ? opts.valveOpen : true,
+        range: opts.range !== undefined ? opts.range : 2,
+        blown: !!opts.blown,
         V: 0, V_arch: 0, I_mag: 0, dV: 0, power: 0, heatRatio: 0,
         V_ref: 0, V_arch_ref: 0, flows_ref: [0, 0, 0, 0],
         worldFlows: [0, 0, 0, 0],
@@ -1833,7 +1879,7 @@ function animate() {
         if (b.labelEl && b.labelEl.style.display !== 'none') {
             const wp = new THREE.Vector3();
             b.meshGroup.getWorldPosition(wp);
-            wp.y += b.addon === 'pressure' ? 1.55 : 0.95;
+            wp.y += b.addon === 'pressure' ? 1.55 : (isMeterAddon(b.addon) ? 2.2 : 0.95);
             wp.project(camera);
             b.labelEl.style.left = `${(wp.x * 0.5 + 0.5) * window.innerWidth}px`;
             b.labelEl.style.top = `${(-(wp.y * 0.5) + 0.5) * window.innerHeight}px`;
@@ -1862,7 +1908,7 @@ const restoreHooks = [];
 function serializeState(includeSettings = false) {
     const st = {
         v: 3,
-        blocks: blocks.map(b => ({ gx: b.gx, gz: b.gz, pipeShape: b.pipeShape, addon: b.addon, rot: b.rot, R: b.R, valveOpen: b.valveOpen }))
+        blocks: blocks.map(b => ({ gx: b.gx, gz: b.gz, pipeShape: b.pipeShape, addon: b.addon, rot: b.rot, R: b.R, valveOpen: b.valveOpen, range: b.range, blown: b.blown }))
     };
     serializeHooks.forEach(fn => fn(st));
     if (includeSettings) st.settings = { ...settings, cellCount };
@@ -1890,7 +1936,7 @@ function restoreState(json, withSettings = false) {
     clearAllBlocks(false);
     (st.blocks || []).forEach(d => {
         if (!PIPE_SHAPES[d.pipeShape] || !ADDON_DEFS[d.addon]) return;
-        createOrUpdateBlock(d.gx, d.gz, d.pipeShape, d.addon, d.rot, isFinite(d.R) ? d.R : null, { silent: true, valveOpen: d.valveOpen !== false });
+        createOrUpdateBlock(d.gx, d.gz, d.pipeShape, d.addon, d.rot, isFinite(d.R) ? d.R : null, { silent: true, valveOpen: d.valveOpen !== false, range: d.range, blown: d.blown });
     });
     restoreHooks.forEach(fn => fn(st));
     selectBlock(null);
@@ -2100,7 +2146,7 @@ let clipboard = null;
 function itemsFromBlocks(arr) {
     let minx = Infinity, minz = Infinity;
     arr.forEach(b => { minx = Math.min(minx, b.gx); minz = Math.min(minz, b.gz); });
-    return arr.map(b => ({ dx: b.gx - minx, dz: b.gz - minz, pipeShape: b.pipeShape, addon: b.addon, rot: b.rot, R: b.R, valveOpen: b.valveOpen }));
+    return arr.map(b => ({ dx: b.gx - minx, dz: b.gz - minz, pipeShape: b.pipeShape, addon: b.addon, rot: b.rot, R: b.R, valveOpen: b.valveOpen, range: b.range, blown: false }));
 }
 function copySelection() {
     if (!selection.size) { showToast('請先選取要複製的元件'); return false; }
@@ -2211,7 +2257,7 @@ function placeStamp() {
     if (!stamp.valid) { showToast('紅色格子已有管件，請移到全部為綠色的位置再放下'); return; }
     checkpoint();
     const placed = stamp.items.map(it => createOrUpdateBlock(stamp.anchor.ox + it.dx, stamp.anchor.oz + it.dz,
-        it.pipeShape, it.addon, it.rot, isFinite(it.R) ? it.R : null, { silent: true, valveOpen: it.valveOpen !== false }));
+        it.pipeShape, it.addon, it.rot, isFinite(it.R) ? it.R : null, { silent: true, valveOpen: it.valveOpen !== false, range: it.range }));
     cancelStamp();
     selection = new Set(placed.filter(Boolean));
     selectedBlock = placed[placed.length - 1] || null;
@@ -2249,11 +2295,11 @@ function seriesLoop(rs, opts = {}) {
     items.push(cell(0, 0, [1, 1, 0, 0]));
     for (let x = 1; x <= W - 2; x++) {
         const R = rs[x - 1];
-        items.push(R !== undefined ? cell(x, 0, [1, 0, 1, 0], 'res_med', { R }) : cell(x, 0, [1, 0, 1, 0]));
+        items.push(R !== undefined && R !== null ? cell(x, 0, [1, 0, 1, 0], 'res_med', { R }) : cell(x, 0, [1, 0, 1, 0]));
     }
     items.push(cell(W - 1, 0, [0, 1, 1, 0]));
     items.push({ dx: 0, dz: 1, pipeShape: 'pipe_straight', rot: 3, addon: 'pump' });
-    items.push(cell(W - 1, 1, [0, 1, 0, 1], opts.noMeter ? 'none' : 'flow'));
+    items.push(cell(W - 1, 1, [0, 1, 0, 1], opts.noMeter ? 'none' : (opts.rightMeter || 'flow'), { range: opts.meterRange }));
     items.push(cell(0, 2, [1, 0, 0, 1]));
     for (let x = 1; x <= W - 2; x++) {
         if (x === 1 && opts.valveClosed !== undefined) items.push(cell(x, 2, [1, 0, 1, 0], 'valve', { valveOpen: !opts.valveClosed }));
@@ -2383,7 +2429,8 @@ function loadScene(key) {
     let w = 0, h = 0;
     items.forEach(i => { w = Math.max(w, i.dx); h = Math.max(h, i.dz); });
     const ox = -Math.floor(w / 2), oz = -Math.floor(h / 2);
-    items.forEach(it => createOrUpdateBlock(ox + it.dx, oz + it.dz, it.pipeShape, it.addon, it.rot, isFinite(it.R) ? it.R : null, { silent: true, valveOpen: it.valveOpen !== false }));
+    items.forEach(it => createOrUpdateBlock(ox + it.dx, oz + it.dz, it.pipeShape, it.addon, it.rot, isFinite(it.R) ? it.R : null, { silent: true, valveOpen: it.valveOpen !== false, range: it.range }));
+    if (s.after) s.after(ox, oz);
     selectBlock(null);
     solveNetwork();
     fitCameraToBlocks();
@@ -2393,6 +2440,10 @@ function fitCameraToBlocks() {
     if (!blocks.length) { resetCameraView(); return; }
     let minx = Infinity, maxx = -Infinity, minz = Infinity, maxz = -Infinity;
     blocks.forEach(b => { minx = Math.min(minx, b.gx); maxx = Math.max(maxx, b.gx); minz = Math.min(minz, b.gz); maxz = Math.max(maxz, b.gz); });
+    if (typeof probes !== 'undefined') probes.forEach(m => {
+        const gx = m.x / TILE_SIZE, gz = m.z / TILE_SIZE - 0.8;   // 錶頭懸在上方，往畫面上緣多留一些
+        minx = Math.min(minx, gx); maxx = Math.max(maxx, gx); minz = Math.min(minz, gz); maxz = Math.max(maxz, gz);
+    });
     const cx = (minx + maxx) / 2 * TILE_SIZE, cz = (minz + maxz) / 2 * TILE_SIZE;
     const spanX = (maxx - minx + 1.6) * TILE_SIZE, spanZ = (maxz - minz + 1.6) * TILE_SIZE;
     // 只用左右面板之間的可視寬度來估算
@@ -2562,6 +2613,754 @@ window.addEventListener('keydown', (e) => {
 });
 
 // ============================================================================
+// 12. v3.4 教學用電表：伏特計 (3/15/30 V) 與安培計 (50 mA/500 mA/5 A)
+//     - 管內串接：像電阻一樣裝在 I 型直管上（安培計的正確接法；伏特計接錯示範）
+//     - 探針側接：電表懸在畫布上方，紅/黑兩條軟管接到任意兩格（伏特計正確接法；安培計接錯示範）
+//     伏特計＝錶頭串聯大電阻（倍增器）；安培計＝錶頭並聯小電阻（分流器）
+// ============================================================================
+const VOLT_RANGES = [{ fs: 3, label: '3 V' }, { fs: 15, label: '15 V' }, { fs: 30, label: '30 V' }];
+const AMP_RANGES = [{ fs: 0.05, label: '50 mA' }, { fs: 0.5, label: '500 mA' }, { fs: 5, label: '5 A' }];
+const FUSE_FACTOR = 3;   // 安培計電流超過量程 3 倍時保險絲熔斷
+
+settings.voltSens = 1000;  // 伏特計靈敏度 Ω/V（學校指針表常見數量級）
+settings.ampR50 = 2;       // 安培計 50 mA 檔內阻 Ω（500 mA 檔 ÷10、5 A 檔 ÷100）
+
+function meterRanges(kind) { return kind === 'volt' ? VOLT_RANGES : AMP_RANGES; }
+function meterR(kind, range) {
+    const fs = meterRanges(kind)[range].fs;
+    return kind === 'volt' ? settings.voltSens * fs : settings.ampR50 * (0.05 / fs);
+}
+
+ADDON_DEFS.ammeter = { name: '教學用安培計 (管內串接)' };
+ADDON_DEFS.voltmeter = { name: '教學用伏特計 (管內串接)' };
+TWO_TERMINAL_ADDONS.add('ammeter');
+TWO_TERMINAL_ADDONS.add('voltmeter');
+function isMeterAddon(a) { return a === 'ammeter' || a === 'voltmeter'; }
+
+// ---------------- 錶頭模型（刻度盤貼圖依量程重畫） ----------------
+const dialTexCache = new Map();
+function dialTexture(kind, range) {
+    const key = `${kind}_${range}`;
+    if (dialTexCache.has(key)) return dialTexCache.get(key);
+    const c = document.createElement('canvas');
+    c.width = c.height = 256;
+    const g = c.getContext('2d');
+    g.fillStyle = '#f8fafc';
+    g.beginPath(); g.arc(128, 128, 126, 0, Math.PI * 2); g.fill();
+    const cx = 128, cy = 150, r = 100;
+    const fs = meterRanges(kind)[range].fs;
+    // 刻度弧：從 −50° 到 +50°（以正上方為 0°）
+    g.strokeStyle = '#0f172a'; g.lineWidth = 3;
+    g.beginPath();
+    g.arc(cx, cy, r, (-90 - 50) * Math.PI / 180, (-90 + 50) * Math.PI / 180);
+    g.stroke();
+    g.strokeStyle = '#dc2626'; g.lineWidth = 6;
+    g.beginPath();
+    g.arc(cx, cy, r, (-90 + 50) * Math.PI / 180, (-90 + 58) * Math.PI / 180);
+    g.stroke();
+    g.fillStyle = '#0f172a'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    for (let i = 0; i <= 10; i++) {
+        const phi = (i / 10 - 0.5) * 100 * Math.PI / 180;
+        const len = i % 5 === 0 ? 16 : 9;
+        g.lineWidth = i % 5 === 0 ? 3 : 2;
+        g.beginPath();
+        g.moveTo(cx + r * Math.sin(phi), cy - r * Math.cos(phi));
+        g.lineTo(cx + (r - len) * Math.sin(phi), cy - (r - len) * Math.cos(phi));
+        g.stroke();
+        if (i % 5 === 0) {
+            const v = fs * i / 10;
+            const txt = kind === 'amp' && fs < 1 ? `${trimNum(v * 1000)}` : `${trimNum(v)}`;
+            g.font = 'bold 20px sans-serif';
+            g.fillText(txt, cx + (r - 32) * Math.sin(phi), cy - (r - 32) * Math.cos(phi));
+        }
+    }
+    g.font = 'bold 40px sans-serif';
+    g.fillStyle = kind === 'volt' ? '#1d4ed8' : '#b45309';
+    g.fillText(kind === 'volt' ? 'V' : (fs < 1 ? 'mA' : 'A'), cx, cy - 34);
+    g.font = 'bold 18px sans-serif';
+    g.fillStyle = '#334155';
+    g.fillText(`量程 ${meterRanges(kind)[range].label}`, cx, 214);
+    const tex = new THREE.CanvasTexture(c);
+    dialTexCache.set(key, tex);
+    return tex;
+}
+
+const meterKnobMat = { red: new THREE.MeshStandardMaterial({ color: 0xb91c1c, roughness: 0.4 }),
+    black: new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.4 }),
+    active: new THREE.MeshStandardMaterial({ color: 0xfbbf24, emissive: 0xf59e0b, emissiveIntensity: 0.8 }) };
+Object.values(meterKnobMat).forEach(m => SHARED_MATS.add(m));
+
+// 建立錶頭：回傳 { group, needle, dialMat, knobs: [common, r0, r1, r2] }
+function createMeterHead(kind, range) {
+    const head = new THREE.Group();
+    const bodyMat = new THREE.MeshStandardMaterial({ color: kind === 'volt' ? 0x1e293b : 0x292524, metalness: 0.4, roughness: 0.5, emissive: 0x000000 });
+    const body = new THREE.Mesh(new THREE.BoxGeometry(1.15, 1.05, 0.32), bodyMat);
+    head.add(body);
+    const rim = new THREE.Mesh(new THREE.TorusGeometry(0.43, 0.035, 8, 32),
+        new THREE.MeshStandardMaterial({ color: kind === 'volt' ? 0x3b82f6 : 0xf59e0b, metalness: 0.5 }));
+    rim.position.set(0, 0.08, 0.17);
+    head.add(rim);
+    const dialMat = new THREE.MeshBasicMaterial({ map: dialTexture(kind, range), color: 0xffffff });
+    const dial = new THREE.Mesh(new THREE.CircleGeometry(0.42, 40), dialMat);
+    dial.position.set(0, 0.08, 0.165);
+    head.add(dial);
+    const needle = new THREE.Group();
+    needle.position.set(0, 0.08 - 0.072, 0.18);   // 對應刻度盤圓心 (128,150)
+    const nm = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.34, 0.01), new THREE.MeshBasicMaterial({ color: 0xdc2626 }));
+    nm.position.y = 0.17;
+    needle.add(nm);
+    const hub = new THREE.Mesh(new THREE.CircleGeometry(0.03, 12), new THREE.MeshBasicMaterial({ color: 0x0f172a }));
+    hub.position.z = 0.011;
+    needle.add(hub);
+    head.add(needle);
+    // 接線柱：最左黑色「−」共用端，右側三個紅色量程端（目前量程發亮）
+    const knobs = [];
+    const knobGeo = new THREE.CylinderGeometry(0.075, 0.075, 0.12, 12).rotateX(Math.PI / 2);
+    [-0.39, -0.13, 0.13, 0.39].forEach((x, i) => {
+        const k = new THREE.Mesh(knobGeo, i === 0 ? meterKnobMat.black : (i - 1 === range ? meterKnobMat.active : meterKnobMat.red));
+        k.position.set(x, -0.44, 0.2);
+        head.add(k);
+        knobs.push(k);
+    });
+    return { group: head, needle, dialMat, bodyMat, knobs };
+}
+function setHeadRange(h, kind, range) {
+    h.dialMat.map = dialTexture(kind, range);
+    h.dialMat.needsUpdate = true;
+    h.knobs.forEach((k, i) => { if (i > 0) k.material = (i - 1 === range) ? meterKnobMat.active : meterKnobMat.red; });
+}
+
+// 指針：f = 讀數 / 滿刻度；超出量程頂到右端抖動，反接打到左端
+function needleTarget(f, blown, elapsed) {
+    if (blown) return 0.87 + 0.02;
+    if (f > 1) return -(1.08 - 0.5) * 1.745 + 0.04 * Math.sin(elapsed * 40);
+    if (f < -0.02) return (0.5 + 0.06) * 1.745 + 0.04 * Math.sin(elapsed * 40);
+    return -(Math.max(0, f) - 0.5) * 1.745;
+}
+
+// 管內串接電表的 3D 模型
+ADDON_BUILDERS.ammeter = ADDON_BUILDERS.voltmeter = function (block, group, pipeR) {
+    const kind = block.addon === 'ammeter' ? 'amp' : 'volt';
+    if (kind === 'amp') {
+        // 粗分流管（大部分水走這裡）＋上方細細的錶頭支管
+        const shunt = new THREE.Mesh(new THREE.CylinderGeometry(pipeR * 0.5, pipeR * 0.5, TILE_SIZE * 0.6, 16).rotateZ(Math.PI / 2),
+            new THREE.MeshStandardMaterial({ color: 0xb45309, metalness: 0.7, roughness: 0.3, transparent: true, opacity: 0.55 }));
+        group.add(shunt);
+        const curve = new THREE.CatmullRomCurve3([
+            new THREE.Vector3(-0.5, 0.3, 0), new THREE.Vector3(-0.35, 0.75, 0), new THREE.Vector3(0.35, 0.75, 0), new THREE.Vector3(0.5, 0.3, 0)]);
+        group.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 20, 0.05, 8, false),
+            new THREE.MeshStandardMaterial({ color: 0xfde68a, transparent: true, opacity: 0.6 })));
+    } else {
+        // 伏特計內部：塞滿的倍增電阻（水幾乎過不去）
+        group.add(new THREE.Mesh(new THREE.CylinderGeometry(pipeR * 0.95, pipeR * 0.95, TILE_SIZE * 0.7, 18).rotateZ(Math.PI / 2),
+            new THREE.MeshStandardMaterial({ color: 0x4c1d95, transparent: true, opacity: 0.6, depthWrite: false })));
+    }
+    const h = createMeterHead(kind, block.range || 0);
+    const holder = new THREE.Group();
+    holder.rotation.y = block.rot * (Math.PI / 2);   // 抵銷管件旋轉，錶面一律朝向觀看者
+    h.group.position.set(0, 1.35, 0);
+    h.group.rotation.x = -0.55;
+    h.group.scale.setScalar(1.25);
+    holder.add(h.group);
+    const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.6, 8), flangeMat);
+    stem.position.y = 0.6;
+    holder.add(stem);
+    group.add(holder);
+    block.meterHead = h;
+    createLabel(block, '');
+};
+
+// ---------------- 探針側接電表 ----------------
+let probes = [];
+let nextProbeId = 1;
+let selectedMeter = null;
+const probeLeadMat = { plus: new THREE.MeshStandardMaterial({ color: 0xdc2626, roughness: 0.5 }), minus: new THREE.MeshStandardMaterial({ color: 0x1f2937, roughness: 0.5 }) };
+SHARED_MATS.add(probeLeadMat.plus); SHARED_MATS.add(probeLeadMat.minus);
+const leadParticles = new THREE.InstancedMesh(new THREE.SphereGeometry(0.05, 6, 6),
+    new THREE.MeshStandardMaterial({ color: 0x7dd3fc, emissive: 0x0284c7, emissiveIntensity: 0.7 }), 40 * 16);
+leadParticles.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+scene.add(leadParticles);
+
+function createProbe(kind, x, z, range = 2, opts = {}) {
+    const m = { isProbe: true, id: nextProbeId++, kind, range, x, z, plus: null, minus: null, blown: !!opts.blown, phase: 0 };
+    probes.push(m);
+    buildProbeMesh(m);
+    return m;
+}
+function buildProbeMesh(m) {
+    if (m.group) { scene.remove(m.group); disposeGroup(m.group); }
+    if (m.leads) ['plus', 'minus'].forEach(w => { if (m.leads[w]) { scene.remove(m.leads[w]); disposeGroup(m.leads[w]); } });
+    if (m.labelEl) m.labelEl.remove();
+    const g = new THREE.Group();
+    g.position.set(m.x, 0, m.z);
+    const h = createMeterHead(m.kind, m.range);
+    h.group.position.y = 2.5;
+    h.group.rotation.x = -0.55;
+    h.group.scale.setScalar(1.5);
+    g.add(h.group);
+    const shadow = new THREE.Mesh(new THREE.CircleGeometry(0.55, 24).rotateX(-Math.PI / 2),
+        new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.35, depthWrite: false }));
+    shadow.position.y = 0.01;
+    g.add(shadow);
+    scene.add(g);
+    m.group = g;
+    m.head = h;
+    m.leads = { plus: null, minus: null };
+    m.leadKey = { plus: '', minus: '' };
+    const div = document.createElement('div');
+    div.className = 'floating-label meter';
+    labelsContainer.appendChild(div);
+    m.labelEl = div;
+    m.labelCat = 'meter';
+}
+function removeProbe(m) {
+    if (m.group) { scene.remove(m.group); disposeGroup(m.group); }
+    ['plus', 'minus'].forEach(w => { if (m.leads && m.leads[w]) { scene.remove(m.leads[w]); disposeGroup(m.leads[w]); } });
+    if (m.labelEl) m.labelEl.remove();
+    probes = probes.filter(p => p !== m);
+    if (selectedMeter === m) selectedMeter = null;
+}
+
+function leadStart(m, which) {
+    const knob = which === 'minus' ? m.head.knobs[0] : m.head.knobs[1 + m.range];
+    m.group.updateMatrixWorld(true);
+    return knob.getWorldPosition(new THREE.Vector3());
+}
+function leadEnd(m, which) {
+    const t = m[which];
+    if (t && t.block && blocks.includes(t.block)) {
+        const w = gridToWorld(t.block.gx, t.block.gz);
+        return new THREE.Vector3(w.x, 1.02, w.z);
+    }
+    return new THREE.Vector3(m.x + (which === 'plus' ? 0.7 : -0.7), 0.05, m.z + 0.9);
+}
+function leadCurve(m, which) {
+    const a = leadStart(m, which), b = leadEnd(m, which);
+    const mid = a.clone().lerp(b, 0.5);
+    mid.y = Math.max(a.y, b.y) + 0.6;
+    return new THREE.CatmullRomCurve3([a, a.clone().add(new THREE.Vector3(0, -0.35, 0.2)), mid, b.clone().add(new THREE.Vector3(0, 0.5, 0)), b]);
+}
+function updateProbeLeads(m) {
+    ['plus', 'minus'].forEach(which => {
+        const a = leadStart(m, which), b = leadEnd(m, which);
+        const key = `${a.x.toFixed(2)},${a.y.toFixed(2)},${a.z.toFixed(2)}|${b.x.toFixed(2)},${b.z.toFixed(2)}|${b.y.toFixed(2)}`;
+        if (key === m.leadKey[which]) return;
+        m.leadKey[which] = key;
+        if (m.leads[which]) { scene.remove(m.leads[which]); disposeGroup(m.leads[which]); }
+        const curve = leadCurve(m, which);
+        const lg = new THREE.Group();
+        lg.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 36, 0.045, 8, false), probeLeadMat[which]));
+        const clip = new THREE.Mesh(new THREE.SphereGeometry(0.11, 12, 10), probeLeadMat[which]);
+        clip.position.copy(b);
+        lg.add(clip);
+        lg.userData.curve = curve;
+        scene.add(lg);
+        m.leads[which] = lg;
+    });
+}
+
+// ---------------- 讀數 ----------------
+function meterView(obj) {
+    const isProbe = obj.isProbe === true;
+    const kind = isProbe ? obj.kind : (obj.addon === 'ammeter' ? 'amp' : 'volt');
+    const range = isProbe ? obj.range : (obj.range || 0);
+    const R = meterR(kind, range);
+    const fs = meterRanges(kind)[range].fs;
+    let reading = 0, through = 0, connected = true;
+    if (isProbe) {
+        connected = !!(obj.plus && obj.minus && obj.edge);
+        if (connected && !obj.blown) {
+            through = obj.edge.I || 0;
+            reading = kind === 'volt' ? (obj.edge.dV || 0) : through;
+        }
+    } else if (!obj.blown) {
+        const Isigned = obj.worldFlows[obj.rot % 4] || 0;  // 由「+」端（本地西側）流入為正
+        through = Isigned;
+        reading = kind === 'volt' ? Isigned * R : Isigned;
+    }
+    const f = reading / fs;
+    let status = 'ok';
+    if (obj.blown) status = 'blown';
+    else if (!connected) status = 'unconnected';
+    else if (f > 1) status = 'over';
+    else if (f < -0.02) status = 'reverse';
+    return { obj, isProbe, kind, range, R, fs, reading, through, f, status, connected };
+}
+function formatMeterReading(mv) {
+    if (mv.kind === 'volt') return `${mv.reading.toFixed(mv.fs <= 3 ? 2 : 1)} V`;
+    if (mv.fs <= 0.05) return `${(mv.reading * 1000).toFixed(1)} mA`;
+    if (mv.fs <= 0.5) return `${(mv.reading * 1000).toFixed(0)} mA`;
+    return `${mv.reading.toFixed(2)} A`;
+}
+function meterLabelText(mv) {
+    const rl = meterRanges(mv.kind)[mv.range].label;
+    if (mv.status === 'blown') return `🔥 保險絲熔斷`;
+    if (mv.status === 'unconnected') return `${rl}檔：探針未接好`;
+    if (mv.status === 'over') return `⚠️ ${rl}檔：超出量程！`;
+    if (mv.status === 'reverse') return `⚠️ ${rl}檔：反接（指針打到左邊）`;
+    return `${rl}檔：${formatMeterReading(mv)}`;
+}
+
+// ---------------- 求解器整合 ----------------
+extraEdgeProviders.push(() => probes
+    .filter(m => m.plus && m.minus && !m.blown && blocks.includes(m.plus.block) && blocks.includes(m.minus.block))
+    .map(m => {
+        const e = { a: { block: m.plus.block, dir: 0 }, b: { block: m.minus.block, dir: 0 }, R: meterR(m.kind, m.range), meter: m };
+        m.edge = e;
+        return e;
+    }));
+
+function cleanupProbeTargets() {
+    probes.forEach(m => {
+        m.edge = null;
+        ['plus', 'minus'].forEach(w => { if (m[w] && !blocks.includes(m[w].block)) m[w] = null; });
+    });
+}
+// 保險絲：安培計電流超過量程 3 倍即熔斷（變成斷路）
+function checkFuses() {
+    const blownNow = [];
+    blocks.forEach(b => {
+        if (b.addon !== 'ammeter' || b.blown) return;
+        const mv = meterView(b);
+        if (Math.abs(mv.reading) > FUSE_FACTOR * mv.fs) { b.blown = true; blownNow.push(mv); }
+    });
+    probes.forEach(m => {
+        if (m.kind !== 'amp' || m.blown || !m.edge) return;
+        const mv = meterView(m);
+        if (Math.abs(mv.reading) > FUSE_FACTOR * mv.fs) { m.blown = true; blownNow.push(mv); }
+    });
+    if (blownNow.length) {
+        const mv = blownNow[0];
+        showToast(`🔥 安培計電流約 ${formatCurrent(Math.abs(mv.reading))}，超過 ${meterRanges('amp')[mv.range].label} 量程 ${FUSE_FACTOR} 倍，保險絲熔斷！請改用較大量程，並確認安培計是「串聯」在電路中。`);
+    }
+    return blownNow.length > 0;
+}
+const _solveBeforeMeters = solveNetwork;
+solveNetwork = function () {
+    cleanupProbeTargets();
+    _solveBeforeMeters();
+    if (checkFuses()) { cleanupProbeTargets(); _solveBeforeMeters(); }
+};
+
+// ---------------- 序列化 ----------------
+serializeHooks.push(st => {
+    st.probes = probes.map(m => ({
+        kind: m.kind, range: m.range, x: +m.x.toFixed(3), z: +m.z.toFixed(3), blown: m.blown,
+        plus: m.plus ? { gx: m.plus.block.gx, gz: m.plus.block.gz } : null,
+        minus: m.minus ? { gx: m.minus.block.gx, gz: m.minus.block.gz } : null
+    }));
+});
+restoreHooks.push(st => {
+    endConnectSilently();
+    [...probes].forEach(removeProbe);
+    (st.probes || []).forEach(p => {
+        if (p.kind !== 'volt' && p.kind !== 'amp') return;
+        const m = createProbe(p.kind, p.x, p.z, Math.min(2, Math.max(0, p.range | 0)), { blown: p.blown });
+        if (p.plus) { const b = blockMap.get(`${p.plus.gx},${p.plus.gz}`); if (b) m.plus = { block: b }; }
+        if (p.minus) { const b = blockMap.get(`${p.minus.gx},${p.minus.gz}`); if (b) m.minus = { block: b }; }
+    });
+});
+const _clearAllBeforeMeters = clearAllBlocks;
+clearAllBlocks = function (record = true) {
+    if (record && !blocks.length && probes.length) checkpoint();
+    _clearAllBeforeMeters(record);
+    endConnectSilently();
+    [...probes].forEach(removeProbe);
+    selectedMeter = null;
+};
+
+// ---------------- 選取與檢視面板 ----------------
+function selectMeter(m) {
+    if (m && !probes.includes(m)) m = null;
+    selection.clear();
+    selectedBlock = null;
+    selectedMeter = m;
+    onSelectionChanged();
+}
+const _selectBlockBeforeMeters = selectBlock;
+selectBlock = function (block, additive = false) {
+    selectedMeter = null;
+    _selectBlockBeforeMeters(block, additive);
+};
+
+// 依電路拓撲判斷電表的實際接法（拿掉電表本身後，看兩端之間還有哪些通路）：
+//   'parallel'     → 有一條「不經過電池」的通路：電表與某段電路並聯
+//   'acrossSource' → 只能經過電池、且沿途沒有電阻：電表直接接在電池兩端
+//   'series'       → 只能繞經電池與負載回來：電表串聯在迴路中
+//   'open'         → 兩端之間沒有任何其他通路（迴路沒接好）
+function meterConnection(mv) {
+    if (!lastSolve || !lastSolve.nodeOf) return null;
+    const { nodes, nodeOf } = lastSolve;
+    let a, b, skipNode = -1, skipEdge = null;
+    if (mv.isProbe) {
+        const m = mv.obj;
+        if (!m.plus || !m.minus || !m.edge) return null;
+        a = nodeOf.get(`${m.plus.block.id}_0`);
+        b = nodeOf.get(`${m.minus.block.id}_0`);
+        skipEdge = m.edge;
+    } else {
+        const blk = mv.obj;
+        const wdPlus = (blk.rot + 2) % 4, wdMinus = blk.rot % 4;
+        if (!areConnected(blk, wdPlus) || !areConnected(blk, wdMinus)) return 'open';
+        const nP = blockMap.get(`${blk.gx + DIRS[wdPlus].dx},${blk.gz + DIRS[wdPlus].dz}`);
+        const nM = blockMap.get(`${blk.gx + DIRS[wdMinus].dx},${blk.gz + DIRS[wdMinus].dz}`);
+        a = nodeOf.get(`${nP.id}_${(wdPlus + 2) % 4}`);
+        b = nodeOf.get(`${nM.id}_${(wdMinus + 2) % 4}`);
+        skipNode = nodeOf.get(`${blk.id}_0`);
+    }
+    if (a === undefined || b === undefined) return null;
+    const isPump = i => nodes[i].block.addon === 'pump' && !nodes[i].isArch;
+    const reach = (allowNode) => {
+        if (a === b) return true;
+        const seen = new Set([a]);
+        const q = [a];
+        while (q.length) {
+            const u = q.shift();
+            for (const e of nodes[u].edges) {
+                const v = e.to;
+                if (v === skipNode || (skipEdge && e.extra === skipEdge) || seen.has(v)) continue;
+                if (v === b) return true;
+                if (!allowNode(v)) continue;
+                seen.add(v);
+                q.push(v);
+            }
+        }
+        return false;
+    };
+    if (reach(i => !isPump(i))) return 'parallel';
+    if (reach(i => isPump(i) || nodes[i].R <= 1)) return 'acrossSource';
+    if (reach(() => true)) return 'series';
+    return 'open';
+}
+
+function meterInspectorHTML(mv) {
+    const ranges = meterRanges(mv.kind);
+    const hi = (c, t) => `<span style="color:${c};font-weight:700;">${t}</span>`;
+    const statusTxt = {
+        ok: hi('#86efac', '正常'),
+        over: hi('#fca5a5', '超出量程：指針頂到最右邊，讀不出正確數值，請切換到較大量程'),
+        reverse: hi('#fca5a5', '反接：電流從「−」端流入，指針打到左邊；請對調紅黑兩條線'),
+        blown: hi('#f87171', '保險絲熔斷，電表變成斷路'),
+        unconnected: hi('#fde68a', '探針尚未接好')
+    }[mv.status];
+    const structure = mv.kind === 'volt'
+        ? `內部是錶頭<b>串聯</b>一個大電阻（倍增器）。量程越大，倍增電阻越大；正確接法是<b>並聯</b>在待測的兩點之間，只讓很少的水流過側管。`
+        : `內部是錶頭<b>並聯</b>一條很粗的分流管（分流器），大部分水走分流管。量程越大，分流管越粗、電阻越小；正確接法是<b>串聯</b>在電路中，讓水全部流過它。`;
+    // 依實際接法（電路拓撲）判斷，而不是看電表裝在管內或用探針
+    const conn = mv.status === 'unconnected' ? null : meterConnection(mv);
+    const okBox = t => `<div class="meter-ok">✅ ${t}</div>`;
+    const warn = t => `<div class="meter-warn">⚠️ ${t}</div>`;
+    let misuse = '';
+    if (mv.kind === 'volt') {
+        if (conn === 'parallel') misuse = okBox('伏特計並聯在兩點之間：只分走很少的水流，量到的是這兩點的水壓差。');
+        else if (conn === 'acrossSource') misuse = okBox('伏特計直接接在電池兩端：量到的是電池的端電壓。');
+        else if (conn === 'series') misuse = warn('伏特計串聯在電路裡：電流必須穿過它才能繞回電池。它的電阻很大，整個電路幾乎沒有電流，所以它讀到的幾乎是電源電壓。');
+    } else {
+        if (conn === 'series') misuse = okBox('安培計串聯在迴路中：水全部流過它，量到的是這條迴路的電流。');
+        else if (conn === 'parallel') misuse = warn('安培計並聯在兩點之間：它的電阻很小，等於接了一條近乎短路的捷徑，電流會非常大。');
+        else if (conn === 'acrossSource') misuse = warn('安培計直接接在電池兩端：等於用一條粗管把電池短路，電流非常大，電池發燙、保險絲容易熔斷。');
+    }
+    return `
+        <div class="meter-reading ${mv.status}">${mv.status === 'ok' ? formatMeterReading(mv) : (mv.status === 'unconnected' ? '—' : (mv.status === 'blown' ? '熔斷' : '？'))}</div>
+        • <b>狀態：</b> ${statusTxt}<br>
+        • <b>目前量程：</b> ${ranges[mv.range].label}（滿刻度）<br>
+        • <b>電表內阻：</b> ${formatOhm(mv.R)}<br>
+        • <b>流過電表的電流：</b> ${formatCurrent(Math.abs(mv.through))}<br>
+        <div class="range-row">${ranges.map((r, i) => `<button class="btn range-btn${i === mv.range ? ' active' : ''}" onclick="setSelectedMeterRange(${i})">${r.label}</button>`).join('')}</div>
+        ${misuse}
+        <div style="margin-top:6px; font-size:0.72rem; color:#cbd5e1;">${structure}</div>
+        ${mv.status === 'blown' ? `<button class="btn" style="width:100%; justify-content:center; margin-top:8px; background:#f59e0b; color:#0f172a; border:none;" onclick="replaceFuse()">🔧 更換保險絲</button>` : ''}
+        ${mv.isProbe ? `<div style="display:flex; gap:6px; margin-top:8px; flex-wrap:wrap;">
+            <button class="btn" style="padding:4px 8px; font-size:0.72rem;" onclick="startConnect(selectedMeter, 'plus', false)">🔴 重接 + 探針</button>
+            <button class="btn" style="padding:4px 8px; font-size:0.72rem;" onclick="startConnect(selectedMeter, 'minus', false)">⚫ 重接 − 探針</button>
+            <button class="btn" style="padding:4px 8px; font-size:0.72rem;" onclick="swapProbeLeads()">🔁 對調紅黑線</button>
+        </div>` : ''}`;
+}
+const _refreshInspectorBeforeMeters = refreshInspector;
+refreshInspector = function () {
+    const box = document.getElementById('inspector-box');
+    const nameEl = document.getElementById('insp-name');
+    const detailsEl = document.getElementById('insp-details');
+    if (selectedMeter && !probes.includes(selectedMeter)) selectedMeter = null;
+    const target = selectedMeter || (selection.size === 1 && selectedBlock && isMeterAddon(selectedBlock.addon) ? selectedBlock : null);
+    if (!target) { _refreshInspectorBeforeMeters(); return; }
+    box.style.display = 'block';
+    document.getElementById('insp-r-wrap').style.display = 'none';
+    document.getElementById('insp-valve-wrap').style.display = 'none';
+    document.getElementById('btn-strip-addon').style.display = selectedMeter ? 'none' : 'inline-flex';
+    const mv = meterView(target);
+    nameEl.textContent = mv.isProbe
+        ? (mv.kind === 'volt' ? '教學用伏特計 (探針側接)' : '教學用安培計 (探針側接)')
+        : `I 型直管 ＋ ${ADDON_DEFS[target.addon].name}`;
+    detailsEl.innerHTML = meterInspectorHTML(mv);
+};
+const _deleteBeforeMeters = deleteSelectedBlock;
+deleteSelectedBlock = function () {
+    if (selectedMeter) {
+        checkpoint();
+        removeProbe(selectedMeter);
+        selectedMeter = null;
+        solveNetwork();
+        onSelectionChanged();
+        return;
+    }
+    _deleteBeforeMeters();
+};
+
+function setSelectedMeterRange(i) {
+    const t = selectedMeter || selectedBlock;
+    if (!t) return;
+    checkpoint();
+    t.range = i;
+    if (selectedMeter) buildProbeMesh(selectedMeter);
+    else buildBlockMesh(selectedBlock);
+    solveNetwork();
+    refreshInspector();
+}
+function replaceFuse() {
+    const t = selectedMeter || selectedBlock;
+    if (!t) return;
+    checkpoint();
+    t.blown = false;
+    if (!selectedMeter) buildBlockMesh(selectedBlock);
+    solveNetwork();
+    refreshInspector();
+}
+function swapProbeLeads() {
+    const m = selectedMeter;
+    if (!m) return;
+    checkpoint();
+    const t = m.plus; m.plus = m.minus; m.minus = t;
+    solveNetwork();
+}
+
+// ---------------- 探針連接模式 ----------------
+let connectState = null;
+// 電路重新載入（復原、重做、切換情境、清空）時，結束接線模式，避免拿著已被替換掉的舊電表
+function endConnectSilently() {
+    if (!connectState) return;
+    connectState = null;
+    setHint();
+}
+function startConnect(m, which, chain) {
+    if (!m || !probes.includes(m)) return;
+    connectState = { meter: m, which, chain, snap: serializeState() };
+    setHint();
+}
+function finishConnect() {
+    if (!connectState) return;
+    commitSnapshot(connectState.snap);
+    connectState = null;
+    setHint();
+}
+const _setHintBeforeMeters = setHint;
+setHint = function () {
+    const el = document.querySelector('.hint-banner');
+    if (connectState) {
+        const w = connectState.which === 'plus' ? '🔴 紅色「+」探針' : '⚫ 黑色「−」探針';
+        const kind = connectState.meter.kind === 'volt' ? '伏特計' : '安培計';
+        el.innerHTML = `📌 ${kind}：請點選 <b>${w}</b> 要夾住的管件（量電阻兩端電壓時，夾在電阻左右兩格）｜ Esc 結束`;
+        return;
+    }
+    _setHintBeforeMeters();
+};
+
+// 拖入電表：管內串接走一般附加元件流程；探針側接在放開處建立電表並進入接線模式
+const _dropBeforeMeters = handleDropAtGrid;
+handleDropAtGrid = function (gx, gz, itemKey) {
+    if (itemKey === 'probe_volt' || itemKey === 'probe_amp') {
+        const w = gridToWorld(gx, gz);
+        const m = createProbe(itemKey === 'probe_volt' ? 'volt' : 'amp', w.x, w.z, 2);
+        selectMeter(m);
+        solveNetwork();
+        startConnect(m, 'plus', true);
+        return;
+    }
+    _dropBeforeMeters(gx, gz, itemKey);
+};
+const _startPaletteDragBeforeMeters = startPaletteDrag;
+startPaletteDrag = function (e, itemKey) {
+    _startPaletteDragBeforeMeters(e, itemKey);
+    if (itemKey === 'probe_volt' || itemKey === 'probe_amp') {
+        dragBadge.style.display = 'block';
+        dragBadge.style.background = 'rgba(167, 139, 250, 0.95)';
+        dragBadge.style.color = '#0f172a';
+        dragBadge.textContent = `📟 放置${itemKey === 'probe_volt' ? '伏特計' : '安培計'}（放開後再點兩個接點）`;
+    }
+};
+
+// 指標事件：在一般處理之前攔截（電表本體拖曳、接線模式）
+let meterDrag = null;
+function pickProbe(clientX, clientY) {
+    setRayFromClient(clientX, clientY);
+    const meshes = [];
+    probes.forEach(m => m.head.group.traverse(o => { if (o.isMesh) { o.userData.probe = m; meshes.push(o); } }));
+    const hits = raycaster.intersectObjects(meshes, false);
+    return hits.length ? hits[0].object.userData.probe : null;
+}
+renderer.domElement.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0 || interactionMode !== 'none' || stamp) return;
+    if (connectState) {
+        e.stopImmediatePropagation();
+        const m = connectState.meter;
+        if (!probes.includes(m)) { endConnectSilently(); return; }
+        const pt = getMouseGroundPoint(e.clientX, e.clientY);
+        const hit = pt ? blockMap.get(`${worldToGrid(pt).gx},${worldToGrid(pt).gz}`) : null;
+        if (!hit) { showToast('請點在管件上（探針要夾在水管上）'); return; }
+        const other = connectState.which === 'plus' ? m.minus : m.plus;
+        if (other && other.block === hit) { showToast('兩支探針不能夾在同一格'); return; }
+        m[connectState.which] = { block: hit };
+        solveNetwork();
+        if (connectState.chain && connectState.which === 'plus') {
+            connectState.which = 'minus';
+            setHint();
+        } else {
+            finishConnect();
+            selectMeter(m);
+        }
+        return;
+    }
+    const m = pickProbe(e.clientX, e.clientY);
+    if (m) {
+        e.stopImmediatePropagation();
+        selectMeter(m);
+        const pt = getMouseGroundPoint(e.clientX, e.clientY);
+        meterDrag = { m, ox: pt ? m.x - pt.x : 0, oz: pt ? m.z - pt.z : 0, snap: serializeState(), moved: false };
+        interactionMode = 'move_meter';
+        controls.enabled = false;
+    }
+}, true);
+window.addEventListener('pointermove', (e) => {
+    if (interactionMode !== 'move_meter' || !meterDrag) return;
+    const pt = getMouseGroundPoint(e.clientX, e.clientY);
+    if (!pt) return;
+    meterDrag.m.x = pt.x + meterDrag.ox;
+    meterDrag.m.z = pt.z + meterDrag.oz;
+    meterDrag.m.group.position.set(meterDrag.m.x, 0, meterDrag.m.z);
+    meterDrag.moved = true;
+});
+window.addEventListener('pointerup', () => {
+    if (interactionMode !== 'move_meter') return;
+    if (meterDrag && meterDrag.moved) commitSnapshot(meterDrag.snap);
+    meterDrag = null;
+    interactionMode = 'none';
+    controls.enabled = true;
+}, true);
+window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && connectState) { e.stopImmediatePropagation(); finishConnect(); return; }
+    if ((e.key === 'Delete' || e.key === 'Backspace') && selectedMeter && !(e.target && /INPUT|SELECT|TEXTAREA/.test(e.target.tagName))) {
+        e.stopImmediatePropagation(); e.preventDefault(); deleteSelectedBlock();
+    }
+}, true);
+
+// ---------------- 動畫：指針、熔斷、探針導線與導線內水粒子 ----------------
+const leadDummy = new THREE.Object3D();
+animateHooks.push((dt, elapsed) => {
+    const all = blocks.filter(b => isMeterAddon(b.addon) && b.meterHead).map(b => ({ obj: b, head: b.meterHead }))
+        .concat(probes.map(m => ({ obj: m, head: m.head })));
+    all.forEach(({ obj, head }) => {
+        const mv = meterView(obj);
+        const target = needleTarget(mv.f, mv.status === 'blown', elapsed);
+        head.needle.rotation.z += (target - head.needle.rotation.z) * Math.min(1, dt * 9);
+        head.dialMat.color.setHex(mv.status === 'blown' ? 0x7f1d1d : 0xffffff);
+        head.bodyMat.emissive.setHex(selectedMeter === obj ? 0x1e40af : 0x000000);
+        if (obj.labelEl) {
+            obj.labelEl.textContent = meterLabelText(mv);
+            obj.labelEl.classList.toggle('warn', mv.status !== 'ok' && mv.status !== 'unconnected');
+        }
+    });
+    let idx = 0;
+    probes.forEach(m => {
+        updateProbeLeads(m);
+        // 標籤位置
+        const show = labelShow.meter || (revealOnSelect && selectedMeter === m);
+        m.labelEl.style.display = show ? 'block' : 'none';
+        if (show) {
+            const wp = m.head.group.getWorldPosition(new THREE.Vector3());
+            wp.y += 1.2;
+            wp.project(camera);
+            m.labelEl.style.left = `${(wp.x * 0.5 + 0.5) * window.innerWidth}px`;
+            m.labelEl.style.top = `${(-(wp.y * 0.5) + 0.5) * window.innerHeight}px`;
+        }
+        // 導線內的水粒子：+ 線由管件流向電表，− 線由電表流回管件
+        const I = (m.edge && !m.blown) ? (m.edge.I || 0) : 0;
+        const spd = Math.abs(I) > 1e-7 ? visualSpeed(I) * 0.12 : 0;
+        m.phase = (m.phase + spd * dt * Math.sign(I)) % 1;
+        ['plus', 'minus'].forEach(which => {
+            const lg = m.leads[which];
+            if (!lg || !m[which]) return;
+            for (let k = 0; k < 8 && idx < leadParticles.count; k++) {
+                let t = ((k / 8) + (which === 'plus' ? -m.phase : m.phase)) % 1;
+                if (t < 0) t += 1;
+                leadDummy.position.copy(lg.userData.curve.getPointAt(t));
+                leadDummy.scale.setScalar(spd > 0 ? 1 : 0.6);
+                leadDummy.updateMatrix();
+                leadParticles.setMatrixAt(idx++, leadDummy.matrix);
+            }
+        });
+    });
+    leadDummy.position.set(0, -999, 0);
+    leadDummy.scale.setScalar(1);
+    leadDummy.updateMatrix();
+    for (let k = idx; k < leadParticles.count; k++) leadParticles.setMatrixAt(k, leadDummy.matrix);
+    leadParticles.instanceMatrix.needsUpdate = true;
+});
+
+// ---------------- 情境：電表正確與錯誤接法 ----------------
+TEMPLATES.ammInline = { group: '電表', name: '串聯迴路＋管內安培計 (正確)', make: () => seriesLoop([10], { rightMeter: 'ammeter', meterRange: 2 }) };
+// 老師提供的範本：用管件做的伏特計並聯側管。兩個 T 型管之間 (第 2 列中間) 留空，放入待測元件
+TEMPLATES.voltBypass = { group: '電表', name: '伏特計並聯側管模組 (中間空格放待測元件)', make: () => [{"dx": 1, "dz": 0, "pipeShape": "pipe_straight", "addon": "voltmeter", "rot": 0, "R": 10, "valveOpen": true, "range": 2}, {"dx": 2, "dz": 0, "pipeShape": "pipe_corner", "addon": "none", "rot": 1, "R": 10, "valveOpen": true, "range": 2}, {"dx": 0, "dz": 0, "pipeShape": "pipe_corner", "addon": "none", "rot": 0, "R": 10, "valveOpen": true, "range": 2}, {"dx": 0, "dz": 1, "pipeShape": "pipe_tee", "addon": "none", "rot": 2, "R": 10, "valveOpen": true, "range": 2}, {"dx": 2, "dz": 1, "pipeShape": "pipe_tee", "addon": "none", "rot": 2, "R": 10, "valveOpen": true, "range": 2}].map(i => ({ ...i })) };
+TEMPLATES.voltInline = { group: '電表', name: '伏特計誤串聯 (錯誤示範)', make: () => seriesLoop([10], { rightMeter: 'voltmeter', meterRange: 2 }) };
+SCENES.meterCorrect = {
+    name: '電表正確接法：安培計串聯、伏特計並聯',
+    make: () => seriesLoop([20, null, 10], { rightMeter: 'ammeter', meterRange: 2 }),
+    after: (ox, oz) => {
+        const a = blockMap.get(`${ox},${oz}`), b = blockMap.get(`${ox + 2},${oz}`);
+        const w = gridToWorld(ox + 1, oz);
+        const m = createProbe('volt', w.x, w.z - TILE_SIZE * 1.3, 2);
+        m.plus = { block: a }; m.minus = { block: b };
+    }
+};
+SCENES.voltSeries = {
+    name: '錯誤示範：伏特計串聯在電路中',
+    make: () => seriesLoop([10], { rightMeter: 'voltmeter', meterRange: 0 })
+};
+SCENES.ampParallel = {
+    name: '錯誤示範：安培計並聯在電池兩端',
+    make: () => seriesLoop([10]),
+    after: (ox, oz) => {
+        const a = blockMap.get(`${ox},${oz}`), b = blockMap.get(`${ox},${oz + 2}`);
+        const w = gridToWorld(ox, oz + 1);
+        const m = createProbe('amp', w.x - TILE_SIZE * 1.5, w.z, 2);
+        m.plus = { block: a }; m.minus = { block: b };
+    }
+};
+
+function initMeterControls() {
+    advControls.voltSens = makeLogControl(document.getElementById('ctl-volt'), {
+        label: '伏特計靈敏度 (Ω/V，內阻 = 靈敏度 × 量程)',
+        min: 100, max: 1e7,
+        snaps: [
+            { v: 1000, label: '指針表', title: '學校指針式伏特計常見數量級 1 kΩ/V' },
+            { v: 20000, label: '精密表', title: '精密指針表 20 kΩ/V' },
+            { v: 1e7, label: '≈理想', title: '近乎理想（內阻極大）' }
+        ],
+        get: () => settings.voltSens,
+        onChange: v => { settings.voltSens = v; solveNetwork(); }
+    });
+    advControls.ampR50 = makeLogControl(document.getElementById('ctl-amp'), {
+        label: '安培計內阻 (50 mA 檔；500 mA 檔 ÷10、5 A 檔 ÷100)',
+        min: 0.001, max: 20,
+        snaps: [
+            { v: 0.02, label: '≈理想', title: '近乎理想（內阻極小）' },
+            { v: 2, label: '指針表', title: '學校指針式安培計常見數量級' }
+        ],
+        get: () => settings.ampR50,
+        onChange: v => { settings.ampR50 = v; solveNetwork(); }
+    });
+}
+
+// ============================================================================
 // 10. 預設教學迴路與初始化
 // ============================================================================
 function loadPreset(name, btnEl) {
@@ -2675,6 +3474,7 @@ function initControls() {
 }
 
 initControls();
+initMeterControls();
 buildSceneSelect();
 buildTemplateSelect();
 setHint();
