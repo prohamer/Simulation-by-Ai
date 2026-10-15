@@ -1,0 +1,1951 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D 平面水路與自由電子類比沙盒 v3.1 - 3 號電池內阻與短路教學</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <style>
+        :root {
+            --bg-dark: #070b14;
+            --panel-bg: rgba(15, 23, 42, 0.93);
+            --accent: #38bdf8;
+            --gold: #fbbf24;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --border-color: #334155;
+            --danger: #ef4444;
+            --success: #22c55e;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+        body {
+            font-family: 'Segoe UI', 'Microsoft JhengHei', sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            overflow: hidden;
+            width: 100vw;
+            height: 100vh;
+        }
+        #canvas-container {
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+        /* Top Bar */
+        .top-bar {
+            position: absolute;
+            top: 12px;
+            left: 16px;
+            right: 16px;
+            z-index: 10;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: var(--panel-bg);
+            backdrop-filter: blur(10px);
+            padding: 10px 18px;
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+            box-shadow: 0 8px 28px rgba(0,0,0,0.55);
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .title-group h1 {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: var(--accent);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .title-group p {
+            font-size: 0.76rem;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+        .preset-group {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .btn {
+            background: #1e293b;
+            color: var(--text-main);
+            border: 1px solid var(--border-color);
+            padding: 7px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.79rem;
+            font-weight: 600;
+            transition: all 0.15s;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .btn:hover { background: #334155; border-color: var(--accent); }
+        .btn.active { background: var(--accent); color: #0f172a; border-color: var(--accent); }
+        .btn.toggle-on { background: rgba(34, 197, 94, 0.25); border-color: #22c55e; color: #86efac; }
+        .btn.danger:hover { background: var(--danger); color: white; border-color: var(--danger); }
+
+        /* Left Drag Palette */
+        .left-panel {
+            position: absolute;
+            top: 82px;
+            left: 16px;
+            width: 295px;
+            max-height: calc(100vh - 135px);
+            overflow-y: auto;
+            z-index: 10;
+            background: var(--panel-bg);
+            backdrop-filter: blur(10px);
+            padding: 14px;
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+            box-shadow: 0 8px 28px rgba(0,0,0,0.55);
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .section-title {
+            font-size: 0.77rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--accent);
+            font-weight: 700;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 4px;
+        }
+        .palette-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 7px;
+        }
+        .palette-item {
+            background: rgba(30, 41, 59, 0.78);
+            border: 1px dashed #475569;
+            border-radius: 8px;
+            padding: 7px 6px;
+            color: var(--text-main);
+            cursor: grab;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+            gap: 2px;
+            font-size: 0.76rem;
+            transition: all 0.15s;
+        }
+        .palette-item:hover {
+            border-style: solid;
+            border-color: var(--accent);
+            background: rgba(56, 189, 248, 0.15);
+            transform: translateY(-2px);
+        }
+        .palette-item.remove-tool {
+            border-color: #f87171;
+            background: rgba(127, 29, 29, 0.3);
+        }
+        .palette-item.remove-tool:hover {
+            background: rgba(239, 68, 68, 0.28);
+            border-color: #ef4444;
+        }
+        .palette-item:active { cursor: grabbing; }
+        .palette-icon { font-size: 1.3rem; pointer-events: none; }
+        .palette-sub { font-size: 0.65rem; color: var(--text-muted); pointer-events: none; }
+
+        /* Right Inspector */
+        .right-panel {
+            position: absolute;
+            top: 82px;
+            right: 16px;
+            width: 305px;
+            max-height: calc(100vh - 135px);
+            overflow-y: auto;
+            z-index: 10;
+            background: var(--panel-bg);
+            backdrop-filter: blur(10px);
+            padding: 14px;
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+            box-shadow: 0 8px 28px rgba(0,0,0,0.55);
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .stat-card {
+            background: rgba(30, 41, 59, 0.75);
+            border-left: 3px solid var(--accent);
+            padding: 8px 10px;
+            border-radius: 6px;
+            font-size: 0.8rem;
+        }
+        .stat-card .stat-title { color: var(--text-muted); font-size: 0.72rem; }
+        .stat-card .stat-val { font-size: 0.95rem; font-weight: 700; color: #f8fafc; margin-top: 2px; }
+
+        .control-row { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
+        .control-row label { font-size: 0.78rem; display: flex; justify-content: space-between; color: #cbd5e1; }
+        .control-row input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer; }
+
+        .spring-box {
+            background: rgba(15, 23, 42, 0.85);
+            border: 1px solid #475569;
+            border-radius: 8px;
+            padding: 9px;
+        }
+        .energy-bar-bg {
+            width: 100%; height: 9px; background: #1e293b; border-radius: 5px; overflow: hidden; margin: 5px 0;
+        }
+        .energy-bar-fill {
+            height: 100%; width: 100%; background: linear-gradient(90deg, #f59e0b, #22c55e);
+        }
+
+        /* Floating Labels */
+        #labels-container {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; z-index: 5; overflow: hidden;
+        }
+        .floating-label {
+            position: absolute;
+            transform: translate(-50%, -100%);
+            background: rgba(15, 23, 42, 0.92);
+            border: 1px solid #475569;
+            color: #f8fafc;
+            padding: 2px 7px;
+            border-radius: 5px;
+            font-size: 0.72rem;
+            font-weight: 600;
+            white-space: nowrap;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.65);
+        }
+        .floating-label.pressure { border-color: #f87171; color: #fecaca; }
+        .floating-label.flow { border-color: #38bdf8; color: #bae6fd; }
+        .floating-label.pump { border-color: #fbbf24; color: #fde68a; }
+        .floating-label.resistor { border-color: #a78bfa; color: #ddd6fe; }
+        .floating-label.valve { border-color: #fb923c; color: #fed7aa; }
+
+        /* Bottom Gesture Guide */
+        .hint-banner {
+            position: absolute;
+            bottom: 12px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10;
+            background: rgba(15, 23, 42, 0.92);
+            border: 1px solid var(--border-color);
+            padding: 7px 18px;
+            border-radius: 20px;
+            font-size: 0.77rem;
+            color: #e2e8f0;
+            box-shadow: 0 4px 18px rgba(0,0,0,0.5);
+            white-space: nowrap;
+        }
+        .toast {
+            position: absolute;
+            bottom: 58px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 20;
+            background: rgba(127, 29, 29, 0.95);
+            border: 1px solid #f87171;
+            color: #fee2e2;
+            padding: 8px 16px;
+            border-radius: 10px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            box-shadow: 0 4px 18px rgba(0,0,0,0.5);
+            display: none;
+            max-width: 90vw;
+            text-align: center;
+        }
+        .drag-ghost-badge {
+            position: fixed;
+            pointer-events: none;
+            z-index: 999;
+            background: rgba(56, 189, 248, 0.95);
+            color: #0f172a;
+            font-weight: 700;
+            font-size: 0.78rem;
+            padding: 6px 11px;
+            border-radius: 8px;
+            display: none;
+            transform: translate(14px, 14px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.45);
+        }
+    </style>
+</head>
+<body>
+
+<div id="canvas-container"></div>
+<div id="labels-container"></div>
+<div id="drag-badge" class="drag-ghost-badge">拖曳至畫布放開</div>
+<div id="toast" class="toast"></div>
+
+<!-- Top Bar -->
+<div class="top-bar">
+    <div class="title-group">
+        <h1>🎮 3D 平面水路與自由電子類比沙盒 v3.1</h1>
+        <p>理想零壓降水管 ｜ 幫浦以 3 號鹼性電池為模型 (1.5 V、內阻 0.2 Ω) ｜ 短路時幫浦發熱變紅</p>
+    </div>
+    <div class="preset-group">
+        <button class="btn" id="btn-toggle-labels" onclick="toggleFloatingLabels()">👁️ 顯示上方數字 (目前：隱藏)</button>
+        <button class="btn active" onclick="loadPreset('series', this)">範例 1：串聯分壓迴路</button>
+        <button class="btn" onclick="loadPreset('parallel', this)">範例 2：並聯與十字橋接</button>
+        <button class="btn" onclick="resetCameraView()">🎯 視角置中</button>
+        <button class="btn danger" onclick="clearAllBlocks()">🗑️ 清空畫布</button>
+    </div>
+</div>
+
+<!-- Left Drag Palette -->
+<div class="left-panel">
+    <div class="section-title">1. 底層透明導水管 (R≈0 幾乎無壓降)</div>
+    <div class="palette-grid">
+        <div class="palette-item" onpointerdown="startPaletteDrag(event, 'pipe_straight')">
+            <span class="palette-icon">📏</span>
+            <span>I 型直管</span>
+            <span class="palette-sub">兩端導通</span>
+        </div>
+        <div class="palette-item" onpointerdown="startPaletteDrag(event, 'pipe_corner')">
+            <span class="palette-icon">📐</span>
+            <span>L 型 90° 彎管</span>
+            <span class="palette-sub">轉角導通</span>
+        </div>
+        <div class="palette-item" onpointerdown="startPaletteDrag(event, 'pipe_tee')">
+            <span class="palette-icon">┣</span>
+            <span>T 型三通管</span>
+            <span class="palette-sub">三向分流/匯流</span>
+        </div>
+        <div class="palette-item" onpointerdown="startPaletteDrag(event, 'pipe_cross')">
+            <span class="palette-icon">➕</span>
+            <span>十字形四通管</span>
+            <span class="palette-sub">四向連通節點</span>
+        </div>
+        <div class="palette-item" onpointerdown="startPaletteDrag(event, 'pipe_bridge')" style="grid-column: span 2;">
+            <span class="palette-icon">🌉</span>
+            <span>雙層跨接管 (上下不連通)</span>
+            <span class="palette-sub">水平與垂直各自獨立導通 (類比跨接電線)</span>
+        </div>
+    </div>
+
+    <div class="section-title">2. 管內附加元件</div>
+    <div style="font-size:0.7rem; color:var(--text-muted); line-height:1.45; margin-top:-4px;">幫浦、閥門、螺旋電阻、流量計是<b style="color:#fde68a;">兩端元件</b>，只能裝在 I 型直管；水壓計可裝在任何單層管件。</div>
+    <div class="palette-grid">
+        <div class="palette-item remove-tool" onpointerdown="startPaletteDrag(event, 'strip_addon')" style="grid-column: span 2;">
+            <span class="palette-icon">🔧</span>
+            <span style="color:#fecaca; font-weight:700;">清除/拆除管內元件 (保留水管)</span>
+            <span class="palette-sub" style="color:#fca5a5;">拖入任何裝有儀表/電阻/幫浦的管內即可還原空管</span>
+        </div>
+        <div class="palette-item" onpointerdown="startPaletteDrag(event, 'pump')">
+            <span class="palette-icon">⏱️</span>
+            <span>發條手搖幫浦</span>
+            <span class="palette-sub">3 號電池 (含內阻)</span>
+        </div>
+        <div class="palette-item" onpointerdown="startPaletteDrag(event, 'valve')">
+            <span class="palette-icon">🚰</span>
+            <span>水閥門 (開關)</span>
+            <span class="palette-sub">點擊切換導通/斷路</span>
+        </div>
+        <div class="palette-item" onpointerdown="startPaletteDrag(event, 'res_low')">
+            <span class="palette-icon">🌀</span>
+            <span>疏螺旋填充物</span>
+            <span class="palette-sub">低電阻 R=1kΩ</span>
+        </div>
+        <div class="palette-item" onpointerdown="startPaletteDrag(event, 'res_med')">
+            <span class="palette-icon">🌀🌀</span>
+            <span>中螺旋填充物</span>
+            <span class="palette-sub">中電阻 R=2kΩ</span>
+        </div>
+        <div class="palette-item" onpointerdown="startPaletteDrag(event, 'res_high')">
+            <span class="palette-icon">🌀🌀🌀</span>
+            <span>密螺旋填充物</span>
+            <span class="palette-sub">高電阻 R=4kΩ</span>
+        </div>
+        <div class="palette-item" onpointerdown="startPaletteDrag(event, 'pressure')">
+            <span class="palette-icon">🌡️</span>
+            <span>串接水壓計</span>
+            <span class="palette-sub">測當地水壓 (電位V)</span>
+        </div>
+        <div class="palette-item" onpointerdown="startPaletteDrag(event, 'flow')" style="grid-column: span 2;">
+            <span class="palette-icon">🧭</span>
+            <span>串接水輪流量計</span>
+            <span class="palette-sub">測量水流速 (電流 I)</span>
+        </div>
+    </div>
+
+    <div class="section-title">3. 發條幫浦驅動設定</div>
+    <div class="spring-box">
+        <div style="display:flex; gap:5px; margin-bottom:6px;">
+            <button class="btn active" id="mode-cont" style="flex:1; justify-content:center; padding:5px;" onclick="setPumpMode('continuous')">⚙️ 恆定發條</button>
+            <button class="btn" id="mode-wind" style="flex:1; justify-content:center; padding:5px;" onclick="setPumpMode('windup')">🔑 手動發條</button>
+        </div>
+        <div id="windup-box" style="display:none;">
+            <div style="display:flex; justify-content:space-between; font-size:0.74rem; color:#fde68a;">
+                <span>發條彈簧儲能：</span>
+                <span id="spring-pct">100%</span>
+            </div>
+            <div class="energy-bar-bg"><div class="energy-bar-fill" id="spring-bar"></div></div>
+            <button class="btn" style="width:100%; justify-content:center; background:#f59e0b; color:#0f172a; border:none;" onclick="windUpSpring()">🔄 轉動把手！上緊發條</button>
+        </div>
+        <div class="control-row">
+            <label><span>每顆幫浦內含 3 號電池數</span><span id="pump-v-txt" style="color:var(--accent);font-weight:700;">2 顆 = 3.0 V</span></label>
+            <input type="range" min="1" max="4" step="1" value="2" oninput="setCellCount(this.value)">
+            <div id="pump-r-txt" style="font-size:0.7rem; color:var(--text-muted);">內阻 r = 0.40 Ω ｜ 短路電流 ε/r ≈ 7.5 A</div>
+        </div>
+    </div>
+</div>
+
+<!-- Right Inspector -->
+<div class="right-panel">
+    <div class="section-title">迴路導通與物理狀態</div>
+    <div id="circuit-badge" style="padding:7px 10px; border-radius:6px; background:rgba(34,197,94,0.18); border:1px solid #22c55e; color:#86efac; font-size:0.78rem; font-weight:600;">
+        ✅ 封閉迴路已導通！微觀水粒子同步漂移中
+    </div>
+    <div class="stat-card">
+        <div class="stat-title">電池電動勢 ε ／ 幫浦電流 I ／ 端電壓</div>
+        <div class="stat-val" id="global-readout">3.00 V ｜ 1.00 mA ｜ 3.00 V</div>
+    </div>
+
+    <div id="inspector-box" style="display:none; background:rgba(56,189,248,0.12); border:1px solid var(--accent); border-radius:8px; padding:10px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; gap:4px; flex-wrap:wrap;">
+            <span style="font-size:0.82rem; font-weight:700; color:var(--accent);" id="insp-name">選取元件</span>
+            <div style="display:flex; gap:4px;">
+                <button class="btn" id="btn-strip-addon" style="padding:3px 7px; font-size:0.71rem; display:none;" onclick="stripSelectedAddon()">🔧 拆附加物</button>
+                <button class="btn danger" style="padding:3px 7px; font-size:0.71rem;" onclick="deleteSelectedBlock()">🗑️ 整格刪除</button>
+            </div>
+        </div>
+        <div style="font-size:0.77rem; color:#e2e8f0; line-height:1.55;" id="insp-details"></div>
+
+        <div id="insp-valve-wrap" style="display:none; margin-top:8px;">
+            <button class="btn" id="btn-toggle-valve" style="width:100%; justify-content:center; background:#f59e0b; color:#0f172a; border:none;" onclick="toggleSelectedValve()">
+                🚰 切換閥門狀態 (目前：開啟導通)
+            </button>
+        </div>
+
+        <div id="insp-r-wrap" class="control-row" style="display:none; margin-top:8px;">
+            <label><span>螺旋填充物密度 (電阻 R)</span><span id="insp-r-val" style="color:#c4b5fd;font-weight:700;">2.0 kΩ</span></label>
+            <input type="range" id="insp-r-slider" min="0.5" max="6.0" step="0.5" value="2.0" oninput="changeSelectedR(this.value)">
+        </div>
+    </div>
+
+    <div class="section-title">新增設計說明</div>
+    <div style="font-size:0.75rem; color:#cbd5e1; line-height:1.55; display:flex; flex-direction:column; gap:6px;">
+        <div>🔹 <b>一般水管零壓降：</b>空導水管每格內阻僅 1 mΩ（10⁻⁶ kΩ），同一條無電阻導線上各點水壓計讀數幾乎相同（如 3.00 V）。</div>
+        <div>🔹 <b>幫浦＝3 號鹼性電池：</b>每顆 ε = 1.5 V、內阻 r = 0.2 Ω（廠商規格約 0.15–0.3 Ω）。接上 kΩ 級電阻時電流僅數 mA，內阻幾乎不影響；<b>若用空管直接接回幫浦（短路）</b>，電流衝到 ε/r ≈ 7.5 A，端電壓掉到接近 0，能量全變成電池內部的熱 (P = I²r)，幫浦會發紅發燙。</div>
+        <div>🔹 <b>兩端元件只裝直管：</b>幫浦、閥門、電阻、流量計有明確的「入口→出口」，只能裝在 I 型直管；水壓計測的是單點電位，可裝在彎管、T 型或十字管上。</div>
+        <div>🔹 <b>上方數字預設隱藏：</b>學生可先專注觀察指針角度、底盤水壓色彩、螺旋轉速與水流偏移；需要定量驗證時再按上方按鈕開啟數字標籤。</div>
+    </div>
+</div>
+
+<div class="hint-banner">
+    🖱️ <b>左鍵拖入管件或附加元件</b> ｜ 拖入「🔧清除元件」僅移除管內裝置 ｜ 點選後<b>按中央移動、拉四角金球旋轉</b>
+</div>
+
+<script>
+// ============================================================================
+// 1. 雙層模組化資料結構：底層水管形狀 (pipeShape) + 管內附加元件 (addon)
+// ============================================================================
+const TILE_SIZE = 2.4;
+const IDEAL_WIRE_R = 1e-6; // 理想導線極小內阻 (kΩ)，即每格 1 mΩ，確保一般水管幾乎零壓降
+// 關閉的閥門不再用「極大電阻」近似，而是直接不建立連通邊（真正斷路），避免矩陣條件數過差。
+
+// ---- 3 號 (AA) 鹼性電池模型 ----
+// Energizer E91 規格書：新品內阻約 150–300 mΩ，取中間值 0.2 Ω。
+const AA_CELL_EMF = 1.5;          // V
+const AA_CELL_R_KOHM = 0.2e-3;    // 0.2 Ω 換算成本程式使用的 kΩ
+const MAX_BLOCKS = 250;           // 方塊數上限（同時是粒子緩衝區大小）
+
+// 兩端元件：有明確入口/出口，只能裝在 I 型直管
+const TWO_TERMINAL_ADDONS = new Set(['pump', 'valve', 'res_low', 'res_med', 'res_high', 'flow']);
+function isResistorAddon(a) { return a === 'res_low' || a === 'res_med' || a === 'res_high'; }
+function resistorName(R) {
+    if (R <= 1.5) return '疏螺旋填充物';
+    if (R <= 3.0) return '中螺旋填充物';
+    return '密螺旋填充物';
+}
+
+// 方向索引: 0: 東(+X), 1: 南(+Z), 2: 西(-X), 3: 北(-Z)
+const DIRS = [
+    { dx: 1, dz: 0, angle: 0, label: '東 (+X)' },
+    { dx: 0, dz: 1, angle: -Math.PI / 2, label: '南 (+Z)' },
+    { dx: -1, dz: 0, angle: Math.PI, label: '西 (-X)' },
+    { dx: 0, dz: -1, angle: Math.PI / 2, label: '北 (-Z)' }
+];
+
+// 底層水管形狀定義 (在 rot=0 時開放的連接埠 [東, 南, 西, 北])
+const PIPE_SHAPES = {
+    pipe_straight: { name: 'I 型透明直管', basePorts: [1, 0, 1, 0] },
+    pipe_corner:   { name: 'L 型 90° 彎管', basePorts: [1, 1, 0, 0] },
+    pipe_tee:      { name: 'T 型三通分流管', basePorts: [1, 1, 1, 0] },
+    pipe_cross:    { name: '十字形四通連通管', basePorts: [1, 1, 1, 1] },
+    pipe_bridge:   { name: '雙層跨接管 (上下不互通)', basePorts: [1, 1, 1, 1], isBridge: true }
+};
+
+// 管內附加元件定義
+const ADDON_DEFS = {
+    none:     { name: '無附加元件 (純導水管)', defaultR: IDEAL_WIRE_R },
+    pump:     { name: '發條手搖幫浦 (3 號電池)', defaultR: IDEAL_WIRE_R },
+    valve:    { name: '水閥門 (開關)', defaultR: IDEAL_WIRE_R },
+    res_low:  { name: '疏螺旋填充物', defaultR: 1.0 },
+    res_med:  { name: '中螺旋填充物', defaultR: 2.0 },
+    res_high: { name: '密螺旋填充物', defaultR: 4.0 },
+    pressure: { name: '串接水壓計', defaultR: IDEAL_WIRE_R },
+    flow:     { name: '串接流量計', defaultR: IDEAL_WIRE_R }
+};
+
+let blocks = [];
+let blockMap = new Map(); // key: "gx,gz" -> block
+let selectedBlock = null;
+let nextBlockId = 1;
+
+let showFloatingLabels = false; // 預設不顯示上方數字標籤
+let pumpMode = 'continuous';
+let springEnergy = 1.0;
+let cellCount = 2;                                   // 每顆幫浦內串聯的 3 號電池數
+let nominalPumpV = AA_CELL_EMF * cellCount;          // 電動勢 ε
+function pumpInternalR() { return AA_CELL_R_KOHM * cellCount; } // 內阻 r (kΩ)
+function springScale() { return pumpMode === 'windup' ? springEnergy : 1.0; }
+
+function addonDisplayName(b) {
+    if (isResistorAddon(b.addon)) return resistorName(b.R);
+    return ADDON_DEFS[b.addon].name;
+}
+
+let toastTimer = null;
+function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.style.display = 'block';
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { t.style.display = 'none'; }, 3200);
+}
+
+// 安全的電流→動畫速度映射：mA 級線性，A 級（短路）以對數壓縮並設上限
+function visualSpeed(I_mA) {
+    const a = Math.abs(I_mA);
+    if (a <= 3) return a;
+    return Math.min(9, 3 + Math.log(a / 3) * 0.9);
+}
+
+function getRotatedPorts(block) {
+    const base = PIPE_SHAPES[block.pipeShape].basePorts;
+    const out = [0, 0, 0, 0];
+    for (let d = 0; d < 4; d++) {
+        out[(d + block.rot) % 4] = base[d];
+    }
+    return out;
+}
+
+// ============================================================================
+// 2. Three.js 場景、燈光與無邊際畫布設定
+// ============================================================================
+const container = document.getElementById('canvas-container');
+const labelsContainer = document.getElementById('labels-container');
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x070b14);
+scene.fog = new THREE.FogExp2(0x070b14, 0.011);
+
+const camera = new THREE.PerspectiveCamera(42, window.innerWidth / window.innerHeight, 0.1, 300);
+camera.position.set(0, 21, 15.5);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+container.appendChild(renderer.domElement);
+
+const controls = new THREE.OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.07;
+controls.maxPolarAngle = Math.PI / 2 - 0.03;
+controls.minDistance = 4;
+controls.maxDistance = 95;
+controls.mouseButtons = {
+    LEFT: THREE.MOUSE.PAN,
+    MIDDLE: THREE.MOUSE.DOLLY,
+    RIGHT: THREE.MOUSE.ROTATE
+};
+
+scene.add(new THREE.AmbientLight(0xffffff, 0.68));
+const dirLight = new THREE.DirectionalLight(0xffffff, 0.9);
+dirLight.position.set(18, 35, 22);
+scene.add(dirLight);
+
+const gridHelper = new THREE.GridHelper(60 * TILE_SIZE, 60, 0x334155, 0x1e293b);
+gridHelper.position.set(TILE_SIZE / 2, -0.02, TILE_SIZE / 2);
+scene.add(gridHelper);
+
+const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+
+function gridToWorld(gx, gz) {
+    return new THREE.Vector3(gx * TILE_SIZE, 0, gz * TILE_SIZE);
+}
+function worldToGrid(vec3) {
+    return {
+        gx: Math.round(vec3.x / TILE_SIZE),
+        gz: Math.round(vec3.z / TILE_SIZE)
+    };
+}
+
+// ============================================================================
+// 3. 四角金色旋轉控點與中央移動 Gizmo
+// ============================================================================
+const gizmoGroup = new THREE.Group();
+gizmoGroup.visible = false;
+scene.add(gizmoGroup);
+
+const cornerHandles = [];
+createGizmoModels();
+
+function createGizmoModels() {
+    const frameGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(TILE_SIZE * 0.96, 0.12, TILE_SIZE * 0.96));
+    const frameLine = new THREE.LineSegments(frameGeo, new THREE.LineBasicMaterial({ color: 0x38bdf8 }));
+    frameLine.position.y = 0.08;
+    gizmoGroup.add(frameLine);
+
+    const offset = TILE_SIZE * 0.46;
+    const corners = [[offset, offset], [-offset, offset], [-offset, -offset], [offset, -offset]];
+    const handleGeo = new THREE.SphereGeometry(0.22, 16, 16);
+    const handleMat = new THREE.MeshStandardMaterial({
+        color: 0xfbbf24, emissive: 0xd97706, emissiveIntensity: 0.5, roughness: 0.2
+    });
+    const ringGeo = new THREE.RingGeometry(0.25, 0.31, 16).rotateX(-Math.PI / 2);
+    const ringMat = new THREE.MeshBasicMaterial({ color: 0xfef08a, side: THREE.DoubleSide });
+
+    corners.forEach(([cx, cz], idx) => {
+        const hMesh = new THREE.Mesh(handleGeo, handleMat);
+        hMesh.position.set(cx, 0.22, cz);
+        hMesh.userData = { gizmoRole: 'rotate', cornerIdx: idx };
+        const rMesh = new THREE.Mesh(ringGeo, ringMat);
+        rMesh.position.y = -0.15;
+        hMesh.add(rMesh);
+        gizmoGroup.add(hMesh);
+        cornerHandles.push(hMesh);
+    });
+}
+
+function updateGizmoTransform() {
+    if (!selectedBlock) {
+        gizmoGroup.visible = false;
+        return;
+    }
+    gizmoGroup.visible = true;
+    const pos = gridToWorld(selectedBlock.gx, selectedBlock.gz);
+    gizmoGroup.position.set(pos.x, 0, pos.z);
+    gizmoGroup.rotation.y = -selectedBlock.rot * (Math.PI / 2);
+}
+
+// ============================================================================
+// 4. 高密度微觀水粒子 InstancedMesh (類比散佈的自由電子)
+// ============================================================================
+const PARTICLES_PER_BLOCK = 48;
+const particleSphereGeo = new THREE.SphereGeometry(0.042, 8, 8);
+const particleInstMat = new THREE.MeshStandardMaterial({
+    color: 0x38bdf8, emissive: 0x0284c7, emissiveIntensity: 0.6, roughness: 0.2
+});
+const particleInstMesh = new THREE.InstancedMesh(particleSphereGeo, particleInstMat, MAX_BLOCKS * PARTICLES_PER_BLOCK);
+particleInstMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+scene.add(particleInstMesh);
+
+// ============================================================================
+// 5. 3D 元件模型建立 (支援任意水管形狀 + 任意附加元件組合)
+// ============================================================================
+const glassMat = new THREE.MeshPhysicalMaterial({
+    color: 0xdbeafe, transparent: true, opacity: 0.32, roughness: 0.15, depthWrite: false
+});
+const flangeMat = new THREE.MeshStandardMaterial({ color: 0x64748b, metalness: 0.7, roughness: 0.35 });
+const goldRotorMat = new THREE.MeshStandardMaterial({ color: 0xfbbf24, metalness: 0.55, roughness: 0.3, side: THREE.DoubleSide });
+const SHARED_MATS = new Set([glassMat, flangeMat, goldRotorMat]);
+
+// 釋放方塊模型的 GPU 資源（共用材質除外），避免反覆重建造成記憶體洩漏
+function disposeGroup(group) {
+    group.traverse(o => {
+        if (o.geometry) o.geometry.dispose();
+        if (o.material) {
+            const mats = Array.isArray(o.material) ? o.material : [o.material];
+            mats.forEach(m => { if (!SHARED_MATS.has(m)) m.dispose(); });
+        }
+    });
+}
+
+function createHelicalRotorMesh() {
+    const g = new THREE.Group();
+    g.add(new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.2, 10).rotateZ(Math.PI / 2), flangeMat));
+    const bladeGeo = new THREE.BoxGeometry(0.13, 0.31, 0.028);
+    for (let i = 0; i < 4; i++) {
+        const pivot = new THREE.Group();
+        pivot.rotation.x = (i * Math.PI) / 2;
+        const blade = new THREE.Mesh(bladeGeo, goldRotorMat);
+        blade.position.y = 0.16;
+        blade.rotation.y = Math.PI / 5;
+        pivot.add(blade);
+        g.add(pivot);
+    }
+    return g;
+}
+
+function pressureToColor(v, maxV = 3.0) {
+    const ratio = Math.max(0, Math.min(1, v / Math.max(1.5, maxV)));
+    const col = new THREE.Color();
+    col.setHSL((1.0 - ratio) * 0.6, 0.85, 0.52);
+    return col;
+}
+
+function buildBlockMesh(block) {
+    if (block.meshGroup) {
+        scene.remove(block.meshGroup);
+        disposeGroup(block.meshGroup);
+    }
+    if (block.labelEl) {
+        block.labelEl.remove();
+        block.labelEl = null;
+    }
+
+    const group = new THREE.Group();
+    const wPos = gridToWorld(block.gx, block.gz);
+    group.position.set(wPos.x, 0.55, wPos.z);
+    group.rotation.y = -block.rot * (Math.PI / 2);
+    scene.add(group);
+    block.meshGroup = group;
+    block.rotors = [];
+    block.gaugeNeedle = null;
+    block.turbine = null;
+    block.valveGate = null;
+    block.pumpBodyMat = null;
+    block.pumpArrowMat = null;
+
+    const shapeDef = PIPE_SHAPES[block.pipeShape];
+    const basePorts = shapeDef.basePorts;
+    const pipeR = 0.44;
+    const halfTile = TILE_SIZE / 2;
+
+    // 底部平面水壓發光圓盤
+    const baseMat = new THREE.MeshStandardMaterial({
+        color: 0x3b82f6, emissive: 0x3b82f6, emissiveIntensity: 0.35, roughness: 0.4
+    });
+    const baseDisk = new THREE.Mesh(new THREE.CylinderGeometry(0.62, 0.68, 0.07, 24), baseMat);
+    baseDisk.position.y = -0.49;
+    group.add(baseDisk);
+    block.baseMat = baseMat;
+
+    if (shapeDef.isBridge) {
+        // 雙層跨接管：X 軸直管 + 上拱 Z 軸跨接管（兩條水流互不相通）
+        const horizCyl = new THREE.Mesh(
+            new THREE.CylinderGeometry(pipeR, pipeR, TILE_SIZE, 20, 1, true).rotateZ(-Math.PI / 2),
+            glassMat
+        );
+        group.add(horizCyl);
+
+        // Z 軸拱橋管
+        const archGroup = new THREE.Group();
+        const overCyl = new THREE.Mesh(
+            new THREE.CylinderGeometry(pipeR * 0.9, pipeR * 0.9, TILE_SIZE * 0.65, 18).rotateX(Math.PI / 2),
+            glassMat
+        );
+        overCyl.position.y = 0.62;
+        archGroup.add(overCyl);
+
+        [-1, 1].forEach(sign => {
+            const ramp = new THREE.Mesh(
+                new THREE.CylinderGeometry(pipeR * 0.9, pipeR * 0.9, 0.75, 16),
+                glassMat
+            );
+            ramp.position.set(0, 0.31, sign * (TILE_SIZE * 0.35));
+            ramp.rotation.x = sign * 0.52;
+            archGroup.add(ramp);
+        });
+        group.add(archGroup);
+
+        for (let d = 0; d < 4; d++) {
+            const arm = new THREE.Group();
+            arm.rotation.y = DIRS[d].angle;
+            const flange = new THREE.Mesh(
+                new THREE.TorusGeometry(pipeR * 1.05, 0.045, 10, 24).rotateY(Math.PI / 2),
+                flangeMat
+            );
+            flange.position.x = halfTile - 0.03;
+            arm.add(flange);
+            group.add(arm);
+        }
+    } else {
+        // 一般單層連通管件（直管、彎管、三通、十字四通）
+        const centerNode = new THREE.Mesh(new THREE.SphereGeometry(pipeR * 1.03, 16, 16), glassMat);
+        group.add(centerNode);
+
+        for (let d = 0; d < 4; d++) {
+            if (!basePorts[d]) continue;
+            const arm = new THREE.Group();
+            arm.rotation.y = DIRS[d].angle;
+
+            const cyl = new THREE.Mesh(
+                new THREE.CylinderGeometry(pipeR, pipeR, halfTile, 20, 1, true).rotateZ(-Math.PI / 2),
+                glassMat
+            );
+            cyl.position.x = halfTile / 2;
+            arm.add(cyl);
+
+            const flange = new THREE.Mesh(
+                new THREE.TorusGeometry(pipeR * 1.05, 0.045, 10, 24).rotateY(Math.PI / 2),
+                flangeMat
+            );
+            flange.position.x = halfTile - 0.03;
+            arm.add(flange);
+
+            group.add(arm);
+        }
+    }
+
+    // 建構管內附加元件 (Addon Layer)
+    const addon = block.addon;
+    if (addon === 'res_low' || addon === 'res_med' || addon === 'res_high') {
+        const numRotors = Math.max(2, Math.min(18, Math.round(block.R * 3.5)));
+        for (let k = 0; k < numRotors; k++) {
+            const rotor = createHelicalRotorMesh();
+            const frac = (k + 0.5) / numRotors;
+            const rx = (frac - 0.5) * (TILE_SIZE * 0.76);
+            const ang = k * 2.4;
+            const rad = (numRotors <= 3) ? 0 : 0.15;
+            rotor.position.set(rx, Math.sin(ang) * rad, Math.cos(ang) * rad);
+            const sc = numRotors > 8 ? 0.68 : 0.85;
+            rotor.scale.set(sc, sc, sc);
+            rotor.rotation.x = k * 0.8;
+            group.add(rotor);
+            block.rotors.push(rotor);
+        }
+        createLabel(block, 'resistor', `R=${block.R.toFixed(1)}kΩ`);
+    }
+    else if (addon === 'pump') {
+        // 幫浦本體材質：短路時依內部發熱功率 (I²r) 由灰轉紅發光
+        const bodyMat = new THREE.MeshStandardMaterial({
+            color: 0x334155, metalness: 0.75, roughness: 0.3, emissive: 0x000000, emissiveIntensity: 1.0
+        });
+        const body = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.55, 0.55, 0.88, 20).rotateZ(Math.PI / 2),
+            bodyMat
+        );
+        group.add(body);
+        block.pumpBodyMat = bodyMat;
+
+        const arrowMat = new THREE.MeshStandardMaterial({ color: 0xfbbf24, emissive: 0xd97706, emissiveIntensity: 0.35 });
+        const arrow = new THREE.Mesh(
+            new THREE.ConeGeometry(0.22, 0.52, 12).rotateZ(-Math.PI / 2),
+            arrowMat
+        );
+        block.pumpArrowMat = arrowMat;
+        arrow.position.set(0.08, 0.68, 0);
+        group.add(arrow);
+
+        const crank = new THREE.Group();
+        crank.position.set(0, 0, 0.58);
+        crank.add(new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.1, 16).rotateX(Math.PI / 2), goldRotorMat));
+        const arm = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.45, 0.08), flangeMat);
+        arm.position.set(0, 0.18, 0.07);
+        crank.add(arm);
+        const grip = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.055, 0.055, 0.26, 12).rotateX(Math.PI / 2),
+            new THREE.MeshStandardMaterial({ color: 0xea580c })
+        );
+        grip.position.set(0, 0.38, 0.18);
+        crank.add(grip);
+        group.add(crank);
+        block.turbine = crank;
+        createLabel(block, 'pump', `幫浦 +${nominalPumpV.toFixed(1)}V`);
+    }
+    else if (addon === 'pressure') {
+        const gauge = new THREE.Group();
+        gauge.position.y = 0.85;
+        const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.5, 12), flangeMat);
+        stem.position.y = -0.35;
+        gauge.add(stem);
+        const dial = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.46, 0.46, 0.12, 24).rotateX(Math.PI / 2),
+            new THREE.MeshStandardMaterial({ color: 0xf8fafc })
+        );
+        gauge.add(dial);
+        const rim = new THREE.Mesh(
+            new THREE.TorusGeometry(0.46, 0.045, 10, 24),
+            new THREE.MeshStandardMaterial({ color: 0xef4444, metalness: 0.5 })
+        );
+        rim.position.z = 0.05;
+        gauge.add(rim);
+
+        const needlePivot = new THREE.Group();
+        needlePivot.position.z = 0.08;
+        const needle = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.34, 0.02), new THREE.MeshBasicMaterial({ color: 0xdc2626 }));
+        needle.position.y = 0.13;
+        needlePivot.add(needle);
+        gauge.add(needlePivot);
+        group.add(gauge);
+        block.gaugeNeedle = needlePivot;
+        createLabel(block, 'pressure', `0.00 V`);
+    }
+    else if (addon === 'flow') {
+        const ring = new THREE.Mesh(
+            new THREE.TorusGeometry(pipeR * 1.08, 0.06, 10, 24).rotateY(Math.PI / 2),
+            new THREE.MeshStandardMaterial({ color: 0x0ea5e9, metalness: 0.6 })
+        );
+        group.add(ring);
+        const wheel = new THREE.Group();
+        const padGeo = new THREE.BoxGeometry(0.04, 0.66, 0.22);
+        const padMat = new THREE.MeshStandardMaterial({ color: 0x38bdf8, emissive: 0x0284c7, emissiveIntensity: 0.3 });
+        for (let p = 0; p < 3; p++) {
+            const pad = new THREE.Mesh(padGeo, padMat);
+            pad.rotation.z = (p * Math.PI) / 3;
+            wheel.add(pad);
+        }
+        group.add(wheel);
+        block.turbine = wheel;
+        createLabel(block, 'flow', `0.00 mA`);
+    }
+    else if (addon === 'valve') {
+        // 水閥門 (類比電路開關 Switch)：上方紅色手輪 + 管內閘門片
+        const valveGroup = new THREE.Group();
+        const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.55, 12), flangeMat);
+        stem.position.y = 0.45;
+        valveGroup.add(stem);
+
+        const wheelColor = block.valveOpen ? 0x22c55e : 0xef4444;
+        const wheel = new THREE.Mesh(
+            new THREE.TorusGeometry(0.32, 0.055, 10, 20).rotateX(Math.PI / 2),
+            new THREE.MeshStandardMaterial({ color: wheelColor, roughness: 0.3 })
+        );
+        wheel.position.y = 0.72;
+        valveGroup.add(wheel);
+
+        // 管內阻水閘板
+        const gateMat = new THREE.MeshStandardMaterial({
+            color: block.valveOpen ? 0x22c55e : 0xef4444,
+            transparent: true,
+            opacity: block.valveOpen ? 0.35 : 0.88
+        });
+        const gate = new THREE.Mesh(new THREE.CylinderGeometry(pipeR * 0.92, pipeR * 0.92, 0.06, 20), gateMat);
+        // 開啟時水平順著水流，關閉時垂直擋住水流
+        gate.rotation.z = block.valveOpen ? 0 : Math.PI / 2;
+        valveGroup.add(gate);
+
+        group.add(valveGroup);
+        block.valveGate = gate;
+        createLabel(block, 'valve', block.valveOpen ? '閥門: 開啟' : '閥門: 關閉(斷路)');
+    }
+
+    // 初始化 48 顆微觀水粒子
+    block.particles = [];
+    const openLocalDirs = [];
+    for (let d = 0; d < 4; d++) if (basePorts[d]) openLocalDirs.push(d);
+
+    for (let i = 0; i < PARTICLES_PER_BLOCK; i++) {
+        const chosenLocalDir = openLocalDirs[i % openLocalDirs.length] || 0;
+        block.particles.push({
+            localDir: chosenLocalDir,
+            dist: Math.random() * halfTile,
+            radialR: 0.04 + Math.random() * 0.25,
+            radialAngle: Math.random() * Math.PI * 2,
+            phase: Math.random() * Math.PI * 2
+        });
+    }
+}
+
+function createLabel(block, cls, text) {
+    const div = document.createElement('div');
+    div.className = `floating-label ${cls}`;
+    div.textContent = text;
+    div.style.display = showFloatingLabels ? 'block' : 'none';
+    labelsContainer.appendChild(div);
+    block.labelEl = div;
+}
+
+function toggleFloatingLabels() {
+    showFloatingLabels = !showFloatingLabels;
+    const btn = document.getElementById('btn-toggle-labels');
+    if (showFloatingLabels) {
+        btn.textContent = '👁️ 顯示上方數字 (目前：開啟)';
+        btn.classList.add('toggle-on');
+    } else {
+        btn.textContent = '👁️ 顯示上方數字 (目前：隱藏)';
+        btn.classList.remove('toggle-on');
+    }
+    blocks.forEach(b => {
+        if (b.labelEl) {
+            b.labelEl.style.display = showFloatingLabels ? 'block' : 'none';
+        }
+    });
+}
+
+// ============================================================================
+// 6. 節點水壓網路求解器 (支援理想零壓降導線與雙層跨接管)
+// ============================================================================
+function areConnected(b1, worldDirFrom1To2) {
+    const ports1 = getRotatedPorts(b1);
+    if (!ports1[worldDirFrom1To2]) return false;
+
+    const nx = b1.gx + DIRS[worldDirFrom1To2].dx;
+    const nz = b1.gz + DIRS[worldDirFrom1To2].dz;
+    const b2 = blockMap.get(`${nx},${nz}`);
+    if (!b2) return false;
+
+    const oppDir = (worldDirFrom1To2 + 2) % 4;
+    const ports2 = getRotatedPorts(b2);
+    return ports2[oppDir] === 1;
+}
+
+function getEffectiveBlockR(b) {
+    if (b.addon === 'pump') return pumpInternalR();          // 電池內阻 r
+    if (isResistorAddon(b.addon)) return b.R;
+    return IDEAL_WIRE_R;                                     // 空管、水壓計、流量計、開啟的閥門
+}
+function isClosedValve(b) { return b.addon === 'valve' && !b.valveOpen; }
+
+// 求解在「完整電動勢 (彈簧 100%)」下的網路；線性電路對 ε 成正比，
+// 手動發條模式只需呼叫 applySpringScale() 按比例縮放，不必每幀重解矩陣。
+function solveNetwork() {
+    blockMap.clear();
+    blocks.forEach(b => {
+        b.V_ref = 0;
+        b.V_arch_ref = 0;
+        b.flows_ref = [0, 0, 0, 0];
+        blockMap.set(`${b.gx},${b.gz}`, b);
+    });
+
+    if (blocks.length === 0) { applySpringScale(); return; }
+
+    const E = nominalPumpV;
+
+    // 雙層跨接管拆為 2 個獨立節點 (通道 A: local 0-2, 通道 B: local 1-3)
+    const nodes = [];
+    const blockDirNodeMap = new Map(); // `${block.id}_${worldDir}` -> nodeIndex
+
+    blocks.forEach(b => {
+        if (PIPE_SHAPES[b.pipeShape].isBridge) {
+            const idxA = nodes.push({ block: b, isArch: false, R: IDEAL_WIRE_R, V: 0, edges: [] }) - 1;
+            const idxB = nodes.push({ block: b, isArch: true,  R: IDEAL_WIRE_R, V: 0, edges: [] }) - 1;
+            for (let ld = 0; ld < 4; ld++) {
+                const wd = (ld + b.rot) % 4;
+                blockDirNodeMap.set(`${b.id}_${wd}`, (ld === 0 || ld === 2) ? idxA : idxB);
+            }
+        } else {
+            const idx = nodes.push({ block: b, isArch: false, R: getEffectiveBlockR(b), V: 0, edges: [] }) - 1;
+            for (let wd = 0; wd < 4; wd++) blockDirNodeMap.set(`${b.id}_${wd}`, idx);
+        }
+    });
+
+    const N = nodes.length;
+
+    // 幫浦只存在於直管：出口 = 世界方向 rot，入口 = rot+2，兩側各提供 ε/2
+    function pumpBoost(blk, worldDir) {
+        if (blk.addon !== 'pump') return 0;
+        const outDir = blk.rot % 4;
+        const inDir = (outDir + 2) % 4;
+        if (worldDir === outDir) return E / 2;
+        if (worldDir === inDir) return -E / 2;
+        return 0;
+    }
+
+    blocks.forEach(b => {
+        if (isClosedValve(b)) return;                 // 關閉的閥門：真正斷路，不建邊
+        for (let d = 0; d < 4; d++) {
+            if (!areConnected(b, d)) continue;
+            const nb = blockMap.get(`${b.gx + DIRS[d].dx},${b.gz + DIRS[d].dz}`);
+            if (isClosedValve(nb)) continue;
+            const opp = (d + 2) % 4;
+            const u = blockDirNodeMap.get(`${b.id}_${d}`);
+            const v = blockDirNodeMap.get(`${nb.id}_${opp}`);
+            if (u === undefined || v === undefined) continue;
+
+            const G = 1.0 / (nodes[u].R / 2 + nodes[v].R / 2);
+            const V_boost = pumpBoost(b, d) - pumpBoost(nb, opp);
+            nodes[u].edges.push({ to: v, G, V_boost, worldDir: d });
+        }
+    });
+
+    // 每個連通分量選一個 0V 參考點：優先選幫浦入口側的鄰居
+    const visited = new Array(N).fill(false);
+    const groundSet = new Set();
+    for (let i = 0; i < N; i++) {
+        if (visited[i]) continue;
+        const comp = [];
+        const q = [i];
+        visited[i] = true;
+        while (q.length > 0) {
+            const u = q.shift();
+            comp.push(u);
+            for (const edge of nodes[u].edges) {
+                if (!visited[edge.to]) { visited[edge.to] = true; q.push(edge.to); }
+            }
+        }
+        let gIdx = comp[0];
+        for (const u of comp) {
+            const b = nodes[u].block;
+            if (b.addon !== 'pump') continue;
+            const pumpInDir = (b.rot + 2) % 4;
+            if (!areConnected(b, pumpInDir)) continue;
+            const nb = blockMap.get(`${b.gx + DIRS[pumpInDir].dx},${b.gz + DIRS[pumpInDir].dz}`);
+            if (isClosedValve(nb)) continue;
+            const targetIdx = blockDirNodeMap.get(`${nb.id}_${(pumpInDir + 2) % 4}`);
+            if (targetIdx !== undefined) { gIdx = targetIdx; break; }
+        }
+        groundSet.add(gIdx);
+    }
+
+    const A = Array.from({ length: N }, () => new Array(N).fill(0));
+    const B = new Array(N).fill(0);
+    for (let i = 0; i < N; i++) {
+        if (groundSet.has(i) || nodes[i].edges.length === 0) {
+            A[i][i] = 1;
+            B[i] = 0;
+            continue;
+        }
+        for (const edge of nodes[i].edges) {
+            A[i][i] += edge.G;
+            A[i][edge.to] -= edge.G;
+            B[i] -= edge.G * edge.V_boost;
+        }
+    }
+
+    const V_sol = gaussianSolve(A, B);
+    let minV = Infinity;
+    for (let i = 0; i < N; i++) if (V_sol[i] < minV) minV = V_sol[i];
+    if (isFinite(minV) && minV < -0.005) {
+        for (let i = 0; i < N; i++) V_sol[i] -= minV;
+    }
+
+    for (let i = 0; i < N; i++) {
+        nodes[i].V = V_sol[i];
+        if (nodes[i].isArch) nodes[i].block.V_arch_ref = V_sol[i];
+        else nodes[i].block.V_ref = V_sol[i];
+    }
+
+    for (let i = 0; i < N; i++) {
+        const node = nodes[i];
+        for (const edge of node.edges) {
+            const fl = edge.G * (node.V - nodes[edge.to].V + edge.V_boost);
+            node.block.flows_ref[edge.worldDir] = fl;
+        }
+    }
+
+    applySpringScale();
+}
+
+// 依發條儲能比例 s 縮放所有電位與電流，並計算衍生量（ΔV、功率、電池發熱）
+let lastInspectorRefresh = 0;
+function applySpringScale(forceInspector = true) {
+    const s = springScale();
+    const effE = nominalPumpV * s;
+    const r = pumpInternalR();
+    const I_short = nominalPumpV / r;          // 短路電流上限 ε/r (mA)
+    const P_heat_max = I_short * I_short * r;  // 短路時內部最大發熱 (mW)
+
+    let maxPumpI = 0, sumPumpE = 0, worstHeat = 0, termV = effE;
+
+    blocks.forEach(b => {
+        b.V = b.V_ref * s;
+        b.V_arch = b.V_arch_ref * s;
+        let sIn = 0, sOut = 0;
+        for (let d = 0; d < 4; d++) {
+            let fl = b.flows_ref[d] * s;
+            if (Math.abs(fl) < 1e-4) fl = 0;
+            b.worldFlows[d] = fl;
+            if (fl > 0) sOut += fl; else sIn += -fl;
+        }
+        b.I_mag = Math.max(sIn, sOut);
+        b.dV = 0; b.power = 0; b.heatRatio = 0;
+
+        if (isResistorAddon(b.addon)) {
+            b.dV = b.I_mag * b.R;                 // V = mA × kΩ
+            b.power = b.I_mag * b.dV;             // mW
+        } else if (b.addon === 'pump') {
+            b.emf = effE;
+            b.termV = effE - b.I_mag * r;         // 端電壓 = ε − I·r
+            b.heat = b.I_mag * b.I_mag * r;       // 內部發熱 I²r (mW)
+            b.outPower = b.I_mag * b.termV;       // 輸出給外電路的功率 (mW)
+            b.heatRatio = Math.min(1, b.heat / P_heat_max);
+            b.dV = b.termV;
+            sumPumpE += effE;
+            if (b.I_mag >= maxPumpI) { maxPumpI = b.I_mag; termV = b.termV; }
+            worstHeat = Math.max(worstHeat, b.heatRatio);
+        }
+    });
+
+    const badge = document.getElementById('circuit-badge');
+    if (maxPumpI > 0.25 * I_short * Math.max(s, 1e-6) && maxPumpI > 50) {
+        badge.style.background = 'rgba(239,68,68,0.22)';
+        badge.style.borderColor = '#ef4444';
+        badge.style.color = '#fecaca';
+        badge.textContent = `🔥 短路！電流 ${formatCurrent(maxPumpI)}，能量幾乎全在電池內部變成熱`;
+    } else if (maxPumpI > 0.01) {
+        badge.style.background = 'rgba(34,197,94,0.18)';
+        badge.style.borderColor = '#22c55e';
+        badge.style.color = '#86efac';
+        badge.textContent = '✅ 封閉迴路已導通！微觀水粒子同步漂移中';
+    } else {
+        badge.style.background = 'rgba(245,158,11,0.18)';
+        badge.style.borderColor = '#f59e0b';
+        badge.style.color = '#fde68a';
+        badge.textContent = '⚠️ 尚未構成封閉迴路或閥門已關閉（水粒子原地熱運動）';
+    }
+    document.getElementById('global-readout').textContent =
+        `${sumPumpE.toFixed(2)} V ｜ ${formatCurrent(maxPumpI)} ｜ ${termV.toFixed(2)} V`;
+
+    const now = performance.now();
+    if (forceInspector || now - lastInspectorRefresh > 120) {
+        lastInspectorRefresh = now;
+        refreshInspector();
+    }
+}
+
+function formatCurrent(mA) {
+    return Math.abs(mA) >= 1000 ? `${(mA / 1000).toFixed(2)} A` : `${mA.toFixed(2)} mA`;
+}
+function formatPower(mW) {
+    if (Math.abs(mW) >= 1000) return `${(mW / 1000).toFixed(2)} W`;
+    if (Math.abs(mW) >= 0.01 || mW === 0) return `${mW.toFixed(2)} mW`;
+    return `${(mW * 1000).toFixed(3)} µW`;
+}
+
+function gaussianSolve(A, B) {
+    const n = B.length;
+    for (let i = 0; i < n; i++) {
+        let maxEl = Math.abs(A[i][i]), maxRow = i;
+        for (let k = i + 1; k < n; k++) {
+            if (Math.abs(A[k][i]) > maxEl) { maxEl = Math.abs(A[k][i]); maxRow = k; }
+        }
+        for (let k = i; k < n; k++) { const t = A[maxRow][k]; A[maxRow][k] = A[i][k]; A[i][k] = t; }
+        const t = B[maxRow]; B[maxRow] = B[i]; B[i] = t;
+        if (Math.abs(A[i][i]) < 1e-12) continue;
+        for (let k = i + 1; k < n; k++) {
+            const c = -A[k][i] / A[i][i];
+            for (let j = i; j < n; j++) A[k][j] = (i === j) ? 0 : A[k][j] + c * A[i][j];
+            B[k] += c * B[i];
+        }
+    }
+    const x = new Array(n).fill(0);
+    for (let i = n - 1; i >= 0; i--) {
+        if (Math.abs(A[i][i]) < 1e-12) continue;
+        x[i] = B[i] / A[i][i];
+        for (let k = i - 1; k >= 0; k--) B[k] -= A[k][i] * x[i];
+    }
+    return x;
+}
+
+// ============================================================================
+// 7. 拖曳拼裝、附加元件嵌合與「🔧 清除管內元件」互動邏輯
+// ============================================================================
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+let interactionMode = 'none';
+let draggingPaletteItem = null;
+let rotateCornerIdx = 0;   // 旋轉時抓住的是哪一顆金球
+const dragBadge = document.getElementById('drag-badge');
+
+// 射線與地面無交點（例如點在地平線以上）時回傳 null，不再誤判為 (0,0)
+function getMouseGroundPoint(clientX, clientY) {
+    mouse.x = (clientX / window.innerWidth) * 2 - 1;
+    mouse.y = -(clientY / window.innerHeight) * 2 + 1;
+    raycaster.setFromCamera(mouse, camera);
+    return raycaster.ray.intersectPlane(groundPlane, new THREE.Vector3());
+}
+
+// 放開位置若落在任何 UI 面板上則不放置（取代寫死的 300/310 像素判斷）
+function isOverUiPanel(x, y) {
+    const sel = ['.left-panel', '.right-panel', '.top-bar', '.hint-banner'];
+    return sel.some(s => {
+        const el = document.querySelector(s);
+        if (!el) return false;
+        const r = el.getBoundingClientRect();
+        return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+    });
+}
+
+function startPaletteDrag(e, itemKey) {
+    e.preventDefault();
+    interactionMode = 'palette_drag';
+    draggingPaletteItem = itemKey;
+    controls.enabled = false;
+    dragBadge.style.display = 'block';
+
+    if (itemKey === 'strip_addon') {
+        dragBadge.style.background = 'rgba(239, 68, 68, 0.95)';
+        dragBadge.style.color = '#ffffff';
+        dragBadge.textContent = '🔧 拖入管內以拆除附加元件 (保留底管)';
+    } else if (PIPE_SHAPES[itemKey]) {
+        dragBadge.style.background = 'rgba(56, 189, 248, 0.95)';
+        dragBadge.style.color = '#0f172a';
+        dragBadge.textContent = `➕ 鋪設管件：${PIPE_SHAPES[itemKey].name}`;
+    } else if (ADDON_DEFS[itemKey]) {
+        dragBadge.style.background = 'rgba(251, 191, 36, 0.95)';
+        dragBadge.style.color = '#0f172a';
+        dragBadge.textContent = `⚙️ 安裝元件：${ADDON_DEFS[itemKey].name}`;
+    }
+
+    dragBadge.style.left = `${e.clientX}px`;
+    dragBadge.style.top = `${e.clientY}px`;
+}
+
+renderer.domElement.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0 || interactionMode !== 'none') return;
+
+    mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+    mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+    raycaster.setFromCamera(mouse, camera);
+
+    if (selectedBlock && gizmoGroup.visible) {
+        const hitHandles = raycaster.intersectObjects(cornerHandles, true);
+        if (hitHandles.length > 0) {
+            let obj = hitHandles[0].object;
+            while (obj && obj.userData.cornerIdx === undefined) obj = obj.parent;
+            rotateCornerIdx = obj ? obj.userData.cornerIdx : 0;
+            interactionMode = 'rotate_block';
+            controls.enabled = false;
+            return;
+        }
+    }
+
+    const pt = getMouseGroundPoint(e.clientX, e.clientY);
+    if (!pt) return;
+    const { gx, gz } = worldToGrid(pt);
+    const hitBlock = blockMap.get(`${gx},${gz}`);
+
+    if (hitBlock) {
+        // 若已經選取同一個水閥門，再次點擊可直接切換開關
+        if (selectedBlock === hitBlock && hitBlock.addon === 'valve') {
+            toggleSelectedValve();
+        }
+        selectBlock(hitBlock);
+        interactionMode = 'move_block';
+        controls.enabled = false;
+    } else {
+        selectBlock(null);
+    }
+});
+
+window.addEventListener('pointermove', (e) => {
+    if (interactionMode === 'palette_drag') {
+        dragBadge.style.left = `${e.clientX}px`;
+        dragBadge.style.top = `${e.clientY}px`;
+        return;
+    }
+
+    const pt = getMouseGroundPoint(e.clientX, e.clientY);
+    if (!pt) return;
+
+    if (interactionMode === 'move_block' && selectedBlock) {
+        const { gx, gz } = worldToGrid(pt);
+        if (gx !== selectedBlock.gx || gz !== selectedBlock.gz) {
+            if (!blockMap.has(`${gx},${gz}`)) {
+                blockMap.delete(`${selectedBlock.gx},${selectedBlock.gz}`);
+                selectedBlock.gx = gx;
+                selectedBlock.gz = gz;
+                blockMap.set(`${gx},${gz}`, selectedBlock);
+                const wPos = gridToWorld(gx, gz);
+                selectedBlock.meshGroup.position.set(wPos.x, 0.55, wPos.z);
+                updateGizmoTransform();
+                solveNetwork();
+            }
+        }
+    }
+    else if (interactionMode === 'rotate_block' && selectedBlock) {
+        const centerW = gridToWorld(selectedBlock.gx, selectedBlock.gz);
+        const angle = Math.atan2(pt.z - centerW.z, pt.x - centerW.x);
+        // 第 k 顆金球在方塊本地座標的角度為 π/4 + k·π/2，扣除後才不會一抓就跳轉
+        const cornerAng = Math.PI / 4 + rotateCornerIdx * (Math.PI / 2);
+        selectedBlock.meshGroup.rotation.y = cornerAng - angle;
+        gizmoGroup.rotation.y = cornerAng - angle;
+
+        const snappedRot = (Math.round((angle - cornerAng) / (Math.PI / 2)) % 4 + 4) % 4;
+        if (snappedRot !== selectedBlock.rot) {
+            selectedBlock.rot = snappedRot;
+            solveNetwork();
+        }
+    }
+});
+
+window.addEventListener('pointerup', (e) => {
+    if (interactionMode === 'palette_drag' && draggingPaletteItem) {
+        dragBadge.style.display = 'none';
+        const pt = getMouseGroundPoint(e.clientX, e.clientY);
+        if (pt && !isOverUiPanel(e.clientX, e.clientY)) {
+            const { gx, gz } = worldToGrid(pt);
+            handleDropAtGrid(gx, gz, draggingPaletteItem);
+        }
+        draggingPaletteItem = null;
+    }
+    else if (interactionMode === 'rotate_block' && selectedBlock) {
+        selectedBlock.meshGroup.rotation.y = -selectedBlock.rot * (Math.PI / 2);
+        updateGizmoTransform();
+        solveNetwork();
+    }
+
+    interactionMode = 'none';
+    controls.enabled = true;
+});
+
+function handleDropAtGrid(gx, gz, itemKey) {
+    const existing = blockMap.get(`${gx},${gz}`);
+
+    // 1. 若拖入的是「🔧 清除/拆除管內元件」：只拆附加物，永遠保留底管
+    if (itemKey === 'strip_addon') {
+        if (!existing) return;
+        if (existing.addon !== 'none') {
+            existing.addon = 'none';
+            existing.R = IDEAL_WIRE_R;
+            buildBlockMesh(existing);
+            selectBlock(existing);
+            solveNetwork();
+        } else {
+            selectBlock(existing);
+            showToast('這格已經是空管；若要整格刪除，請按右側「🗑️ 整格刪除」或 Delete 鍵');
+        }
+        return;
+    }
+
+    // 2. 若拖入的是「底層導水管形狀 (I型、L型、T型、十字形、跨接管)」
+    if (PIPE_SHAPES[itemKey]) {
+        if (existing) {
+            const toBridge = !!PIPE_SHAPES[itemKey].isBridge;
+            if (itemKey !== 'pipe_straight' && TWO_TERMINAL_ADDONS.has(existing.addon)) {
+                showToast(`「${addonDisplayName(existing)}」是兩端元件，只能裝在 I 型直管；請先用 🔧 拆除元件再換管`);
+                return;
+            }
+            existing.pipeShape = itemKey;
+            if (toBridge && existing.addon !== 'none') {
+                showToast('雙層跨接管不能裝附加元件，已自動拆除原本的元件');
+                existing.addon = 'none';
+                existing.R = IDEAL_WIRE_R;
+            }
+            buildBlockMesh(existing);
+            selectBlock(existing);
+            solveNetwork();
+        } else {
+            createOrUpdateBlock(gx, gz, itemKey, 'none', 0);
+        }
+        return;
+    }
+
+    // 3. 若拖入的是「管內附加元件 (水壓計、流量計、螺旋電阻、幫浦、水閥門)」
+    if (ADDON_DEFS[itemKey]) {
+        if (existing && PIPE_SHAPES[existing.pipeShape].isBridge) {
+            showToast('雙層跨接管有兩條獨立水路，不能裝附加元件；請裝在旁邊的管件上');
+            return;
+        }
+        if (existing && TWO_TERMINAL_ADDONS.has(itemKey) && existing.pipeShape !== 'pipe_straight') {
+            showToast(`「${ADDON_DEFS[itemKey].name}」是兩端元件，只能裝在 I 型直管（有明確的入口與出口）`);
+            return;
+        }
+        if (existing) {
+            existing.addon = itemKey;
+            existing.R = ADDON_DEFS[itemKey].defaultR;
+            existing.valveOpen = true;
+            buildBlockMesh(existing);
+            selectBlock(existing);
+            solveNetwork();
+        } else {
+            // 若在空格上放置附加元件，自動以「I 型直管」作為底管承載
+            createOrUpdateBlock(gx, gz, 'pipe_straight', itemKey, 0);
+        }
+    }
+}
+
+window.addEventListener('keydown', (e) => {
+    if ((e.key === 'Delete' || e.key === 'Backspace') && selectedBlock) {
+        deleteSelectedBlock();
+    } else if ((e.key === 'r' || e.key === 'R') && selectedBlock) {
+        selectedBlock.rot = (selectedBlock.rot + 1) % 4;
+        selectedBlock.meshGroup.rotation.y = -selectedBlock.rot * (Math.PI / 2);
+        updateGizmoTransform();
+        solveNetwork();
+    }
+});
+
+window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// ============================================================================
+// 8. 元件管理與右側檢視面板更新
+// ============================================================================
+function createOrUpdateBlock(gx, gz, pipeShape, addon = 'none', rot = 0, customR = null) {
+    const existing = blockMap.get(`${gx},${gz}`);
+    if (existing) removeBlock(existing);
+    else if (blocks.length >= MAX_BLOCKS) {
+        showToast(`已達方塊數上限 (${MAX_BLOCKS} 格)，請先刪除部分管件`);
+        return null;
+    }
+
+    const defR = customR !== null ? customR : (ADDON_DEFS[addon] ? ADDON_DEFS[addon].defaultR : IDEAL_WIRE_R);
+    const block = {
+        id: nextBlockId++,
+        gx, gz,
+        pipeShape,
+        addon,
+        rot: rot % 4,
+        R: defR,
+        valveOpen: true,
+        V: 0, V_arch: 0, I_mag: 0, dV: 0, power: 0, heatRatio: 0,
+        V_ref: 0, V_arch_ref: 0, flows_ref: [0, 0, 0, 0],
+        worldFlows: [0, 0, 0, 0],
+        meshGroup: null,
+        rotors: [],
+        gaugeNeedle: null,
+        turbine: null,
+        valveGate: null,
+        particles: [],
+        labelEl: null
+    };
+    blocks.push(block);
+    buildBlockMesh(block);
+    selectBlock(block);
+    solveNetwork();
+    return block;
+}
+
+function removeBlock(block) {
+    if (block.meshGroup) {
+        scene.remove(block.meshGroup);
+        disposeGroup(block.meshGroup);
+    }
+    if (block.labelEl) block.labelEl.remove();
+    blocks = blocks.filter(b => b.id !== block.id);
+    blockMap.delete(`${block.gx},${block.gz}`);
+}
+
+function stripSelectedAddon() {
+    if (!selectedBlock || selectedBlock.addon === 'none') return;
+    selectedBlock.addon = 'none';
+    selectedBlock.R = IDEAL_WIRE_R;
+    buildBlockMesh(selectedBlock);
+    solveNetwork();
+}
+
+function deleteSelectedBlock() {
+    if (!selectedBlock) return;
+    removeBlock(selectedBlock);
+    selectBlock(null);
+    solveNetwork();
+}
+
+function toggleSelectedValve() {
+    if (!selectedBlock || selectedBlock.addon !== 'valve') return;
+    selectedBlock.valveOpen = !selectedBlock.valveOpen;
+    buildBlockMesh(selectedBlock);
+    solveNetwork();
+}
+
+function selectBlock(block) {
+    selectedBlock = block;
+    updateGizmoTransform();
+    refreshInspector();
+}
+
+function refreshInspector() {
+    const box = document.getElementById('inspector-box');
+    const nameEl = document.getElementById('insp-name');
+    const detailsEl = document.getElementById('insp-details');
+    const rWrap = document.getElementById('insp-r-wrap');
+    const valveWrap = document.getElementById('insp-valve-wrap');
+    const btnStrip = document.getElementById('btn-strip-addon');
+
+    if (!selectedBlock) {
+        box.style.display = 'none';
+        return;
+    }
+    box.style.display = 'block';
+    const b = selectedBlock;
+    const pName = PIPE_SHAPES[b.pipeShape].name;
+    const aName = addonDisplayName(b);
+
+    nameEl.textContent = b.addon === 'none' ? `${pName}` : `${pName} ＋ ${aName}`;
+    btnStrip.style.display = (b.addon !== 'none') ? 'inline-flex' : 'none';
+    rWrap.style.display = 'none';
+    valveWrap.style.display = 'none';
+
+    if (PIPE_SHAPES[b.pipeShape].isBridge) {
+        detailsEl.innerHTML = `
+            • <b>下層水平水路水壓：</b> <span style="color:#fca5a5;font-weight:700;">${b.V.toFixed(2)} V</span><br>
+            • <b>上層拱橋水路水壓：</b> <span style="color:#fca5a5;font-weight:700;">${b.V_arch.toFixed(2)} V</span><br>
+            • 兩條水路互不相通，就像兩條跨過彼此但沒有焊接的電線
+        `;
+    } else if (isResistorAddon(b.addon)) {
+        detailsEl.innerHTML = `
+            • <b>當地水壓 (電位)：</b> ${b.V.toFixed(2)} V<br>
+            • <b>此段水壓落差 (電壓降 ΔV)：</b> <span style="color:#fca5a5;font-weight:700;">${b.dV.toFixed(2)} V</span><br>
+            • <b>通過水流量 (電流 I)：</b> <span style="color:#7dd3fc;font-weight:700;">${formatCurrent(b.I_mag)}</span><br>
+            • <b>螺旋物旋轉功率 (P)：</b> <span style="color:#fde047;font-weight:700;">${formatPower(b.power)}</span>
+        `;
+        rWrap.style.display = 'flex';
+        document.getElementById('insp-r-val').textContent = `${b.R.toFixed(1)} kΩ`;
+        document.getElementById('insp-r-slider').value = b.R;
+    } else if (b.addon === 'pump') {
+        const r = pumpInternalR();
+        const rOhm = r * 1000;
+        const emf = b.emf ?? nominalPumpV * springScale();
+        const iShort = emf / r;
+        const pMaxOut = emf * emf / (4 * r);
+        const hot = b.heatRatio > 0.0625;
+        detailsEl.innerHTML = `
+            • <b>推水方向：</b> ${DIRS[b.rot % 4].label}<br>
+            • <b>內含：</b> ${cellCount} 顆 3 號電池串聯<br>
+            • <b>電動勢 ε：</b> ${emf.toFixed(2)} V ｜ <b>內阻 r：</b> ${rOhm.toFixed(2)} Ω<br>
+            • <b>通過電流 I：</b> <span style="color:#7dd3fc;font-weight:700;">${formatCurrent(b.I_mag)}</span><br>
+            • <b>端電壓 ε − I·r：</b> <span style="color:#fca5a5;font-weight:700;">${(b.termV ?? emf).toFixed(2)} V</span><br>
+            • <b>輸出給外電路：</b> ${formatPower(b.outPower ?? 0)}<br>
+            • <b>電池內部發熱 I²r：</b> <span style="color:${hot ? '#f87171' : '#fde047'};font-weight:700;">${formatPower(b.heat ?? 0)}</span><br>
+            <div style="margin-top:6px; padding:6px 8px; border-radius:6px; background:rgba(15,23,42,0.7); font-size:0.72rem; color:#cbd5e1;">
+                上限參考：短路電流 ε/r ≈ ${formatCurrent(iShort)}；最大可輸出功率 ε²/4r ≈ ${formatPower(pMaxOut)}（外電阻 = r 時）。
+                ${hot ? '<br><b style="color:#fca5a5;">🔥 目前接近短路：能量大多消耗在電池內部，電池會發燙、快速耗盡。</b>' : ''}
+            </div>
+        `;
+    } else if (b.addon === 'valve') {
+        detailsEl.innerHTML = `
+            • <b>閥門狀態：</b> ${b.valveOpen ? '<span style="color:#86efac;">開啟 (導通)</span>' : '<span style="color:#fca5a5;">關閉 (斷路阻擋水流)</span>'}<br>
+            • <b>通過流量：</b> ${formatCurrent(b.I_mag)}
+        `;
+        valveWrap.style.display = 'block';
+        document.getElementById('btn-toggle-valve').textContent = b.valveOpen
+            ? '🚰 點擊關閉閥門 (切斷水路)'
+            : '🚰 點擊開啟閥門 (導通水路)';
+    } else {
+        detailsEl.innerHTML = `
+            • <b>管內水壓 (電位 V)：</b> <span style="color:#fca5a5;font-weight:700;">${b.V.toFixed(2)} V</span><br>
+            • <b>通過水流量 (電流 I)：</b> <span style="color:#7dd3fc;font-weight:700;">${formatCurrent(b.I_mag)}</span><br>
+            • <b>壓降損耗：</b> ≈ 0.00 V (理想零電阻導水管)
+        `;
+    }
+}
+
+function changeSelectedR(val) {
+    if (!selectedBlock) return;
+    selectedBlock.R = parseFloat(val);
+    buildBlockMesh(selectedBlock);
+    solveNetwork();
+}
+
+function setPumpMode(m) {
+    pumpMode = m;
+    document.getElementById('mode-cont').classList.toggle('active', m === 'continuous');
+    document.getElementById('mode-wind').classList.toggle('active', m === 'windup');
+    document.getElementById('windup-box').style.display = (m === 'windup') ? 'block' : 'none';
+    solveNetwork();
+}
+
+function windUpSpring() {
+    springEnergy = Math.min(1.0, springEnergy + 0.45);
+    document.getElementById('spring-pct').textContent = `${Math.round(springEnergy * 100)}%`;
+    document.getElementById('spring-bar').style.width = `${springEnergy * 100}%`;
+    applySpringScale();
+}
+
+function setCellCount(val) {
+    cellCount = parseInt(val, 10);
+    nominalPumpV = AA_CELL_EMF * cellCount;
+    const rOhm = pumpInternalR() * 1000;
+    document.getElementById('pump-v-txt').textContent = `${cellCount} 顆 = ${nominalPumpV.toFixed(1)} V`;
+    document.getElementById('pump-r-txt').textContent =
+        `內阻 r = ${rOhm.toFixed(2)} Ω ｜ 短路電流 ε/r ≈ ${(nominalPumpV / rOhm).toFixed(1)} A`;
+    blocks.forEach(b => { if (b.addon === 'pump' && b.labelEl) b.labelEl.textContent = `幫浦 +${nominalPumpV.toFixed(1)}V`; });
+    solveNetwork();
+}
+
+function resetCameraView() {
+    camera.position.set(0, 21, 15.5);
+    controls.target.set(0.5, 0, 0);
+}
+
+function clearAllBlocks() {
+    [...blocks].forEach(b => removeBlock(b));
+    selectBlock(null);
+    solveNetwork();
+}
+
+// ============================================================================
+// 9. 動畫迴圈：微觀水粒子運動、螺旋填充物旋轉與指針更新
+// ============================================================================
+const clock = new THREE.Clock();
+const dummyObj = new THREE.Object3D();
+
+// 粒子在分流節點依各支路電流大小加權選擇去向，讓並聯分流比例看得出來
+function pickWeighted(dirs, weights) {
+    let total = 0;
+    for (const w of weights) total += w;
+    let x = Math.random() * total;
+    for (let i = 0; i < dirs.length; i++) {
+        x -= weights[i];
+        if (x <= 0) return dirs[i];
+    }
+    return dirs[dirs.length - 1];
+}
+
+function animate() {
+    requestAnimationFrame(animate);
+    const dt = Math.min(clock.getDelta(), 0.05);
+    const elapsed = clock.getElapsedTime();
+    controls.update();
+
+    if (pumpMode === 'windup' && springEnergy > 0) {
+        const hasFlow = blocks.some(b => b.I_mag > 0.01);
+        if (hasFlow) {
+            // 短路時能量大量轉為熱，彈簧耗盡速度最多快 10 倍
+            let worstHeat = 0;
+            blocks.forEach(b => { if (b.addon === 'pump') worstHeat = Math.max(worstHeat, b.heatRatio || 0); });
+            const drain = 0.04 * (1 + 9 * Math.sqrt(worstHeat));
+            springEnergy = Math.max(0, springEnergy - dt * drain);
+            document.getElementById('spring-pct').textContent = `${Math.round(springEnergy * 100)}%`;
+            document.getElementById('spring-bar').style.width = `${springEnergy * 100}%`;
+            applySpringScale(false);   // 線性縮放，不重解矩陣；檢視面板節流更新
+        }
+    }
+
+    const halfTile = TILE_SIZE / 2;
+    let instIdx = 0;
+    const effMaxV = Math.max(1.5, nominalPumpV);
+
+    for (let bIdx = 0; bIdx < blocks.length; bIdx++) {
+        const b = blocks[bIdx];
+        const shapeDef = PIPE_SHAPES[b.pipeShape];
+        const basePorts = shapeDef.basePorts;
+
+        if (b.baseMat) {
+            const col = pressureToColor(b.V, effMaxV);
+            b.baseMat.color.copy(col);
+            b.baseMat.emissive.copy(col);
+        }
+
+        // 1. 螺旋填充物原地旋轉
+        if (b.rotors.length > 0) {
+            const rotSpeed = visualSpeed(b.I_mag) * (2.0 + b.R * 0.65);
+            for (let k = 0; k < b.rotors.length; k++) {
+                b.rotors[k].rotation.x += rotSpeed * dt * 3.2 * (k % 2 === 0 ? 1 : -1);
+            }
+            if (b.labelEl) b.labelEl.textContent = `R=${b.R.toFixed(1)}kΩ | ΔV=${b.dV.toFixed(2)}V`;
+        }
+
+        // 2. 幫浦手搖曲柄旋轉
+        if (b.addon === 'pump' && b.turbine) {
+            const effV = nominalPumpV * springScale();
+            const spd = b.I_mag > 0.01 ? visualSpeed(b.I_mag) * 3.8 : (effV > 0 ? 0.5 : 0);
+            b.turbine.rotation.z -= spd * dt;
+
+            // 依電池內部發熱 I²r 發紅：開根號讓「接近短路」也看得出來，並加上脈動
+            const h = Math.min(1, Math.sqrt(b.heatRatio || 0));
+            if (b.pumpBodyMat) {
+                const pulse = 0.75 + 0.25 * Math.sin(elapsed * 9);
+                b.pumpBodyMat.color.setRGB(0.2 + 0.55 * h, 0.255 * (1 - h) + 0.05 * h, 0.333 * (1 - h) + 0.03 * h);
+                b.pumpBodyMat.emissive.setRGB(1.0 * h, 0.18 * h, 0.0);
+                b.pumpBodyMat.emissiveIntensity = h * 1.4 * pulse;
+            }
+            if (b.pumpArrowMat) {
+                b.pumpArrowMat.emissive.setRGB(0.85, 0.47 * (1 - h), 0.02 * (1 - h));
+                b.pumpArrowMat.emissiveIntensity = 0.35 + h * 0.9;
+            }
+            if (b.labelEl) {
+                b.labelEl.textContent = h > 0.25
+                    ? `🔥 幫浦 +${effV.toFixed(1)}V ｜ 發熱 ${formatPower(b.heat || 0)}`
+                    : `幫浦 +${effV.toFixed(1)}V`;
+            }
+        }
+
+        // 3. 水壓計與流量計更新
+        if (b.addon === 'pressure' && b.gaugeNeedle) {
+            const ratio = Math.max(0, Math.min(1, b.V / effMaxV));
+            const targetAng = 2.1 - ratio * 4.2;
+            b.gaugeNeedle.rotation.z += (targetAng - b.gaugeNeedle.rotation.z) * 0.15;
+            if (b.labelEl) b.labelEl.textContent = `水壓: ${b.V.toFixed(2)} V`;
+        }
+        if (b.addon === 'flow' && b.turbine) {
+            b.turbine.rotation.z -= visualSpeed(b.I_mag) * dt * 5.5;
+            if (b.labelEl) b.labelEl.textContent = `流量: ${formatCurrent(b.I_mag)}`;
+        }
+
+        // 4. 微觀水粒子推進與方向偏移
+        const inLocalDirs = [], inW = [];
+        const outLocalDirs = [], outW = [];
+        for (let ld = 0; ld < 4; ld++) {
+            if (!basePorts[ld]) continue;
+            const wd = (ld + b.rot) % 4;
+            const fl = b.worldFlows[wd];
+            if (fl < -1e-4) { inLocalDirs.push(ld); inW.push(-fl); }
+            else if (fl > 1e-4) { outLocalDirs.push(ld); outW.push(fl); }
+        }
+
+        const blockWorldPos = gridToWorld(b.gx, b.gz);
+        const blockRotY = -b.rot * (Math.PI / 2);
+        const isResistor = isResistorAddon(b.addon);
+
+        for (let p = 0; p < b.particles.length; p++) {
+            const pt = b.particles[p];
+            const wd = (pt.localDir + b.rot) % 4;
+            const flowOnArm = b.worldFlows[wd];
+            const speed = visualSpeed(flowOnArm) * 1.45;
+
+            if (speed > 1e-3) {
+                if (flowOnArm > 0) {
+                    pt.dist += speed * dt;
+                    if (pt.dist >= halfTile) {
+                        pt.dist = halfTile;
+                        if (shapeDef.isBridge) {
+                            // 雙層跨接管：水平只轉水平 (0<->2)，垂直只轉垂直 (1<->3)
+                            pt.localDir = (pt.localDir + 2) % 4;
+                        } else if (inLocalDirs.length > 0) {
+                            pt.localDir = pickWeighted(inLocalDirs, inW);
+                        } else {
+                            pt.dist = 0;
+                        }
+                    }
+                } else {
+                    pt.dist -= speed * dt;
+                    if (pt.dist <= 0) {
+                        pt.dist = 0;
+                        if (shapeDef.isBridge) {
+                            pt.localDir = (pt.localDir + 2) % 4;
+                        } else if (outLocalDirs.length > 0) {
+                            pt.localDir = pickWeighted(outLocalDirs, outW);
+                        } else {
+                            pt.dist = halfTile;
+                        }
+                    }
+                }
+            } else {
+                // 無水流時：自由電子原地隨機布朗熱運動
+                pt.dist = Math.max(0.05, Math.min(halfTile - 0.05, pt.dist + Math.sin(elapsed * 5 + pt.phase) * 0.002));
+            }
+
+            const lDirObj = DIRS[pt.localDir];
+            let lx = lDirObj.dx * pt.dist;
+            let lz = lDirObj.dz * pt.dist;
+            let ly = 0;
+
+            if (isResistor) {
+                const amp = Math.min(0.28, 0.09 + b.R * 0.038);
+                const freq = 9.0 + b.R * 2.5;
+                const ph = pt.dist * freq + pt.phase + elapsed * (visualSpeed(b.I_mag) * 4.5 + 0.8);
+                const perp = Math.sin(ph) * amp;
+                ly = Math.cos(ph) * amp;
+                lx += (-lDirObj.dz) * perp;
+                lz += (lDirObj.dx) * perp;
+            } else {
+                const jitter = 0.018 * Math.sin(elapsed * 6.0 + pt.phase);
+                const perp = Math.cos(pt.radialAngle) * pt.radialR + jitter;
+                ly = Math.sin(pt.radialAngle) * pt.radialR - jitter;
+                lx += (-lDirObj.dz) * perp;
+                lz += (lDirObj.dx) * perp;
+            }
+
+            // 雙層跨接管的 Z 軸分支粒子沿拱橋高度抬升
+            if (shapeDef.isBridge && (pt.localDir === 1 || pt.localDir === 3)) {
+                const archProgress = 1.0 - (pt.dist / halfTile);
+                ly += Math.sin(archProgress * Math.PI * 0.5) * 0.62;
+            }
+
+            const cosR = Math.cos(blockRotY);
+            const sinR = Math.sin(blockRotY);
+            const wx = blockWorldPos.x + (lx * cosR + lz * sinR);
+            const wz = blockWorldPos.z + (-lx * sinR + lz * cosR);
+            const wy = 0.55 + ly;
+
+            dummyObj.position.set(wx, wy, wz);
+            dummyObj.updateMatrix();
+            particleInstMesh.setMatrixAt(instIdx++, dummyObj.matrix);
+        }
+
+        if (b.labelEl && b.meshGroup && showFloatingLabels) {
+            const wp = new THREE.Vector3();
+            b.meshGroup.getWorldPosition(wp);
+            wp.y += (b.addon === 'pressure') ? 1.55 : 0.95;
+            wp.project(camera);
+            b.labelEl.style.left = `${(wp.x * 0.5 + 0.5) * window.innerWidth}px`;
+            b.labelEl.style.top = `${(-(wp.y * 0.5) + 0.5) * window.innerHeight}px`;
+        }
+    }
+
+    dummyObj.position.set(0, -999, 0);
+    dummyObj.updateMatrix();
+    for (let k = instIdx; k < MAX_BLOCKS * PARTICLES_PER_BLOCK; k++) {
+        particleInstMesh.setMatrixAt(k, dummyObj.matrix);
+    }
+    particleInstMesh.instanceMatrix.needsUpdate = true;
+
+    renderer.render(scene, camera);
+}
+
+// ============================================================================
+// 10. 預設教學迴路載入 (Presets)
+// ============================================================================
+function loadPreset(name, btnEl) {
+    if (btnEl) {
+        document.querySelectorAll('.preset-group .btn').forEach(b => {
+            if (b.id !== 'btn-toggle-labels') b.classList.remove('active');
+        });
+        btnEl.classList.add('active');
+    }
+
+    clearAllBlocks();
+
+    if (name === 'series') {
+        // 串聯迴路：幫浦(3V) -> 水壓計(3.00V) -> 2kΩ密螺旋 -> 水壓計(1.00V) -> 1kΩ疏螺旋 -> 水壓計(0.00V) -> 水閥門 -> 流量計
+        createOrUpdateBlock(-2, -1, 'pipe_corner', 'none', 0);
+        createOrUpdateBlock(-1, -1, 'pipe_straight', 'pressure', 0);
+        const r1 = createOrUpdateBlock(0, -1, 'pipe_straight', 'res_med', 0);
+        createOrUpdateBlock(1, -1, 'pipe_straight', 'pressure', 0);
+        createOrUpdateBlock(2, -1, 'pipe_straight', 'res_low', 0);
+        createOrUpdateBlock(3, -1, 'pipe_straight', 'pressure', 0);
+        createOrUpdateBlock(4, -1, 'pipe_corner', 'none', 1);
+
+        createOrUpdateBlock(-2, 0, 'pipe_straight', 'pump', 3); // 朝北推水
+        createOrUpdateBlock(-2, 1, 'pipe_corner', 'none', 3);
+
+        createOrUpdateBlock(4, 0, 'pipe_straight', 'flow', 1);
+        createOrUpdateBlock(4, 1, 'pipe_corner', 'none', 2);
+
+        createOrUpdateBlock(-1, 1, 'pipe_straight', 'none', 0);
+        createOrUpdateBlock(0, 1, 'pipe_straight', 'valve', 0); // 底部加裝水閥門開關
+        for (let x = 1; x <= 3; x++) {
+            createOrUpdateBlock(x, 1, 'pipe_straight', 'none', 0);
+        }
+        selectBlock(r1);
+    }
+    else if (name === 'parallel') {
+        // 並聯與十字連通管示範
+        createOrUpdateBlock(-3, -1, 'pipe_corner', 'none', 0);
+        createOrUpdateBlock(-2, -1, 'pipe_straight', 'flow', 0);
+        createOrUpdateBlock(-1, -1, 'pipe_cross', 'pressure', 0); // 十字連通管直接加裝水壓計！
+
+        // 上分支 (z=-2)
+        createOrUpdateBlock(-1, -2, 'pipe_corner', 'none', 0);
+        createOrUpdateBlock(0, -2, 'pipe_straight', 'res_low', 0);
+        createOrUpdateBlock(1, -2, 'pipe_straight', 'flow', 0);
+        createOrUpdateBlock(2, -2, 'pipe_corner', 'none', 1);
+
+        // 中分支 (z=-1)
+        const rMed = createOrUpdateBlock(0, -1, 'pipe_straight', 'res_med', 0);
+        createOrUpdateBlock(1, -1, 'pipe_straight', 'flow', 0);
+        createOrUpdateBlock(2, -1, 'pipe_cross', 'pressure', 0); // 右側匯流十字管
+
+        // 下分支 (z=0)
+        createOrUpdateBlock(-1, 0, 'pipe_corner', 'none', 3);
+        createOrUpdateBlock(0, 0, 'pipe_straight', 'res_high', 0);
+        createOrUpdateBlock(1, 0, 'pipe_straight', 'flow', 0);
+        createOrUpdateBlock(2, 0, 'pipe_corner', 'none', 2);
+
+        // 右側與底部回流
+        createOrUpdateBlock(3, -1, 'pipe_corner', 'none', 1);
+        createOrUpdateBlock(3, 0, 'pipe_straight', 'none', 1);
+        createOrUpdateBlock(3, 1, 'pipe_corner', 'none', 2);
+
+        createOrUpdateBlock(-3, 0, 'pipe_straight', 'pump', 3);
+        createOrUpdateBlock(-3, 1, 'pipe_corner', 'none', 3);
+
+        for (let x = -2; x <= 2; x++) {
+            createOrUpdateBlock(x, 1, 'pipe_straight', 'none', 0);
+        }
+        selectBlock(rMed);
+    }
+}
+
+loadPreset('series');
+animate();
+</script>
+</body>
+</html>
