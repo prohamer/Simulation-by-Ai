@@ -1,5 +1,4 @@
-<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
-<title>繩波實驗台</title>
+<title>Wavelab</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -171,6 +170,15 @@ canvas.freehand{width:100%;height:130px;display:block;border-radius:8px;backgrou
   #formula .eq{font-size:11.5px;line-height:1.55}
   #formula .say{font-size:13px}
 }
+/* 觸控裝置（iPad 等）：整體高度降約 15%，避開瀏覽器網址列與分頁列 */
+@media (pointer: coarse) and (min-width: 901px){
+  html,body{height:auto}
+  #app{height:85vh;height:85dvh}
+}
+@media (pointer: coarse) and (max-width: 900px){
+  #stage{height:53vh;height:53dvh;min-height:340px}
+  #app.nopanel #stage{height:85vh;height:85dvh}
+}
 /* 觸控裝置（iPad 等）：放大可點範圍、避免 iOS 對焦輸入框時自動放大 */
 @media (pointer: coarse){
   .tb{height:44px;min-width:44px;padding:0 12px;font-size:14px}
@@ -238,6 +246,7 @@ canvas.freehand{width:100%;height:130px;display:block;border-radius:8px;backgrou
       <button class="tb" data-act="view" data-v="front" type="button">正視</button>
       <button class="tb" data-act="view" data-v="oblique" type="button">斜視</button>
       <button class="tb" data-act="view" data-v="top" type="button">俯視</button>
+      <button class="tb" id="bLock" data-act="lockView" type="button" title="鎖定／解鎖視角旋轉縮放（L）">🔓</button>
       <span class="tclock" id="clock">t = 0.000 s</span>
     </div>
     <div id="toast" hidden></div>
@@ -361,7 +370,7 @@ function buildSeq(src, base = 0) {
   return { kind: 'curve', times, vals, total: end };
 }
 function heldVal(src, s) {
-  if (s.kind === 'custom' || s.kind === 'hold' || s.kind === 'return') { const v = driveVal(src, s, S.t); return v === null ? 0 : v; }
+  if (s.kind) { const v = driveVal(src, s, S.t); return v === null ? 0 : v; }
   return 0;
 }
 const seqDone = (src, s) => s.kind === 'hold' || (s.kind === 'custom' && s.seq && !src.custom.loop && S.t - s.t0 >= s.seq.total);
@@ -428,7 +437,7 @@ function allSourceRefs() {
 const RT = new WeakMap();
 function buildRT(r) {
   const N = clamp(Math.round(r.L * 60), 120, 600), dx = r.L / N;
-  const R = { L: r.L, N, dx, y: new Float64Array(N + 1), yp: new Float64Array(N + 1), yn: new Float64Array(N + 1), c2: new Float64Array(N + 1), cmax: 1 };
+  const R = { L: r.L, N, dx, y: new Float64Array(N + 1), yp: new Float64Array(N + 1), yn: new Float64Array(N + 1), c2: new Float64Array(N + 1), cmax: 1, h: 0, tSim: S.t };
   RT.set(r, R); updateC2(r); return R;
 }
 function rt(r) { const R = RT.get(r); return (!R || R.L !== r.L) ? buildRT(r) : R; }
@@ -461,15 +470,26 @@ function histVal(t) {
   const u = (t - T[lo]) / (T[hi] - T[lo] || 1);
   return HIST.v[lo] + (HIST.v[hi] - HIST.v[lo]) * u;
 }
+// 固定時間步長：與螢幕更新率無關（iPad ProMotion 會動態改變幀率，變動步長會讓差分法發散）
 function stepRope(r, ri, t0, dur) {
   const R = rt(r), N = R.N;
-  let n = Math.ceil(dur * R.cmax / (0.9 * R.dx)); n = clamp(n, 1, 900);
-  const h = dur / n, lam = h * h / (R.dx * R.dx), b = r.damping * h / 2, ib = 1 / (1 + b);
+  const h = Math.min(0.85 * R.dx / R.cmax, 0.004);
+  if (R.h && Math.abs(h - R.h) > 1e-12) {
+    // 參數改變導致步長改變時，保持各點速度不變
+    const k = h / R.h; for (let i = 0; i <= N; i++) R.yp[i] = R.y[i] - (R.y[i] - R.yp[i]) * k;
+  }
+  R.h = h;
+  if (!(R.tSim <= t0 + dur) || R.tSim < t0 - 1) R.tSim = t0;
+  let n = Math.floor((t0 + dur - R.tSim) / h + 1e-9);
+  if (n > 6000) { R.tSim = t0 + dur - 6000 * h; n = 6000; }
+  if (n <= 0) return;
+  const tBase = R.tSim;
+  const lam = h * h / (R.dx * R.dx), b = r.damping * h / 2, ib = 1 / (1 + b);
   const drv = r.sources.map((src, j) => ({ e: eff(r, j), idx: Math.round(clamp(src.pos, 0, 1) * N) }));
   let y = R.y, yp = R.yp, yn = R.yn; const c2 = R.c2;
   const chL = Math.sqrt(c2[0]) * h, chR = Math.sqrt(c2[N]) * h;
   for (let k = 0; k < n; k++) {
-    const t = t0 + (k + 1) * h;
+    const t = tBase + (k + 1) * h;
     for (let i = 1; i < N; i++) yn[i] = (2 * y[i] - (1 - b) * yp[i] + lam * c2[i] * (y[i + 1] - 2 * y[i] + y[i - 1])) * ib;
     boundary(r.leftEnd, yn, y, 0, 1, chL, R.dx);
     boundary(r.rightEnd, yn, y, N, N - 1, chR, R.dx);
@@ -477,7 +497,7 @@ function stepRope(r, ri, t0, dur) {
     if (ri === 0 && drv.length) histPush(t, yn[drv[0].idx]);
     const tmp = yp; yp = y; y = yn; yn = tmp;
   }
-  R.y = y; R.yp = yp; R.yn = yn;
+  R.y = y; R.yp = yp; R.yn = yn; R.tSim = tBase + n * h;
   let bad = false;
   for (let i = 0; i <= N; i += 7) if (!(Math.abs(y[i]) < 40)) { bad = true; break; }
   if (bad) { y.fill(0); yp.fill(0); toast('數值發散，已重設「' + r.name + '」'); }
@@ -490,7 +510,7 @@ function advance(dt) {
 }
 function resetWaves() {
   S.t = 0; HIST.t.length = 0; HIST.v.length = 0; S.formula.tStart = null; CH.t.length = CH.a.length = CH.b.length = 0;
-  S.ropes.forEach(r => { const R = rt(r); R.y.fill(0); R.yp.fill(0); R.yn.fill(0); r.sources.forEach(src => { const s = srt(src); s.kind = null; s.dragging = false; }); });
+  S.ropes.forEach(r => { const R = rt(r); R.y.fill(0); R.yp.fill(0); R.yn.fill(0); R.tSim = 0; r.sources.forEach(src => { const s = srt(src); s.kind = null; s.dragging = false; }); });
 }
 
 /* =========================================================
@@ -983,7 +1003,14 @@ function setPanel(open) {
   const b = $('#bTool'); b.classList.toggle('on', !open); b.setAttribute('aria-pressed', String(open));
   try { localStorage.setItem('rwl.panel', open ? '1' : '0'); } catch (e) {}
 }
-let curView = 'front';
+let curView = 'front', viewLocked = false;
+function setViewLock(on) {
+  viewLocked = on;
+  controls.enabled = !on;
+  const b = $('#bLock');
+  b.textContent = on ? '🔒' : '🔓';
+  b.classList.toggle('on', on);
+}
 function fitView(kind = 'front') {
   curView = kind;
   const xa = LAY.x0 - 0.8, xb = LAY.x0 + LAY.maxL + 0.8, ya = LAY.bottom - 0.2, yb = LAY.top + 0.3;
@@ -1036,7 +1063,7 @@ renderer.domElement.addEventListener('pointerdown', ev => {
   if (S.paused) { toast('模擬暫停中，按 ▶ 播放後再拉動'); return; }
   controls.enabled = false;
   const as = axisScreen(r, j);
-  drag = { r, j, e, as, x: ev.clientX, y: ev.clientY, v0: e.s.kind === 'manual' ? (driveVal(e.src, e.s, S.t) || 0) : 0, id: ev.pointerId };
+  drag = { r, j, e, as, x: ev.clientX, y: ev.clientY, v0: heldVal(e.src, e.s), id: ev.pointerId };
   e.s.kind = 'manual'; e.s.dragging = true; e.s.manual = drag.v0; e.s.t0 = S.t;
   renderer.domElement.setPointerCapture(ev.pointerId);
 });
@@ -1069,10 +1096,10 @@ renderer.domElement.addEventListener('pointermove', ev => {
   drag.e.s.manual = clamp(drag.v0 + (dx * a.ax + dy * a.ay) / l2, -1.6, 1.6);
 });
 const endDrag = () => {
-  if (posDrag) { posDrag = null; controls.enabled = true; renderer.domElement.style.cursor = ''; if (S.tab === 'source' || S.tab === 'medium') renderPanel(); return; }
+  if (posDrag) { posDrag = null; controls.enabled = !viewLocked; renderer.domElement.style.cursor = ''; if (S.tab === 'source' || S.tab === 'medium') renderPanel(); return; }
   if (!drag) return;
-  const s = drag.e.s; s.dragging = false; s.relT = S.t; s.relV = s.manual;
-  drag = null; controls.enabled = true;
+  const s = drag.e.s; s.dragging = false; s.kind = 'hold'; s.holdV = s.manual; s.t0 = S.t;
+  drag = null; controls.enabled = !viewLocked;
 };
 renderer.domElement.addEventListener('pointerup', endDrag);
 renderer.domElement.addEventListener('pointercancel', endDrag);
@@ -1092,7 +1119,7 @@ function enterDraw(r, j) {
 }
 function exitDraw() {
   if (!DR.on) return;
-  DR.on = false; overlay.classList.remove('on'); controls.enabled = true;
+  DR.on = false; overlay.classList.remove('on'); controls.enabled = !viewLocked;
   $('#drawBar').hidden = true; $('#scn').hidden = false;
   const src = DR.r.sources[DR.j], s = srt(src);
   if (src.custom.arrows.length) { s.armed = true; toast('已備妥 ' + src.custom.arrows.length + ' 支箭頭，按 ▶ 恢復模擬即產生波'); }
@@ -1236,7 +1263,7 @@ function drawChart() {
    ========================================================= */
 let last = performance.now(), frameN = 0;
 function loop(now) {
-  const real = Math.min(0.05, (now - last) / 1000); last = now; frameN++;
+  const real = clamp((now - last) / 1000, 0, 0.05); last = now; frameN++;
   if (!S.paused && !DR.on) {
     advance(real * S.timeScale);
     chartSample();
@@ -1509,7 +1536,8 @@ function srcCard(r, j) {
       <p class="hint">週期數 0 代表持續振動；按「停止」會在完成目前這次振動後才停。</p>
       <div class="row"><button type="button" class="btn pri" data-act="fire" data-j="${j}">開始</button><button type="button" class="btn" data-act="stop" data-j="${j}">停止</button></div>`;
   } else if (src.mode === 'manual') {
-    h += `<p class="hint">播放中，在黑板上按住此波源的發亮握把，${r.pol === 'transverse' ? '上下' : '左右'}拖曳即可拉扯繩子；放手後波源會回到原位。</p>`;
+    h += `<p class="hint">播放中，在黑板上按住此波源的發亮握把，${r.pol === 'transverse' ? '上下' : '左右'}拖曳即可拉扯繩子。放手後波源會停在放手的位置，下次再從那裡拉起。</p>
+      <div class="row"><button type="button" class="btn" data-act="returnEq" data-j="${j}">回到平衡位置</button></div>`;
   } else {
     const c = src.custom;
     h += `<div class="row"><label>方式</label>${seg(b + 'custom.kind', c.kind, [['arrows', '箭頭'], ['draw', '手繪曲線']], 'panel')}</div>`;
@@ -1633,6 +1661,7 @@ document.addEventListener('click', ev => {
     case 'ghost': captureGhost(); break;
     case 'ghostClear': clearGroup(ghosts); break;
     case 'view': fitView(t.dataset.v); break;
+    case 'lockView': setViewLock(!viewLocked); break;
     case 'preset': loadPreset(t.dataset.id); break;
     case 'sel': S.sel = +t.dataset.i; renderPanel(); break;
     case 'addRope': {
@@ -1765,6 +1794,7 @@ document.addEventListener('keydown', ev => {
   else if (ev.key === 'f' || ev.key === 'F') setFrozen(!S.frozen);
   else if (ev.key === 'g' || ev.key === 'G') captureGhost();
   else if (ev.key === 't' || ev.key === 'T') setPanel($('#app').classList.contains('nopanel'));
+  else if (ev.key === 'l' || ev.key === 'L') setViewLock(!viewLocked);
   else if (ev.key === 'Escape' && DR.on) exitDraw();
 });
 
@@ -1778,5 +1808,3 @@ if (window.innerWidth < 900) { $('#scn').classList.add('collapsed'); $('#scnTogg
 if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { labelCache.clear(); buildScene(); });
 requestAnimationFrame(loop);
 </script>
-
-</body></html>
