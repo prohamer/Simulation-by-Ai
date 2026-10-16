@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"><meta name="apple-mobile-web-app-capable" content="yes">
-    <title>PipemanV3.7.2</title>
+    <title>PipemanV3.7.3</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
     <style>
@@ -547,7 +547,7 @@
 <!-- Top Bar -->
 <div class="top-bar">
     <div class="title-group">
-        <h1>水路與電流類比v3.7.2 <button class="help-btn" onclick="openHelp()" title="使用說明" aria-label="使用說明">?</button></h1>
+        <h1>水路與電流類比v3.7.3 <button class="help-btn" onclick="openHelp()" title="使用說明" aria-label="使用說明">?</button></h1>
         <p>水流＝電流（正電荷的流動方向）｜ 幫浦＝3 號電池 (1.5 V、內阻 0.2 Ω) ｜ 可切換電子流觀點</p>
     </div>
     <div class="preset-group">
@@ -822,7 +822,8 @@
           <li><b>多選</b>：按「☑️ 多選模式」（或按住 Shift）點選多個元件；空白處拖曳可框選。拖曳任一已選元件整組移動，按 R 整組旋轉。</li>
           <li><b>複製</b>：「📄 複製」或 Ctrl+C／Ctrl+V。綠色預覽表示可以放，紅色表示和現有管件重疊。</li>
           <li><b>復原／重做</b>：↶／↷ 或 Ctrl+Z／Ctrl+Y。</li>
-          <li><b>📚 切換教學情境</b>：一鍵載入串聯、並聯、三組比較、短路對照、電表正確與錯誤接法、電位高度等情境（會取代目前畫布，可按復原回來）。</li>
+          <li><b>📚 切換教學情境</b>：分成「基本電路」「電表」「電位高度」三組，一鍵載入串聯、並聯、三組比較、短路對照、電表正確與錯誤接法、電位高度等情境。情境會取代目前的畫布，並<b>一併設定該情境的條件</b>（電池數、電池內阻、電表精度），載入時畫面下方會提示；按「復原」可連同原本的電路與設定一起回去。</li>
+          <li><b>含開關的情境</b>：部分電表錯誤示範一開始閥門是關閉的，先讓學生預測，再點選閥門打開（接通電路）觀察結果。</li>
           <li><b>➕ 加入電路範本</b>：把範本加到目前畫布上。框選自己的電路後可「⭐ 存成我的範本」。</li>
           <li><b>💾 匯出／📂 匯入</b>：把課前準備好的電路存成 .json 檔帶到教室。畫布也會自動存在瀏覽器裡，重新開啟時自動還原。</li>
         </ul>
@@ -2328,15 +2329,15 @@ function commitSnapshot(snap) {
 function undo() {
     if (!undoStack.length) { showToast('沒有可以復原的步驟'); return; }
     cancelStamp();
-    redoStack.push(serializeState());
-    restoreState(undoStack.pop());
+    redoStack.push(serializeState(true));
+    restoreState(undoStack.pop(), true);   // 只有含設定的快照（例如切換情境前）才會還原設定
     updateUndoButtons();
 }
 function redo() {
     if (!redoStack.length) { showToast('沒有可以重做的步驟'); return; }
     cancelStamp();
-    undoStack.push(serializeState());
-    restoreState(redoStack.pop());
+    undoStack.push(serializeState(true));
+    restoreState(redoStack.pop(), true);
     updateUndoButtons();
 }
 function updateUndoButtons() {
@@ -2784,13 +2785,32 @@ function onSceneSelect(sel) {
     sel.blur();
     if (v) loadScene(v);
 }
+// 情境的教學條件：沒有指定的項目一律回到預設值，確保每次載入結果都一樣
+const DEFAULT_SCENE_SETTINGS = { wireR: 0.001, cellR: 0.2, flowR: 0.001, voltSens: 1000, ampR50: 2, cellCount: 2 };
+function sceneSettings(s) { return Object.assign({}, DEFAULT_SCENE_SETTINGS, s.settings || {}); }
+function describeSceneSettings(st, hasMeters) {
+    const parts = [`${st.cellCount} 顆電池（${(AA_CELL_EMF * st.cellCount).toFixed(1)} V）`];
+    parts.push(st.cellR <= 0.002 ? '理想電池（內阻≈0）' : st.cellR >= 0.8 ? '舊電池' : `新電池（每顆 ${formatOhm(st.cellR)}）`);
+    const kinds = hasMeters || {};
+    if (kinds.volt) parts.push(st.voltSens >= 1e6 ? '近理想伏特計' : `伏特計 ${formatOhm(st.voltSens)}/V`);
+    if (kinds.amp) parts.push(st.ampR50 <= 0.05 ? '近理想安培計' : `安培計 50 mA 檔 ${formatOhm(st.ampR50)}`);
+    return parts.join('、');
+}
 function loadScene(key) {
     const s = SCENES[key];
     if (!s) return;
     cancelStamp();
-    if (s.preset) { loadPreset(s.preset); fitCameraToBlocks(); return; }
+    const before = serializeState(true);            // 復原時連同設定一起還原
+    applySettingsFromState(sceneSettings(s));
+    if (s.preset) {
+        loadPreset(s.preset, null, false);
+        pushUndo(before);
+        fitCameraToBlocks();
+        showToast(`📚 ${s.name}｜條件：${describeSceneSettings(sceneSettings(s), false)}`);
+        return;
+    }
     const items = normalizeItems((s.tpl ? TEMPLATES[s.tpl].make() : s.make()).map(i => ({ ...i })));
-    clearAllBlocks(true);
+    clearAllBlocks(false);
     let w = 0, h = 0;
     items.forEach(i => { w = Math.max(w, i.dx); h = Math.max(h, i.dz); });
     const ox = -Math.floor(w / 2), oz = -Math.floor(h / 2);
@@ -2798,7 +2818,13 @@ function loadScene(key) {
     if (s.after) s.after(ox, oz);
     selectBlock(null);
     solveNetwork();
+    pushUndo(before);
     fitCameraToBlocks();
+    const hasMeters = {
+        volt: blocks.some(b => b.addon === 'voltmeter') || probes.some(m => m.kind === 'volt'),
+        amp: blocks.some(b => b.addon === 'ammeter') || probes.some(m => m.kind === 'amp')
+    };
+    showToast(`📚 ${s.name}｜條件：${describeSceneSettings(sceneSettings(s), hasMeters)}${s.tip ? '｜' + s.tip : ''}`);
 }
 
 // 畫布中可看見的寬度比例（寬螢幕扣掉左右面板）
@@ -4361,6 +4387,73 @@ animateHooks.push(() => {
 });
 
 // ============================================================================
+// 18. 教學情境（含老師調整過的電路與條件）
+//   每個情境可帶自己的條件（電池數、內阻、電表精度）；沒指定的項目回到預設值。
+//   載入時畫面下方會提示條件；按「復原」可連同原本的設定一起回去。
+// ============================================================================
+const SCENE_DATA = {
+    par10x: [{"dx":-2,"dz":-1,"pipeShape":"pipe_corner","addon":"none","rot":0},{"dx":-2,"dz":0,"pipeShape":"pipe_straight","addon":"pump","rot":3},{"dx":-2,"dz":1,"pipeShape":"pipe_straight","addon":"flow","rot":1},{"dx":-2,"dz":2,"pipeShape":"pipe_corner","addon":"none","rot":3},{"dx":-1,"dz":-1,"pipeShape":"pipe_tee","addon":"none","rot":0},{"dx":0,"dz":-1,"pipeShape":"pipe_straight","addon":"res_med","rot":0,"R":10},{"dx":1,"dz":-1,"pipeShape":"pipe_straight","addon":"flow","rot":0},{"dx":2,"dz":-1,"pipeShape":"pipe_tee","addon":"none","rot":0},{"dx":-1,"dz":0,"pipeShape":"pipe_tee","addon":"none","rot":3},{"dx":0,"dz":0,"pipeShape":"pipe_straight","addon":"res_med","rot":0,"R":100},{"dx":1,"dz":0,"pipeShape":"pipe_straight","addon":"flow","rot":0},{"dx":2,"dz":0,"pipeShape":"pipe_tee","addon":"none","rot":1},{"dx":-1,"dz":1,"pipeShape":"pipe_corner","addon":"none","rot":3},{"dx":0,"dz":1,"pipeShape":"pipe_straight","addon":"res_med","rot":0,"R":1000},{"dx":1,"dz":1,"pipeShape":"pipe_straight","addon":"flow","rot":0},{"dx":2,"dz":1,"pipeShape":"pipe_corner","addon":"none","rot":2},{"dx":3,"dz":-1,"pipeShape":"pipe_corner","addon":"none","rot":1},{"dx":3,"dz":0,"pipeShape":"pipe_straight","addon":"none","rot":1},{"dx":3,"dz":1,"pipeShape":"pipe_straight","addon":"none","rot":1},{"dx":3,"dz":2,"pipeShape":"pipe_corner","addon":"none","rot":2},{"dx":-1,"dz":2,"pipeShape":"pipe_straight","addon":"none","rot":0},{"dx":0,"dz":2,"pipeShape":"pipe_straight","addon":"none","rot":0},{"dx":1,"dz":2,"pipeShape":"pipe_straight","addon":"valve","rot":0,"valveOpen":true},{"dx":2,"dz":2,"pipeShape":"pipe_straight","addon":"none","rot":0}],
+    ampAcrossR: [{"dx":1,"dz":1,"pipeShape":"pipe_corner","addon":"none","rot":2},{"dx":0,"dz":-1,"pipeShape":"pipe_straight","addon":"res_med","rot":0,"R":10},{"dx":-1,"dz":-2,"pipeShape":"pipe_corner","addon":"none","rot":0},{"dx":-1,"dz":0,"pipeShape":"pipe_straight","addon":"pump","rot":3},{"dx":1,"dz":0,"pipeShape":"pipe_straight","addon":"flow","rot":1},{"dx":-1,"dz":1,"pipeShape":"pipe_corner","addon":"none","rot":3},{"dx":0,"dz":1,"pipeShape":"pipe_straight","addon":"valve","rot":0,"valveOpen":false},{"dx":1,"dz":-2,"pipeShape":"pipe_corner","addon":"none","rot":1},{"dx":0,"dz":-2,"pipeShape":"pipe_straight","addon":"ammeter","rot":0,"range":1},{"dx":1,"dz":-1,"pipeShape":"pipe_tee","addon":"none","rot":1},{"dx":-1,"dz":-1,"pipeShape":"pipe_tee","addon":"none","rot":3}],
+    ampCompare: [{"dx":1,"dz":2,"pipeShape":"pipe_corner","addon":"none","rot":2},{"dx":0,"dz":-1,"pipeShape":"pipe_straight","addon":"res_med","rot":0,"R":10},{"dx":1,"dz":-2,"pipeShape":"pipe_corner","addon":"none","rot":1},{"dx":-1,"dz":0,"pipeShape":"pipe_straight","addon":"pump","rot":3},{"dx":1,"dz":0,"pipeShape":"pipe_straight","addon":"flow","rot":1},{"dx":-1,"dz":-2,"pipeShape":"pipe_corner","addon":"none","rot":0},{"dx":0,"dz":2,"pipeShape":"pipe_straight","addon":"none","rot":0},{"dx":-1,"dz":2,"pipeShape":"pipe_corner","addon":"none","rot":3},{"dx":0,"dz":-2,"pipeShape":"pipe_straight","addon":"ammeter","rot":0,"range":1},{"dx":1,"dz":-1,"pipeShape":"pipe_tee","addon":"none","rot":1},{"dx":-1,"dz":-1,"pipeShape":"pipe_tee","addon":"none","rot":3},{"dx":-1,"dz":1,"pipeShape":"pipe_straight","addon":"valve","rot":1,"valveOpen":false},{"dx":1,"dz":1,"pipeShape":"pipe_straight","addon":"ammeter","rot":1,"range":2}],
+    voltSeries: [{"dx":-1,"dz":-1,"pipeShape":"pipe_corner","addon":"none","rot":0},{"dx":0,"dz":-1,"pipeShape":"pipe_straight","addon":"res_med","rot":0,"R":10},{"dx":1,"dz":-1,"pipeShape":"pipe_corner","addon":"none","rot":1},{"dx":-1,"dz":0,"pipeShape":"pipe_straight","addon":"pump","rot":3},{"dx":1,"dz":0,"pipeShape":"pipe_straight","addon":"voltmeter","rot":1,"range":0},{"dx":-1,"dz":1,"pipeShape":"pipe_corner","addon":"none","rot":3},{"dx":0,"dz":1,"pipeShape":"pipe_straight","addon":"valve","rot":0,"valveOpen":false},{"dx":1,"dz":1,"pipeShape":"pipe_corner","addon":"none","rot":2}],
+    heightSeries: [{"dx":-2,"dz":-1,"pipeShape":"pipe_corner","addon":"none","rot":0},{"dx":-1,"dz":-1,"pipeShape":"pipe_straight","addon":"res_med","rot":0,"R":20},{"dx":0,"dz":-1,"pipeShape":"pipe_straight","addon":"none","rot":0},{"dx":1,"dz":-1,"pipeShape":"pipe_straight","addon":"res_med","rot":0,"R":10},{"dx":2,"dz":-1,"pipeShape":"pipe_corner","addon":"none","rot":1},{"dx":-2,"dz":0,"pipeShape":"pipe_straight","addon":"pump","rot":3},{"dx":2,"dz":0,"pipeShape":"pipe_straight","addon":"flow","rot":1},{"dx":-2,"dz":1,"pipeShape":"pipe_corner","addon":"none","rot":3},{"dx":-1,"dz":1,"pipeShape":"pipe_straight","addon":"none","rot":0},{"dx":0,"dz":1,"pipeShape":"pipe_straight","addon":"valve","rot":0,"valveOpen":true},{"dx":1,"dz":1,"pipeShape":"pipe_straight","addon":"none","rot":0},{"dx":2,"dz":1,"pipeShape":"pipe_corner","addon":"none","rot":2}],
+    heightCompare: [{"dx":-7,"dz":-1,"pipeShape":"pipe_corner","addon":"none","rot":0},{"dx":-6,"dz":-1,"pipeShape":"pipe_straight","addon":"res_med","rot":0,"R":10},{"dx":-5,"dz":-1,"pipeShape":"pipe_corner","addon":"none","rot":1},{"dx":-7,"dz":0,"pipeShape":"pipe_straight","addon":"pump","rot":3},{"dx":-5,"dz":0,"pipeShape":"pipe_straight","addon":"flow","rot":1},{"dx":-7,"dz":1,"pipeShape":"pipe_corner","addon":"none","rot":3},{"dx":-6,"dz":1,"pipeShape":"pipe_straight","addon":"valve","rot":0,"valveOpen":true},{"dx":-5,"dz":1,"pipeShape":"pipe_corner","addon":"none","rot":2},{"dx":-1,"dz":-1,"pipeShape":"pipe_corner","addon":"none","rot":0},{"dx":0,"dz":-1,"pipeShape":"pipe_straight","addon":"res_med","rot":0,"R":10},{"dx":1,"dz":-1,"pipeShape":"pipe_corner","addon":"none","rot":1},{"dx":-1,"dz":0,"pipeShape":"pipe_straight","addon":"pump","rot":3},{"dx":1,"dz":0,"pipeShape":"pipe_straight","addon":"flow","rot":1},{"dx":-1,"dz":1,"pipeShape":"pipe_corner","addon":"none","rot":3},{"dx":0,"dz":1,"pipeShape":"pipe_straight","addon":"valve","rot":0,"valveOpen":true},{"dx":2,"dz":1,"pipeShape":"pipe_corner","addon":"none","rot":2},{"dx":5,"dz":-1,"pipeShape":"pipe_corner","addon":"none","rot":0},{"dx":6,"dz":-1,"pipeShape":"pipe_straight","addon":"none","rot":0},{"dx":7,"dz":-1,"pipeShape":"pipe_corner","addon":"none","rot":1},{"dx":5,"dz":0,"pipeShape":"pipe_straight","addon":"pump","rot":3},{"dx":7,"dz":0,"pipeShape":"pipe_straight","addon":"flow","rot":1},{"dx":5,"dz":1,"pipeShape":"pipe_corner","addon":"none","rot":3},{"dx":6,"dz":1,"pipeShape":"pipe_straight","addon":"valve","rot":0,"valveOpen":true},{"dx":7,"dz":1,"pipeShape":"pipe_corner","addon":"none","rot":2}]
+};
+const _sceneItems = k => () => SCENE_DATA[k].map(i => ({ ...i }));
+const _heightOn = () => { if (!heightMode) setHeightMode(true, false); };
+
+// 老師調整後的情境（取代或新增）
+SCENES.par10x = {
+    group: '基本電路', name: '並聯分流：10／100／1000 Ω（電流 100 : 10 : 1）',
+    make: _sceneItems('par10x'), settings: {"wireR": 0.001, "cellR": 0.2, "flowR": 0.001, "voltSens": 1000, "ampR50": 2, "cellCount": 2},
+    tip: '三條支路電壓相同，電流與電阻成反比'
+};
+SCENES.voltSeries = {
+    group: '電表', name: '錯誤示範：伏特計串聯（含開關）',
+    make: _sceneItems('voltSeries'), settings: {"wireR": 0.001, "cellR": 0.001, "flowR": 0.001, "voltSens": 20000, "ampR50": 0.02, "cellCount": 2},
+    tip: '先讀數，再打開閥門（開關）比較'
+};
+SCENES.ampAcrossR = {
+    group: '電表', name: '錯誤示範：安培計並聯在電阻兩端（含開關）',
+    make: _sceneItems('ampAcrossR'), settings: {"wireR": 0.001, "cellR": 0.2, "flowR": 0.001, "voltSens": 20000, "ampR50": 0.02, "cellCount": 4},
+    tip: '打開閥門（開關）後，安培計的保險絲會熔斷'
+};
+SCENES.ampCompare = {
+    group: '電表', name: '安培計對照：正確串聯 vs 錯誤並聯（含開關）',
+    make: _sceneItems('ampCompare'), settings: {"wireR": 0.001, "cellR": 0.2, "flowR": 0.001, "voltSens": 20000, "ampR50": 0.02, "cellCount": 4},
+    tip: '打開閥門後，並聯的安培計熔斷，串聯的安培計繼續量到電流'
+};
+SCENES.heightSeries = {
+    group: '電位高度', name: '🏔️ 電位高度：串聯分壓（20 Ω＋10 Ω，理想電池）',
+    make: _sceneItems('heightSeries'), settings: {"wireR": 0.001, "cellR": 0.001, "flowR": 0.001, "voltSens": 20000, "ampR50": 0.02, "cellCount": 2}, after: _heightOn,
+    tip: '20 Ω 下坡 2 V、10 Ω 下坡 1 V'
+};
+SCENES.heightCompare = {
+    group: '電位高度', name: '🏔️ 電位高度：正常、斷路（管子沒接上）、短路對照',
+    make: _sceneItems('heightCompare'), settings: {"wireR": 0.001, "cellR": 0.2, "flowR": 0.001, "voltSens": 20000, "ampR50": 0.02, "cellCount": 2}, after: _heightOn,
+    tip: '斷路處承受全部電壓；短路時幫浦內電阻吃掉幾乎全部電壓'
+};
+
+// 情境分組與排列順序
+const SCENE_GROUPS = [
+    ['基本電路', ['series', 'parallel', 'par10x', 'seriesTrio', 'parTrio', 'shortDemo']],
+    ['電表', ['meterCorrect', 'voltSeries', 'ampAcrossR', 'ampCompare', 'ampParallel']],
+    ['電位高度', ['heightSeries', 'heightCompare', 'heightParallel']]
+];
+buildSceneSelect = function () {
+    const sel = document.getElementById('scene-select');
+    const listed = new Set();
+    let html = '<option value="">📚 切換教學情境…</option>';
+    SCENE_GROUPS.forEach(([g, keys]) => {
+        const opts = keys.filter(k => SCENES[k]).map(k => { listed.add(k); return `<option value="${k}">${SCENES[k].name}</option>`; });
+        if (opts.length) html += `<optgroup label="${g}">${opts.join('')}</optgroup>`;
+    });
+    const rest = Object.keys(SCENES).filter(k => !listed.has(k));
+    if (rest.length) html += `<optgroup label="其他">${rest.map(k => `<option value="${k}">${SCENES[k].name}</option>`).join('')}</optgroup>`;
+    sel.innerHTML = html;
+};
+
+// ============================================================================
 // 14. v3.6 iPad／觸控最佳化
 //   - 精簡版面：左右面板變成可收合的抽屜，工具列單排、圖示化
 //   - 手勢：單指拖曳＝平移、雙指捏合＝縮放、雙指拖轉＝轉視角；鎖住整頁縮放
@@ -4658,12 +4751,12 @@ document.addEventListener('click', (e) => {
 // ============================================================================
 // 10. 預設教學迴路與初始化
 // ============================================================================
-function loadPreset(name, btnEl) {
+function loadPreset(name, btnEl, record = true) {
     if (btnEl) {
         document.querySelectorAll('.preset-group > .btn').forEach(b => b.classList.remove('active'));
         btnEl.classList.add('active');
     }
-    clearAllBlocks();
+    clearAllBlocks(record);
     const S = { silent: true };
     let focus = null;
 
