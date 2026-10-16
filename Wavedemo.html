@@ -1,0 +1,1782 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>繩波實驗台</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=LXGW+WenKai+TC:wght@400;700&family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: wood-framed blackboard stage on the left, instrument panel on the right; stacks to one column on phones */
+:root{
+  --bg:#e9ece6; --panel:#f7f8f4; --ink:#1d2824; --muted:#5d6b65; --line:#d2d9d3;
+  --accent:#1d6b58; --accent-ink:#ffffff; --chip:#e1e7e2; --warn:#a9482a; --field:#ffffff;
+  --board:#1c322c; --board-hi:#26443c; --chalk:#eef0e6; --chalk-dim:rgba(238,240,230,.66); --chalk-faint:rgba(238,240,230,.16);
+  --frame:#6e5235; --frame-hi:#8a6a46; --frost:#a9dcf2;
+  --f-display:"LXGW WenKai TC","Kaiti TC","STKaiti","Noto Sans TC",serif;
+  --f-body:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){ --bg:#101614; --panel:#161e1b; --ink:#e3eae6; --muted:#93a29b; --line:#2a3632;
+    --accent:#6fcdb0; --accent-ink:#08130f; --chip:#212c28; --warn:#f08f6d; --field:#0f1513; color-scheme:dark }
+}
+:root[data-theme="dark"]{ --bg:#101614; --panel:#161e1b; --ink:#e3eae6; --muted:#93a29b; --line:#2a3632;
+  --accent:#6fcdb0; --accent-ink:#08130f; --chip:#212c28; --warn:#f08f6d; --field:#0f1513; color-scheme:dark }
+
+html,body{height:100%}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14px;line-height:1.5}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%;-webkit-tap-highlight-color:transparent}
+body{overscroll-behavior:none}
+button,.chip,.preset,label{touch-action:manipulation}
+#stage{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+#panel h1{display:flex;align-items:baseline;gap:8px}
+#panel h1 .hide{margin-left:auto;align-self:center;display:inline-flex;align-items:center;gap:5px;border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:4px 10px;font-family:var(--f-body);font-size:13px;font-weight:500;color:var(--muted);cursor:pointer}
+#panel h1 .hide svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+[hidden]{display:none!important}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+#app.nopanel{grid-template-columns:minmax(0,1fr)}
+#app.nopanel #panel{display:none}
+#app{height:100%;display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:14px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:12px}
+
+/* ---------- stage ---------- */
+#stage{position:relative;min-height:0;min-width:0;border-radius:12px;overflow:hidden;background:var(--board);
+  border:7px solid var(--frame);box-shadow:inset 0 0 0 1px var(--frame-hi),0 2px 0 var(--frame-hi)}
+#stage canvas.gl{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
+#overlay{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:2;touch-action:none}
+#overlay.on{pointer-events:auto;cursor:crosshair}
+#stage.frozen{box-shadow:inset 0 0 0 3px var(--frost),inset 0 0 60px rgba(169,220,242,.28),0 2px 0 var(--frame-hi)}
+.hud{position:absolute;z-index:3;color:var(--chalk);font-family:var(--f-body)}
+.chalkcard{background:rgba(16,30,26,.82);border:1px solid var(--chalk-faint);border-radius:10px;backdrop-filter:blur(3px)}
+
+#scn{top:10px;left:10px;max-width:min(360px,calc(100% - 20px));padding:10px 12px}
+#scn h2{margin:0;font-family:var(--f-display);font-size:20px;font-weight:700;line-height:1.25;text-wrap:balance;display:flex;gap:8px;align-items:center}
+#scn h2 button{margin-left:auto;background:none;border:1px solid var(--chalk-faint);border-radius:6px;color:var(--chalk-dim);font-size:12px;padding:1px 7px;cursor:pointer}
+#scn ul{margin:6px 0 0;padding-left:18px;font-size:13px;color:var(--chalk-dim)}
+#scn li{margin:2px 0}
+#scn.collapsed ul{display:none}
+
+#chart{top:10px;right:10px;width:300px;height:150px}
+#formula{left:10px;bottom:62px;padding:10px 14px;font-size:13px;max-width:min(380px,calc(100% - 20px))}
+#formula{cursor:pointer}
+#formula.mini .eq{display:none}
+#formula .tip{font-size:11px;color:var(--chalk-dim);margin-top:2px}
+#formula .eq{font-family:var(--f-mono);font-size:14px;line-height:1.7;white-space:nowrap;overflow-x:auto}
+#formula .eq b{color:#f2c14e;font-weight:500}
+#formula .say{font-family:var(--f-display);font-size:16px;margin-top:4px;color:var(--chalk)}
+#freezeTag{top:10px;left:50%;transform:translateX(-50%);padding:5px 14px;font-family:var(--f-display);font-size:18px;color:var(--frost);border-color:var(--frost)}
+#drawBar{top:10px;left:10px;right:10px;padding:10px 12px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:13px}
+#drawBar .msg{flex:1 1 220px;min-width:0}
+#drawBar .msg b{font-family:var(--f-display);font-size:16px;font-weight:700}
+
+#transport{left:0;right:0;bottom:0;padding:8px 10px;display:flex;gap:6px;align-items:center;overflow-x:auto;
+  background:linear-gradient(to top,rgba(10,22,18,.92),rgba(10,22,18,.55));scrollbar-width:thin}
+.tb{flex:none;height:34px;min-width:34px;padding:0 10px;border-radius:8px;border:1px solid var(--chalk-faint);
+  background:rgba(238,240,230,.06);color:var(--chalk);cursor:pointer;display:inline-flex;gap:6px;align-items:center;justify-content:center;font-size:13px;white-space:nowrap}
+.tb:hover{background:rgba(238,240,230,.14)}
+.tb.on{background:var(--chalk);color:var(--board);border-color:var(--chalk)}
+.tb.big{background:#f2c14e;color:#22190a;border-color:#f2c14e;font-weight:700}
+.tb svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.tsep{flex:none;width:1px;height:22px;background:var(--chalk-faint);margin:0 4px}
+.tclock{flex:none;font-family:var(--f-mono);font-size:13px;color:var(--chalk);min-width:92px;text-align:right;font-variant-numeric:tabular-nums}
+.tspeed{flex:none;display:flex;align-items:center;gap:6px;color:var(--chalk-dim);font-size:12px}
+.tspeed input{width:96px;accent-color:#f2c14e}
+.tspeed output{font-family:var(--f-mono);color:var(--chalk);min-width:44px;font-variant-numeric:tabular-nums}
+
+#toast{position:absolute;z-index:6;left:50%;bottom:64px;transform:translateX(-50%);padding:7px 14px;border-radius:8px;
+  background:var(--chalk);color:var(--board);font-size:13px;box-shadow:0 4px 16px rgba(0,0,0,.3)}
+
+/* ---------- panel ---------- */
+#panel{min-height:0;min-width:0;display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+#panel header{padding:12px 14px 0}
+#panel h1{margin:0;font-family:var(--f-display);font-size:24px;font-weight:700;letter-spacing:.02em}
+#panel h1 small{font-family:var(--f-body);font-size:12px;font-weight:400;color:var(--muted);margin-left:8px;letter-spacing:0}
+.tabs{display:flex;gap:2px;margin-top:10px;border-bottom:1px solid var(--line)}
+.tabs button{flex:1;background:none;border:0;border-bottom:2px solid transparent;padding:7px 2px 8px;cursor:pointer;color:var(--muted);font-size:13px;font-weight:500}
+.tabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent)}
+#pbody{flex:1;overflow:auto;padding:12px 14px 20px;display:flex;flex-direction:column;gap:14px}
+
+.sec{display:flex;flex-direction:column;gap:8px}
+.sec>h3{margin:0;font-size:11px;letter-spacing:.12em;color:var(--muted);font-weight:700}
+.card{border:1px solid var(--line);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:8px;background:var(--field)}
+.card h4{margin:0;font-size:14px;display:flex;align-items:center;gap:8px}
+.card h4 .sp{flex:1}
+.fr{display:grid;grid-template-columns:76px minmax(0,1fr) 92px;gap:8px;align-items:center}
+.fr label{font-size:13px;color:var(--muted)}
+.fr input[type=range]{width:100%;accent-color:var(--accent);min-width:0}
+.num{display:flex;align-items:center;gap:3px;border:1px solid var(--line);border-radius:6px;padding:0 6px;background:var(--panel)}
+.num input{width:100%;min-width:0;border:0;background:none;padding:3px 0;font-family:var(--f-mono);font-size:12.5px;font-variant-numeric:tabular-nums}
+.num i{font-style:normal;color:var(--muted);font-size:11px;white-space:nowrap}
+.row{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.row>label{font-size:13px;color:var(--muted);min-width:68px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;flex-wrap:wrap}
+.seg button{border:0;background:none;padding:5px 10px;cursor:pointer;font-size:13px;color:var(--muted)}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button.on{background:var(--accent);color:var(--accent-ink)}
+.btn{border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:6px 11px;cursor:pointer;font-size:13px}
+.btn:hover{border-color:var(--accent)}
+.btn:disabled{opacity:.4;cursor:default}
+.btn.pri{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:500}
+.btn.sm{padding:3px 8px;font-size:12px}
+.btn.ghost{border-color:transparent;background:none;color:var(--muted)}
+.btn.warn{color:var(--warn)}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;border:1px solid var(--line);background:var(--chip);cursor:pointer;font-size:13px}
+.chip.on{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent);background:var(--panel)}
+.dot{width:10px;height:10px;border-radius:50%;flex:none;box-shadow:0 0 0 1px rgba(0,0,0,.25)}
+.readout{font-family:var(--f-mono);font-size:12.5px;background:var(--chip);border-radius:8px;padding:8px 10px;line-height:1.7;font-variant-numeric:tabular-nums;overflow-x:auto}
+.readout b{font-weight:500;color:var(--accent)}
+.hint{font-size:12.5px;color:var(--muted);margin:0}
+.status{font-size:11px;padding:1px 8px;border-radius:999px;background:var(--chip);color:var(--muted);font-weight:500}
+.status.live{background:var(--accent);color:var(--accent-ink)}
+.status.arm{background:#f2c14e;color:#22190a}
+select{border:1px solid var(--line);border-radius:6px;background:var(--panel);padding:4px 6px;font-size:13px}
+.ck{display:flex;gap:8px;align-items:flex-start;font-size:13px;cursor:pointer}
+.ck input{margin-top:3px;accent-color:var(--accent)}
+.ck span small{display:block;color:var(--muted);font-size:12px}
+.swatches{display:flex;gap:6px}
+.swatches button{width:22px;height:22px;border-radius:50%;border:2px solid transparent;cursor:pointer}
+.swatches button.on{border-color:var(--ink)}
+.presets{display:grid;grid-template-columns:1fr;gap:8px}
+.preset{text-align:left;border:1px solid var(--line);background:var(--field);border-radius:10px;padding:9px 11px;cursor:pointer;display:grid;grid-template-columns:auto minmax(0,1fr);gap:2px 10px;align-items:baseline}
+.preset:hover{border-color:var(--accent)}
+.preset.on{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.preset .tag{grid-row:span 2;font-size:11px;color:var(--accent);font-weight:700;letter-spacing:.06em;min-width:2.6em}
+.preset b{font-family:var(--f-display);font-size:16px;font-weight:700}
+.preset span{font-size:12.5px;color:var(--muted)}
+.arrows{display:flex;flex-direction:column;gap:4px}
+.arow{display:grid;grid-template-columns:26px minmax(0,1fr) 30px;gap:6px;align-items:center}
+.arow .n{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-family:var(--f-mono);font-size:12px;font-weight:500;color:#22190a}
+textarea{width:100%;min-height:120px;border:1px solid var(--line);border-radius:8px;background:var(--panel);padding:8px;font-family:var(--f-mono);font-size:12px;resize:vertical}
+canvas.freehand{width:100%;height:130px;display:block;border-radius:8px;background:var(--board);touch-action:none;cursor:crosshair}
+.saves{display:flex;flex-direction:column;gap:6px}
+.save{display:flex;gap:6px;align-items:center;font-size:13px}
+.save span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+@media (max-width:900px){
+  html,body{height:auto}
+  #app{grid-template-columns:minmax(0,1fr);height:auto}
+  #stage{height:62vh;height:62dvh;min-height:380px}
+  #app.nopanel #stage{height:calc(100vh - 24px);height:calc(100dvh - 24px)}
+  #panel{max-height:none}
+  #pbody{overflow:visible}
+  #chart{width:220px;height:118px}
+}
+@media (max-width:520px){
+  #chart{display:none}
+  #scn h2{font-size:17px}
+  #formula{bottom:56px;padding:7px 10px}
+  #formula .eq{font-size:11.5px;line-height:1.55}
+  #formula .say{font-size:13px}
+}
+/* 觸控裝置（iPad 等）：放大可點範圍、避免 iOS 對焦輸入框時自動放大 */
+@media (pointer: coarse){
+  .tb{height:44px;min-width:44px;padding:0 12px;font-size:14px}
+  .tb svg{width:18px;height:18px}
+  .tspeed input{width:130px;height:32px}
+  .tclock{font-size:14px}
+  #transport{padding:8px 10px calc(8px + env(safe-area-inset-bottom,0px));gap:8px}
+  #formula{bottom:72px}
+  #toast{bottom:76px}
+  .tabs button{padding:12px 2px 13px;font-size:15px}
+  .btn{padding:10px 14px;font-size:14px}
+  .btn.sm{padding:8px 12px;font-size:13px}
+  .seg button{padding:10px 14px;font-size:14px}
+  .chip{padding:8px 14px;font-size:14px}
+  .preset{padding:12px 14px}
+  input,select,textarea,.num input{font-size:16px}
+  select{padding:8px 8px}
+  .num{padding:2px 8px}
+  .fr{grid-template-columns:74px minmax(0,1fr) 108px;gap:10px}
+  .fr input[type=range]{height:34px}
+  .ck{padding:4px 0}
+  .ck input{width:22px;height:22px;margin-top:0}
+  .swatches button{width:30px;height:30px}
+  .arow{grid-template-columns:30px minmax(0,1fr) 40px}
+  .arow .n{width:26px;height:26px}
+  #scn h2 button{padding:6px 12px;font-size:13px}
+  #drawBar .tb{min-width:64px}
+  canvas.freehand{height:170px}
+  #panel h1 .hide{padding:8px 12px}
+}
+@media (prefers-reduced-motion: reduce){ *{scroll-behavior:auto} }
+</style>
+
+<div id="app">
+  <section id="stage" aria-label="3D 模擬畫面">
+    <canvas id="overlay"></canvas>
+    <div id="scn" class="hud chalkcard"><h2><span id="scnTitle">繩波實驗台</span><button id="scnToggle" type="button">收合</button></h2><ul id="scnNotes"></ul></div>
+    <div id="freezeTag" class="hud chalkcard" hidden>時間凍結</div>
+    <div id="drawBar" class="hud chalkcard" hidden>
+      <div class="msg"><b>繪製波源振動</b>　從畫面任意處上下拖曳，畫出第 <span id="drawN">1</span> 支箭頭；箭頭長度＝位移量，依序接續。</div>
+      <button class="tb" data-act="drawUndo" type="button">復原</button>
+      <button class="tb" data-act="drawClear" type="button">清除</button>
+      <button class="tb big" data-act="drawDone" type="button">完成</button>
+    </div>
+    <canvas id="chart" class="hud chalkcard" width="600" height="300" aria-label="位移–時間圖"></canvas>
+    <div id="formula" class="hud chalkcard" hidden></div>
+    <div id="transport" class="hud">
+      <button class="tb" id="bTool" data-act="togglePanel" type="button" title="顯示／收合右側工具箱（T）" aria-label="工具箱" aria-pressed="true"><svg viewBox="0 0 24 24"><path d="M3 9h18v10H3z"/><path d="M8 9V6a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v3"/><path d="M3 13h18"/><path d="M10 13v2h4v-2"/></svg><span>工具箱</span></button>
+      <span class="tsep"></span>
+      <button class="tb" id="bPlay" data-act="play" type="button" title="播放／暫停（空白鍵）"></button>
+      <button class="tb" data-act="step" type="button" title="前進一格（→）"><svg viewBox="0 0 24 24"><path d="M6 5l9 7-9 7z"/><path d="M18 5v14"/></svg></button>
+      <button class="tb" data-act="resetWave" type="button" title="清除波形、時間歸零"><svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v5h5"/></svg>歸零</button>
+      <span class="tsep"></span>
+      <button class="tb big" data-act="fireAll" type="button" title="觸發所有波源（P）">發射</button>
+      <span class="tsep"></span>
+      <span class="tspeed"><label for="speed">速度</label><input id="speed" type="range" min="0" max="100" step="1"><output id="speedOut">1×</output></span>
+      <button class="tb" data-act="speed" data-v="0.1" type="button">0.1×</button>
+      <button class="tb" data-act="speed" data-v="0.25" type="button">¼×</button>
+      <button class="tb" data-act="speed" data-v="1" type="button">1×</button>
+      <span class="tsep"></span>
+      <button class="tb" id="bFreeze" data-act="freeze" type="button" title="暫停並量測波長、振幅">時間凍結</button>
+      <button class="tb" data-act="ghost" type="button" title="留下目前波形的殘影">殘影</button>
+      <button class="tb" data-act="ghostClear" type="button" title="清除殘影">清殘影</button>
+      <span class="tsep"></span>
+      <button class="tb" data-act="view" data-v="front" type="button">正視</button>
+      <button class="tb" data-act="view" data-v="oblique" type="button">斜視</button>
+      <button class="tb" data-act="view" data-v="top" type="button">俯視</button>
+      <span class="tclock" id="clock">t = 0.000 s</span>
+    </div>
+    <div id="toast" hidden></div>
+  </section>
+
+  <aside id="panel" aria-label="設定面板">
+    <header>
+      <h1>繩波實驗台<small>力學波・3D 互動模擬</small><button type="button" class="hide" data-act="togglePanel" title="收合工具箱（T）"><svg viewBox="0 0 24 24"><path d="M3 9h18v10H3z"/><path d="M8 9V6a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v3"/><path d="M3 13h18"/><path d="M10 13v2h4v-2"/></svg>收合</button></h1>
+      <nav class="tabs" role="tablist">
+        <button role="tab" data-tab="scene">情境</button>
+        <button role="tab" data-tab="medium">介質</button>
+        <button role="tab" data-tab="source">波源</button>
+        <button role="tab" data-tab="display">顯示</button>
+        <button role="tab" data-tab="file">檔案</button>
+      </nav>
+    </header>
+    <div id="pbody"></div>
+  </aside>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+'use strict';
+/* =========================================================
+   基本工具
+   ========================================================= */
+const $ = s => document.querySelector(s);
+const TAU = Math.PI * 2;
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const fmt = (v, d = 2) => (Math.abs(v) < 1e-9 ? 0 : v).toFixed(d);
+const ROPE_COLORS = ['#f2c14e', '#7cc6e8', '#ef8a74', '#b9a3f0', '#9bd97c', '#f39cc3'];
+const ARROW_COLORS = ['#f2c14e', '#7cc6e8', '#ef8a74', '#9bd97c', '#b9a3f0', '#f39cc3'];
+let uidc = 1;
+const uid = () => 'r' + (uidc++) + Math.random().toString(36).slice(2, 6);
+const deep = o => JSON.parse(JSON.stringify(o));
+
+/* =========================================================
+   資料模型
+   ========================================================= */
+function newSource(o = {}) {
+  const base = {
+    pos: 0, mode: 'pulse', amp: 0.4,
+    shape: 'halfsine', width: 0.3, sign: 1,
+    wave: 'sine', freq: 1, cycles: 0, phase: 0,
+    custom: { kind: 'arrows', arrows: [], segDur: 0.25, curve: [], curveDur: 1.6, loop: false }
+  };
+  const defCustom = deep(base.custom);
+  const s = Object.assign(base, o);
+  s.custom = Object.assign(defCustom, deep(o.custom || {}));
+  return s;
+}
+function newRope(o = {}) {
+  const base = {
+    id: uid(), name: '繩1', color: ROPE_COLORS[0], medium: 'rope', pol: 'transverse',
+    L: 6, F: 4, mu: 0.25, damping: 0.05, leftEnd: 'fixed', rightEnd: 'fixed',
+    junction: { on: false, pos: 0.5, ratio: 4 }, turns: 40, coilR: 0.2,
+    sync: false, sources: [newSource()]
+  };
+  const r = Object.assign(base, o);
+  r.junction = Object.assign({ on: false, pos: 0.5, ratio: 4 }, o.junction || {});
+  r.sources = (o.sources || [{}]).map(s => newSource(s));
+  if (!o.id) r.id = uid();
+  return r;
+}
+
+const S = {
+  ropes: [], sel: 0, tab: 'scene', t: 0, paused: false, timeScale: 1,
+  display: { markers: true, ruler: true, labels: true, chart: true, dispCurve: true, measure: false, grid: true },
+  probe: { rope: 0, pos: 0.5 },
+  formula: { mode: 'none', tStart: null },
+  scenario: { id: null, title: '繩波實驗台', notes: [] },
+  frozen: false
+};
+const selRope = () => S.ropes[clamp(S.sel, 0, S.ropes.length - 1)];
+
+/* =========================================================
+   波源函數
+   ========================================================= */
+function waveFn(w, p) {
+  switch (w) {
+    case 'square': return Math.tanh(5 * Math.sin(p)) / Math.tanh(5);
+    case 'triangle': return (2 / Math.PI) * Math.asin(Math.sin(p));
+    default: return Math.sin(p);
+  }
+}
+function pulseFn(sh, u) {
+  switch (sh) {
+    case 'gauss': return Math.exp(-Math.pow((u - 0.5) / 0.17, 2));
+    case 'tri': return 1 - Math.abs(2 * u - 1);
+    case 'square': { const e = 0.15, sm = x => x * x * (3 - 2 * x); return u < e ? sm(u / e) : u > 1 - e ? sm((1 - u) / e) : 1; }
+    case 'fullsine': return Math.sin(TAU * u);
+    default: return Math.sin(Math.PI * u);
+  }
+}
+const SRT = new WeakMap();
+function srt(src) {
+  let s = SRT.get(src);
+  if (!s) { s = { kind: null, t0: 0, stopAt: Infinity, manual: 0, dragging: false, relT: 0, relV: 0, armed: false, seq: null }; SRT.set(src, s); }
+  return s;
+}
+const isSynced = (r, j) => j === 0 && r.sync && S.ropes.indexOf(r) > 0 && S.ropes[0] && S.ropes[0].sources[0];
+function eff(r, j) {
+  const src = isSynced(r, j) ? S.ropes[0].sources[0] : r.sources[j];
+  return { src, s: srt(src) };
+}
+function buildSeq(src, base = 0) {
+  const c = src.custom;
+  if (c.kind === 'arrows') {
+    if (!c.arrows.length) return null;
+    const times = [0], vals = [base]; let acc = base, t = 0;
+    for (const a of c.arrows) { acc += a.d; t += c.segDur; times.push(t); vals.push(acc); }
+    if (c.loop && Math.abs(acc - base) > 1e-4) { t += c.segDur; times.push(t); vals.push(base); }
+    return { kind: 'arrows', times, vals, total: t, nArrows: c.arrows.length };
+  }
+  if (!c.curve.length) return null;
+  const n = c.curve.length, ramp = 0.08, times = [0], vals = [base];
+  for (let i = 0; i < n; i++) { times.push(ramp + c.curveDur * i / (n - 1)); vals.push(c.curve[i] * src.amp); }
+  let end = ramp + c.curveDur;
+  if (c.loop && Math.abs(vals[vals.length - 1] - base) > 1e-3) { end += 0.15; times.push(end); vals.push(base); }
+  return { kind: 'curve', times, vals, total: end };
+}
+function heldVal(src, s) {
+  if (s.kind === 'custom' || s.kind === 'hold' || s.kind === 'return') { const v = driveVal(src, s, S.t); return v === null ? 0 : v; }
+  return 0;
+}
+const seqDone = (src, s) => s.kind === 'hold' || (s.kind === 'custom' && s.seq && !src.custom.loop && S.t - s.t0 >= s.seq.total);
+function seqVal(q, tt) {
+  const T = q.times; let i = 1;
+  while (i < T.length - 1 && T[i] < tt) i++;
+  const a = T[i - 1], b = T[i], u = b > a ? clamp((tt - a) / (b - a), 0, 1) : 1;
+  const w = q.kind === 'arrows' ? 0.5 - 0.5 * Math.cos(Math.PI * u) : u;
+  return q.vals[i - 1] + (q.vals[i] - q.vals[i - 1]) * w;
+}
+function driveVal(src, s, t) {
+  if (!s.kind) return null;
+  const dt = t - s.t0; if (dt < -1e-9) return null;
+  switch (s.kind) {
+    case 'pulse': { const u = dt / src.width; return u >= 1 ? null : src.amp * src.sign * pulseFn(src.shape, Math.max(0, u)); }
+    case 'periodic': return t >= s.stopAt ? null : src.amp * waveFn(src.wave, TAU * src.freq * dt + src.phase * Math.PI / 180);
+    case 'manual': {
+      if (s.dragging) return s.manual;
+      const u = (t - s.relT) / 0.15; if (u >= 1) return null;
+      return s.relV * 0.5 * (1 + Math.cos(Math.PI * clamp(u, 0, 1)));
+    }
+    case 'custom': {
+      const q = s.seq; if (!q) return null; let tt = dt;
+      if (tt >= q.total) { if (src.custom.loop) tt %= q.total; else return q.vals[q.vals.length - 1]; }
+      return seqVal(q, tt);
+    }
+    case 'hold': return s.holdV;
+    case 'return': { const u = dt / s.dur; if (u >= 1) return null; return s.holdV * 0.5 * (1 + Math.cos(Math.PI * clamp(u, 0, 1))); }
+  }
+  return null;
+}
+function startSource(src, s) {
+  const t = S.t;
+  if (src.mode === 'pulse') { s.kind = 'pulse'; s.t0 = t; }
+  else if (src.mode === 'periodic') { s.kind = 'periodic'; s.t0 = t; s.stopAt = src.cycles > 0 ? t + src.cycles / src.freq : Infinity; }
+  else if (src.mode === 'custom') {
+    s.seq = buildSeq(src, heldVal(src, s));
+    if (!s.seq) { toast('這個波源還沒有設定自訂振動'); return false; }
+    s.kind = 'custom'; s.t0 = t; s.armed = false;
+  } else return false;
+  if (S.formula.tStart === null && S.ropes[0] && eff(S.ropes[0], 0).src === src) S.formula.tStart = t;
+  return true;
+}
+function stopSource(src, s) {
+  if (s.kind === 'periodic') {
+    const n = Math.ceil((S.t - s.t0) * src.freq - 1e-6);
+    s.stopAt = Math.max(S.t, s.t0 + n / src.freq);
+  } else if (s.kind === 'custom' || s.kind === 'return') { const v = heldVal(src, s); s.kind = 'hold'; s.holdV = v; s.t0 = S.t; }
+}
+function returnToEq(src, s) {
+  const v = heldVal(src, s);
+  if (Math.abs(v) < 1e-4) { s.kind = null; return; }
+  s.kind = 'return'; s.holdV = v; s.t0 = S.t; s.dur = Math.max(0.15, src.custom.segDur || 0.25);
+}
+function allSourceRefs() {
+  const out = []; const seen = new Set();
+  S.ropes.forEach(r => r.sources.forEach((_, j) => { const e = eff(r, j); if (!seen.has(e.src)) { seen.add(e.src); out.push(e); } }));
+  return out;
+}
+
+/* =========================================================
+   物理：一維波動方程（有限差分）
+   ========================================================= */
+const RT = new WeakMap();
+function buildRT(r) {
+  const N = clamp(Math.round(r.L * 60), 120, 600), dx = r.L / N;
+  const R = { L: r.L, N, dx, y: new Float64Array(N + 1), yp: new Float64Array(N + 1), yn: new Float64Array(N + 1), c2: new Float64Array(N + 1), cmax: 1 };
+  RT.set(r, R); updateC2(r); return R;
+}
+function rt(r) { const R = RT.get(r); return (!R || R.L !== r.L) ? buildRT(r) : R; }
+function muAt(r, x) { return (r.junction.on && x >= r.junction.pos * r.L) ? r.mu * r.junction.ratio : r.mu; }
+function updateC2(r) {
+  const R = RT.get(r); if (!R) return;
+  let cm = 0;
+  for (let i = 0; i <= R.N; i++) { const c2 = r.F / muAt(r, i * R.dx); R.c2[i] = c2; if (c2 > cm) cm = c2; }
+  R.cmax = Math.sqrt(cm);
+}
+const speed = (r, x = 0) => Math.sqrt(r.F / muAt(r, x));
+function boundary(type, yn, y, e, nb, ch, dx) {
+  if (type === 'fixed') yn[e] = 0;
+  else if (type === 'free') yn[e] = yn[nb];
+  else yn[e] = y[nb] + (ch - dx) / (ch + dx) * (yn[nb] - y[e]);
+}
+const HIST = { t: [], v: [] };
+function histPush(t, v) {
+  const n = HIST.t.length;
+  if (n && t - HIST.t[n - 1] < 0.002) return;
+  HIST.t.push(t); HIST.v.push(v);
+  if (HIST.t.length > 40000) { HIST.t.splice(0, 10000); HIST.v.splice(0, 10000); }
+}
+function histVal(t) {
+  const T = HIST.t, n = T.length;
+  if (!n || t < T[0]) return 0;
+  if (t >= T[n - 1]) return HIST.v[n - 1];
+  let lo = 0, hi = n - 1;
+  while (hi - lo > 1) { const m = (lo + hi) >> 1; if (T[m] <= t) lo = m; else hi = m; }
+  const u = (t - T[lo]) / (T[hi] - T[lo] || 1);
+  return HIST.v[lo] + (HIST.v[hi] - HIST.v[lo]) * u;
+}
+function stepRope(r, ri, t0, dur) {
+  const R = rt(r), N = R.N;
+  let n = Math.ceil(dur * R.cmax / (0.9 * R.dx)); n = clamp(n, 1, 900);
+  const h = dur / n, lam = h * h / (R.dx * R.dx), b = r.damping * h / 2, ib = 1 / (1 + b);
+  const drv = r.sources.map((src, j) => ({ e: eff(r, j), idx: Math.round(clamp(src.pos, 0, 1) * N) }));
+  let y = R.y, yp = R.yp, yn = R.yn; const c2 = R.c2;
+  const chL = Math.sqrt(c2[0]) * h, chR = Math.sqrt(c2[N]) * h;
+  for (let k = 0; k < n; k++) {
+    const t = t0 + (k + 1) * h;
+    for (let i = 1; i < N; i++) yn[i] = (2 * y[i] - (1 - b) * yp[i] + lam * c2[i] * (y[i + 1] - 2 * y[i] + y[i - 1])) * ib;
+    boundary(r.leftEnd, yn, y, 0, 1, chL, R.dx);
+    boundary(r.rightEnd, yn, y, N, N - 1, chR, R.dx);
+    for (const d of drv) { const v = driveVal(d.e.src, d.e.s, t); if (v !== null) yn[d.idx] = v; }
+    if (ri === 0 && drv.length) histPush(t, yn[drv[0].idx]);
+    const tmp = yp; yp = y; y = yn; yn = tmp;
+  }
+  R.y = y; R.yp = yp; R.yn = yn;
+  let bad = false;
+  for (let i = 0; i <= N; i += 7) if (!(Math.abs(y[i]) < 40)) { bad = true; break; }
+  if (bad) { y.fill(0); yp.fill(0); toast('數值發散，已重設「' + r.name + '」'); }
+}
+function advance(dt) {
+  const t0 = S.t;
+  S.ropes.forEach((r, i) => stepRope(r, i, t0, dt));
+  S.t = t0 + dt;
+  for (const e of allSourceRefs()) if (e.s.kind && driveVal(e.src, e.s, S.t) === null && S.t > e.s.t0) e.s.kind = null;
+}
+function resetWaves() {
+  S.t = 0; HIST.t.length = 0; HIST.v.length = 0; S.formula.tStart = null; CH.t.length = CH.a.length = CH.b.length = 0;
+  S.ropes.forEach(r => { const R = rt(r); R.y.fill(0); R.yp.fill(0); R.yn.fill(0); r.sources.forEach(src => { const s = srt(src); s.kind = null; s.dragging = false; }); });
+}
+
+/* =========================================================
+   Three.js 場景
+   ========================================================= */
+const stage = $('#stage');
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+renderer.localClippingEnabled = true;
+renderer.domElement.className = 'gl';
+stage.insertBefore(renderer.domElement, stage.firstChild);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color('#1c322c');
+const camera = new THREE.PerspectiveCamera(32, 1, 0.05, 300);
+const controls = new THREE.OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.12;
+scene.add(new THREE.HemisphereLight(0xf4f6ee, 0x1a2a24, 0.85));
+const sun = new THREE.DirectionalLight(0xffffff, 0.75); sun.position.set(3, 6, 8); scene.add(sun);
+const world = new THREE.Group(); scene.add(world);
+const fixed = new THREE.Group(); scene.add(fixed);
+const ghosts = new THREE.Group(); scene.add(ghosts);
+const measureG = new THREE.Group(); scene.add(measureG);
+const CHALK = 0xeef0e6;
+
+function makeLabel(text, opt = {}) {
+  const size = opt.size || 0.2, color = opt.color || '#eef0e6', font = opt.font || 'LXGW WenKai TC';
+  const cv = document.createElement('canvas'), ctx = cv.getContext('2d'), px = 64;
+  ctx.font = `700 ${px}px "${font}", "Noto Sans TC", sans-serif`;
+  const w = Math.ceil(ctx.measureText(text).width) + 24;
+  cv.width = w; cv.height = px + 24;
+  ctx.font = `700 ${px}px "${font}", "Noto Sans TC", sans-serif`;
+  if (opt.bg) { ctx.fillStyle = opt.bg; ctx.beginPath(); ctx.roundRect ? ctx.roundRect(0, 0, w, px + 24, 16) : ctx.rect(0, 0, w, px + 24); ctx.fill(); }
+  ctx.fillStyle = color; ctx.textBaseline = 'middle'; ctx.fillText(text, 12, (px + 24) / 2 + 2);
+  const tex = new THREE.CanvasTexture(cv); tex.minFilter = THREE.LinearFilter;
+  const m = new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, clippingPlanes: opt.clip || null });
+  const sp = new THREE.Sprite(m); sp.scale.set(size * w / (px + 24), size, 1);
+  sp.center.set(opt.ax ?? 0.5, opt.ay ?? 0.5); sp.renderOrder = 5;
+  return sp;
+}
+function disposeTree(o) {
+  o.traverse(c => {
+    if (c.geometry) c.geometry.dispose();
+    if (c.material) { const ms = Array.isArray(c.material) ? c.material : [c.material]; ms.forEach(m => { if (m.map) m.map.dispose(); m.dispose(); }); }
+  });
+}
+function clearGroup(g) { while (g.children.length) { const c = g.children.pop(); disposeTree(c); } }
+
+class Tube {
+  constructor(M, radius, mat, R = 8) {
+    this.M = M; this.R = R; this.radius = radius;
+    const g = new THREE.BufferGeometry();
+    this.pos = new Float32Array(M * R * 3); this.nrm = new Float32Array(M * R * 3);
+    const idx = [];
+    for (let j = 0; j < M - 1; j++) for (let k = 0; k < R; k++) {
+      const a = j * R + k, b = j * R + (k + 1) % R, c = (j + 1) * R + k, d = (j + 1) * R + (k + 1) % R;
+      idx.push(a, c, b, b, c, d);
+    }
+    g.setIndex(idx);
+    g.setAttribute('position', new THREE.BufferAttribute(this.pos, 3));
+    g.setAttribute('normal', new THREE.BufferAttribute(this.nrm, 3));
+    this.mesh = new THREE.Mesh(g, mat); this.mesh.frustumCulled = false;
+    this.cos = []; this.sin = [];
+    for (let k = 0; k < R; k++) { this.cos.push(Math.cos(TAU * k / R)); this.sin.push(Math.sin(TAU * k / R)); }
+  }
+  update(P) {
+    const M = this.M, R = this.R, rad = this.radius, pos = this.pos, nrm = this.nrm;
+    for (let j = 0; j < M; j++) {
+      const a = Math.max(0, j - 1) * 3, c = Math.min(M - 1, j + 1) * 3;
+      let tx = P[c] - P[a], ty = P[c + 1] - P[a + 1], tz = P[c + 2] - P[a + 2];
+      let l = Math.hypot(tx, ty, tz) || 1; tx /= l; ty /= l; tz /= l;
+      let rx = 0, ry = 0, rz = 1; if (Math.abs(tz) > 0.85) { rx = 0; ry = 1; rz = 0; }
+      let nx = ty * rz - tz * ry, ny = tz * rx - tx * rz, nz = tx * ry - ty * rx;
+      l = Math.hypot(nx, ny, nz) || 1; nx /= l; ny /= l; nz /= l;
+      const bx = ty * nz - tz * ny, by = tz * nx - tx * nz, bz = tx * ny - ty * nx;
+      for (let k = 0; k < R; k++) {
+        const cs = this.cos[k], sn = this.sin[k];
+        const ox = cs * nx + sn * bx, oy = cs * ny + sn * by, oz = cs * nz + sn * bz;
+        const o = (j * R + k) * 3;
+        pos[o] = P[j * 3] + rad * ox; pos[o + 1] = P[j * 3 + 1] + rad * oy; pos[o + 2] = P[j * 3 + 2] + rad * oz;
+        nrm[o] = ox; nrm[o + 1] = oy; nrm[o + 2] = oz;
+      }
+    }
+    this.mesh.geometry.attributes.position.needsUpdate = true;
+    this.mesh.geometry.attributes.normal.needsUpdate = true;
+  }
+}
+
+/* ---------- 版面配置 ---------- */
+const LAY = { x0: -3, gap: 1.6, bases: [], ampMax: 0.4, bottom: 0, top: 0 };
+function ropeAmpEst(r) {
+  let a = 0.1;
+  r.sources.forEach((_, j) => {
+    const src = eff(r, j).src; a = Math.max(a, src.amp);
+    if (src.custom.arrows.length) { let acc = 0; src.custom.arrows.forEach(q => { acc += q.d; a = Math.max(a, Math.abs(acc)); }); }
+  });
+  if (r.medium === 'spring') a = Math.max(a, r.coilR);
+  return clamp(a, 0.15, 1.6);
+}
+function computeLayout() {
+  const maxL = Math.max(...S.ropes.map(r => r.L), 1);
+  LAY.x0 = -maxL / 2; LAY.maxL = maxL; LAY.bases = [];
+  let y = 0; LAY.ampMax = 0.2;
+  S.ropes.forEach((r, i) => {
+    const a = ropeAmpEst(r) + (r.medium === 'spring' && r.pol === 'transverse' ? r.coilR : 0);
+    LAY.ampMax = Math.max(LAY.ampMax, a);
+    if (i > 0) y -= a + 0.55;
+    LAY.bases.push(y); y -= a + 0.55;
+    if (i === 0) LAY.top = a + 0.45;
+    if (i === 0 && S.formula.mode !== 'none') { y -= 2 * a + 1.4; }
+  });
+  LAY.bottom = y;
+}
+
+/* ---------- 每條繩的視覺物件 ---------- */
+const VIS = new WeakMap();
+const markerGeo = new THREE.SphereGeometry(1, 14, 10);
+function buildScene() {
+  clearGroup(world); clearGroup(fixed); clearGroup(measureG);
+  computeLayout();
+  S.ropes.forEach((r, i) => {
+    const R = rt(r), g = new THREE.Group(), base = LAY.bases[i];
+    const col = new THREE.Color(r.color);
+    const mat = new THREE.MeshStandardMaterial({ color: col, roughness: 0.55, metalness: 0.08 });
+    const isSpring = r.medium === 'spring';
+    const M = isSpring ? Math.round(r.turns * 18) + 1 : R.N + 1;
+    const tube = new Tube(M, isSpring ? 0.022 : 0.032, mat, isSpring ? 6 : 8);
+    g.add(tube.mesh);
+    const V = { g, tube, M, base, P: new Float32Array(M * 3), handles: [], markers: [], probe: null, disp: null, label: null };
+    // 接續點
+    if (r.junction.on) {
+      const jx = LAY.x0 + r.junction.pos * r.L;
+      const jm = new THREE.Mesh(new THREE.TorusGeometry(0.07, 0.02, 8, 20), new THREE.MeshStandardMaterial({ color: 0xffffff }));
+      jm.rotation.y = Math.PI / 2; jm.userData.jx = jx; g.add(jm); V.junction = jm;
+      const lb = makeLabel(r.junction.ratio > 1 ? '接較重繩' : '接較輕繩', { size: 0.16, color: '#eef0e6' });
+      lb.position.set(jx, base - ropeAmpEst(r) - 0.18, 0); g.add(lb);
+    }
+    // 端點裝置
+    [['leftEnd', 0], ['rightEnd', 1]].forEach(([k, side]) => {
+      const x = LAY.x0 + side * r.L, type = r[k];
+      if (type === 'fixed') {
+        const post = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.75 + (isSpring ? r.coilR * 2 : 0), 0.4), new THREE.MeshStandardMaterial({ color: 0x8a6a46, roughness: 0.8 }));
+        post.position.set(x + (side ? 0.04 : -0.04), base, 0); g.add(post);
+      } else if (type === 'free') {
+        const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 2 * ropeAmpEst(r) + 0.6, 10), new THREE.MeshStandardMaterial({ color: 0xc9ccc2, metalness: 0.5, roughness: 0.3 }));
+        rod.position.set(x + (side ? 0.03 : -0.03), base, 0); g.add(rod);
+        const ring = new THREE.Mesh(new THREE.TorusGeometry(0.05, 0.014, 8, 18), new THREE.MeshStandardMaterial({ color: 0xc9ccc2, metalness: 0.5 }));
+        ring.rotation.x = Math.PI / 2; g.add(ring); V['ring' + side] = ring;
+      } else {
+        const lb = makeLabel('無反射端', { size: 0.15, color: 'rgba(238,240,230,.7)', ax: side ? 0 : 1 });
+        lb.position.set(x + (side ? 0.12 : -0.12), base, 0); g.add(lb);
+      }
+    });
+    // 波源握把
+    r.sources.forEach((src, j) => {
+      const hm = isSpring
+        ? new THREE.Mesh(new THREE.TorusGeometry(r.coilR + 0.05, 0.03, 10, 28), new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: col, emissiveIntensity: 0.35 }))
+        : new THREE.Mesh(new THREE.SphereGeometry(0.085, 20, 14), new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: col, emissiveIntensity: 0.45 }));
+      if (isSpring) hm.rotation.y = Math.PI / 2;
+      hm.userData = { rope: r, j };
+      g.add(hm);
+      const guide = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 2.4, 6), new THREE.MeshBasicMaterial({ color: CHALK, transparent: true, opacity: 0.25 }));
+      if (r.pol === 'longitudinal') guide.rotation.z = Math.PI / 2;
+      g.add(guide);
+      V.handles.push({ m: hm, guide });
+    });
+    // 質點標記
+    const K = isSpring ? Math.max(4, Math.floor(r.turns / 3)) : 20;
+    for (let k = 0; k <= K; k++) {
+      const s = isSpring ? (k * Math.floor(r.turns / K) || 0) * r.L / r.turns : k * r.L / K;
+      if (isSpring && s > r.L) continue;
+      const m = new THREE.Mesh(markerGeo, new THREE.MeshStandardMaterial({ color: CHALK, roughness: 0.4 }));
+      m.scale.setScalar(isSpring ? 0.04 : 0.045); m.userData.s = s; g.add(m); V.markers.push(m);
+    }
+    const pm = new THREE.Mesh(markerGeo, new THREE.MeshStandardMaterial({ color: 0xff5a4e, emissive: 0x6a120c }));
+    pm.scale.setScalar(0.07); g.add(pm); V.probe = pm;
+    // 縱波位移曲線
+    if (r.pol === 'longitudinal') {
+      const n = 240, lg = new THREE.BufferGeometry();
+      lg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(n * 3), 3));
+      const ln = new THREE.Line(lg, new THREE.LineBasicMaterial({ color: col, transparent: true, opacity: 0.9 }));
+      ln.frustumCulled = false; g.add(ln); V.disp = { ln, n };
+      const axis = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(LAY.x0, 0, 0), new THREE.Vector3(LAY.x0 + r.L, 0, 0)]),
+        new THREE.LineDashedMaterial({ color: CHALK, dashSize: 0.08, gapSize: 0.06, transparent: true, opacity: 0.3 }));
+      axis.computeLineDistances(); g.add(axis); V.dispAxis = axis;
+      const lb = makeLabel('位移曲線（向右位移畫成向上）', { size: 0.14, color: 'rgba(238,240,230,.75)', ax: 0 });
+      g.add(lb); V.dispLabel = lb;
+    }
+    // 名稱
+    const name = makeLabel(r.name, { size: 0.24, color: r.color, ax: 0, ay: 0 });
+    name.position.set(LAY.x0, base + ropeAmpEst(r) + 0.12, 0); g.add(name); V.label = name;
+    world.add(g); VIS.set(r, V);
+  });
+  buildFixtures();
+  buildFormulaObjects();
+  updateVisuals();
+}
+function buildFixtures() {
+  // 背景方格（黑板格線）
+  const xa = LAY.x0 - 1, xb = LAY.x0 + LAY.maxL + 1, ya = LAY.bottom - 0.5, yb = LAY.top + 0.6, z = -0.9;
+  const minor = [], major = [];
+  for (let x = Math.ceil(xa * 2) / 2; x <= xb; x += 0.5) (Math.abs((x - LAY.x0) % 1) < 1e-6 ? major : minor).push(x, ya, z, x, yb, z);
+  for (let y = Math.ceil(ya * 2) / 2; y <= yb; y += 0.5) (Math.abs(y % 1) < 1e-6 ? major : minor).push(xa, y, z, xb, y, z);
+  const mk = (arr, op) => { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(arr, 3)); return new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: CHALK, transparent: true, opacity: op })); };
+  const grid = new THREE.Group(); grid.add(mk(minor, 0.05)); grid.add(mk(major, 0.1)); grid.name = 'grid'; fixed.add(grid);
+  // 量尺
+  const ruler = new THREE.Group(); ruler.name = 'ruler';
+  const ry = LAY.bottom + 0.15, segs = [LAY.x0, ry, 0, LAY.x0 + LAY.maxL, ry, 0];
+  for (let x = 0; x <= LAY.maxL + 1e-6; x += 0.25) {
+    const h = Math.abs(x % 1) < 1e-6 ? 0.14 : Math.abs(x % 0.5) < 1e-6 ? 0.09 : 0.05;
+    segs.push(LAY.x0 + x, ry, 0, LAY.x0 + x, ry + h, 0);
+    if (Math.abs(x % 1) < 1e-6) { const lb = makeLabel(x + (x === 0 ? ' m' : ''), { size: 0.15, font: 'JetBrains Mono', color: 'rgba(238,240,230,.8)' }); lb.position.set(LAY.x0 + x, ry - 0.13, 0); ruler.add(lb); }
+  }
+  const rg = new THREE.BufferGeometry(); rg.setAttribute('position', new THREE.Float32BufferAttribute(segs, 3));
+  ruler.add(new THREE.LineSegments(rg, new THREE.LineBasicMaterial({ color: CHALK, transparent: true, opacity: 0.7 })));
+  fixed.add(ruler);
+}
+function centerPoint(r, R, s, base, out, i0) {
+  const f = clamp(s / R.dx, 0, R.N), i = Math.min(R.N - 1, Math.floor(f)), u = f - i;
+  const v = R.y[i] * (1 - u) + R.y[i + 1] * u;
+  if (r.pol === 'transverse') { out[i0] = LAY.x0 + s; out[i0 + 1] = base + v; }
+  else { out[i0] = LAY.x0 + s + v; out[i0 + 1] = base; }
+  out[i0 + 2] = 0; return v;
+}
+const tmp3 = new Float32Array(3);
+function updateVisuals() {
+  S.ropes.forEach((r, ri) => {
+    const V = VIS.get(r); if (!V) return;
+    const R = rt(r), P = V.P, base = V.base;
+    if (r.medium === 'spring') {
+      const M = V.M, Rc = r.coilR, tw = TAU * r.turns / r.L;
+      for (let j = 0; j < M; j++) {
+        const s = j / (M - 1) * r.L; centerPoint(r, R, s, base, P, j * 3);
+        const a = tw * s; P[j * 3 + 1] += Rc * Math.cos(a); P[j * 3 + 2] += Rc * Math.sin(a);
+      }
+    } else {
+      for (let j = 0; j <= R.N; j++) centerPoint(r, R, j * R.dx, base, P, j * 3);
+    }
+    V.tube.update(P);
+    // 握把
+    r.sources.forEach((src, j) => {
+      const h = V.handles[j]; if (!h) return;
+      centerPoint(r, R, clamp(src.pos, 0, 1) * r.L, base, tmp3, 0);
+      h.m.position.set(tmp3[0], tmp3[1], 0);
+      const mode = eff(r, j).src.mode;
+      h.guide.visible = mode === 'manual';
+      h.guide.position.set(LAY.x0 + src.pos * r.L, base, 0);
+      const live = !!eff(r, j).s.kind;
+      h.m.material.emissiveIntensity = live ? 0.9 : 0.35;
+      if (r.medium !== 'spring') h.m.scale.setScalar(mode === 'manual' ? 1.35 : 1);
+    });
+    // 自由端圓環
+    if (V.ring0) { centerPoint(r, R, 0, base, tmp3, 0); V.ring0.position.set(LAY.x0 - 0.03, tmp3[1], 0); }
+    if (V.ring1) { centerPoint(r, R, r.L, base, tmp3, 0); V.ring1.position.set(LAY.x0 + r.L + 0.03, tmp3[1], 0); }
+    if (V.junction) { centerPoint(r, R, r.junction.pos * r.L, base, tmp3, 0); V.junction.position.set(tmp3[0], tmp3[1], 0); }
+    // 標記
+    const showM = S.display.markers;
+    V.markers.forEach(m => {
+      m.visible = showM; if (!showM) return;
+      const s = m.userData.s; centerPoint(r, R, s, base, tmp3, 0);
+      if (r.medium === 'spring') { const a = TAU * r.turns * s / r.L; m.position.set(tmp3[0], tmp3[1] + r.coilR * Math.cos(a), r.coilR * Math.sin(a)); }
+      else m.position.set(tmp3[0], tmp3[1], 0);
+    });
+    const isProbe = S.probe.rope === ri;
+    V.probe.visible = isProbe;
+    if (isProbe) { centerPoint(r, R, S.probe.pos * r.L, base, tmp3, 0); V.probe.position.set(tmp3[0], tmp3[1] + (r.medium === 'spring' ? r.coilR : 0), r.medium === 'spring' ? 0.0 : 0); }
+    // 位移曲線
+    if (V.disp) {
+      const on = S.display.dispCurve; V.disp.ln.visible = on; V.dispAxis.visible = on; V.dispLabel.visible = on;
+      if (on) {
+        const yb = base + (r.medium === 'spring' ? r.coilR : 0) + ropeAmpEst(r) + 0.15;
+        const arr = V.disp.ln.geometry.attributes.position.array, n = V.disp.n;
+        for (let k = 0; k < n; k++) {
+          const s = k / (n - 1) * r.L, f = clamp(s / R.dx, 0, R.N), i = Math.min(R.N - 1, Math.floor(f)), u = f - i;
+          arr[k * 3] = LAY.x0 + s; arr[k * 3 + 1] = yb + (R.y[i] * (1 - u) + R.y[i + 1] * u); arr[k * 3 + 2] = 0;
+        }
+        V.disp.ln.geometry.attributes.position.needsUpdate = true;
+        V.dispAxis.position.y = yb; V.dispLabel.position.set(LAY.x0 + r.L + 0.1, yb, 0);
+      }
+    }
+    V.label.visible = S.display.labels;
+  });
+  const g = fixed.getObjectByName('grid'); if (g) g.visible = S.display.grid;
+  const ru = fixed.getObjectByName('ruler'); if (ru) ru.visible = S.display.ruler;
+}
+
+/* ---------- 殘影 ---------- */
+function captureGhost() {
+  if (ghosts.children.length >= 8) { const c = ghosts.children.shift(); disposeTree(c); }
+  const grp = new THREE.Group();
+  S.ropes.forEach(r => {
+    const V = VIS.get(r); if (!V) return;
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(V.P.slice(), 3));
+    const ln = new THREE.Line(g, new THREE.LineBasicMaterial({ color: r.color, transparent: true, opacity: 0.55 }));
+    ln.position.z = -0.02; grp.add(ln);
+  });
+  const lb = makeLabel('t=' + fmt(S.t, 2) + 's', { size: 0.13, font: 'JetBrains Mono', color: 'rgba(238,240,230,.7)', ax: 1 });
+  lb.position.set(LAY.x0 - 0.15, LAY.bases[0] + 0.05 * ghosts.children.length, 0); grp.add(lb);
+  ghosts.add(grp);
+  ghosts.children.forEach((c, i, a) => c.traverse(o => { if (o.material && o.isLine) o.material.opacity = 0.18 + 0.5 * (i + 1) / a.length; }));
+  toast('已留下 t = ' + fmt(S.t, 2) + ' s 的殘影');
+}
+
+/* ---------- 時間凍結量測 ---------- */
+function buildMeasure() {
+  clearGroup(measureG);
+  if (!S.display.measure) return;
+  const lineMat = () => new THREE.LineBasicMaterial({ color: 0xa9dcf2 });
+  S.ropes.forEach((r, ri) => {
+    if (r.pol !== 'transverse') return;
+    const R = rt(r), base = LAY.bases[ri], y = R.y;
+    let mx = 0; for (let i = 0; i <= R.N; i++) mx = Math.max(mx, y[i]);
+    // 平衡位置
+    const eq = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(LAY.x0, base, 0.01), new THREE.Vector3(LAY.x0 + r.L, base, 0.01)]),
+      new THREE.LineDashedMaterial({ color: 0xa9dcf2, dashSize: 0.07, gapSize: 0.06, transparent: true, opacity: 0.6 }));
+    eq.computeLineDistances(); measureG.add(eq);
+    if (mx < 0.02) return;
+    const crests = [];
+    for (let i = 2; i < R.N - 1; i++) if (y[i] > 0.4 * mx && y[i] >= y[i - 1] && y[i] > y[i + 1]) {
+      if (!crests.length || i - crests[crests.length - 1] > 6) crests.push(i);
+    }
+    const top = base + mx + 0.2;
+    crests.forEach(i => {
+      const x = LAY.x0 + i * R.dx;
+      const tri = new THREE.Mesh(new THREE.ConeGeometry(0.045, 0.1, 3), new THREE.MeshBasicMaterial({ color: 0xa9dcf2 }));
+      tri.rotation.z = Math.PI; tri.position.set(x, base + y[i] + 0.11, 0.02); measureG.add(tri);
+    });
+    const gaps = []; for (let k = 0; k + 1 < crests.length; k++) gaps.push(crests[k + 1] - crests[k]);
+    const gm = gaps.reduce((a, b) => a + b, 0) / (gaps.length || 1);
+    const periodicLike = gaps.length >= 2 && gaps.every(g => Math.abs(g - gm) < 0.15 * gm);
+    for (let k = 0; k + 1 < crests.length && k < 6; k++) {
+      const xa = LAY.x0 + crests[k] * R.dx, xb = LAY.x0 + crests[k + 1] * R.dx;
+      const pts = [xa, top - 0.05, 0, xa, top + 0.05, 0, xa, top, 0, xb, top, 0, xb, top - 0.05, 0, xb, top + 0.05, 0];
+      const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+      measureG.add(new THREE.LineSegments(g, lineMat()));
+      const lb = makeLabel((periodicLike ? 'λ≈' : '波峰間距 ') + fmt(xb - xa, 2) + ' m', { size: 0.15, color: '#a9dcf2' }); lb.position.set((xa + xb) / 2, top + 0.13, 0.02); measureG.add(lb);
+    }
+    let im = crests[0] ?? 0; crests.forEach(i => { if (y[i] > y[im]) im = i; });
+    if (crests.length) {
+      const x = LAY.x0 + im * R.dx + 0.0;
+      const g = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(x, base, 0.02), new THREE.Vector3(x, base + y[im], 0.02)]);
+      measureG.add(new THREE.Line(g, lineMat()));
+      const lb = makeLabel('A≈' + fmt(y[im], 2) + ' m', { size: 0.14, color: '#a9dcf2', ax: 0 }); lb.position.set(x + 0.06, base + y[im] / 2, 0.02); measureG.add(lb);
+    }
+  });
+}
+
+/* =========================================================
+   v = fλ 教學場景：紙帶 / 公車
+   ========================================================= */
+const FV = { strip: new THREE.Group(), bus: new THREE.Group(), key: '' };
+scene.add(FV.strip); scene.add(FV.bus);
+const labelCache = new Map();
+function cachedLabel(text, opt) {
+  const k = text + JSON.stringify(opt || {});
+  if (!labelCache.has(k)) labelCache.set(k, makeLabel(text, opt));
+  return labelCache.get(k).clone();
+}
+function buildFormulaObjects() {
+  clearGroup(FV.strip); clearGroup(FV.bus); FV.key = '';
+  FV.strip.visible = FV.bus.visible = false;
+  if (S.formula.mode === 'none' || !S.ropes.length) return;
+  const r = S.ropes[0], src = eff(r, 0).src, A = Math.max(0.15, src.amp);
+  const v = speed(r, 0), f = src.freq, lam = v / f, x0s = LAY.x0 + src.pos * r.L, xEnd = LAY.x0 + r.L;
+  const h = 2 * A + 0.34, cy = LAY.bases[0] - ropeAmpEst(r) - 0.55 - h / 2;
+  FV.geo = { A, v, f, lam, x0s, xEnd, h, cy, Tp: 1 / f };
+  if (S.formula.mode === 'strip') {
+    const paper = new THREE.Mesh(new THREE.PlaneGeometry(1, h), new THREE.MeshBasicMaterial({ color: 0xf3eedf, side: THREE.DoubleSide }));
+    paper.position.set(x0s, cy, -0.02); FV.paper = paper; FV.strip.add(paper);
+    const n = 600, lg = new THREE.BufferGeometry(); lg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(n * 3), 3));
+    const ln = new THREE.Line(lg, new THREE.LineBasicMaterial({ color: 0x1f3b6e })); ln.frustumCulled = false; FV.stripLine = ln; FV.stripN = n; FV.strip.add(ln);
+    const mid = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, 0), new THREE.Vector3(1, 0, 0)]), new THREE.LineBasicMaterial({ color: 0x9a9480 }));
+    mid.position.set(x0s, cy, -0.01); FV.stripMid = mid; FV.strip.add(mid);
+    // 捲筒
+    const cv = document.createElement('canvas'); cv.width = 128; cv.height = 32; const c = cv.getContext('2d');
+    c.fillStyle = '#efe8d4'; c.fillRect(0, 0, 128, 32); c.fillStyle = '#b8ae92'; for (let i = 0; i < 8; i++) c.fillRect(i * 16, 0, 5, 32);
+    const roll = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, h + 0.06, 28), new THREE.MeshStandardMaterial({ map: new THREE.CanvasTexture(cv), roughness: 0.9 }));
+    roll.position.set(x0s - 0.2, cy, -0.2); FV.roll = roll; FV.strip.add(roll);
+    const tg = makeLabel('紙帶以波速 v 捲出', { size: 0.16, color: '#eef0e6', ax: 0 }); tg.position.set(x0s - 0.42, cy - h / 2 - 0.2, 0); FV.strip.add(tg);
+    FV.tickG = new THREE.Group(); FV.strip.add(FV.tickG);
+  } else {
+    const L = Math.min(9.5, Math.max(1, lam));
+    const clip = [new THREE.Plane(new THREE.Vector3(1, 0, 0), -x0s), new THREE.Plane(new THREE.Vector3(-1, 0, 0), xEnd + 0.02)];
+    FV.clip = clip;
+    const road = new THREE.Mesh(new THREE.BoxGeometry(r.L + 1.2, 0.03, 0.9), new THREE.MeshStandardMaterial({ color: 0x3a4d46, roughness: 1 }));
+    road.position.set(LAY.x0 + r.L / 2 + 0.1, cy - h / 2 - 0.15, -0.2); FV.bus.add(road);
+    const st = new THREE.Mesh(new THREE.BoxGeometry(0.5, h + 0.3, 0.7), new THREE.MeshStandardMaterial({ color: 0x5b7d6f, roughness: 0.9 }));
+    st.position.set(x0s - 0.27, cy + 0.02, -0.2); FV.bus.add(st);
+    const sign = makeLabel('波源站：每 T＝' + fmt(1 / f, 2) + ' s 發一班車', { size: 0.15, color: '#22190a', bg: '#f2c14e', ax: 0 });
+    sign.position.set(x0s - 0.5, cy + h / 2 + 0.33, 0.2); FV.bus.add(sign);
+    FV.buses = [];
+    const nBus = Math.ceil(r.L / lam) + 2;
+    for (let k = 0; k < nBus; k++) {
+      const b = new THREE.Group();
+      const body = new THREE.Mesh(new THREE.BoxGeometry(lam * 0.97, h, 0.36), new THREE.MeshStandardMaterial({ color: 0xf2b33a, roughness: 0.6, clippingPlanes: clip }));
+      body.position.set(-lam / 2, 0, -0.2); b.add(body);
+      const glass = new THREE.Mesh(new THREE.BoxGeometry(0.04, h * 0.45, 0.37), new THREE.MeshStandardMaterial({ color: 0x24353a, clippingPlanes: clip }));
+      glass.position.set(-0.03, h * 0.18, -0.2); b.add(glass);
+      [-0.2 * lam - 0.05, -0.8 * lam].forEach(wx => {
+        const w = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.4, 16), new THREE.MeshStandardMaterial({ color: 0x1b1f1e, clippingPlanes: clip }));
+        w.rotation.x = Math.PI / 2; w.position.set(wx, -h / 2 - 0.02, -0.2); b.add(w);
+      });
+      const pts = [];
+      for (let q = 0; q <= 160; q++) {
+        const d = q / 160 * lam;
+        pts.push(new THREE.Vector3(-d, src.amp * waveFn(src.wave, TAU * d / lam + src.phase * Math.PI / 180), -0.015));
+      }
+      const wl = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: 0x1f2a5a, clippingPlanes: clip }));
+      b.add(wl);
+      const mid = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, -0.016), new THREE.Vector3(-lam * 0.97, 0, -0.016)]), new THREE.LineBasicMaterial({ color: 0x9a7a2a, clippingPlanes: clip }));
+      b.add(mid);
+      const lb = makeLabel('第' + (k + 1) + '班', { size: 0.15, color: '#22190a', clip });
+      lb.position.set(-lam / 2, h / 2 - 0.12, 0.0); b.add(lb);
+      b.position.y = cy; FV.bus.add(b); FV.buses.push(b);
+    }
+  }
+}
+function updateFormula() {
+  const card = $('#formula');
+  if (S.formula.mode === 'none' || !S.ropes.length || !FV.geo) { card.hidden = true; FV.strip.visible = FV.bus.visible = false; return; }
+  const r = S.ropes[0], e = eff(r, 0), src = e.src, G = FV.geo;
+  const el = S.formula.tStart === null ? 0 : Math.max(0, S.t - S.formula.tStart);
+  const len = clamp(G.v * el, 0, G.xEnd - G.x0s);
+  const periodic = src.mode === 'periodic';
+  if (S.formula.mode === 'strip') {
+    FV.strip.visible = true;
+    FV.paper.scale.x = Math.max(len, 0.001); FV.paper.position.x = G.x0s + len / 2;
+    FV.stripMid.scale.x = Math.max(len, 0.001);
+    const arr = FV.stripLine.geometry.attributes.position.array, n = FV.stripN;
+    for (let k = 0; k < n; k++) {
+      const d = k / (n - 1) * len;
+      arr[k * 3] = G.x0s + d; arr[k * 3 + 1] = G.cy + clamp(histVal(S.t - d / G.v), -G.h / 2 + 0.02, G.h / 2 - 0.02); arr[k * 3 + 2] = 0;
+    }
+    FV.stripLine.geometry.attributes.position.needsUpdate = true;
+    FV.roll.rotation.y = -len / 0.2;
+    // 刻度
+    const step = periodic ? G.lam : 1, want = Math.floor(len / step + 1e-6);
+    if (FV.tickG.userData.n !== want || FV.tickG.userData.step !== step) {
+      clearGroup(FV.tickG); FV.tickG.userData = { n: want, step };
+      for (let k = 1; k <= want && k <= 30; k++) {
+        const x = G.x0s + k * step;
+        const g = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(x, G.cy - G.h / 2, 0.001), new THREE.Vector3(x, G.cy + G.h / 2, 0.001)]);
+        FV.tickG.add(new THREE.Line(g, new THREE.LineBasicMaterial({ color: 0xc0563a })));
+        const txt = periodic ? k + 'T：' + k + 'λ' : k + ' m（' + fmt(k / G.v, 2) + ' s）';
+        const lb = makeLabel(txt, { size: 0.14, color: '#eef0e6' }); lb.position.set(x, G.cy - G.h / 2 - 0.16, 0); FV.tickG.add(lb);
+      }
+    }
+  } else {
+    FV.bus.visible = true;
+    const Tp = 1 / src.freq;
+    FV.buses.forEach((b, k) => {
+      const front = G.x0s + G.v * (el - k * Tp);
+      const on = periodic && S.formula.tStart !== null && front > G.x0s && front - G.lam < G.xEnd + 0.5 && (e.s.kind === 'periodic' ? true : (e.s.stopAt - S.formula.tStart) > k * Tp - 1e-6);
+      b.visible = on; if (on) b.position.x = front;
+    });
+  }
+  // 公式卡
+  const cyc = periodic ? el * src.freq : 0;
+  const v = G.v;
+  let html = `<div class="eq">v = √(F/μ) = √(${fmt(r.F, 2)}/${fmt(r.mu, 3)}) = <b>${fmt(v, 2)} m/s</b>`;
+  if (periodic) html += `<br>f = <b>${fmt(src.freq, 2)} Hz</b>　T = 1/f = <b>${fmt(1 / src.freq, 2)} s</b><br>λ = v/f = <b>${fmt(v / src.freq, 2)} m</b>`;
+  html += `<br>經過 ${fmt(el, 2)} s，送出 ${fmt(len, 2)} m</div>`;
+  if (periodic) {
+    html += S.formula.mode === 'strip'
+      ? `<div class="say">每振動 1 次（T），紙帶送出 1 個 λ ⇒ v = λ/T = fλ<br>已振動 ${fmt(cyc, 1)} 次 → ${fmt(cyc, 1)} λ</div>`
+      : `<div class="say">每 T 發一班、每班長 λ ⇒ 1 秒內開出 f 班 ⇒ v = fλ<br>已發出 ${Math.min(Math.ceil(cyc - 1e-6), 99)} 班（${fmt(cyc, 1)} T）</div>`;
+  } else html += `<div class="say">${S.formula.mode === 'bus' ? '公車模式需使用「週期」波源。' : '紙帶上記錄的是波源過去的振動。'}</div>`;
+  html += `<div class="tip">${card.classList.contains('mini') ? '點一下展開算式' : '點一下縮小'}</div>`;
+  if (card.dataset.h !== html) { card.innerHTML = html; card.dataset.h = html; }
+  card.hidden = false;
+}
+
+/* =========================================================
+   畫面 / 攝影機
+   ========================================================= */
+function resize() {
+  const w = stage.clientWidth, h = stage.clientHeight;
+  renderer.setSize(w, h, false); camera.aspect = w / Math.max(1, h); camera.updateProjectionMatrix();
+  const ov = $('#overlay'), d = Math.min(2, window.devicePixelRatio || 1); ov.width = w * d; ov.height = h * d;
+  const ch = $('#chart'); if (ch.clientWidth) { ch.width = ch.clientWidth * 2; ch.height = ch.clientHeight * 2; }
+}
+let refitT;
+let lastW = 0;
+new ResizeObserver(() => {
+  resize();
+  const w = stage.clientWidth;
+  if (Math.abs(w - lastW) > 40) { lastW = w; clearTimeout(refitT); refitT = setTimeout(() => fitView(curView), 120); }
+}).observe(stage);
+function setPanel(open) {
+  $('#app').classList.toggle('nopanel', !open);
+  const b = $('#bTool'); b.classList.toggle('on', !open); b.setAttribute('aria-pressed', String(open));
+  try { localStorage.setItem('rwl.panel', open ? '1' : '0'); } catch (e) {}
+}
+let curView = 'front';
+function fitView(kind = 'front') {
+  curView = kind;
+  const xa = LAY.x0 - 0.8, xb = LAY.x0 + LAY.maxL + 0.8, ya = LAY.bottom - 0.2, yb = LAY.top + 0.3;
+  const cx = (xa + xb) / 2, cy = (ya + yb) / 2, w = xb - xa, h = (yb - ya) + 1.0;
+  const t = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+  const dist = Math.max(h / 2 / t, w / 2 / t / camera.aspect) * 1.05;
+  controls.target.set(cx, cy - 0.15, 0);
+  if (kind === 'oblique') camera.position.set(cx + dist * 0.42, cy + dist * 0.38, dist * 0.85);
+  else if (kind === 'top') camera.position.set(cx, cy + dist, 0.01);
+  else camera.position.set(cx, cy - 0.15, dist);
+  controls.update();
+}
+
+/* =========================================================
+   互動：手動拉扯
+   ========================================================= */
+const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
+let drag = null;
+function axisScreen(r, j) {
+  const ri = S.ropes.indexOf(r), src = r.sources[j];
+  const p0 = new THREE.Vector3(LAY.x0 + src.pos * r.L, LAY.bases[ri], 0);
+  const ax = r.pol === 'transverse' ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(1, 0, 0);
+  const w = stage.clientWidth, h = stage.clientHeight;
+  const a = p0.clone().project(camera), b = p0.clone().add(ax).project(camera);
+  const A = { x: (a.x + 1) / 2 * w, y: (1 - a.y) / 2 * h }, B = { x: (b.x + 1) / 2 * w, y: (1 - b.y) / 2 * h };
+  return { bx: A.x, by: A.y, ax: B.x - A.x, ay: B.y - A.y };
+}
+renderer.domElement.addEventListener('pointerdown', ev => {
+  const rect = renderer.domElement.getBoundingClientRect();
+  ndc.set((ev.clientX - rect.left) / rect.width * 2 - 1, -(ev.clientY - rect.top) / rect.height * 2 + 1);
+  ray.setFromCamera(ndc, camera);
+  let hit = ray.intersectObjects(handleMeshes())[0];
+  if (!hit) {
+    // 手指點不準時：挑螢幕上距離最近的握把（觸控容許 40px，滑鼠 14px）
+    const tol = ev.pointerType === 'mouse' ? 14 : 40, w = rect.width, h = rect.height, px = ev.clientX - rect.left, py = ev.clientY - rect.top;
+    let best = null, bd = tol;
+    handleMeshes().forEach(m => { const v = m.getWorldPosition(new THREE.Vector3()).project(camera); const d = Math.hypot((v.x + 1) / 2 * w - px, (1 - v.y) / 2 * h - py); if (d < bd) { bd = d; best = m; } });
+    if (best) hit = { object: best };
+  }
+  if (!hit) return;
+  const { rope: r, j } = hit.object.userData, e = eff(r, j);
+  if (e.src.mode !== 'manual' || ev.shiftKey) {
+    controls.enabled = false;
+    posDrag = { r, j, id: ev.pointerId };
+    S.sel = S.ropes.indexOf(r);
+    renderer.domElement.setPointerCapture(ev.pointerId);
+    renderer.domElement.style.cursor = 'ew-resize';
+    return;
+  }
+  if (S.paused) { toast('模擬暫停中，按 ▶ 播放後再拉動'); return; }
+  controls.enabled = false;
+  const as = axisScreen(r, j);
+  drag = { r, j, e, as, x: ev.clientX, y: ev.clientY, v0: e.s.kind === 'manual' ? (driveVal(e.src, e.s, S.t) || 0) : 0, id: ev.pointerId };
+  e.s.kind = 'manual'; e.s.dragging = true; e.s.manual = drag.v0; e.s.t0 = S.t;
+  renderer.domElement.setPointerCapture(ev.pointerId);
+});
+let posDrag = null;
+const zPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0), hitPt = new THREE.Vector3();
+function rayFromEvent(ev) {
+  const rect = renderer.domElement.getBoundingClientRect();
+  ndc.set((ev.clientX - rect.left) / rect.width * 2 - 1, -(ev.clientY - rect.top) / rect.height * 2 + 1);
+  ray.setFromCamera(ndc, camera);
+}
+function handleMeshes() { const hs = []; S.ropes.forEach(r => { const V = VIS.get(r); V && V.handles.forEach(h => hs.push(h.m)); }); return hs; }
+renderer.domElement.addEventListener('pointermove', ev => {
+  if (posDrag) {
+    rayFromEvent(ev);
+    if (ray.ray.intersectPlane(zPlane, hitPt)) {
+      const r = posDrag.r, m = Math.round(clamp(hitPt.x - LAY.x0, 0, r.L) / 0.05) * 0.05;
+      r.sources[posDrag.j].pos = clamp(m / r.L, 0, 1);
+      const sh = $('#stage-pos'); if (sh) sh.textContent = '';
+      toastQuiet('波源 ' + (posDrag.j + 1) + '：x = ' + fmt(m, 2) + ' m');
+    }
+    return;
+  }
+  if (!drag && ev.buttons === 0 && !DR.on) {
+    rayFromEvent(ev);
+    const hit = ray.intersectObjects(handleMeshes())[0];
+    renderer.domElement.style.cursor = hit ? (eff(hit.object.userData.rope, hit.object.userData.j).src.mode === 'manual' ? 'ns-resize' : 'ew-resize') : '';
+  }
+  if (!drag) return;
+  const dx = ev.clientX - drag.x, dy = ev.clientY - drag.y, a = drag.as, l2 = a.ax * a.ax + a.ay * a.ay || 1;
+  drag.e.s.manual = clamp(drag.v0 + (dx * a.ax + dy * a.ay) / l2, -1.6, 1.6);
+});
+const endDrag = () => {
+  if (posDrag) { posDrag = null; controls.enabled = true; renderer.domElement.style.cursor = ''; if (S.tab === 'source' || S.tab === 'medium') renderPanel(); return; }
+  if (!drag) return;
+  const s = drag.e.s; s.dragging = false; s.relT = S.t; s.relV = s.manual;
+  drag = null; controls.enabled = true;
+};
+renderer.domElement.addEventListener('pointerup', endDrag);
+renderer.domElement.addEventListener('pointercancel', endDrag);
+const modeName = m => ({ pulse: '脈衝', periodic: '週期', manual: '手動', custom: '自訂' }[m] || m);
+
+/* =========================================================
+   自訂振動：在畫面上繪製箭頭
+   ========================================================= */
+const overlay = $('#overlay'), octx = overlay.getContext('2d');
+const DR = { on: false, r: null, j: 0, cur: null };
+function enterDraw(r, j) {
+  setPaused(true);
+  DR.on = true; DR.r = r; DR.j = j; DR.cur = null;
+  overlay.classList.add('on'); controls.enabled = false;
+  $('#drawBar').hidden = false; $('#scn').hidden = true;
+  $('#drawN').textContent = r.sources[j].custom.arrows.length + 1;
+}
+function exitDraw() {
+  if (!DR.on) return;
+  DR.on = false; overlay.classList.remove('on'); controls.enabled = true;
+  $('#drawBar').hidden = true; $('#scn').hidden = false;
+  const src = DR.r.sources[DR.j], s = srt(src);
+  if (src.custom.arrows.length) { s.armed = true; toast('已備妥 ' + src.custom.arrows.length + ' 支箭頭，按 ▶ 恢復模擬即產生波'); }
+  renderPanel();
+}
+overlay.addEventListener('pointerdown', ev => {
+  if (!DR.on) return;
+  const rc = overlay.getBoundingClientRect();
+  DR.cur = { x0: ev.clientX - rc.left, y0: ev.clientY - rc.top, x: ev.clientX - rc.left, y: ev.clientY - rc.top };
+  overlay.setPointerCapture(ev.pointerId);
+});
+overlay.addEventListener('pointermove', ev => {
+  if (!DR.on || !DR.cur) return;
+  const rc = overlay.getBoundingClientRect(); DR.cur.x = ev.clientX - rc.left; DR.cur.y = ev.clientY - rc.top;
+});
+overlay.addEventListener('pointerup', () => {
+  if (!DR.on || !DR.cur) return;
+  const m = curMeters(); DR.cur = null;
+  if (Math.abs(m) >= 0.02) { DR.r.sources[DR.j].custom.arrows.push({ d: Math.round(m * 100) / 100 }); $('#drawN').textContent = DR.r.sources[DR.j].custom.arrows.length + 1; renderPanel(); }
+});
+function curMeters() {
+  const a = axisScreen(DR.r, DR.j), l2 = a.ax * a.ax + a.ay * a.ay || 1, c = DR.cur;
+  return clamp(((c.x - c.x0) * a.ax + (c.y - c.y0) * a.ay) / l2, -1.6, 1.6);
+}
+function arrowHead(ctx, x1, y1, x2, y2, col, w) {
+  ctx.strokeStyle = col; ctx.fillStyle = col; ctx.lineWidth = w; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+  const an = Math.atan2(y2 - y1, x2 - x1), s = 6 + w * 1.6;
+  ctx.beginPath(); ctx.moveTo(x2, y2); ctx.lineTo(x2 - s * Math.cos(an - 0.45), y2 - s * Math.sin(an - 0.45)); ctx.lineTo(x2 - s * Math.cos(an + 0.45), y2 - s * Math.sin(an + 0.45)); ctx.closePath(); ctx.fill();
+}
+function drawOverlay() {
+  const d = overlay.width / Math.max(1, stage.clientWidth);
+  octx.setTransform(1, 0, 0, 1, 0, 0); octx.clearRect(0, 0, overlay.width, overlay.height);
+  // 要顯示箭頭的波源
+  let tgt = null;
+  if (DR.on) tgt = { r: DR.r, j: DR.j };
+  else S.ropes.some(r => r.sources.some((src, j) => {
+    if (src.mode !== 'custom' || src.custom.kind !== 'arrows' || !src.custom.arrows.length) return false;
+    const s = srt(src); if (s.armed || (s.kind === 'custom' && !seqDone(src, s))) { tgt = { r, j }; return true; } return false;
+  }));
+  if (!tgt) return;
+  octx.setTransform(d, 0, 0, d, 0, 0);
+  const { r, j } = tgt, src = r.sources[j], s = srt(src), a = axisScreen(r, j), al = Math.hypot(a.ax, a.ay) || 1;
+  const px = -a.ay / al, py = a.ax / al; // 垂直方向
+  const sideSign = px >= 0 ? 1 : -1;
+  const P = (val, k) => ({ x: a.bx + a.ax * val + sideSign * px * (56 + k * 38), y: a.by + a.ay * val + sideSign * py * (56 + k * 38) });
+  octx.fillStyle = '#eef0e6'; octx.beginPath(); octx.arc(a.bx, a.by, 4, 0, TAU); octx.fill();
+  octx.font = '600 12px "Noto Sans TC", sans-serif'; octx.fillText('波源', a.bx - 14, a.by + 20);
+  // 平衡線
+  octx.setLineDash([4, 4]); octx.strokeStyle = 'rgba(238,240,230,.35)'; octx.lineWidth = 1;
+  const e0 = P(0, -0.8), e1 = P(0, src.custom.arrows.length + 1.5);
+  octx.beginPath(); octx.moveTo(a.bx, a.by); octx.lineTo(e1.x, e1.y); octx.stroke(); octx.setLineDash([]);
+  const playingSeq = s.kind === 'custom' && s.seq && !seqDone(src, s);
+  let cur = playingSeq ? s.seq.vals[0] : heldVal(src, s), playing = -1, lowY = a.by + 20;
+  const base0 = cur;
+  if (Math.abs(base0) > 1e-3) {
+    const b1 = P(base0, -0.8), b2 = P(base0, src.custom.arrows.length + 1.5);
+    octx.setLineDash([2, 5]); octx.strokeStyle = 'rgba(242,193,78,.55)'; octx.lineWidth = 1;
+    octx.beginPath(); octx.moveTo(b1.x, b1.y); octx.lineTo(b2.x, b2.y); octx.stroke(); octx.setLineDash([]);
+    octx.fillStyle = 'rgba(242,193,78,.9)'; octx.font = '500 11px "Noto Sans TC", sans-serif'; octx.textAlign = 'left';
+    octx.fillText('起點 ' + (base0 > 0 ? '+' : '') + fmt(base0, 2) + ' m', b1.x - 4, b1.y - 8);
+  }
+  if (playingSeq) {
+    let tt = S.t - s.t0; if (src.custom.loop) tt %= s.seq.total;
+    playing = Math.min(s.seq.times.length - 2, Math.floor(tt / src.custom.segDur));
+  }
+  const list = src.custom.arrows.slice();
+  if (DR.on && DR.cur) list.push({ d: curMeters(), preview: true });
+  list.forEach((q, k) => {
+    const A1 = P(cur, k), A2 = P(cur + q.d, k), col = ARROW_COLORS[k % ARROW_COLORS.length];
+    if (k > 0) { const pv = P(cur, k - 1); octx.setLineDash([3, 4]); octx.strokeStyle = 'rgba(238,240,230,.4)'; octx.lineWidth = 1; octx.beginPath(); octx.moveTo(pv.x, pv.y); octx.lineTo(A1.x, A1.y); octx.stroke(); octx.setLineDash([]); }
+    octx.globalAlpha = q.preview ? 0.6 : (playing >= 0 && playing !== k ? 0.45 : 1);
+    arrowHead(octx, A1.x, A1.y, A2.x, A2.y, col, playing === k ? 6 : 4);
+    // 編號
+    const mx = (A1.x + A2.x) / 2 + sideSign * px * 14, my = (A1.y + A2.y) / 2 + sideSign * py * 14;
+    octx.fillStyle = col; octx.beginPath(); octx.arc(mx, my, 10, 0, TAU); octx.fill();
+    octx.fillStyle = '#1c322c'; octx.font = '700 12px "JetBrains Mono", monospace'; octx.textAlign = 'center'; octx.textBaseline = 'middle';
+    octx.fillText(String(k + 1), mx, my + 0.5);
+    octx.fillStyle = '#eef0e6'; octx.font = '500 11px "JetBrains Mono", monospace'; octx.textAlign = 'left';
+    octx.fillText((q.d > 0 ? '+' : '') + fmt(q.d, 2) + 'm', A2.x + 6, A2.y);
+    octx.globalAlpha = 1; octx.textBaseline = 'alphabetic';
+    lowY = Math.max(lowY, A1.y, A2.y);
+    cur += q.d;
+  });
+  if (list.length) {
+    const k = list.length;
+    if (src.custom.loop && Math.abs(cur - base0) > 1e-3) {
+      const A1 = P(cur, k), A2 = P(base0, k);
+      octx.setLineDash([5, 5]); octx.globalAlpha = playing === k ? 1 : 0.55;
+      arrowHead(octx, A1.x, A1.y, A2.x, A2.y, 'rgba(238,240,230,.8)', 2); octx.setLineDash([]); octx.globalAlpha = 1;
+      octx.fillStyle = 'rgba(238,240,230,.75)'; octx.font = '500 11px "Noto Sans TC", sans-serif'; octx.textAlign = 'left'; octx.fillText('重複播放：回到起點', A2.x + 8, A2.y + 14);
+    } else if (Math.abs(cur) > 1e-3) {
+      const E = P(cur, k - 0.4);
+      octx.fillStyle = 'rgba(238,240,230,.8)'; octx.font = '500 11px "Noto Sans TC", sans-serif'; octx.textAlign = 'left';
+      octx.fillText('結束後停在這裡', E.x + 16, E.y + 4);
+    }
+  }
+  if (!DR.on && s.armed) {
+    octx.fillStyle = '#f2c14e'; octx.font = '700 14px "LXGW WenKai TC", "Noto Sans TC", sans-serif';
+    octx.textAlign = 'left'; octx.fillText('已備妥：按「播放」開始', a.bx - 20, lowY + 26);
+  }
+}
+
+/* =========================================================
+   位移–時間圖
+   ========================================================= */
+const CH = { t: [], a: [], b: [] };
+const chart = $('#chart'), cctx = chart.getContext('2d');
+function chartSample() {
+  const r0 = S.ropes[clamp(S.probe.rope, 0, S.ropes.length - 1)]; if (!r0) return;
+  const R = rt(r0), src = r0.sources[0];
+  const vs = src ? R.y[Math.round(src.pos * R.N)] : 0, vp = R.y[Math.round(S.probe.pos * R.N)];
+  const n = CH.t.length; if (n && S.t - CH.t[n - 1] < 0.004) return;
+  CH.t.push(S.t); CH.a.push(vs); CH.b.push(vp);
+  while (CH.t.length && S.t - CH.t[0] > 6.5) { CH.t.shift(); CH.a.shift(); CH.b.shift(); }
+}
+function drawChart() {
+  chart.hidden = !S.display.chart; if (!S.display.chart) return;
+  const W = chart.width, H = chart.height, c = cctx, d = W / chart.clientWidth || 2;
+  c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, W, H);
+  c.scale(d, d);
+  const w = W / d, h = H / d, l = 30, rr = 8, tp = 22, bt = 18;
+  const r0 = S.ropes[clamp(S.probe.rope, 0, S.ropes.length - 1)]; if (!r0) return;
+  const A = Math.max(0.1, ropeAmpEst(r0)) * 1.15, win = 5;
+  c.fillStyle = 'rgba(238,240,230,.85)'; c.font = '600 11px "Noto Sans TC", sans-serif';
+  c.fillText('位移–時間圖', 8, 14);
+  c.fillStyle = r0.color; c.fillRect(84, 7, 10, 3); c.fillStyle = 'rgba(238,240,230,.75)'; c.fillText('波源', 97, 14);
+  c.fillStyle = '#ff5a4e'; c.fillRect(128, 7, 10, 3); c.fillStyle = 'rgba(238,240,230,.75)'; c.fillText('紅點 x=' + fmt(S.probe.pos * r0.L, 1) + 'm', 141, 14);
+  const X = t => l + (t - (S.t - win)) / win * (w - l - rr), Y = v => tp + (h - tp - bt) / 2 * (1 - v / A);
+  c.strokeStyle = 'rgba(238,240,230,.15)'; c.lineWidth = 1; c.beginPath();
+  c.moveTo(l, Y(0)); c.lineTo(w - rr, Y(0)); c.moveTo(l, tp); c.lineTo(l, h - bt); c.stroke();
+  c.fillStyle = 'rgba(238,240,230,.6)'; c.font = '10px "JetBrains Mono", monospace';
+  c.fillText('+' + fmt(A, 1), 2, tp + 8); c.fillText('-' + fmt(A, 1), 2, h - bt);
+  for (let k = Math.ceil(S.t - win); k <= S.t; k++) { if (k < 0) continue; const x = X(k); c.fillText(k + 's', x - 6, h - 4); c.strokeStyle = 'rgba(238,240,230,.08)'; c.beginPath(); c.moveTo(x, tp); c.lineTo(x, h - bt); c.stroke(); }
+  const line = (arr, col) => { c.strokeStyle = col; c.lineWidth = 1.8; c.beginPath(); let st = false; for (let i = 0; i < CH.t.length; i++) { if (CH.t[i] < S.t - win) continue; const x = X(CH.t[i]), y = Y(clamp(arr[i], -A, A)); st ? c.lineTo(x, y) : c.moveTo(x, y); st = true; } c.stroke(); };
+  line(CH.a, r0.color); line(CH.b, '#ff5a4e');
+}
+
+/* =========================================================
+   主迴圈
+   ========================================================= */
+let last = performance.now(), frameN = 0;
+function loop(now) {
+  const real = Math.min(0.05, (now - last) / 1000); last = now; frameN++;
+  if (!S.paused && !DR.on) {
+    advance(real * S.timeScale);
+    chartSample();
+    if (S.display.measure && frameN % 12 === 0) buildMeasure();
+  }
+  updateVisuals(); updateFormula();
+  controls.update();
+  renderer.render(scene, camera);
+  drawOverlay(); drawChart();
+  $('#clock').textContent = 't = ' + S.t.toFixed(3) + ' s';
+  if (frameN % 10 === 0) updateStatus();
+  requestAnimationFrame(loop);
+}
+
+/* =========================================================
+   播放控制
+   ========================================================= */
+const ICON_PLAY = '<svg viewBox="0 0 24 24"><path d="M7 5l12 7-12 7z" fill="currentColor"/></svg>播放';
+const ICON_PAUSE = '<svg viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></svg>暫停';
+function setPaused(p) {
+  const was = S.paused; S.paused = p;
+  $('#bPlay').innerHTML = p ? ICON_PLAY : ICON_PAUSE;
+  $('#bPlay').classList.toggle('on', p);
+  if (!p) {
+    if (DR.on) exitDraw();
+    if (S.frozen) setFrozen(false, true);
+    if (was) allSourceRefs().forEach(e => { if (e.s.armed) startSource(e.src, e.s); });
+    last = performance.now();
+  }
+  if (p && S.display.measure) buildMeasure();
+}
+function setFrozen(f, fromPlay) {
+  S.frozen = f;
+  stage.classList.toggle('frozen', f); $('#freezeTag').hidden = !f; $('#bFreeze').classList.toggle('on', f);
+  if (f) { S._measureBefore = S.display.measure; S.display.measure = true; $('#freezeTag').textContent = '時間凍結　t = ' + S.t.toFixed(3) + ' s'; setPaused(true); buildMeasure(); }
+  else { S.display.measure = !!S._measureBefore; buildMeasure(); if (!fromPlay) setPaused(false); }
+  if (S.tab === 'display') renderPanel();
+}
+const SPEED_MIN = 0.02, SPEED_MAX = 2;
+const speedToSlider = v => Math.round(100 * Math.log(v / SPEED_MIN) / Math.log(SPEED_MAX / SPEED_MIN));
+const sliderToSpeed = p => SPEED_MIN * Math.pow(SPEED_MAX / SPEED_MIN, p / 100);
+function setSpeed(v) {
+  S.timeScale = clamp(v, SPEED_MIN, SPEED_MAX);
+  $('#speed').value = speedToSlider(S.timeScale);
+  $('#speedOut').textContent = (S.timeScale < 0.1 ? S.timeScale.toFixed(2) : S.timeScale < 1 ? S.timeScale.toFixed(2).replace(/0$/, '') : S.timeScale.toFixed(1).replace(/\.0$/, '')) + '×';
+}
+$('#speed').addEventListener('input', e => setSpeed(sliderToSpeed(+e.target.value)));
+function fireAll() {
+  let n = 0;
+  allSourceRefs().forEach(e => { if (e.src.mode === 'pulse' || e.src.mode === 'custom' || (e.src.mode === 'periodic' && !e.s.kind)) { if (startSource(e.src, e.s)) n++; } });
+  if (!n) toast('沒有可觸發的波源（手動模式請直接拖曳握把）');
+  if (S.paused && n) setPaused(false);
+}
+function fireRope(r) {
+  r.sources.forEach((_, j) => { const e = eff(r, j); if (e.src.mode !== 'manual') startSource(e.src, e.s); });
+  if (S.paused) setPaused(false);
+}
+
+/* =========================================================
+   教學情境
+   ========================================================= */
+const PRESETS = [
+  { id: 'fixed', tag: '反射', title: '脈衝・固定端反射', desc: '單一脈衝撞上固定端，反射後上下顛倒。', speed: 0.5, start: 'pulse',
+    notes: ['按「發射」送出向上的脈衝。', '觀察：反射脈衝的方向與入射脈衝相反。', '提問：為什麼固定端會讓脈衝翻轉？'],
+    ropes: [{ name: '繩子', rightEnd: 'fixed', sources: [{ mode: 'pulse', amp: 0.45, width: 0.35 }] }] },
+  { id: 'free', tag: '反射', title: '脈衝・自由端反射', desc: '右端套在光滑桿上的圓環，反射不翻轉。', speed: 0.5, start: 'pulse',
+    notes: ['右端是可上下滑動的圓環（自由端）。', '觀察：反射脈衝與入射同側，端點位移約為兩倍。', '比較：和固定端反射有什麼不同？'],
+    ropes: [{ name: '繩子', rightEnd: 'free', sources: [{ mode: 'pulse', amp: 0.4, width: 0.35 }] }] },
+  { id: 'tension', tag: '波速', title: '張力與波速', desc: '兩條同種繩，張力 2 N 與 8 N，同步發射。', speed: 0.5, start: 'pulse',
+    notes: ['兩條繩的線密度相同，張力相差 4 倍。', '觀察：哪一條的脈衝先到右端？快幾倍？', '驗證 v = √(F/μ)：張力 4 倍 → 波速 2 倍。'],
+    ropes: [{ name: '張力 2 N', F: 2, rightEnd: 'absorb', sources: [{ mode: 'pulse', amp: 0.35, width: 0.4 }] },
+            { name: '張力 8 N', F: 8, color: ROPE_COLORS[1], rightEnd: 'absorb', sync: true, sources: [{}] }] },
+  { id: 'density', tag: '波速', title: '線密度與波速', desc: '相同張力，細繩與粗繩比賽。', speed: 0.5, start: 'pulse',
+    notes: ['張力都是 4 N，線密度 0.1 與 0.4 kg/m。', '觀察：較重的繩子波速較慢。', '提問：波速與 μ 的關係是什麼？'],
+    ropes: [{ name: '細繩 μ=0.1', mu: 0.1, rightEnd: 'absorb', sources: [{ mode: 'pulse', amp: 0.35, width: 0.4 }] },
+            { name: '粗繩 μ=0.4', mu: 0.4, color: ROPE_COLORS[2], rightEnd: 'absorb', sync: true, sources: [{}] }] },
+  { id: 'light-heavy', tag: '介質', title: '輕繩接重繩', desc: '波由疏介質進入密介質：部分反射且翻轉。', speed: 0.4, start: 'pulse',
+    notes: ['中點之後的繩子線密度是前段的 4 倍。', '觀察：在接點處分成「反射」與「透射」兩個脈衝。', '反射脈衝翻轉，透射脈衝變慢、波形變窄。'],
+    ropes: [{ name: '輕→重', L: 8, junction: { on: true, pos: 0.5, ratio: 4 }, rightEnd: 'absorb', sources: [{ mode: 'pulse', amp: 0.45, width: 0.35 }] }] },
+  { id: 'heavy-light', tag: '介質', title: '重繩接輕繩', desc: '波由密介質進入疏介質：反射不翻轉。', speed: 0.4, start: 'pulse',
+    notes: ['後段線密度只有前段的 1/4。', '觀察：反射脈衝與入射同側，透射脈衝變寬、變快。', '和「輕繩接重繩」對照。'],
+    ropes: [{ name: '重→輕', L: 8, F: 4, mu: 0.4, junction: { on: true, pos: 0.5, ratio: 0.25 }, rightEnd: 'absorb', sources: [{ mode: 'pulse', amp: 0.4, width: 0.4 }] }] },
+  { id: 'superpose', tag: '疊加', title: '波的疊加：相向脈衝', desc: '兩端同時發射，同相建設、反相破壞。', speed: 0.35, start: 'pulse',
+    notes: ['上面一條：兩個向上脈衝相遇 → 相加變高。', '下面一條：一上一下相遇 → 瞬間幾乎抵消。', '用「時間凍結」停在相遇瞬間觀察，再恢復看它們各自穿過。'],
+    ropes: [{ name: '同相', leftEnd: 'absorb', rightEnd: 'absorb', sources: [{ pos: 0, mode: 'pulse', amp: 0.3, width: 0.4 }, { pos: 1, mode: 'pulse', amp: 0.3, width: 0.4 }] },
+            { name: '反相', color: ROPE_COLORS[2], leftEnd: 'absorb', rightEnd: 'absorb', sources: [{ pos: 0, mode: 'pulse', amp: 0.3, width: 0.4 }, { pos: 1, mode: 'pulse', amp: 0.3, width: 0.4, sign: -1 }] }] },
+  { id: 'standing', tag: '駐波', title: '駐波：兩端固定', desc: '以第 3 諧音頻率振動，形成 3 個波腹。', speed: 0.6, start: 'periodic',
+    notes: ['波源振幅很小，但在共振頻率下駐波振幅會被放大。', '觀察：波節不動、波腹振動最大；相鄰波節相距 λ/2。', '到「介質」分頁按 f₁、f₂、f₄ 換其他諧音。'],
+    ropes: [{ name: '弦', L: 6, F: 4, mu: 0.25, damping: 0.35, sources: [{ mode: 'periodic', amp: 0.05, freq: 1 }] }] },
+  { id: 'manual', tag: '手動', title: '手動拉扯繩子', desc: '用滑鼠或手指拖曳波源握把，自己甩出波。', speed: 0.6, start: null,
+    notes: ['按住左端發亮的握把上下拖曳。', '試試快速甩一下、慢慢拉一下，波形寬度有何不同？', '試試規律地上下擺動，形成連續週期波。'],
+    ropes: [{ name: '手中的繩', L: 7, rightEnd: 'absorb', sources: [{ mode: 'manual', amp: 0.5 }] }] },
+  { id: 'spring-long', tag: '彈簧', title: '彈簧縱波（疏密波）', desc: '彈簧沿長度方向振動，出現疏部與密部。', speed: 0.5, start: 'periodic',
+    notes: ['質點振動方向與波的傳播方向平行。', '觀察白色標記：只在原位置附近左右來回。', '上方曲線把「向右位移」畫成「向上」，對照密部、疏部的位置。'],
+    ropes: [{ name: '彈簧', medium: 'spring', pol: 'longitudinal', L: 6, F: 2.25, mu: 0.25, turns: 48, coilR: 0.2, rightEnd: 'absorb', sources: [{ mode: 'periodic', amp: 0.1, freq: 1 }] }] },
+  { id: 'spring-both', tag: '彈簧', title: '彈簧：橫波與縱波', desc: '兩條相同彈簧同步振動，一條橫向、一條縱向。', speed: 0.5, start: 'periodic',
+    notes: ['同一個波源節奏，兩種振動方向。', '觀察：兩者的波長與波速相同。', '橫波的波峰位置對應縱波的哪裡？'],
+    ropes: [{ name: '橫波彈簧', medium: 'spring', pol: 'transverse', L: 6, F: 2.25, mu: 0.25, turns: 48, coilR: 0.16, rightEnd: 'absorb', sources: [{ mode: 'periodic', amp: 0.25, freq: 1 }] },
+            { name: '縱波彈簧', medium: 'spring', pol: 'longitudinal', color: ROPE_COLORS[1], L: 6, F: 2.25, mu: 0.25, turns: 48, coilR: 0.16, rightEnd: 'absorb', sync: true, sources: [{}] }] },
+  { id: 'arrows', tag: '自訂', title: '自訂振動：箭頭', desc: '先上、再下、回原點：畫出一個完整波形。', speed: 0.5, start: 'armed',
+    notes: ['畫面上的 1、2、3 號箭頭就是波源的動作順序。', '按 ▶ 恢復模擬，波源依箭頭運動並產生波。', '到「波源」分頁按「在畫面上繪製」，自己設計振動。'],
+    ropes: [{ name: '繩子', L: 7, rightEnd: 'absorb', sources: [{ mode: 'custom', amp: 0.4, custom: { kind: 'arrows', arrows: [{ d: 0.4 }, { d: -0.8 }, { d: 0.4 }], segDur: 0.25 } }] }] },
+  { id: 'strip', tag: '公式', title: '波速公式 v = fλ：紙帶', desc: '紙帶以波速捲出，記錄波源振動。', speed: 0.5, start: 'periodic', formula: 'strip',
+    notes: ['紙帶與波同步，以速率 v 從波源捲出。', '波源每振動一次（經過 T），紙帶剛好送出一個 λ。', '所以 v = λ / T = fλ。可用「時間凍結」數數看。'],
+    ropes: [{ name: '繩子', L: 8, F: 1, mu: 0.25, rightEnd: 'absorb', sources: [{ mode: 'periodic', amp: 0.32, freq: 1 }] }] },
+  { id: 'bus', tag: '公式', title: '波速公式 v = fλ：公車', desc: '每 T 秒發一班長 λ 的公車，車速就是波速。', speed: 0.5, start: 'periodic', formula: 'bus',
+    notes: ['每輛公車車身畫著一個完整波長。', '波源站每 T 秒發一班，1 秒發出 f 班。', '1 秒內開出 f 輛、每輛長 λ ⇒ 車速 v = fλ。'],
+    ropes: [{ name: '繩子', L: 8, F: 1, mu: 0.25, rightEnd: 'absorb', sources: [{ mode: 'periodic', amp: 0.32, freq: 1 }] }] }
+];
+function applyState(st, opts = {}) {
+  S.ropes = st.ropes.map((o, i) => newRope(Object.assign({ name: '繩' + (i + 1), color: ROPE_COLORS[i % ROPE_COLORS.length] }, o)));
+  S.sel = 0;
+  S.formula.mode = st.formula || 'none';
+  if (st.display) Object.assign(S.display, st.display);
+  if (st.probe) Object.assign(S.probe, st.probe);
+  S.scenario = { id: st.id || null, title: st.title || '自訂設定', notes: st.notes || [] };
+  clearGroup(ghosts);
+  resetWaves();
+  buildScene(); fitView('front');
+  setSpeed(st.speed ?? st.timeScale ?? 1);
+  renderScenario();
+  if (S.frozen) setFrozen(false, true);
+  if (st.start === 'periodic') { allSourceRefs().forEach(e => { if (e.src.mode === 'periodic') startSource(e.src, e.s); }); setPaused(false); }
+  else if (st.start === 'armed') { allSourceRefs().forEach(e => { if (e.src.mode === 'custom') e.s.armed = true; }); setPaused(true); }
+  else setPaused(false);
+  renderPanel();
+}
+function loadPreset(id) {
+  const p = PRESETS.find(q => q.id === id); if (!p) return;
+  S.display.measure = false; S._measureBefore = false;
+  applyState(deep(p));
+  toast('已載入：' + p.title);
+}
+function renderScenario() {
+  $('#scnTitle').textContent = S.scenario.title;
+  $('#scnNotes').innerHTML = (S.scenario.notes || []).map(n => `<li>${esc(n)}</li>`).join('');
+}
+$('#formula').addEventListener('click', () => { $('#formula').classList.toggle('mini'); $('#formula').dataset.h = ''; });
+$('#scnToggle').addEventListener('click', () => { const c = $('#scn').classList.toggle('collapsed'); $('#scnToggle').textContent = c ? '展開' : '收合'; });
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+/* =========================================================
+   面板 UI
+   ========================================================= */
+const pbody = $('#pbody');
+const idOf = b => 'f-' + b.replace(/[^a-z0-9]/gi, '-');
+function fr(label, bind, val, min, max, step, unit = '', re = '') {
+  const id = idOf(bind);
+  return `<div class="fr"><label for="${id}">${label}</label>
+    <input type="range" id="${id}" data-bind="${bind}" data-num data-re="${re}" min="${min}" max="${max}" step="${step}" value="${val}">
+    <span class="num"><input type="number" id="${id}-n" data-bind="${bind}" data-num data-re="${re}" min="${min}" max="${max}" step="${step}" value="${+(+val).toFixed(4)}" aria-label="${label}"><i>${unit}</i></span></div>`;
+}
+function seg(bind, val, opts, re = 'panel') {
+  return `<div class="seg" role="group">${opts.map(([v, l]) => `<button type="button" class="${String(val) === String(v) ? 'on' : ''}" data-set="${bind}" data-val="${v}" data-re="${re}">${l}</button>`).join('')}</div>`;
+}
+function ck(bind, val, label, sub = '', re = '') {
+  return `<label class="ck"><input type="checkbox" id="${idOf(bind)}" data-bind="${bind}" data-re="${re}" ${val ? 'checked' : ''}><span>${label}${sub ? `<small>${sub}</small>` : ''}</span></label>`;
+}
+function ropeChips(withActions) {
+  return `<div class="chips">${S.ropes.map((r, i) => `<button type="button" class="chip ${i === S.sel ? 'on' : ''}" data-act="sel" data-i="${i}"><span class="dot" style="background:${r.color}"></span>${esc(r.name)}</button>`).join('')}
+    ${withActions ? `<button type="button" class="chip" data-act="addRope">＋ 新增一組裝置</button>` : ''}</div>`;
+}
+function groupTools(r) {
+  const i = S.ropes.indexOf(r);
+  return `<div class="row"><button type="button" class="btn pri" data-act="dupRope">複製整組「${esc(r.name)}」</button>
+    <button type="button" class="btn sm" data-act="moveRope" data-d="-1" ${i <= 0 ? 'disabled' : ''} aria-label="上移">↑ 上移</button>
+    <button type="button" class="btn sm" data-act="moveRope" data-d="1" ${i >= S.ropes.length - 1 ? 'disabled' : ''} aria-label="下移">↓ 下移</button></div>`;
+}
+function harmonics(r) {
+  const v = speed(r), L = r.L, a = r.leftEnd, b = r.rightEnd;
+  if (r.junction.on || a === 'absorb' || b === 'absorb') return null;
+  const same = a === b;
+  const list = [];
+  for (let n = 1; n <= 5; n++) list.push(same ? n * v / (2 * L) : (2 * n - 1) * v / (4 * L));
+  return { list, label: same ? 'fₙ = n·v/2L' : 'fₙ = (2n−1)·v/4L' };
+}
+function renderPanel() {
+  document.querySelectorAll('.tabs button').forEach(b => b.setAttribute('aria-selected', b.dataset.tab === S.tab));
+  const r = selRope();
+  let h = '';
+  if (S.tab === 'scene') {
+    h += `<div class="sec"><h3>教學情境</h3><p class="hint">點選即載入。每個情境都附有觀察重點，顯示在黑板左上角。</p>
+      <div class="presets">${PRESETS.map(p => `<button type="button" class="preset ${S.scenario.id === p.id ? 'on' : ''}" data-act="preset" data-id="${p.id}"><span class="tag">${p.tag}</span><b>${p.title}</b><span>${p.desc}</span></button>`).join('')}</div></div>
+      <div class="sec"><h3>快捷鍵</h3><p class="hint">空白鍵：播放／暫停　→：前進一格　P：發射　F：時間凍結　G：殘影　T：收合工具箱</p>
+      <p class="hint">iPad：單指拖曳旋轉視角、雙指縮放平移；按住發亮握把可拉扯或左右移動波源。</p></div>`;
+  } else if (S.tab === 'medium' && r) {
+    const v = speed(r), hm = harmonics(r), isMaster = S.sel === 0;
+    h += `<div class="sec"><h3>裝置（每組 = 一條繩或彈簧＋它的波源）</h3>${ropeChips(true)}${groupTools(r)}</div>
+    <div class="card"><h4><span class="dot" style="background:${r.color}"></span><input type="text" data-bind="rope.name" data-re="scene,chips" value="${esc(r.name)}" aria-label="名稱" style="border:0;background:none;font-weight:700;min-width:0;flex:1"><span class="swatches">${ROPE_COLORS.map(c => `<button type="button" class="${c === r.color ? 'on' : ''}" style="background:${c}" data-set="rope.color" data-val="${c}" data-re="scene,panel" aria-label="顏色 ${c}"></button>`).join('')}</span></h4>
+      <div class="row"><label>介質</label>${seg('rope.medium', r.medium, [['rope', '繩子'], ['spring', '彈簧']], 'scene,panel')}</div>
+      <div class="row"><label>振動方向</label>${seg('rope.pol', r.pol, [['transverse', '橫波'], ['longitudinal', '縱波']], 'scene,panel')}</div>
+      ${fr('長度 L', 'rope.L', r.L, 1, 12, 0.1, 'm', 'L')}
+      ${fr('張力 F', 'rope.F', r.F, 0.2, 50, 0.1, 'N', 'phys')}
+      ${fr('線密度 μ', 'rope.mu', r.mu, 0.02, 2, 0.01, 'kg/m', 'phys')}
+      ${fr('阻尼', 'rope.damping', r.damping, 0, 2, 0.01, '1/s', '')}
+      <div class="readout" id="ropeReadout"></div>
+      <div class="row"><label>左端</label>${seg('rope.leftEnd', r.leftEnd, [['fixed', '固定'], ['free', '自由'], ['absorb', '無反射']], 'scene,panel')}</div>
+      <div class="row"><label>右端</label>${seg('rope.rightEnd', r.rightEnd, [['fixed', '固定'], ['free', '自由'], ['absorb', '無反射']], 'scene,panel')}</div>
+      ${hm ? `<div class="row"><label>駐波頻率</label>${hm.list.map((f, i) => `<button type="button" class="btn sm" data-act="harm" data-f="${f}">f${'₁₂₃₄₅'[i]} ${fmt(f, 2)}</button>`).join('')}</div><p class="hint">${hm.label}；按下會把波源設為該頻率的週期振動。</p>` : ''}
+    </div>
+    <div class="card"><h4>接續另一段繩子</h4>
+      ${ck('rope.junction.on', r.junction.on, '啟用接續點', '接點之後的線密度改變，可觀察反射與透射', 'scene,panel,phys')}
+      ${r.junction.on ? fr('接點位置', 'rope.junction.pos', r.junction.pos, 0.1, 0.9, 0.01, '×L', 'scene,phys') + fr('密度倍率', 'rope.junction.ratio', r.junction.ratio, 0.1, 10, 0.05, '×μ', 'scene,phys') : ''}
+    </div>
+    ${r.medium === 'spring' ? `<div class="card"><h4>彈簧外觀</h4>${fr('圈數', 'rope.turns', r.turns, 10, 120, 1, '圈', 'scene')}${fr('半徑', 'rope.coilR', r.coilR, 0.08, 0.4, 0.01, 'm', 'scene')}</div>` : ''}
+    ${!isMaster ? `<div class="card">${ck('rope.sync', r.sync, '波源與「' + esc(S.ropes[0].name) + '」同步', '勾選後第 1 個波源的振動方式與時間完全跟隨第一條', 'scene,panel')}</div>` : ''}
+    ${S.ropes.length > 1 ? `<button type="button" class="btn warn" data-act="delRope">刪除「${esc(r.name)}」</button>` : ''}`;
+  } else if (S.tab === 'source' && r) {
+    h += `<div class="sec"><h3>波源（屬於所選的裝置）</h3>${ropeChips(true)}${groupTools(r)}
+      <div class="card"><div class="row"><label>這組是</label>${seg('rope.medium', r.medium, [['rope', '繩子'], ['spring', '彈簧']], 'scene,panel')}${seg('rope.pol', r.pol, [['transverse', '橫波'], ['longitudinal', '縱波']], 'scene,panel')}</div>
+      <p class="hint">繩子或彈簧是「裝置」的屬性，同一組上的所有波源共用。想要一條繩、一條彈簧，請「複製整組」後把其中一組改成彈簧。</p></div></div>`;
+    h += r.sources.map((_, j) => srcCard(r, j)).join('');
+    h += `<div class="row">${r.sources.length < 3 ? `<button type="button" class="btn" data-act="addSrc">＋ 在這組上新增波源</button>` : ''}<button type="button" class="btn pri" data-act="fireRope">觸發「${esc(r.name)}」全部波源</button></div>`;
+  } else if (S.tab === 'display') {
+    const pr = S.ropes[clamp(S.probe.rope, 0, S.ropes.length - 1)];
+    h += `<div class="sec"><h3>畫面元素</h3>
+      ${ck('disp.markers', S.display.markers, '質點標記', '白色小球顯示介質質點只在原地振動')}
+      ${ck('disp.ruler', S.display.ruler, '量尺')}
+      ${ck('disp.grid', S.display.grid, '背景方格（每格 0.5 m）')}
+      ${ck('disp.labels', S.display.labels, '名稱標籤')}
+      ${ck('disp.dispCurve', S.display.dispCurve, '縱波位移曲線', '把縱向位移畫成橫向曲線')}
+      ${ck('disp.measure', S.display.measure, '量測波長與振幅', '自動標出波峰、λ 與 A（暫停時最清楚）', 'measure')}
+      ${ck('disp.chart', S.display.chart, '位移–時間圖')}</div>
+    <div class="sec"><h3>觀察點（紅點）</h3>
+      <div class="row"><label>介質</label><select data-bind="probe.rope" data-num data-re="">${S.ropes.map((q, i) => `<option value="${i}" ${i === S.probe.rope ? 'selected' : ''}>${esc(q.name)}</option>`).join('')}</select></div>
+      ${fr('位置', 'probe.pos', S.probe.pos, 0, 1, 0.01, '×L', '')}
+      <p class="hint">紅點的位移會畫在右上角的位移–時間圖，與波源比較可看出「延遲 = 距離 / 波速」。${pr ? '目前位置 x = ' + fmt(S.probe.pos * pr.L, 2) + ' m' : ''}</p></div>
+    <div class="sec"><h3>v = fλ 教學視覺化</h3>
+      ${seg('formula.mode', S.formula.mode, [['none', '關閉'], ['strip', '紙帶捲出'], ['bus', '公車發車']], 'scene,panel,fit')}
+      <p class="hint">以第一條繩的第 1 個波源為準，建議右端設為「無反射」。紙帶適用任何波源；公車需用週期波源。</p></div>`;
+  } else if (S.tab === 'file') {
+    h += `<div class="sec"><h3>匯出設定</h3><p class="hint">包含所有介質、波源（含自訂箭頭與手繪曲線）、顯示與速度設定。</p>
+      <textarea id="expTxt" readonly aria-label="匯出內容">${esc(exportJSON())}</textarea>
+      <div class="row"><button type="button" class="btn pri" data-act="copyExp">複製 JSON</button></div></div>
+    <div class="sec"><h3>匯入設定</h3>
+      <textarea id="impTxt" placeholder="在此貼上 JSON，或選擇 .json 檔案" aria-label="匯入內容"></textarea>
+      <div class="row"><button type="button" class="btn pri" data-act="import">套用</button><label class="btn" for="impFile">選擇檔案…</label><input type="file" id="impFile" accept=".json,application/json,text/plain" hidden></div></div>
+    <div class="sec"><h3>存在這台電腦的瀏覽器</h3>
+      <div class="row"><input type="text" id="saveName" placeholder="設定名稱" style="flex:1;min-width:0;border:1px solid var(--line);border-radius:8px;padding:6px 8px;background:var(--panel)"><button type="button" class="btn" data-act="save">儲存</button></div>
+      <div class="saves">${loadSaves().map((s, i) => `<div class="save"><span>${esc(s.name)} <small style="color:var(--muted)">${esc(s.at)}</small></span><button type="button" class="btn sm" data-act="loadSave" data-i="${i}">載入</button><button type="button" class="btn sm ghost" data-act="delSave" data-i="${i}">刪除</button></div>`).join('') || '<p class="hint">尚無儲存。清除瀏覽資料後會消失，重要設定請另外匯出。</p>'}</div></div>`;
+  }
+  pbody.innerHTML = h;
+  if (S.tab === 'medium') updateReadout();
+  if (S.tab === 'source') { initFreehand(); updateStatus(); }
+  if (S.tab === 'file') { const f = $('#impFile'); f && f.addEventListener('change', onFile); }
+}
+function srcCard(r, j) {
+  const src = r.sources[j], b = 'src.' + j + '.', synced = isSynced(r, j), e = eff(r, j), es = e.src;
+  let h = `<div class="card"><h4>波源 ${j + 1}<span class="status" id="st-${j}">閒置</span><span class="sp"></span>${r.sources.length > 1 ? `<button type="button" class="btn sm ghost" data-act="delSrc" data-j="${j}">移除</button>` : ''}</h4>
+    ${fr('位置 x', 'srcpos.' + j, +(src.pos * r.L).toFixed(2), 0, r.L, 0.05, 'm', 'scene')}
+    <p class="hint">也可以在黑板上直接左右拖曳發亮的波源握把來移動${src.mode === 'manual' ? '（手動模式請按住 Shift 再拖）' : ''}。</p>`;
+  if (synced) return h + `<p class="hint">已與「${esc(S.ropes[0].name)}」的波源同步（${modeName(es.mode)}），振動設定請到第一條修改。</p>
+    <div class="row"><button type="button" class="btn pri" data-act="fire" data-j="${j}">觸發（連同第一條）</button></div></div>`;
+  h += `<div class="row">${seg(b + 'mode', src.mode, [['pulse', '脈衝'], ['periodic', '週期'], ['manual', '手動'], ['custom', '自訂']], 'panel,scene')}</div>`;
+  if (src.mode === 'pulse') {
+    h += `<div class="row"><label>脈衝形狀</label><select data-bind="${b}shape">${[['halfsine', '半正弦'], ['gauss', '高斯'], ['tri', '三角'], ['square', '方形'], ['fullsine', '一個完整波']].map(([v, l]) => `<option value="${v}" ${src.shape === v ? 'selected' : ''}>${l}</option>`).join('')}</select>
+      <select data-bind="${b}sign" data-num>${[[1, '向上'], [-1, '向下']].map(([v, l]) => `<option value="${v}" ${src.sign === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+      ${fr('振幅 A', b + 'amp', src.amp, 0.02, 1.5, 0.01, 'm', 'amp')}
+      ${fr('持續時間', b + 'width', src.width, 0.05, 2, 0.01, 's')}
+      <div class="readout" id="rd-${j}">脈衝寬度 ≈ 波速 × 持續時間 = <b>${fmt(speed(r, src.pos * r.L) * src.width, 2)} m</b></div>
+      <div class="row"><button type="button" class="btn pri" data-act="fire" data-j="${j}">發射脈衝</button></div>`;
+  } else if (src.mode === 'periodic') {
+    const v = speed(r, src.pos * r.L);
+    h += `<div class="row"><label>波形</label>${seg(b + 'wave', src.wave, [['sine', '正弦'], ['square', '方波'], ['triangle', '三角']], '')}</div>
+      ${fr('振幅 A', b + 'amp', src.amp, 0.01, 1.5, 0.01, 'm', 'amp')}
+      ${fr('頻率 f', b + 'freq', src.freq, 0.1, 5, 0.01, 'Hz', 'fpanel')}
+      ${fr('週期數', b + 'cycles', src.cycles, 0, 20, 1, '次', '')}
+      ${fr('初相位', b + 'phase', src.phase, -180, 180, 5, '°', '')}
+      <div class="readout" id="rd-${j}">T = 1/f = <b>${fmt(1 / src.freq, 3)} s</b>　λ = v/f = <b>${fmt(v / src.freq, 2)} m</b></div>
+      <p class="hint">週期數 0 代表持續振動；按「停止」會在完成目前這次振動後才停。</p>
+      <div class="row"><button type="button" class="btn pri" data-act="fire" data-j="${j}">開始</button><button type="button" class="btn" data-act="stop" data-j="${j}">停止</button></div>`;
+  } else if (src.mode === 'manual') {
+    h += `<p class="hint">播放中，在黑板上按住此波源的發亮握把，${r.pol === 'transverse' ? '上下' : '左右'}拖曳即可拉扯繩子；放手後波源會回到原位。</p>`;
+  } else {
+    const c = src.custom;
+    h += `<div class="row"><label>方式</label>${seg(b + 'custom.kind', c.kind, [['arrows', '箭頭'], ['draw', '手繪曲線']], 'panel')}</div>`;
+    if (c.kind === 'arrows') {
+      let acc = 0;
+      h += `<div class="arrows">${c.arrows.map((a, k) => { acc += a.d; return `<div class="arow"><span class="n" style="background:${ARROW_COLORS[k % ARROW_COLORS.length]}">${k + 1}</span>
+          <span class="num"><input type="number" step="0.01" min="-1.6" max="1.6" value="${a.d}" data-arrow="${j}.${k}" aria-label="箭頭 ${k + 1} 位移"><i>m　→ 位置 ${fmt(acc, 2)}</i></span>
+          <button type="button" class="btn sm ghost" data-act="delArrow" data-j="${j}" data-k="${k}" aria-label="刪除箭頭 ${k + 1}">✕</button></div>`; }).join('') || '<p class="hint">尚無箭頭。</p>'}</div>
+        ${fr('每支時間', b + 'custom.segDur', c.segDur, 0.05, 1.5, 0.01, 's', '')}
+        <p class="hint">在暫停狀態下繪製；第 1 支從波源目前的位置出發，之後每支接在上一支的終點。播放結束後波源停在最後位置，不會自動歸零；需要時按「回到平衡位置」。</p>
+        <div class="row"><button type="button" class="btn pri" data-act="draw" data-j="${j}">在畫面上繪製</button><button type="button" class="btn" data-act="addArrow" data-j="${j}">＋ 加一支</button><button type="button" class="btn" data-act="clearArrows" data-j="${j}">清除</button></div>`;
+    } else {
+      h += `<canvas class="freehand" id="fh-${j}" data-j="${j}" width="600" height="260" aria-label="手繪波源位移–時間曲線"></canvas>
+        ${fr('總時間', b + 'custom.curveDur', c.curveDur, 0.2, 6, 0.1, 's', 'fh')}
+        ${fr('最大位移', b + 'amp', src.amp, 0.02, 1.5, 0.01, 'm', 'amp,fh')}
+        <p class="hint">由左往右畫出波源位移隨時間的變化（橫軸時間、縱軸位移）。畫完的終點就是波源最後停住的位置。</p>
+        <div class="row"><button type="button" class="btn" data-act="clearCurve" data-j="${j}">清除曲線</button></div>`;
+    }
+    h += `${ck(b + 'custom.loop', c.loop, '重複播放', '重複時會先回到起點，避免波源瞬間跳動')}
+      <div class="row"><button type="button" class="btn pri" data-act="fire" data-j="${j}">立即播放</button><button type="button" class="btn" data-act="arm" data-j="${j}">備妥，等 ▶ 恢復時播放</button></div>
+      <div class="row"><button type="button" class="btn" data-act="stop" data-j="${j}">停在目前位置</button><button type="button" class="btn" data-act="returnEq" data-j="${j}">回到平衡位置</button></div>`;
+  }
+  return h + '</div>';
+}
+function updateReadout() {
+  const el = $('#ropeReadout'), r = selRope(); if (!el || !r) return;
+  const v = speed(r);
+  let t = `v = √(F/μ) = <b>${fmt(v, 2)} m/s</b>　單程 L/v = <b>${fmt(r.L / v, 2)} s</b>`;
+  if (r.junction.on) t += `<br>接點後 v' = <b>${fmt(speed(r, r.L), 2)} m/s</b>`;
+  el.innerHTML = t;
+}
+function updateStatus() {
+  if (S.tab !== 'source') return;
+  const r = selRope(); if (!r) return;
+  r.sources.forEach((_, j) => {
+    const el = document.getElementById('st-' + j); if (!el) return;
+    const e = eff(r, j);
+    const held = seqDone(e.src, e.s);
+    const [txt, cls] = held ? ['停在 ' + fmt(heldVal(e.src, e.s), 2) + ' m', 'arm'] : e.s.kind === 'return' ? ['回到平衡位置中', 'live'] : e.s.kind ? ['振動中', 'live'] : e.s.armed ? ['已備妥', 'arm'] : ['閒置', ''];
+    if (el.textContent !== txt) { el.textContent = txt; el.className = 'status ' + cls; }
+  });
+}
+
+/* ---------- 綁定 ---------- */
+function getRoot(bind) {
+  const [head, ...rest] = bind.split('.');
+  if (head === 'rope') return [selRope(), rest];
+  if (head === 'src') return [selRope().sources[+rest[0]], rest.slice(1)];
+  if (head === 'disp') return [S.display, rest];
+  if (head === 'probe') return [S.probe, rest];
+  if (head === 'formula') return [S.formula, rest];
+  return [null, []];
+}
+function setBind(bind, v) {
+  if (bind.startsWith('srcpos.')) { const r = selRope(), j = +bind.split('.')[1]; r.sources[j].pos = clamp(v / r.L, 0, 1); return; }
+  const [obj, path] = getRoot(bind); if (!obj) return;
+  let o = obj; for (let i = 0; i < path.length - 1; i++) o = o[path[i]];
+  o[path[path.length - 1]] = v;
+}
+function afterChange(re, bind) {
+  const set = new Set((re || '').split(',').filter(Boolean));
+  const r = selRope();
+  if (set.has('L')) { buildRT(r); r.sources.forEach(s => { srt(s).kind = null; }); set.add('scene'); set.add('fit'); }
+  if (set.has('phys')) { updateC2(r); updateReadout(); if (S.formula.mode !== 'none') set.add('scene'); }
+  if (set.has('amp') || set.has('fpanel')) { if (S.formula.mode !== 'none' && S.sel === 0) set.add('scene'); }
+  if (bind === 'formula.mode' && S.formula.tStart === null && S.ropes[0]) { const e = eff(S.ropes[0], 0); if (e.s.kind) S.formula.tStart = e.s.t0; }
+  if (/^src\.\d+\.mode$/.test(bind)) { const e = eff(r, +bind.split('.')[1]); e.s.kind = null; e.s.armed = false; }
+  if (set.has('scene')) buildScene();
+  if (set.has('fit')) fitView('front');
+  if (set.has('measure')) buildMeasure();
+  if (set.has('chips')) document.querySelectorAll('.chip.on').forEach(c => { const i = +c.dataset.i; if (S.ropes[i]) c.lastChild.textContent = S.ropes[i].name; });
+  if (set.has('fh')) drawFreehandAll();
+  if (set.has('panel')) renderPanel();
+  if (S.tab === 'source') refreshSrcReadouts();
+}
+function refreshSrcReadouts() {
+  const r = selRope(); if (!r) return;
+  r.sources.forEach((src, j) => {
+    const el = document.getElementById('rd-' + j); if (!el) return;
+    const v = speed(r, src.pos * r.L);
+    el.innerHTML = src.mode === 'periodic'
+      ? `T = 1/f = <b>${fmt(1 / src.freq, 3)} s</b>　λ = v/f = <b>${fmt(v / src.freq, 2)} m</b>`
+      : `脈衝寬度 ≈ 波速 × 持續時間 = <b>${fmt(v * src.width, 2)} m</b>`;
+  });
+}
+pbody.addEventListener('input', ev => {
+  const el = ev.target;
+  if (el.dataset.arrow) {
+    const [j, k] = el.dataset.arrow.split('.').map(Number), v = parseFloat(el.value);
+    if (isFinite(v)) { selRope().sources[j].custom.arrows[k].d = clamp(v, -1.6, 1.6); }
+    return;
+  }
+  const b = el.dataset.bind; if (!b) return;
+  let v;
+  if (el.type === 'checkbox') v = el.checked;
+  else if (el.dataset.num !== undefined) { v = parseFloat(el.value); if (!isFinite(v)) return; }
+  else v = el.value;
+  setBind(b, v);
+  pbody.querySelectorAll(`[data-bind="${b}"]`).forEach(o => { if (o !== el && o.type !== 'checkbox') o.value = typeof v === 'number' ? +v.toFixed(4) : v; });
+  if (el.type === 'text') { afterChange(el.dataset.re === 'scene,chips' ? 'chips' : '', b); clearTimeout(pbody._nt); pbody._nt = setTimeout(() => buildScene(), 500); return; }
+  afterChange(el.dataset.re, b);
+});
+pbody.addEventListener('change', ev => {
+  const el = ev.target;
+  if (el.dataset.arrow) { renderPanel(); return; }
+  if (/phys|\bL\b/.test(el.dataset.re || '') && S.tab === 'medium') renderPanel();
+});
+document.addEventListener('click', ev => {
+  const t = ev.target.closest('[data-act],[data-set],[data-tab]'); if (!t) return;
+  if (t.dataset.tab) { S.tab = t.dataset.tab; renderPanel(); return; }
+  if (t.dataset.set) { let v = t.dataset.val; setBind(t.dataset.set, v); afterChange(t.dataset.re, t.dataset.set); return; }
+  const a = t.dataset.act, r = selRope(), j = +t.dataset.j;
+  switch (a) {
+    case 'play': setPaused(!S.paused); break;
+    case 'togglePanel': setPanel($('#app').classList.contains('nopanel')); break;
+    case 'step': if (!S.paused) setPaused(true); advance(1 / 60 * Math.max(0.25, S.timeScale)); chartSample(); if (S.display.measure) buildMeasure(); break;
+    case 'resetWave': resetWaves(); clearGroup(ghosts); buildMeasure(); allSourceRefs().forEach(e => { if (e.src.mode === 'custom' && e.src.custom.arrows.length) e.s.armed = e.s.armed; }); toast('波形已清除，時間歸零'); break;
+    case 'fireAll': fireAll(); break;
+    case 'speed': setSpeed(+t.dataset.v); break;
+    case 'freeze': setFrozen(!S.frozen); break;
+    case 'ghost': captureGhost(); break;
+    case 'ghostClear': clearGroup(ghosts); break;
+    case 'view': fitView(t.dataset.v); break;
+    case 'preset': loadPreset(t.dataset.id); break;
+    case 'sel': S.sel = +t.dataset.i; renderPanel(); break;
+    case 'addRope': {
+      const i = S.ropes.length; S.ropes.push(newRope({ name: '繩' + (i + 1), color: ROPE_COLORS[i % ROPE_COLORS.length] }));
+      S.sel = i; buildScene(); fitView(); renderPanel(); break;
+    }
+    case 'dupRope': {
+      const c = deep(r); delete c.id; c.name = r.name + ' 複本'; c.color = ROPE_COLORS[S.ropes.length % ROPE_COLORS.length];
+      S.ropes.splice(S.sel + 1, 0, newRope(c)); S.sel = S.sel + 1; buildScene(); fitView(); renderPanel(); toast('已複製整組「' + r.name + '」（介質、端點、所有波源與自訂振動）'); break;
+    }
+    case 'moveRope': {
+      const i = S.sel, k = i + (+t.dataset.d); if (k < 0 || k >= S.ropes.length) break;
+      [S.ropes[i], S.ropes[k]] = [S.ropes[k], S.ropes[i]]; S.sel = k;
+      if (S.ropes[0].sync) S.ropes[0].sync = false;
+      buildScene(); fitView(); renderPanel(); break;
+    }
+    case 'delRope': if (S.ropes.length > 1) { S.ropes.splice(S.sel, 1); S.sel = Math.max(0, S.sel - 1); S.probe.rope = clamp(S.probe.rope, 0, S.ropes.length - 1); buildScene(); fitView(); renderPanel(); } break;
+    case 'addSrc': r.sources.push(newSource({ pos: r.sources.length === 1 ? 1 : 0.5 })); buildScene(); renderPanel(); break;
+    case 'delSrc': r.sources.splice(j, 1); buildScene(); renderPanel(); break;
+    case 'fire': { const e = eff(r, j); if (startSource(e.src, e.s) && S.paused) setPaused(false); break; }
+    case 'stop': { const e = eff(r, j); stopSource(e.src, e.s); e.s.armed = false; break; }
+    case 'fireRope': fireRope(r); break;
+    case 'returnEq': { const e = eff(r, j); returnToEq(e.src, e.s); e.s.armed = false; if (S.paused) setPaused(false); break; }
+    case 'harm': {
+      const src = r.sources[0]; src.mode = 'periodic'; src.freq = +(+t.dataset.f).toFixed(4); if (src.amp > 0.12) src.amp = 0.05;
+      if (r.damping < 0.2) r.damping = 0.35;
+      const s = srt(src); resetWaves(); startSource(src, s); if (S.paused) setPaused(false); renderPanel(); toast('波源改為 ' + fmt(src.freq, 2) + ' Hz'); break;
+    }
+    case 'draw': enterDraw(r, j); break;
+    case 'drawUndo': if (DR.on) { DR.r.sources[DR.j].custom.arrows.pop(); $('#drawN').textContent = DR.r.sources[DR.j].custom.arrows.length + 1; renderPanel(); } break;
+    case 'drawClear': if (DR.on) { DR.r.sources[DR.j].custom.arrows.length = 0; $('#drawN').textContent = 1; renderPanel(); } break;
+    case 'drawDone': exitDraw(); break;
+    case 'addArrow': { const ar = r.sources[j].custom.arrows; ar.push({ d: ar.length % 2 ? -0.3 : 0.3 }); renderPanel(); break; }
+    case 'delArrow': r.sources[j].custom.arrows.splice(+t.dataset.k, 1); renderPanel(); break;
+    case 'clearArrows': r.sources[j].custom.arrows.length = 0; srt(r.sources[j]).armed = false; renderPanel(); break;
+    case 'clearCurve': r.sources[j].custom.curve = []; drawFreehandAll(); break;
+    case 'arm': { const s = srt(r.sources[j]); if (!buildSeq(r.sources[j])) { toast('請先畫出振動'); break; } s.armed = true; setPaused(true); toast('已備妥，按 ▶ 恢復模擬時開始'); break; }
+    case 'copyExp': {
+      const ta = $('#expTxt'), txt = exportJSON(); ta.value = txt;
+      try { navigator.clipboard.writeText(txt).then(() => toast('已複製到剪貼簿'), () => { ta.select(); toast('請按 Ctrl+C 複製已選取的文字'); }); }
+      catch (e) { ta.select(); toast('請按 Ctrl+C 複製已選取的文字'); }
+      break;
+    }
+    case 'import': importJSON($('#impTxt').value); break;
+    case 'save': {
+      const name = ($('#saveName').value || '').trim() || S.scenario.title || '未命名';
+      const list = loadSaves(); list.unshift({ name, at: new Date().toLocaleString('zh-TW', { hour12: false }), data: exportJSON() });
+      storeSaves(list.slice(0, 30)); renderPanel(); toast('已儲存「' + name + '」'); break;
+    }
+    case 'loadSave': { const s = loadSaves()[+t.dataset.i]; if (s) importJSON(s.data); break; }
+    case 'delSave': { const l = loadSaves(); l.splice(+t.dataset.i, 1); storeSaves(l); renderPanel(); break; }
+  }
+});
+
+/* ---------- 手繪曲線 ---------- */
+function drawFreehand(cv) {
+  const j = +cv.dataset.j, src = selRope().sources[j]; if (!src) return;
+  const c = cv.getContext('2d'), W = cv.width, H = cv.height;
+  c.clearRect(0, 0, W, H);
+  c.strokeStyle = 'rgba(238,240,230,.12)'; c.lineWidth = 1;
+  for (let i = 1; i < 8; i++) { c.beginPath(); c.moveTo(i * W / 8, 0); c.lineTo(i * W / 8, H); c.stroke(); }
+  for (let i = 1; i < 4; i++) { c.beginPath(); c.moveTo(0, i * H / 4); c.lineTo(W, i * H / 4); c.stroke(); }
+  c.strokeStyle = 'rgba(238,240,230,.4)'; c.beginPath(); c.moveTo(0, H / 2); c.lineTo(W, H / 2); c.stroke();
+  c.fillStyle = 'rgba(238,240,230,.7)'; c.font = '22px "JetBrains Mono", monospace';
+  c.fillText('+' + fmt(src.amp, 2) + ' m', 8, 26); c.fillText('−' + fmt(src.amp, 2) + ' m', 8, H - 10);
+  c.fillText(fmt(src.custom.curveDur, 1) + ' s', W - 70, H / 2 - 8);
+  const cu = src.custom.curve; if (!cu.length) { c.fillStyle = 'rgba(238,240,230,.5)'; c.font = '26px "Noto Sans TC", sans-serif'; c.fillText('在這裡由左往右畫', W / 2 - 110, H / 2 + 44); return; }
+  c.strokeStyle = '#f2c14e'; c.lineWidth = 4; c.beginPath();
+  cu.forEach((v, i) => { const x = i / (cu.length - 1) * W, y = H / 2 - v * (H / 2 - 8); i ? c.lineTo(x, y) : c.moveTo(x, y); }); c.stroke();
+}
+function drawFreehandAll() { document.querySelectorAll('canvas.freehand').forEach(drawFreehand); }
+function initFreehand() {
+  document.querySelectorAll('canvas.freehand').forEach(cv => {
+    drawFreehand(cv);
+    let down = false, lastI = -1;
+    const pt = ev => { const rc = cv.getBoundingClientRect(); return { u: clamp((ev.clientX - rc.left) / rc.width, 0, 1), v: clamp(1 - 2 * (ev.clientY - rc.top) / rc.height, -1, 1) }; };
+    const put = ev => {
+      const src = selRope().sources[+cv.dataset.j], n = 120, p = pt(ev);
+      if (src.custom.curve.length !== n) src.custom.curve = new Array(n).fill(0);
+      const i = Math.round(p.u * (n - 1));
+      if (lastI < 0) src.custom.curve[i] = p.v;
+      else { const a = Math.min(lastI, i), b = Math.max(lastI, i), va = src.custom.curve[lastI]; for (let k = a; k <= b; k++) src.custom.curve[k] = b === a ? p.v : va + (p.v - va) * (k - lastI) / (i - lastI); }
+      lastI = i; drawFreehand(cv);
+    };
+    cv.addEventListener('pointerdown', ev => { down = true; lastI = -1; cv.setPointerCapture(ev.pointerId); put(ev); });
+    cv.addEventListener('pointermove', ev => { if (down) put(ev); });
+    cv.addEventListener('pointerup', () => { down = false; });
+  });
+}
+
+/* ---------- 匯入匯出 ---------- */
+function exportJSON() {
+  return JSON.stringify({
+    app: 'rope-wave-lab', version: 1, title: S.scenario.title, notes: S.scenario.notes,
+    timeScale: S.timeScale, display: S.display, probe: S.probe, formula: S.formula.mode,
+    ropes: S.ropes.map(r => { const c = deep(r); delete c.id; return c; })
+  }, null, 2);
+}
+function importJSON(txt) {
+  let o;
+  try { o = JSON.parse(txt); } catch (e) { toast('無法解析：請確認貼上的是完整的 JSON 文字'); return; }
+  if (!o || !Array.isArray(o.ropes) || !o.ropes.length) { toast('格式不符：找不到 ropes 介質清單'); return; }
+  const num = (v, a, b, d) => (typeof v === 'number' && isFinite(v)) ? clamp(v, a, b) : d;
+  const ropes = o.ropes.slice(0, 6).map(r => Object.assign({}, r, {
+    L: num(r.L, 1, 12, 6), F: num(r.F, 0.2, 50, 4), mu: num(r.mu, 0.02, 2, 0.25), damping: num(r.damping, 0, 2, 0.05),
+    sources: (Array.isArray(r.sources) && r.sources.length ? r.sources : [{}]).slice(0, 3)
+  }));
+  applyState({ ropes, title: o.title || '匯入的設定', notes: Array.isArray(o.notes) ? o.notes : [], speed: num(o.timeScale, SPEED_MIN, SPEED_MAX, 1),
+    display: o.display, probe: o.probe, formula: ['strip', 'bus'].includes(o.formula) ? o.formula : 'none', start: null });
+  toast('已匯入「' + (o.title || '設定') + '」');
+}
+function onFile(ev) {
+  const f = ev.target.files[0]; if (!f) return;
+  const rd = new FileReader(); rd.onload = () => { $('#impTxt').value = rd.result; importJSON(rd.result); }; rd.readAsText(f);
+}
+function loadSaves() { try { return JSON.parse(localStorage.getItem('rwl.saves') || '[]'); } catch (e) { return []; } }
+function storeSaves(l) { try { localStorage.setItem('rwl.saves', JSON.stringify(l)); } catch (e) { toast('此瀏覽器無法儲存，請改用匯出'); } }
+
+/* ---------- 提示 ---------- */
+let toastT;
+function toastQuiet(msg) { const t = $('#toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, 1200); }
+function toast(msg) { const t = $('#toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, 2600); }
+
+/* ---------- 鍵盤 ---------- */
+document.addEventListener('keydown', ev => {
+  if (/INPUT|TEXTAREA|SELECT/.test(ev.target.tagName)) return;
+  if (ev.code === 'Space') { ev.preventDefault(); setPaused(!S.paused); }
+  else if (ev.key === 'ArrowRight') { if (!S.paused) setPaused(true); advance(1 / 60 * Math.max(0.25, S.timeScale)); if (S.display.measure) buildMeasure(); }
+  else if (ev.key === 'p' || ev.key === 'P') fireAll();
+  else if (ev.key === 'f' || ev.key === 'F') setFrozen(!S.frozen);
+  else if (ev.key === 'g' || ev.key === 'G') captureGhost();
+  else if (ev.key === 't' || ev.key === 'T') setPanel($('#app').classList.contains('nopanel'));
+  else if (ev.key === 'Escape' && DR.on) exitDraw();
+});
+
+/* ---------- 啟動 ---------- */
+resize();
+try { if (localStorage.getItem('rwl.panel') === '0') setPanel(false); } catch (e) {}
+setPaused(false);
+loadPreset('strip');
+S.tab = 'scene'; renderPanel();
+if (window.innerWidth < 900) { $('#scn').classList.add('collapsed'); $('#scnToggle').textContent = '展開'; }
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { labelCache.clear(); buildScene(); });
+requestAnimationFrame(loop);
+</script>
+
+</body></html>
