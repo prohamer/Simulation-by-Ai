@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>wave creatorV2</title>
+<title>wave_creatorV3</title>
 <meta name="description" content="互動式頻率產生器,支援多種樂器音色、自訂波形繪製、即時鋼琴演奏、示波器與頻譜顯示">
 <meta name="keywords" content="頻率產生器,音樂教學,物理教學,波形,示波器,頻譜,合成器,鋼琴">
 <style>
@@ -26,8 +26,17 @@
     --wh: 120px;  /* 白鍵高 */
     --pad: 8px;   /* 鍵盤左右內距 */
 }
-* { margin: 0; padding: 0; box-sizing: border-box; }
-html { -webkit-text-size-adjust: 100%; }
+* { margin: 0; padding: 0; box-sizing: border-box; touch-action: manipulation; }
+html { -webkit-text-size-adjust: 100%; -webkit-tap-highlight-color: transparent; }
+/* 禁止選取文字與長按選單;輸入框仍可選取、編輯 */
+html, body {
+    -webkit-user-select: none; user-select: none;
+    -webkit-touch-callout: none;
+}
+input, select, textarea {
+    -webkit-user-select: text; user-select: text;
+}
+canvas, img { -webkit-user-drag: none; }
 body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans TC', 'Microsoft JhengHei', sans-serif;
     background: linear-gradient(135deg, var(--bg1), var(--bg2), var(--bg3)) fixed;
@@ -264,6 +273,8 @@ details.adv .ctl-head { color: #fca5a5; }
 }
 .black-key:hover { background: linear-gradient(#4b5563, #1f2937); }
 .black-key.active { background: linear-gradient(#a78bfa, #7c3aed); }
+.oct-toggle { font-size: 0.76rem; white-space: nowrap; }
+.oct-toggle.disabled { opacity: 0.45; cursor: not-allowed; }
 .kb { font-weight: 500; opacity: 0.55; font-size: 0.56rem; }
 
 /* ---------- 手機 ---------- */
@@ -435,10 +446,14 @@ details.adv .ctl-head { color: #fca5a5; }
     </section>
 
     <!-- 鋼琴 -->
-    <section class="panel" data-id="piano" data-title="🎹 即時演奏鋼琴(兩個八度)">
+    <section class="panel" data-id="piano" data-title="🎹 即時演奏鋼琴">
+        <div data-head>
+            <label class="check oct-toggle" id="piano3Label"><input type="checkbox" id="piano3">3 個八度</label>
+        </div>
         <div class="panel-body">
-            <div class="piano-scroll"><div class="piano-keys" id="pianoKeys"></div></div>
-            <p class="hint">按住琴鍵演奏、放開停止;可滑動連奏,也可多指彈和弦。選「鋼琴」音色時會有自然衰減。<br>
+            <div class="piano-scroll" id="pianoScroll"><div class="piano-keys" id="pianoKeys"></div></div>
+            <p class="hint warn" id="pianoNote" hidden></p>
+            <p class="hint">直接按住琴鍵就能演奏,不需先按「開始播放」;放開停止,可滑動連奏,也可多指彈和弦。選「鋼琴」音色時會有自然衰減。<br>
             電腦鍵盤:<b>Z–M</b> = C3–B3、<b>Q–U</b> = C4–B4、<b>I</b> = C5(黑鍵在上一排)。<b>空白鍵</b> 播放/停止,<b>Esc</b> 全部停止。</p>
         </div>
     </section>
@@ -490,20 +505,24 @@ function noteLabel(f) {
 const fmtMs = ms => ms < 1 ? (ms * 1000).toFixed(0) + ' µs' : ms.toFixed(2) + ' ms';
 const fmtHz = f => f >= 1000 ? (f / 1000).toFixed(f % 1000 ? 1 : 0) + 'k' : String(Math.round(f));
 
-/* 鋼琴鍵:C3 (MIDI 48) 到 C5 (MIDI 72) */
-const KB_LETTERS = 'zsxdcvgbhnjmq2w3er5t6y7ui';
-const PIANO = [];
-for (let m = 48; m <= 72; m++) {
-    const n = NOTE_NAMES[m % 12];
-    PIANO.push({
-        id: 'k' + m, midi: m, short: n,
-        name: n + (Math.floor(m / 12) - 1),
-        black: n.includes('#'),
-        freq: midiToFreq(m),
-        kb: KB_LETTERS[m - 48]
-    });
+/* 鋼琴鍵:C3 (MIDI 48) 起,兩個八度到 C5 (72),三個八度到 C6 (84) */
+const KB_LETTERS = 'zsxdcvgbhnjmq2w3er5t6y7ui';   // 電腦鍵盤對應 C3–C5
+let PIANO = [];
+let KB_MAP = new Map();
+function makeKeys(lastMidi) {
+    PIANO = [];
+    for (let m = 48; m <= lastMidi; m++) {
+        const n = NOTE_NAMES[m % 12];
+        PIANO.push({
+            id: 'k' + m, midi: m, short: n,
+            name: n + (Math.floor(m / 12) - 1),
+            black: n.includes('#'),
+            freq: midiToFreq(m),
+            kb: KB_LETTERS[m - 48] || ''
+        });
+    }
+    KB_MAP = new Map(PIANO.filter(k => k.kb).map(k => [k.kb, k]));
 }
-const KB_MAP = new Map(PIANO.map(k => [k.kb, k]));
 
 /* =========================================================
  * 狀態
@@ -540,7 +559,7 @@ const waveCache = {};
 /* =========================================================
  * 音訊引擎
  * ========================================================= */
-async function ensureAudio() {
+function ensureAudio() {
     if (!ctx) {
         ctx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'interactive' });
 
@@ -571,8 +590,23 @@ async function ensureAudio() {
         specAn.connect(sink);
         sink.connect(ctx.destination);
     }
-    if (ctx.state === 'suspended') await ctx.resume();
+    if (ctx.state !== 'running') ctx.resume().catch(() => {});
 }
+
+/* 行動裝置的瀏覽器只在「放開手指/點擊」時才允許開啟聲音,
+ * 所以在任何一次互動時就先解鎖音訊,讓琴鍵不必先按「開始播放」也能發聲。 */
+function unlockAudio() {
+    if (ctx && ctx.state === 'running') return;
+    ensureAudio();
+    try {   // iOS 需要實際播放一段(無聲)聲音才會解鎖
+        const s = ctx.createBufferSource();
+        s.buffer = ctx.createBuffer(1, 1, 22050);
+        s.connect(ctx.destination);
+        s.start(0);
+    } catch (e) {}
+}
+['pointerdown', 'pointerup', 'touchend', 'mousedown', 'click', 'keydown']
+    .forEach(t => document.addEventListener(t, unlockAudio, { capture: true, passive: true }));
 
 function getWave(name) {
     if (name === 'custom') {
@@ -624,6 +658,27 @@ function startVoice(id, freq, { decay = false } = {}) {
 function stopVoice(id, release = 0.03) {
     const v = voices.get(id);
     if (!v) return;
+    if (ctx.state !== 'running') {
+        // 第一次觸控時音訊可能還在解鎖中:等解鎖完成後再讓這個音響一小段,避免「按了沒聲音」
+        v.pendingStop = true;
+        const t0 = performance.now();
+        const wait = () => {
+            if (!v.pendingStop || voices.get(id) !== v) return;
+            if (ctx.state === 'running') {
+                setTimeout(() => { if (v.pendingStop && voices.get(id) === v) { v.pendingStop = false; stopVoiceNow(id, v, release); } }, 250);
+            } else if (performance.now() - t0 < 3000) {
+                setTimeout(wait, 30);
+            } else {
+                v.pendingStop = false;
+                stopVoiceNow(id, v, release);
+            }
+        };
+        wait();
+        return;
+    }
+    stopVoiceNow(id, v, release);
+}
+function stopVoiceNow(id, v, release) {
     voices.delete(id);
     const t = ctx.currentTime;
     const g = v.env.gain;
@@ -638,11 +693,12 @@ function stopVoice(id, release = 0.03) {
 }
 
 /* ---------- 主播放(持續音) ---------- */
-async function startMain() {
+function startMain() {
     held.add('main');
-    await ensureAudio();
-    if (!held.has('main') || voices.has('main')) return;
-    startVoice('main', state.freq);
+    ensureAudio();
+    const ex = voices.get('main');
+    if (ex) ex.pendingStop = false;
+    else startVoice('main', state.freq);
     setPlayUI(true);
     clearTimeout(stopTimer);
     if (!state.continuous) stopTimer = setTimeout(stopMain, state.duration * 1000);
@@ -665,12 +721,13 @@ function setPlayUI(on) {
 }
 
 /* ---------- 鋼琴聲部(可和弦) ---------- */
-async function noteOn(key) {
+function noteOn(key) {
     if (held.has(key.id)) return;
     held.add(key.id);
     key.el.classList.add('active');
-    await ensureAudio();
-    if (!held.has(key.id) || voices.has(key.id)) return;
+    ensureAudio();   // 不等待:音訊解鎖後聲音會立刻接上
+    const ex = voices.get(key.id);
+    if (ex) { ex.pendingStop = false; return; }
     startVoice(key.id, key.freq, { decay: state.instrument === 'piano' });
 }
 function noteOff(key) {
@@ -1162,8 +1219,18 @@ function selectInstrument(name) {
  * ========================================================= */
 const pointerKey = new Map();   // pointerId -> key(null 表示按住但不在琴鍵上)
 
-function buildPiano() {
+const PIANO3_KEY = 'wavegen.piano3';
+let pianoOctaves = 0;
+let piano3Pref = false;
+try { piano3Pref = localStorage.getItem(PIANO3_KEY) === '1'; } catch (e) {}
+
+function buildPiano(octaves) {
+    PIANO.forEach(k => { if (held.has(k.id) || voices.has(k.id)) noteOff(k); });
+    pointerKey.clear();
+    pianoOctaves = octaves;
+    makeKeys(octaves === 3 ? 84 : 72);
     const wrap = $('#pianoKeys');
+    wrap.innerHTML = '';
     let whiteIdx = 0;
     PIANO.forEach(k => {
         const el = document.createElement('button');
@@ -1171,7 +1238,7 @@ function buildPiano() {
         el.tabIndex = -1;
         el.className = k.black ? 'black-key' : 'white-key';
         el.setAttribute('aria-label', k.name);
-        el.innerHTML = `<span>${k.black ? k.short : k.name}</span><span class="kb">${k.kb.toUpperCase()}</span>`;
+        el.innerHTML = `<span>${k.black ? k.short : k.name}</span><span class="kb">${k.kb ? k.kb.toUpperCase() : '&nbsp;'}</span>`;
         if (k.black) el.style.setProperty('--i', whiteIdx);   // 黑鍵位置交給 CSS 計算
         else whiteIdx++;
         k.el = el;
@@ -1198,6 +1265,40 @@ function buildPiano() {
         el.addEventListener('contextmenu', e => e.preventDefault());
         wrap.appendChild(el);
     });
+}
+
+/* 版面夠寬才能切換成 3 個八度 */
+function cssPx(name) {
+    return parseFloat(getComputedStyle(document.documentElement).getPropertyValue(name)) || 0;
+}
+function updatePianoRange() {
+    const scroller = $('#pianoScroll');
+    const w = scroller.clientWidth;
+    if (!w) return;                                   // 面板收合或隱藏時不判斷
+    const need = 22 * cssPx('--wk') + 2 * cssPx('--pad') + 2;   // 3 個八度 = 22 個白鍵
+    const fits = w >= need;
+    const cb = $('#piano3'), label = $('#piano3Label');
+    cb.checked = piano3Pref;
+    cb.disabled = !fits;
+    label.classList.toggle('disabled', !fits);
+    label.title = fits ? '切換為 C3–C6 三個八度' : `畫面寬度不足(需要約 ${Math.ceil(need)} px)`;
+    const note = $('#pianoNote');
+    if (piano3Pref && !fits) {
+        note.hidden = false;
+        note.textContent = '⚠ 目前寬度不足以顯示 3 個八度,暫時以 2 個八度顯示。加寬視窗、橫放平板,或在寬螢幕上用 ⇔ 把鋼琴面板設為全寬即可。';
+    } else note.hidden = true;
+    const want = piano3Pref && fits ? 3 : 2;
+    if (want !== pianoOctaves) buildPiano(want);
+}
+
+function bindPianoGlobal() {
+    $('#piano3').addEventListener('change', e => {
+        piano3Pref = e.target.checked;
+        try { localStorage.setItem(PIANO3_KEY, piano3Pref ? '1' : '0'); } catch (err) {}
+        updatePianoRange();
+    });
+    if ('ResizeObserver' in window) new ResizeObserver(() => updatePianoRange()).observe($('#pianoScroll'));
+    else window.addEventListener('resize', updatePianoRange);
 
     const end = e => {
         if (!pointerKey.has(e.pointerId)) return;
@@ -1530,7 +1631,9 @@ function init() {
     buildMenu();
     layout = loadLayout();
     applyLayout();
-    buildPiano();
+    buildPiano(2);
+    bindPianoGlobal();
+    updatePianoRange();
     bindControls();
     setFreq(440);
     setVolume(0.3);
@@ -1538,6 +1641,25 @@ function init() {
     updateScopeInfo();
     refreshCanvases();
 }
+
+/* =========================================================
+ * 禁止選取與雙擊放大
+ * ========================================================= */
+const isEditable = t => !!(t && t.closest && t.closest('input, select, textarea'));
+document.addEventListener('selectstart', e => { if (!isEditable(e.target)) e.preventDefault(); });
+document.addEventListener('dragstart', e => { if (!isEditable(e.target)) e.preventDefault(); });
+document.addEventListener('dblclick', e => { if (!isEditable(e.target)) e.preventDefault(); }, { passive: false });
+// 後備方案:部分舊版 iOS 不支援 touch-action: manipulation,快速連點第二下時攔截縮放,並補送 click
+let lastTouchEnd = 0;
+document.addEventListener('touchend', e => {
+    const now = Date.now();
+    if (now - lastTouchEnd < 350 && !isEditable(e.target) && e.changedTouches.length === 1) {
+        e.preventDefault();
+        const t = e.target.closest && e.target.closest('button, summary, label, [data-act]');
+        if (t) t.click();
+    }
+    lastTouchEnd = now;
+}, { passive: false });
 
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
 else init();
