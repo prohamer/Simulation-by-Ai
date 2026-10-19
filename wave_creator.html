@@ -1,1971 +1,1548 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🎵 頻率產生器 - 多樂器音色合成器</title>
-    <meta name="description" content="互動式頻率產生器,支持多種樂器音色、自訂波形繪製、即時鋼琴演奏和波形顯示">
-    <meta name="keywords" content="頻率產生器,音樂教學,波形,合成器,鋼琴">
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            background: linear-gradient(to bottom right, #581c87, #1e3a8a, #312e81);
-            min-height: 100vh;
-            padding: 1rem;
-            color: white;
-        }
-
-        .container {
-            max-width: 1024px;
-            margin: 0 auto;
-            background: rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(16px);
-            border-radius: 24px;
-            padding: 1.5rem;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-        }
-
-        h1 {
-            font-size: 2rem;
-            text-align: center;
-            margin-bottom: 0.25rem;
-            font-weight: bold;
-        }
-
-        .subtitle {
-            text-align: center;
-            color: #bfdbfe;
-            margin-bottom: 1.5rem;
-            font-size: 0.875rem;
-        }
-
-        .section {
-            margin-bottom: 1.5rem;
-        }
-
-        .section-title {
-            font-size: 1rem;
-            font-weight: 600;
-            margin-bottom: 0.75rem;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-
-        .play-button {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 0.5rem;
-            padding: 0.75rem 1.5rem;
-            font-size: 1rem;
-            font-weight: bold;
-            border: none;
-            border-radius: 9999px;
-            cursor: pointer;
-            transition: all 0.3s;
-            margin: 0 auto 1.5rem;
-        }
-
-        .play-button:hover {
-            transform: scale(1.05);
-        }
-
-        .play-button.playing {
-            background: #ef4444;
-            color: white;
-        }
-
-        .play-button.playing:hover {
-            background: #dc2626;
-        }
-
-        .play-button.stopped {
-            background: #10b981;
-            color: white;
-        }
-
-        .play-button.stopped:hover {
-            background: #059669;
-        }
-
-        .instruments-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
-            gap: 0.75rem;
-        }
-
-        .instrument-btn {
-            padding: 0.625rem;
-            background: rgba(255, 255, 255, 0.2);
-            border: none;
-            border-radius: 10px;
-            color: white;
-            cursor: pointer;
-            transition: all 0.3s;
-            font-size: 0.75rem;
-            font-weight: 500;
-        }
-
-        .instrument-btn:hover {
-            background: rgba(255, 255, 255, 0.3);
-        }
-
-        .instrument-btn.active {
-            background: #3b82f6;
-            transform: scale(1.05);
-            box-shadow: 0 10px 30px rgba(59, 130, 246, 0.5);
-        }
-
-        .instrument-icon {
-            font-size: 1.5rem;
-            display: block;
-            margin-bottom: 0.25rem;
-        }
-
-        .canvas-container {
-            background: #1e293b;
-            border-radius: 10px;
-            padding: 0.375rem;
-            border: 2px solid;
-        }
-
-        .canvas-container.draw {
-            border-color: #3b82f6;
-        }
-
-        .canvas-container.display {
-            border-color: #10b981;
-        }
-
-        canvas {
-            width: 100%;
-            border-radius: 8px;
-            display: block;
-            cursor: crosshair;
-        }
-
-        canvas.display-canvas {
-            cursor: default;
-        }
-
-        .slider-container {
-            margin-top: 0.5rem;
-        }
-
-        .slider-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 0.5rem;
-        }
-
-        .slider-value {
-            font-size: 1.25rem;
-            font-weight: bold;
-            color: #93c5fd;
-        }
-
-        input[type="range"] {
-            width: 100%;
-            height: 12px;
-            background: rgba(255, 255, 255, 0.2);
-            border-radius: 6px;
-            outline: none;
-            -webkit-appearance: none;
-        }
-
-        input[type="range"]::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            width: 20px;
-            height: 20px;
-            border-radius: 50%;
-            background: white;
-            cursor: pointer;
-            box-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
-        }
-
-        input[type="range"]::-moz-range-thumb {
-            width: 20px;
-            height: 20px;
-            border-radius: 50%;
-            background: white;
-            cursor: pointer;
-            border: none;
-            box-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
-        }
-
-        .slider-labels {
-            display: flex;
-            justify-content: space-between;
-            font-size: 0.75rem;
-            color: #bfdbfe;
-            margin-top: 0.5rem;
-        }
-
-        .notes-grid {
-            display: grid;
-            grid-template-columns: repeat(7, 1fr);
-            gap: 0.375rem;
-        }
-
-        .note-btn {
-            padding: 0.5rem 0.375rem;
-            background: rgba(255, 255, 255, 0.2);
-            border: none;
-            border-radius: 6px;
-            color: white;
-            font-size: 0.7rem;
-            font-weight: 500;
-            cursor: pointer;
-            transition: all 0.3s;
-        }
-
-        .note-btn:hover {
-            background: rgba(255, 255, 255, 0.3);
-            transform: scale(1.05);
-        }
-
-        .piano-container {
-            background: linear-gradient(to bottom, #1e293b, #0f172a);
-            border-radius: 10px;
-            padding: 0.75rem;
-            border: 2px solid #a78bfa;
-            overflow-x: auto;
-        }
-
-        .piano-keys {
-            position: relative;
-            height: 150px;
-            display: inline-flex;
-            align-items: flex-start;
-            justify-content: flex-start;
-            margin-bottom: 0.75rem;
-            min-width: fit-content;
-            padding: 0 10px;
-        }
-
-        .white-key {
-            width: 38px;
-            height: 130px;
-            background: linear-gradient(to bottom, white, #e5e7eb);
-            border: 2px solid #6b7280;
-            border-radius: 0 0 6px 6px;
-            cursor: pointer;
-            transition: all 0.1s;
-            display: flex;
-            align-items: flex-end;
-            justify-content: center;
-            padding-bottom: 0.375rem;
-            font-weight: bold;
-            color: #1f2937;
-            font-size: 0.65rem;
-            user-select: none;
-            touch-action: none;
-            flex-shrink: 0;
-        }
-
-        .white-key:hover {
-            background: linear-gradient(to bottom, #e5e7eb, #d1d5db);
-        }
-
-        .white-key:active {
-            background: linear-gradient(to bottom, #bfdbfe, #93c5fd);
-        }
-
-        .black-key {
-            position: absolute;
-            width: 26px;
-            height: 82px;
-            background: linear-gradient(to bottom, #374151, black);
-            border: 2px solid #111827;
-            border-radius: 0 0 6px 6px;
-            cursor: pointer;
-            transition: all 0.1s;
-            z-index: 10;
-            color: white;
-            font-weight: bold;
-            font-size: 0.6rem;
-            display: flex;
-            align-items: flex-end;
-            padding-bottom: 0.5rem;
-            justify-content: center;
-            user-select: none;
-            touch-action: none;
-        }
-
-        .black-key:hover {
-            background: linear-gradient(to bottom, #4b5563, #1f2937);
-        }
-
-        .black-key:active {
-            background: linear-gradient(to bottom, #a78bfa, #7c3aed);
-        }
-
-        .hint {
-            text-align: center;
-            color: #bfdbfe;
-            font-size: 0.75rem;
-            margin-top: 0.5rem;
-        }
-
-        .hint.custom {
-            color: #fde047;
-        }
-
-        .hint.piano {
-            color: #d8b4fe;
-        }
-
-        .hint.display {
-            color: #6ee7b7;
-        }
-
-        .sync-indicator {
-            display: inline-block;
-            padding: 0.25rem 0.5rem;
-            border-radius: 6px;
-            font-size: 0.7rem;
-            font-weight: bold;
-            margin-left: 0.5rem;
-        }
-
-        .sync-indicator.synced {
-            background: #10b981;
-            color: white;
-        }
-
-        .sync-indicator.unsynced {
-            background: #f59e0b;
-            color: white;
-        }
-
-        .clear-btn {
-            display: flex;
-            align-items: center;
-            gap: 0.375rem;
-            padding: 0.375rem 0.75rem;
-            background: rgba(255, 255, 255, 0.2);
-            border: none;
-            border-radius: 6px;
-            color: white;
-            cursor: pointer;
-            transition: all 0.3s;
-            font-size: 0.75rem;
-        }
-
-        .clear-btn:hover {
-            background: rgba(255, 255, 255, 0.3);
-        }
-
-        .toggle-btn {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 0.5rem;
-            padding: 0.5rem 1rem;
-            background: rgba(147, 51, 234, 0.2);
-            border: 1px solid rgba(147, 51, 234, 0.4);
-            border-radius: 8px;
-            color: #e9d5ff;
-            cursor: pointer;
-            transition: all 0.3s;
-            font-size: 0.8rem;
-            font-weight: 600;
-            margin: 0 auto;
-            width: fit-content;
-        }
-
-        .toggle-btn:hover {
-            background: rgba(147, 51, 234, 0.3);
-            transform: translateY(-2px);
-        }
-
-        .toggle-btn.active {
-            background: rgba(147, 51, 234, 0.4);
-            border-color: rgba(147, 51, 234, 0.6);
-        }
-
-        .toggle-icon {
-            transition: transform 0.3s;
-            font-size: 1rem;
-        }
-
-        .toggle-icon.rotated {
-            transform: rotate(180deg);
-        }
-
-        .collapsible-content {
-            max-height: 0;
-            overflow: hidden;
-            transition: max-height 0.3s ease-out;
-        }
-
-        .collapsible-content.expanded {
-            max-height: 500px;
-            transition: max-height 0.5s ease-in;
-        }
-
-        .mode-switch {
-            display: flex;
-            gap: 0.5rem;
-            justify-content: center;
-            margin-bottom: 0.75rem;
-        }
-
-        .mode-btn {
-            padding: 0.5rem 1rem;
-            background: rgba(255, 255, 255, 0.1);
-            border: 2px solid rgba(255, 255, 255, 0.2);
-            border-radius: 8px;
-            color: #bfdbfe;
-            cursor: pointer;
-            transition: all 0.3s;
-            font-size: 0.75rem;
-            font-weight: 600;
-            display: flex;
-            align-items: center;
-            gap: 0.375rem;
-        }
-
-        .mode-btn:hover {
-            background: rgba(255, 255, 255, 0.2);
-            transform: translateY(-1px);
-        }
-
-        .mode-btn.active {
-            background: rgba(59, 130, 246, 0.3);
-            border-color: #3b82f6;
-            color: #93c5fd;
-            box-shadow: 0 0 15px rgba(59, 130, 246, 0.3);
-        }
-
-        .duration-control {
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-            padding: 0.75rem;
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 10px;
-            margin-bottom: 1rem;
-        }
-
-        .duration-input-group {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-
-        .duration-input {
-            width: 80px;
-            padding: 0.5rem;
-            background: rgba(255, 255, 255, 0.2);
-            border: 1px solid rgba(255, 255, 255, 0.3);
-            border-radius: 6px;
-            color: white;
-            font-size: 0.875rem;
-            text-align: center;
-        }
-
-        .duration-input:focus {
-            outline: none;
-            border-color: #3b82f6;
-            background: rgba(255, 255, 255, 0.25);
-        }
-
-        .duration-label {
-            color: #bfdbfe;
-            font-size: 0.875rem;
-        }
-
-        .checkbox-group {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            cursor: pointer;
-        }
-
-        .checkbox-group input[type="checkbox"] {
-            width: 18px;
-            height: 18px;
-            cursor: pointer;
-            accent-color: #3b82f6;
-        }
-
-        .divider {
-            width: 1px;
-            height: 30px;
-            background: rgba(255, 255, 255, 0.2);
-        }
-
-        .status-badge {
-            display: inline-block;
-            padding: 0.125rem 0.5rem;
-            background: #10b981;
-            color: white;
-            border-radius: 9999px;
-            font-size: 0.65rem;
-            margin-left: 0.375rem;
-        }
-
-        @media (max-width: 768px) {
-            .container {
-                padding: 1rem;
-            }
-
-            h1 {
-                font-size: 1.875rem;
-            }
-
-            .instruments-grid {
-                grid-template-columns: repeat(3, 1fr);
-            }
-
-            .piano-keys {
-                justify-content: flex-start;
-            }
-
-            .white-key {
-                width: 32px;
-                height: 110px;
-                font-size: 0.6rem;
-            }
-
-            .black-key {
-                width: 22px;
-                height: 70px;
-                font-size: 0.55rem;
-            }
-            
-            .black-key:nth-of-type(16) { left: 21px; }
-            .black-key:nth-of-type(17) { left: 53px; }
-            .black-key:nth-of-type(18) { left: 117px; }
-            .black-key:nth-of-type(19) { left: 149px; }
-            .black-key:nth-of-type(20) { left: 181px; }
-            .black-key:nth-of-type(21) { left: 245px; }
-            .black-key:nth-of-type(22) { left: 277px; }
-            .black-key:nth-of-type(23) { left: 341px; }
-            .black-key:nth-of-type(24) { left: 373px; }
-            .black-key:nth-of-type(25) { left: 405px; }
-        }
-
-        .footer {
-            text-align: center;
-            margin-top: 1.5rem;
-            padding-top: 0.75rem;
-            border-top: 1px solid rgba(255, 255, 255, 0.2);
-            color: #bfdbfe;
-            font-size: 0.75rem;
-        }
-
-        .footer a {
-            color: #93c5fd;
-            text-decoration: none;
-        }
-
-        .footer a:hover {
-            text-decoration: underline;
-        }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>wave creatorV2</title>
+<meta name="description" content="互動式頻率產生器,支援多種樂器音色、自訂波形繪製、即時鋼琴演奏、示波器與頻譜顯示">
+<meta name="keywords" content="頻率產生器,音樂教學,物理教學,波形,示波器,頻譜,合成器,鋼琴">
+<style>
+:root {
+    --bg1: #581c87; --bg2: #1e3a8a; --bg3: #312e81;
+    --glass: rgba(255,255,255,0.08);
+    --glass-2: rgba(255,255,255,0.16);
+    --line: rgba(255,255,255,0.18);
+    --text: #ffffff;
+    --muted: #bfdbfe;
+    --accent: #3b82f6;
+    --accent-2: #93c5fd;
+    --ok: #10b981;
+    --warn: #f59e0b;
+    --danger: #ef4444;
+    --scope-bg: #1e293b;
+    /* 鋼琴尺寸:只在這裡改,黑鍵位置會自動對齊 */
+    --wk: 38px;   /* 白鍵寬 */
+    --bk: 26px;   /* 黑鍵寬 */
+    --wh: 120px;  /* 白鍵高 */
+    --pad: 8px;   /* 鍵盤左右內距 */
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans TC', 'Microsoft JhengHei', sans-serif;
+    background: linear-gradient(135deg, var(--bg1), var(--bg2), var(--bg3)) fixed;
+    min-height: 100vh;
+    color: var(--text);
+    font-size: 14px;
+    padding: 0 0.75rem 0.75rem;
+}
+body.is-dragging { user-select: none; cursor: grabbing; }
+button { font-family: inherit; }
+
+/* ---------- 頂部列 ---------- */
+.topbar {
+    position: sticky; top: 0; z-index: 50;
+    display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;
+    margin: 0 -0.75rem 0.6rem;
+    padding: 0.45rem 0.75rem;
+    background: rgba(30, 27, 75, 0.88);
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--line);
+}
+.topbar h1 { font-size: 1.05rem; white-space: nowrap; }
+.topbar .sub { color: var(--muted); font-size: 0.72rem; white-space: nowrap; }
+.spacer { flex: 1; }
+.freq-chip {
+    font-variant-numeric: tabular-nums;
+    background: rgba(255,255,255,0.1); border-radius: 999px;
+    padding: 0.2rem 0.6rem; font-size: 0.8rem; color: var(--accent-2); white-space: nowrap;
+}
+.play-btn {
+    display: inline-flex; align-items: center; gap: 0.35rem;
+    padding: 0.4rem 1rem; border: none; border-radius: 999px;
+    font-weight: 700; font-size: 0.85rem; color: #fff; cursor: pointer;
+    background: var(--ok); transition: background 0.2s, transform 0.15s;
+}
+.play-btn:hover { transform: scale(1.04); }
+.play-btn.playing { background: var(--danger); }
+
+.menu { position: relative; }
+.menu > summary {
+    list-style: none; cursor: pointer;
+    padding: 0.35rem 0.7rem; border-radius: 8px;
+    background: var(--glass-2); font-size: 0.8rem; font-weight: 600; white-space: nowrap;
+}
+.menu > summary::-webkit-details-marker { display: none; }
+.menu-pop {
+    position: absolute; right: 0; top: calc(100% + 6px);
+    min-width: 220px; padding: 0.6rem;
+    background: #1e1b4b; border: 1px solid var(--line); border-radius: 10px;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.45);
+}
+.menu-pop h3 { font-size: 0.75rem; color: var(--muted); font-weight: 600; margin-bottom: 0.35rem; }
+.menu-pop label { display: flex; align-items: center; gap: 0.45rem; padding: 0.22rem 0; font-size: 0.82rem; cursor: pointer; }
+.menu-pop input { accent-color: var(--accent); width: 15px; height: 15px; }
+.menu-actions { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid var(--line); }
+.menu-note { font-size: 0.7rem; color: var(--muted); margin-top: 0.45rem; line-height: 1.45; }
+
+/* ---------- 面板 ---------- */
+.board {
+    max-width: 1200px; margin: 0 auto;
+    display: grid; grid-template-columns: 1fr; gap: 0.6rem; align-items: start;
+}
+@media (min-width: 900px) {
+    .board { grid-template-columns: 1fr 1fr; }
+    .panel { grid-column: 1 / -1; }
+    .panel.half { grid-column: auto; }
+}
+.panel {
+    background: var(--glass);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    min-width: 0;
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+}
+.panel[hidden] { display: none; }
+.panel.dragging { opacity: 0.6; outline: 2px dashed var(--accent-2); outline-offset: 2px; }
+.panel-head {
+    display: flex; align-items: center; gap: 0.2rem;
+    padding: 0.3rem 0.4rem 0.3rem 0.25rem;
+    border-bottom: 1px solid var(--line);
+    cursor: pointer; user-select: none;
+}
+.panel.collapsed .panel-head { border-bottom-color: transparent; }
+.panel.collapsed .panel-body { display: none; }
+.drag-handle {
+    cursor: grab; touch-action: none;
+    padding: 0.15rem 0.35rem; color: var(--muted);
+    font-size: 1rem; line-height: 1; border-radius: 6px;
+}
+.drag-handle:hover { background: var(--glass-2); color: #fff; }
+.panel-title { font-weight: 600; font-size: 0.88rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 0 1 auto; min-width: 4.5em; }
+.panel-extra { flex: 1; display: flex; align-items: center; justify-content: flex-end; gap: 0.35rem; min-width: 0; padding: 0 0.25rem; }
+.icon-btn {
+    flex: none; width: 26px; height: 26px;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: transparent; border: none; border-radius: 6px;
+    color: var(--muted); cursor: pointer; font-size: 0.8rem;
+}
+.icon-btn:hover { background: var(--glass-2); color: #fff; }
+.icon-btn.chev { transition: transform 0.2s; }
+.panel.collapsed .icon-btn.chev { transform: rotate(-90deg); }
+.wide-btn { display: none; }
+@media (min-width: 900px) { .wide-btn { display: inline-flex; } }
+.panel-body { padding: 0.55rem 0.7rem 0.65rem; }
+
+/* ---------- 共用元件 ---------- */
+.row { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+.row.between { justify-content: space-between; }
+.ctl-head { display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem; color: var(--muted); margin-top: 0.45rem; }
+.ctl-head b { color: var(--accent-2); font-size: 0.9rem; font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
+.hint { color: var(--muted); font-size: 0.73rem; margin-top: 0.35rem; line-height: 1.5; }
+.hint.warn { color: #fde047; }
+.chip-btn {
+    display: inline-flex; align-items: center; gap: 0.3rem;
+    padding: 0.25rem 0.6rem; border: none; border-radius: 6px;
+    background: var(--glass-2); color: #fff; cursor: pointer; font-size: 0.75rem; white-space: nowrap;
+}
+.chip-btn:hover { background: rgba(255,255,255,0.26); }
+.chip-btn.on { background: rgba(16,185,129,0.4); }
+.badge { display: inline-block; padding: 0.1rem 0.45rem; border-radius: 999px; font-size: 0.66rem; font-weight: 700; color: #fff; white-space: nowrap; }
+.badge.ok { background: var(--ok); }
+.badge.warn { background: var(--warn); }
+
+.seg { display: inline-flex; gap: 2px; padding: 2px; background: rgba(255,255,255,0.08); border-radius: 8px; }
+.seg button {
+    background: transparent; border: none; color: var(--muted);
+    padding: 0.28rem 0.65rem; border-radius: 6px; cursor: pointer;
+    font-size: 0.76rem; font-weight: 600; white-space: nowrap;
+}
+.seg button.active { background: var(--accent); color: #fff; }
+
+input[type="range"] {
+    width: 100%; height: 6px; margin: 0.4rem 0 0.15rem;
+    background: rgba(255,255,255,0.2); border-radius: 3px;
+    outline: none; -webkit-appearance: none; appearance: none;
+}
+input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%;
+    background: #fff; cursor: pointer; box-shadow: 0 0 8px rgba(255,255,255,0.5);
+}
+input[type="range"]::-moz-range-thumb {
+    width: 16px; height: 16px; border-radius: 50%; border: none;
+    background: #fff; cursor: pointer; box-shadow: 0 0 8px rgba(255,255,255,0.5);
+}
+input[type="range"]:focus-visible { box-shadow: 0 0 0 2px var(--accent-2); }
+.scale { display: flex; justify-content: space-between; font-size: 0.66rem; color: var(--muted); }
+
+.num {
+    width: 92px; padding: 0.3rem 0.4rem;
+    background: rgba(255,255,255,0.14); border: 1px solid rgba(255,255,255,0.28);
+    border-radius: 6px; color: #fff; font-size: 0.95rem; text-align: center;
+    font-variant-numeric: tabular-nums;
+}
+.num.small { width: 64px; font-size: 0.82rem; }
+.num:focus { outline: none; border-color: var(--accent); }
+select.num { width: auto; text-align: left; font-size: 0.75rem; padding: 0.2rem 0.3rem; }
+select.num option { color: #000; }
+.check { display: inline-flex; align-items: center; gap: 0.35rem; cursor: pointer; font-size: 0.8rem; color: var(--muted); }
+.check input { accent-color: var(--accent); width: 15px; height: 15px; }
+
+canvas.scope {
+    display: block; width: 100%;
+    background: var(--scope-bg); border-radius: 8px;
+    border: 2px solid var(--ok);
+}
+#scopeCanvas { height: 190px; }
+#drawCanvas { height: 160px; border-color: var(--accent); cursor: crosshair; touch-action: none; }
+#specCanvas { height: 160px; border-color: #f472b6; }
+
+/* ---------- 樂器 ---------- */
+.instruments { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.35rem; }
+.inst-btn {
+    display: flex; flex-direction: column; align-items: center; gap: 0.1rem;
+    padding: 0.4rem 0.2rem; border: none; border-radius: 8px;
+    background: rgba(255,255,255,0.16); color: #fff; cursor: pointer;
+    font-size: 0.74rem; font-weight: 500; transition: background 0.2s, box-shadow 0.2s;
+}
+.inst-btn:hover { background: rgba(255,255,255,0.26); }
+.inst-btn.active { background: var(--accent); box-shadow: 0 4px 14px rgba(59,130,246,0.5); }
+.inst-btn .ic { font-size: 1.15rem; line-height: 1.25; }
+
+/* ---------- 頻率 ---------- */
+.freq-row { display: flex; align-items: baseline; gap: 0.4rem; flex-wrap: wrap; }
+.note-name { font-size: 0.8rem; color: var(--accent-2); font-variant-numeric: tabular-nums; }
+.notes { display: grid; grid-template-columns: repeat(8, 1fr); gap: 0.25rem; margin-top: 0.45rem; }
+.note-btn {
+    padding: 0.32rem 0; border: none; border-radius: 6px;
+    background: rgba(255,255,255,0.16); color: #fff; cursor: pointer;
+    font-size: 0.72rem; font-weight: 600;
+}
+.note-btn:hover { background: rgba(255,255,255,0.28); }
+.note-btn.active { background: var(--accent); }
+.sep { height: 1px; background: var(--line); margin: 0.55rem 0 0.1rem; }
+
+/* ---------- 示波器 ---------- */
+.osc-box { margin-top: 0.4rem; padding: 0.45rem 0.6rem; background: rgba(59,130,246,0.1); border-left: 3px solid var(--accent); border-radius: 6px; }
+.osc-box .info { font-size: 0.72rem; color: var(--accent-2); line-height: 1.5; margin-top: 0.2rem; }
+details.adv { margin-top: 0.45rem; background: rgba(239,68,68,0.1); border-left: 3px solid var(--danger); border-radius: 6px; }
+details.adv > summary { cursor: pointer; padding: 0.35rem 0.6rem; font-size: 0.78rem; font-weight: 600; color: #fca5a5; }
+details.adv > div { padding: 0 0.6rem 0.5rem; }
+details.adv .ctl-head { color: #fca5a5; }
+
+/* ---------- 鋼琴 ---------- */
+.piano-scroll {
+    overflow-x: auto;
+    background: linear-gradient(#1e293b, #0f172a);
+    border: 1px solid rgba(167,139,250,0.5); border-radius: 8px;
+    padding: 6px 0 8px;
+}
+.piano-keys {
+    position: relative; display: flex;
+    width: max-content; margin: 0 auto;
+    padding: 0 var(--pad);
+}
+.white-key, .black-key {
+    display: flex; flex-direction: column; align-items: center; justify-content: flex-end;
+    border-radius: 0 0 6px 6px; cursor: pointer; user-select: none; -webkit-user-select: none;
+    touch-action: none; font-weight: 700; line-height: 1.2; -webkit-touch-callout: none;
+}
+.white-key {
+    flex: none; width: var(--wk); height: var(--wh);
+    background: linear-gradient(#fff, #e5e7eb); border: 1px solid #6b7280;
+    color: #1f2937; font-size: 0.64rem; padding-bottom: 0.35rem;
+}
+.white-key:hover { background: linear-gradient(#f3f4f6, #d1d5db); }
+.white-key.active { background: linear-gradient(#bfdbfe, #93c5fd); }
+.black-key {
+    position: absolute; top: 0; z-index: 2;
+    left: calc(var(--i) * var(--wk) - var(--bk) / 2 + var(--pad));
+    width: var(--bk); height: calc(var(--wh) * 0.62);
+    background: linear-gradient(#374151, #000); border: 1px solid #111827;
+    color: #fff; font-size: 0.56rem; padding-bottom: 0.35rem;
+}
+.black-key:hover { background: linear-gradient(#4b5563, #1f2937); }
+.black-key.active { background: linear-gradient(#a78bfa, #7c3aed); }
+.kb { font-weight: 500; opacity: 0.55; font-size: 0.56rem; }
+
+/* ---------- 手機 ---------- */
+@media (max-width: 640px) {
+    :root { --wk: 30px; --bk: 20px; --wh: 104px; }
+    .topbar .sub, .freq-chip { display: none; }
+    .topbar { flex-wrap: nowrap; }
+    .topbar h1 { font-size: 0.95rem; }
+    .kb { display: none; }
+    .instruments { grid-template-columns: repeat(4, 1fr); }
+    .inst-btn { font-size: 0.68rem; }
+    #scopeCanvas { height: 160px; }
+    #drawCanvas, #specCanvas { height: 140px; }
+}
+
+.footer { text-align: center; color: var(--muted); font-size: 0.7rem; margin-top: 0.8rem; line-height: 1.6; }
+</style>
 </head>
 <body>
-    <div class="container">
-        <h1>🎵 頻率產生器</h1>
-        <p class="subtitle">多樂器音色合成器 + 自訂波形 + 即時演奏</p>
 
-        <button id="playButton" class="play-button stopped">
-            <span id="playIcon">▶</span>
-            <span id="playText">開始播放</span>
-        </button>
-
-        <div class="duration-control">
-            <div class="duration-input-group">
-                <span class="duration-label">🕐 播放時長:</span>
-                <input type="number" id="durationInput" class="duration-input" min="0.1" max="60" step="0.1" value="2">
-                <span class="duration-label">秒</span>
+<header class="topbar">
+    <h1>🎵 頻率產生器</h1>
+    <span class="sub">多樂器音色 · 自訂波形 · 示波器 · 頻譜</span>
+    <span class="spacer"></span>
+    <span class="freq-chip" id="topFreq">440.00 Hz · A4</span>
+    <button id="playButton" class="play-btn" type="button"><span id="playIcon">▶</span><span id="playText">開始播放</span></button>
+    <details class="menu" id="layoutMenu">
+        <summary>🧩 版面</summary>
+        <div class="menu-pop">
+            <h3>顯示的面板</h3>
+            <div id="panelToggles"></div>
+            <div class="menu-actions">
+                <button type="button" class="chip-btn" id="expandAll">全部展開</button>
+                <button type="button" class="chip-btn" id="collapseAll">全部收合</button>
+                <button type="button" class="chip-btn" id="resetLayout">↺ 重設版面</button>
             </div>
-            <div class="divider"></div>
-            <label class="checkbox-group">
-                <input type="checkbox" id="continuousPlay" checked>
-                <span class="duration-label">♾️ 持續播放</span>
-            </label>
+            <p class="menu-note">拖曳面板標題左側的 ⠿ 可調整順序;點標題可收合;寬螢幕可用 ⇔ 切換全寬/半寬。設定會自動記在這台裝置的瀏覽器中。</p>
         </div>
+    </details>
+</header>
 
-        <div class="section">
-            <h2 class="section-title">🎹 樂器音色</h2>
-            <div class="instruments-grid">
-                <button class="instrument-btn active" data-instrument="sine">
-                    <span class="instrument-icon">〰️</span>
-                    正弦波
-                </button>
-                <button class="instrument-btn" data-instrument="square">
-                    <span class="instrument-icon">⊡</span>
-                    方波
-                </button>
-                <button class="instrument-btn" data-instrument="sawtooth">
-                    <span class="instrument-icon">⚡</span>
-                    鋸齒波
-                </button>
-                <button class="instrument-btn" data-instrument="triangle">
-                    <span class="instrument-icon">△</span>
-                    三角波
-                </button>
-                <button class="instrument-btn" data-instrument="flute">
-                    <span class="instrument-icon">🎵</span>
-                    長笛
-                </button>
-                <button class="instrument-btn" data-instrument="violin">
-                    <span class="instrument-icon">🎻</span>
-                    小提琴
-                </button>
-                <button class="instrument-btn" data-instrument="piano">
-                    <span class="instrument-icon">🎹</span>
-                    鋼琴
-                </button>
-                <button class="instrument-btn" data-instrument="custom">
-                    <span class="instrument-icon">✏️</span>
-                    自訂波形
-                </button>
+<main class="board" id="board">
+
+    <!-- 樂器音色 -->
+    <section class="panel" data-id="instruments" data-title="🎹 樂器音色">
+        <div class="panel-body">
+            <div class="instruments" id="instruments">
+                <button type="button" class="inst-btn active" data-instrument="sine"><span class="ic">〰️</span>正弦波</button>
+                <button type="button" class="inst-btn" data-instrument="square"><span class="ic">⊓</span>方波</button>
+                <button type="button" class="inst-btn" data-instrument="sawtooth"><span class="ic">⚡</span>鋸齒波</button>
+                <button type="button" class="inst-btn" data-instrument="triangle"><span class="ic">△</span>三角波</button>
+                <button type="button" class="inst-btn" data-instrument="flute"><span class="ic">🎵</span>長笛</button>
+                <button type="button" class="inst-btn" data-instrument="violin"><span class="ic">🎻</span>小提琴</button>
+                <button type="button" class="inst-btn" data-instrument="piano"><span class="ic">🎹</span>鋼琴</button>
+                <button type="button" class="inst-btn" data-instrument="custom"><span class="ic">✏️</span>自訂波形</button>
             </div>
+            <p class="hint">播放中切換音色會即時套用,不會中斷聲音。</p>
         </div>
+    </section>
 
-        <div id="customWaveSection" class="section" style="display: none;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-                <h2 class="section-title" style="margin-bottom: 0;">
-                    ✏️ 繪製你的波形
-                    <span id="savedBadge" class="status-badge" style="display: none;">✓ 已儲存</span>
-                </h2>
-                <button id="clearButton" class="clear-btn">
-                    ↺ 清除
-                </button>
+    <!-- 頻率・音量・播放 -->
+    <section class="panel" data-id="frequency" data-title="🎚️ 頻率・音量・播放">
+        <div class="panel-body">
+            <div class="freq-row">
+                <input type="number" id="freqInput" class="num" min="20" max="20000" step="0.01" value="440" aria-label="頻率 (Hz)">
+                <span class="muted">Hz</span>
+                <span class="note-name" id="noteName">≈ A4</span>
             </div>
-            <div class="canvas-container draw">
-                <canvas id="drawCanvas" width="800" height="200"></canvas>
+            <input type="range" id="freqSlider" min="0" max="2000" step="1" aria-label="頻率滑桿(對數刻度)">
+            <div class="scale"><span>20</span><span>200</span><span>2k</span><span>20k Hz</span></div>
+            <div class="notes" id="notes">
+                <button type="button" class="note-btn" data-freq="261.63">C4</button>
+                <button type="button" class="note-btn" data-freq="293.66">D4</button>
+                <button type="button" class="note-btn" data-freq="329.63">E4</button>
+                <button type="button" class="note-btn" data-freq="349.23">F4</button>
+                <button type="button" class="note-btn" data-freq="392.00">G4</button>
+                <button type="button" class="note-btn" data-freq="440.00">A4</button>
+                <button type="button" class="note-btn" data-freq="493.88">B4</button>
+                <button type="button" class="note-btn" data-freq="523.25">C5</button>
             </div>
-            <p class="hint custom">💡 在畫布上按住滑鼠或手指,畫出一個完整週期的波形。<strong>可自由創作:</strong>對稱波形(首尾同高)或不對稱波形(如小提琴鋸齒)都可以!播放後可在示波器倍調整觸發電位來穩定顯示。</p>
+            <div class="sep"></div>
+            <div class="ctl-head"><span>🔊 音量</span><b id="volumeValue">30%</b></div>
+            <input type="range" id="volumeSlider" min="0" max="1" step="0.01" value="0.3" aria-label="音量">
+            <div class="row" style="margin-top:0.45rem">
+                <span class="muted" style="font-size:0.8rem">🕐 播放時長</span>
+                <input type="number" id="durationInput" class="num small" min="0.1" max="60" step="0.1" value="2" aria-label="播放時長(秒)">
+                <span class="muted" style="font-size:0.8rem">秒</span>
+                <label class="check"><input type="checkbox" id="continuousPlay" checked>♾️ 持續播放</label>
+            </div>
+            <p class="hint">頻率滑桿採對數刻度(與人耳對音高的感受一致);需要精確數值請直接輸入。</p>
         </div>
+    </section>
 
-        <div class="section">
-            <div class="slider-container">
-                <div class="slider-header">
-                    <h2 class="section-title" style="margin-bottom: 0;">🎚️ 頻率</h2>
-                    <span class="slider-value" id="frequencyValue">440.00 Hz</span>
-                </div>
-                <input type="range" id="frequencySlider" min="20" max="2000" step="0.01" value="440">
-                <div class="slider-labels">
-                    <span>20 Hz</span>
-                    <span>2000 Hz</span>
+    <!-- 即時波形 / 示波器 -->
+    <section class="panel" data-id="scope" data-title="📊 即時波形">
+        <div data-head>
+            <button type="button" id="freezeButton" class="chip-btn">❄️ 凍結</button>
+        </div>
+        <div class="panel-body">
+            <div class="row between" style="margin-bottom:0.4rem">
+                <div class="seg" id="modeSeg">
+                    <button type="button" data-mode="normal" class="active">🌊 一般模式</button>
+                    <button type="button" data-mode="osc">📡 示波器模式</button>
                 </div>
             </div>
-        </div>
+            <canvas id="scopeCanvas" class="scope"></canvas>
+            <p class="hint" id="scopeHint">按下播放或彈奏鋼琴即可看到波形</p>
 
-        <div class="section">
-            <h2 class="section-title">🎼 快速音符</h2>
-            <div class="notes-grid">
-                <button class="note-btn" data-freq="261.63">C4</button>
-                <button class="note-btn" data-freq="293.66">D4</button>
-                <button class="note-btn" data-freq="329.63">E4</button>
-                <button class="note-btn" data-freq="349.23">F4</button>
-                <button class="note-btn" data-freq="392.00">G4</button>
-                <button class="note-btn" data-freq="440.00">A4</button>
-                <button class="note-btn" data-freq="493.88">B4</button>
-            </div>
-        </div>
-
-        <div class="section">
-            <div class="slider-container">
-                <div class="slider-header">
-                    <h2 class="section-title" style="margin-bottom: 0;">🔊 音量</h2>
-                    <span class="slider-value" id="volumeValue">30%</span>
-                </div>
-                <input type="range" id="volumeSlider" min="0" max="1" step="0.01" value="0.3">
-            </div>
-        </div>
-
-        <div class="section">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
-                <h2 class="section-title" style="margin-bottom: 0;">📊 即時波形顯示</h2>
-                <button id="freezeButton" class="clear-btn" style="display: none;">
-                    ❄️ 凍結波形
-                </button>
-            </div>
-
-            <div class="mode-switch">
-                <button id="normalMode" class="mode-btn active">
-                    <span>🌊</span>
-                    <span>一般模式</span>
-                </button>
-                <button id="oscilloscopeMode" class="mode-btn">
-                    <span>📡</span>
-                    <span>示波器模式</span>
-                </button>
-            </div>
-
-            <div class="canvas-container display">
-                <canvas id="displayCanvas" width="800" height="150" class="display-canvas"></canvas>
-            </div>
-            <p class="hint display" id="displayHint">按下播放按鈕即可看到波形</p>
-        </div>
-
-        <div class="section" id="oscilloscopeSection" style="display: none;">
-            <h2 class="section-title">🔬 示波器控制</h2>
-            
-            <div class="slider-container" style="margin-bottom: 1rem;">
-                <div class="slider-header">
-                    <div style="display: flex; align-items: center;">
-                        <span style="font-size: 0.875rem; color: #bfdbfe;">顯示週期數</span>
-                        <span id="syncIndicator" class="sync-indicator synced">✓ 已同步</span>
+            <div id="oscControls" hidden>
+                <div class="osc-box">
+                    <div class="ctl-head" style="margin-top:0">
+                        <span>顯示週期數 <span id="syncIndicator" class="badge ok">✓ 已同步</span></span>
+                        <b id="cyclesValue">2.0 週期</b>
                     </div>
-                    <span class="slider-value" id="cyclesValue">2.0 週期</span>
+                    <input type="range" id="cyclesSlider" min="0.5" max="10" step="0.1" value="2" aria-label="顯示週期數">
+                    <div class="scale"><span>0.5</span><span>10 週期</span></div>
+                    <div class="info" id="timebaseInfo"></div>
+                    <div class="info" id="syncHint"></div>
                 </div>
-                <input type="range" id="cyclesSlider" min="0.5" max="10" step="0.1" value="2.0">
-                <div class="slider-labels">
-                    <span>0.5 週期</span>
-                    <span>10 週期</span>
-                </div>
-                <div style="margin-top: 0.5rem; padding: 0.5rem; background: rgba(59, 130, 246, 0.1); border-radius: 6px; border-left: 3px solid #3b82f6;">
-                    <p style="font-size: 0.75rem; color: #93c5fd; margin: 0;">
-                        <strong>💡 提示:</strong><span id="timebaseInfo">時基 = 1.14 ms/格 (每格 1.14 毫秒)</span>
-                    </p>
-                    <p style="font-size: 0.7rem; color: #bfdbfe; margin: 0.25rem 0 0 0;" id="syncHint">
-                        調整到整數個週期(1.0, 2.0, 3.0...)波形會靜止不動,就像駐波一樣!
-                    </p>
-                </div>
-            </div>
-
-            <button id="advancedToggle" class="toggle-btn">
-                <span class="toggle-icon" id="toggleIcon">▼</span>
-                <span>🔧 進階觸發設定(專業模式)</span>
-            </button>
-
-            <div id="advancedTrigger" class="collapsible-content" style="margin-top: 1rem;">
-                <div style="padding: 0.75rem; background: rgba(239, 68, 68, 0.1); border-radius: 8px; border-left: 3px solid #ef4444;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-                        <span style="font-size: 0.875rem; color: #fca5a5; font-weight: 600;">⚡ 觸發設定</span>
-                        <div style="display: flex; gap: 0.5rem;">
-                            <button id="triggerRising" class="clear-btn" style="font-size: 0.7rem; padding: 0.25rem 0.5rem; background: rgba(16, 185, 129, 0.3);">
-                                ↗️ 上升沿
-                            </button>
-                            <button id="triggerFalling" class="clear-btn" style="font-size: 0.7rem; padding: 0.25rem 0.5rem;">
-                                ↘️ 下降沿
-                            </button>
+                <details class="adv">
+                    <summary>🔧 進階觸發設定</summary>
+                    <div>
+                        <div class="row between" style="margin-top:0.2rem">
+                            <span style="font-size:0.8rem;color:#fca5a5">觸發斜率</span>
+                            <div class="seg" id="slopeSeg">
+                                <button type="button" data-slope="rising" class="active">↗ 上升沿</button>
+                                <button type="button" data-slope="falling">↘ 下降沿</button>
+                            </div>
                         </div>
+                        <div class="ctl-head"><span>觸發電位</span><b id="triggerValue">50%</b></div>
+                        <input type="range" id="triggerSlider" min="0" max="100" step="1" value="50" aria-label="觸發電位">
+                        <div class="scale"><span>0%(底部)</span><span>50%(中心)</span><span>100%(頂部)</span></div>
+                        <p class="hint" style="color:#fca5a5">對不對稱的波形(如小提琴、鋸齒波),調整觸發電位可以找到穩定的起始點;電位超出波形範圍時會顯示「未觸發」。</p>
                     </div>
-                    <div class="slider-header" style="margin-bottom: 0.25rem;">
-                        <span style="font-size: 0.8rem; color: #fca5a5;">觸發電位</span>
-                        <span class="slider-value" id="triggerValue" style="font-size: 1rem;">50%</span>
-                    </div>
-                    <input type="range" id="triggerSlider" min="0" max="100" step="1" value="50" style="height: 8px;">
-                    <div class="slider-labels" style="font-size: 0.65rem;">
-                        <span>0% (底部)</span>
-                        <span>50% (中心)</span>
-                        <span>100% (頂部)</span>
-                    </div>
-                    <p style="font-size: 0.7rem; color: #fca5a5; margin-top: 0.5rem; margin-bottom: 0;">
-                        💡 對於不對稱波形(如小提琴鋸齒波),調整觸發電位可找到穩定的起始點
-                    </p>
-                </div>
+                </details>
             </div>
         </div>
+    </section>
 
-        <div class="section">
-            <h2 class="section-title">🎹 即時演奏鋼琴(兩個八度)</h2>
-            <div class="piano-container">
-                <div class="piano-keys" id="pianoKeys"></div>
-                <p class="hint piano">💡 按住琴鍵演奏,放開停止 - 支援滑鼠和觸控</p>
+    <!-- 自訂波形 -->
+    <section class="panel" data-id="custom" data-title="✏️ 自訂波形">
+        <div data-head>
+            <span id="savedBadge" class="badge ok" hidden>✓ 已套用</span>
+            <button type="button" id="clearButton" class="chip-btn">↺ 清除</button>
+        </div>
+        <div class="panel-body">
+            <canvas id="drawCanvas" class="scope"></canvas>
+            <p class="hint" id="customHint">💡 按住滑鼠或手指,由左到右畫出「一個週期」。首尾高度不同也可以(例如鋸齒波),系統會自動接合。放開後,黃色虛線就是實際合成出來的波形(前 127 個諧波)。</p>
+        </div>
+    </section>
+
+    <!-- 頻譜 -->
+    <section class="panel" data-id="spectrum" data-title="🌈 頻譜分析">
+        <div data-head>
+            <select id="specMax" class="num" aria-label="頻譜顯示範圍">
+                <option value="2000">0–2 kHz</option>
+                <option value="5000" selected>0–5 kHz</option>
+                <option value="10000">0–10 kHz</option>
+                <option value="20000">0–20 kHz</option>
+            </select>
+        </div>
+        <div class="panel-body">
+            <canvas id="specCanvas" class="scope"></canvas>
+            <div class="row between" style="margin-top:0.35rem">
+                <label class="check"><input type="checkbox" id="showHarmonics" checked>標示諧波位置(1×、2×、3×…)</label>
             </div>
+            <p class="hint">觀察看看:正弦波只有一根峰;方波、三角波只有奇次諧波;鋸齒波所有諧波都有。音色不同,就是諧波的組成不同。</p>
         </div>
+    </section>
 
-        <p class="hint">💡 用鋼琴鍵盤即時演奏,或選擇「自訂波形」創造稀特音色!</p>
-
-        <div class="footer">
-            <p>開源專案 - 歡迎分享給更多學生使用</p>
-            <p>適用於音樂教學、物理教學、聲波學習</p>
+    <!-- 鋼琴 -->
+    <section class="panel" data-id="piano" data-title="🎹 即時演奏鋼琴(兩個八度)">
+        <div class="panel-body">
+            <div class="piano-scroll"><div class="piano-keys" id="pianoKeys"></div></div>
+            <p class="hint">按住琴鍵演奏、放開停止;可滑動連奏,也可多指彈和弦。選「鋼琴」音色時會有自然衰減。<br>
+            電腦鍵盤:<b>Z–M</b> = C3–B3、<b>Q–U</b> = C4–B4、<b>I</b> = C5(黑鍵在上一排)。<b>空白鍵</b> 播放/停止,<b>Esc</b> 全部停止。</p>
         </div>
-    </div>
+    </section>
 
-    <script>
-        let audioContext;
-        let oscillator = null;
-        let gainNode;
-        let analyser;
-        let animationId = null;
-        let isPlaying = false;
-        let currentInstrument = 'sine';
-        let frequency = 440;
-        let volume = 0.3;
-        let customWaveData = null;
-        let drawingPoints = [];
-        let isDrawing = false;
-        let isFrozen = false;
-        let frozenImageData = null;
-        let displayCycles = 2.0;
-        let triggerLevel = 50;
-        let triggerSlope = 'rising';
-        let displayMode = 'normal';
-        let playDuration = 2;
-        let isContinuousPlay = true;
-        let stopTimeout = null;
-        let currentPressedKey = null;
+</main>
 
-        function init() {
-            audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            gainNode = audioContext.createGain();
-            gainNode.connect(audioContext.destination);
-            
-            analyser = audioContext.createAnalyser();
-            analyser.fftSize = 2048;
-            gainNode.connect(analyser);
+<footer class="footer">
+    開源專案 - 歡迎分享給更多學生使用<br>適用於音樂教學、物理教學、聲波學習
+</footer>
 
-            drawGrid(document.getElementById('drawCanvas'));
-            initPianoKeys();
-            setupEventListeners();
-        }
+<script>
+(() => {
+'use strict';
 
-        function getInstrumentWaveform(instrument) {
-            const harmonics = 32;
-            const real = new Float32Array(harmonics);
-            const imag = new Float32Array(harmonics);
-            
-            real[0] = 0;
-            imag[0] = 0;
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 
-            switch(instrument) {
-                case 'flute':
-                    const fluteReal = [
-                        0.000000, -0.665689, -0.241520, -0.084461, 0.023754, -0.018882,
-                        -0.014470, 0.001353, -0.004049, 0.001439, -0.004839, -0.000522,
-                        -0.001376, -0.002107, -0.000180, 0.000510, -0.002791, 0.001364,
-                        -0.001820, 0.001408, 0.000263, 0.000756, 0.001253, -0.000481,
-                        0.000832, 0.000406, 0.000675, 0.000419, -0.000018, 0.000670,
-                        0.000227, 0.000215
-                    ];
-                    
-                    const fluteImag = [
-                        0.000000, -0.602536, 0.010926, -0.043907, 0.023559, 0.011414,
-                        -0.013053, 0.007460, -0.000258, 0.000137, 0.001823, 0.002633,
-                        0.006774, 0.002056, 0.005535, 0.002520, 0.001072, 0.000977,
-                        0.001411, 0.001351, 0.003138, -0.000431, 0.002040, 0.001507,
-                        0.000302, 0.000482, -0.001627, -0.000076, -0.000512, 0.000492,
-                        0.000133, 0.000462
-                    ];
-                    
-                    for (let i = 0; i < harmonics && i < fluteReal.length; i++) {
-                        real[i] = fluteReal[i];
-                        imag[i] = fluteImag[i];
-                    }
-                    break;
+/* =========================================================
+ * 音色資料(傅立葉係數)
+ * ========================================================= */
+const INSTRUMENTS = {
+    flute: {
+        real: [0.000000, -0.665689, -0.241520, -0.084461, 0.023754, -0.018882, -0.014470, 0.001353, -0.004049, 0.001439, -0.004839, -0.000522, -0.001376, -0.002107, -0.000180, 0.000510, -0.002791, 0.001364, -0.001820, 0.001408, 0.000263, 0.000756, 0.001253, -0.000481, 0.000832, 0.000406, 0.000675, 0.000419, -0.000018, 0.000670, 0.000227, 0.000215],
+        imag: [0.000000, -0.602536, 0.010926, -0.043907, 0.023559, 0.011414, -0.013053, 0.007460, -0.000258, 0.000137, 0.001823, 0.002633, 0.006774, 0.002056, 0.005535, 0.002520, 0.001072, 0.000977, 0.001411, 0.001351, 0.003138, -0.000431, 0.002040, 0.001507, 0.000302, 0.000482, -0.001627, -0.000076, -0.000512, 0.000492, 0.000133, 0.000462]
+    },
+    violin: {
+        real: [0.000000, 0.083271, 0.120492, -0.029813, -0.131892, 0.023254, -0.025857, -0.008472, -0.006287, -0.011175, -0.011364, -0.001251, -0.011776, -0.002313, 0.001824, 0.002806, -0.002548, -0.003840, -0.003821, 0.002967, 0.001706, 0.002217, -0.003560, 0.001273, -0.001130, 0.002950, -0.004365, 0.002397, -0.001682, 0.003603, -0.004724, 0.001477],
+        imag: [0.000000, 0.536728, -0.226939, 0.014252, -0.158813, 0.004576, -0.023696, 0.036146, -0.008211, -0.001324, -0.006049, 0.007575, 0.004440, -0.003214, -0.003466, 0.003601, 0.004673, 0.003894, -0.006151, -0.000321, 0.001134, 0.005382, -0.000637, 0.001146, -0.002946, 0.000994, -0.001471, 0.000696, 0.000187, 0.002764, 0.001290, -0.000092]
+    },
+    piano: {
+        real: [0.000000, -0.655542, -0.069323, -0.067852, 0.045698, -0.086718, -0.014329, 0.017055, 0.013534, -0.000099, 0.007251, -0.022797, -0.002402, -0.002295, 0.003001, 0.002360, -0.003251, -0.001729, 0.001700, -0.000141, 0.004372, 0.003334, -0.002556, 0.000797, -0.001452, 0.001399, 0.001511, 0.001627, -0.000257, -0.000067, -0.000538, 0.000285],
+        imag: [0.000000, -0.034535, -0.314345, 0.230697, -0.051015, 0.000114, -0.013571, -0.027533, -0.009915, 0.026955, 0.001501, 0.012120, -0.002871, -0.007191, 0.002215, 0.001585, -0.000237, 0.002186, -0.001895, -0.002961, 0.001123, 0.000375, 0.004142, 0.000600, -0.002278, -0.001130, -0.000440, 0.001803, 0.002698, 0.000157, -0.001152, 0.001187]
+    }
+};
+const BASIC_TYPES = ['sine', 'square', 'sawtooth', 'triangle'];
 
-                case 'violin':
-                    const violinReal = [
-                        0.000000, 0.083271, 0.120492, -0.029813, -0.131892, 0.023254,
-                        -0.025857, -0.008472, -0.006287, -0.011175, -0.011364, -0.001251,
-                        -0.011776, -0.002313, 0.001824, 0.002806, -0.002548, -0.003840,
-                        -0.003821, 0.002967, 0.001706, 0.002217, -0.003560, 0.001273,
-                        -0.001130, 0.002950, -0.004365, 0.002397, -0.001682, 0.003603,
-                        -0.004724, 0.001477
-                    ];
-                    
-                    const violinImag = [
-                        0.000000, 0.536728, -0.226939, 0.014252, -0.158813, 0.004576,
-                        -0.023696, 0.036146, -0.008211, -0.001324, -0.006049, 0.007575,
-                        0.004440, -0.003214, -0.003466, 0.003601, 0.004673, 0.003894,
-                        -0.006151, -0.000321, 0.001134, 0.005382, -0.000637, 0.001146,
-                        -0.002946, 0.000994, -0.001471, 0.000696, 0.000187, 0.002764,
-                        0.001290, -0.000092
-                    ];
-                    
-                    for (let i = 0; i < harmonics && i < violinReal.length; i++) {
-                        real[i] = violinReal[i];
-                        imag[i] = violinImag[i];
-                    }
-                    break;
+/* =========================================================
+ * 音名工具
+ * ========================================================= */
+const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+const midiToFreq = m => 440 * Math.pow(2, (m - 69) / 12);
+function noteLabel(f) {
+    const midi = 69 + 12 * Math.log2(f / 440);
+    const n = Math.round(midi);
+    const cents = Math.round((midi - n) * 100);
+    const name = NOTE_NAMES[((n % 12) + 12) % 12] + (Math.floor(n / 12) - 1);
+    return name + (cents === 0 ? '' : (cents > 0 ? ' +' : ' ') + cents + '¢');
+}
+const fmtMs = ms => ms < 1 ? (ms * 1000).toFixed(0) + ' µs' : ms.toFixed(2) + ' ms';
+const fmtHz = f => f >= 1000 ? (f / 1000).toFixed(f % 1000 ? 1 : 0) + 'k' : String(Math.round(f));
 
-                case 'piano':
-                    const pianoReal = [
-                        0.000000, -0.655542, -0.069323, -0.067852, 0.045698, -0.086718,
-                        -0.014329, 0.017055, 0.013534, -0.000099, 0.007251, -0.022797,
-                        -0.002402, -0.002295, 0.003001, 0.002360, -0.003251, -0.001729,
-                        0.001700, -0.000141, 0.004372, 0.003334, -0.002556, 0.000797,
-                        -0.001452, 0.001399, 0.001511, 0.001627, -0.000257, -0.000067,
-                        -0.000538, 0.000285
-                    ];
-                    
-                    const pianoImag = [
-                        0.000000, -0.034535, -0.314345, 0.230697, -0.051015, 0.000114,
-                        -0.013571, -0.027533, -0.009915, 0.026955, 0.001501, 0.012120,
-                        -0.002871, -0.007191, 0.002215, 0.001585, -0.000237, 0.002186,
-                        -0.001895, -0.002961, 0.001123, 0.000375, 0.004142, 0.000600,
-                        -0.002278, -0.001130, -0.000440, 0.001803, 0.002698, 0.000157,
-                        -0.001152, 0.001187
-                    ];
-                    
-                    for (let i = 0; i < harmonics && i < pianoReal.length; i++) {
-                        real[i] = pianoReal[i];
-                        imag[i] = pianoImag[i];
-                    }
-                    break;
+/* 鋼琴鍵:C3 (MIDI 48) 到 C5 (MIDI 72) */
+const KB_LETTERS = 'zsxdcvgbhnjmq2w3er5t6y7ui';
+const PIANO = [];
+for (let m = 48; m <= 72; m++) {
+    const n = NOTE_NAMES[m % 12];
+    PIANO.push({
+        id: 'k' + m, midi: m, short: n,
+        name: n + (Math.floor(m / 12) - 1),
+        black: n.includes('#'),
+        freq: midiToFreq(m),
+        kb: KB_LETTERS[m - 48]
+    });
+}
+const KB_MAP = new Map(PIANO.map(k => [k.kb, k]));
 
-                default:
-                    return null;
-            }
+/* =========================================================
+ * 狀態
+ * ========================================================= */
+const state = {
+    instrument: 'sine',
+    freq: 440,
+    volume: 0.3,
+    duration: 2,
+    continuous: true,
+    mode: 'normal',
+    cycles: 2,
+    trigLevel: 50,
+    trigSlope: 'rising',
+    frozen: false,
+    specMax: 5000,
+    showHarmonics: true
+};
+const FMIN = 20, FMAX = 20000, SLIDER_STEPS = 2000;
+const PEAK = 0.8;              // 每個聲部的峰值(多聲部時由限幅器保護)
+const NORMAL_SAMPLES = 2048;   // 一般模式顯示的取樣點數
 
-            return { real, imag };
-        }
+let ctx = null, master = null, analyser = null, specAn = null;
+let timeBuf = null, specBuf = null;
+const voices = new Map();   // id -> { osc, env, freq }
+const held = new Set();     // 目前「按住中」的聲部 id(處理非同步啟動的競態)
+let displayFreq = 440;      // 示波器觸發/時基參考頻率(最後一個發聲的音)
+let stopTimer = null;
+let snap = null;            // 凍結時的資料快照
 
-        function drawGrid(canvas) {
-            const ctx = canvas.getContext('2d');
-            const width = canvas.width;
-            const height = canvas.height;
+const custom = { points: [], coeffs: null, wave: null, recon: null };
+const waveCache = {};
 
-            ctx.fillStyle = '#1e293b';
-            ctx.fillRect(0, 0, width, height);
+/* =========================================================
+ * 音訊引擎
+ * ========================================================= */
+async function ensureAudio() {
+    if (!ctx) {
+        ctx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'interactive' });
 
-            ctx.strokeStyle = '#334155';
-            ctx.lineWidth = 1;
+        master = ctx.createGain();
+        master.gain.value = state.volume;
+        const limiter = ctx.createDynamicsCompressor();   // 彈和弦時避免爆音
+        limiter.threshold.value = -3;
+        limiter.knee.value = 0;
+        limiter.ratio.value = 20;
+        limiter.attack.value = 0.002;
+        limiter.release.value = 0.1;
+        master.connect(limiter).connect(ctx.destination);
 
-            for (let i = 0; i <= 10; i++) {
-                ctx.beginPath();
-                ctx.moveTo((width / 10) * i, 0);
-                ctx.lineTo((width / 10) * i, height);
-                ctx.stroke();
-            }
+        // 分析器接在「音量」之前:顯示的波形大小不受音量影響
+        analyser = ctx.createAnalyser();
+        analyser.fftSize = 32768;          // 約 0.68 秒,低頻也能顯示完整週期
+        analyser.smoothingTimeConstant = 0;
+        timeBuf = new Float32Array(analyser.fftSize);
 
-            for (let i = 0; i <= 4; i++) {
-                ctx.beginPath();
-                ctx.moveTo(0, (height / 4) * i);
-                ctx.lineTo(width, (height / 4) * i);
-                ctx.stroke();
-            }
+        specAn = ctx.createAnalyser();
+        specAn.fftSize = 8192;
+        specAn.smoothingTimeConstant = 0.5;
+        specBuf = new Float32Array(specAn.frequencyBinCount);
 
-            ctx.strokeStyle = '#475569';
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.moveTo(0, height / 2);
-            ctx.lineTo(width, height / 2);
-            ctx.stroke();
-        }
+        const sink = ctx.createGain();     // 確保分析器在所有瀏覽器中都持續運作
+        sink.gain.value = 0;
+        analyser.connect(sink);
+        specAn.connect(sink);
+        sink.connect(ctx.destination);
+    }
+    if (ctx.state === 'suspended') await ctx.resume();
+}
 
-        function drawUserWave(points) {
-            const canvas = document.getElementById('drawCanvas');
-            const ctx = canvas.getContext('2d');
+function getWave(name) {
+    if (name === 'custom') {
+        if (!custom.coeffs) return null;
+        if (!custom.wave) custom.wave = ctx.createPeriodicWave(custom.coeffs.real, custom.coeffs.imag);
+        return custom.wave;
+    }
+    const d = INSTRUMENTS[name];
+    if (!d) return null;
+    if (!waveCache[name]) waveCache[name] = ctx.createPeriodicWave(new Float32Array(d.real), new Float32Array(d.imag));
+    return waveCache[name];
+}
 
-            drawGrid(canvas);
+function applyTimbre(osc) {
+    const name = state.instrument;
+    if (BASIC_TYPES.includes(name)) { osc.type = name; return; }
+    const w = getWave(name);
+    if (w) osc.setPeriodicWave(w); else osc.type = 'sine';
+}
 
-            if (points.length < 2) return;
+function retimbreAll() {
+    if (!ctx) return;
+    voices.forEach(v => applyTimbre(v.osc));
+}
 
-            ctx.strokeStyle = '#3b82f6';
-            ctx.lineWidth = 3;
-            ctx.lineCap = 'round';
-            ctx.lineJoin = 'round';
+function startVoice(id, freq, { decay = false } = {}) {
+    const t = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    applyTimbre(osc);
+    osc.frequency.setValueAtTime(freq, t);
 
-            ctx.beginPath();
-            ctx.moveTo(points[0].x, points[0].y);
+    const env = ctx.createGain();
+    env.gain.setValueAtTime(0, t);
+    env.gain.linearRampToValueAtTime(PEAK, t + 0.01);      // 10 ms 起音,消除「喀」聲
+    if (decay) env.gain.setTargetAtTime(0, t + 0.01, 0.7);  // 鋼琴:自然衰減
 
-            for (let i = 1; i < points.length; i++) {
-                ctx.lineTo(points[i].x, points[i].y);
-            }
+    osc.connect(env);
+    env.connect(master);
+    env.connect(analyser);
+    env.connect(specAn);
+    osc.start(t);
 
-            ctx.stroke();
+    voices.set(id, { osc, env, freq });
+    displayFreq = freq;
+    updateScopeInfo();
+    requestFrame();
+}
 
-            const height = canvas.height;
-            
-            ctx.fillStyle = '#10b981';
-            ctx.beginPath();
-            ctx.arc(points[0].x, points[0].y, 6, 0, Math.PI * 2);
-            ctx.fill();
-            
-            if (points.length > 1) {
-                ctx.fillStyle = '#ef4444';
-                ctx.beginPath();
-                ctx.arc(points[points.length - 1].x, points[points.length - 1].y, 6, 0, Math.PI * 2);
-                ctx.fill();
-                
-                const yDiff = Math.abs(points[0].y - points[points.length - 1].y);
-                if (yDiff < 10) {
-                    ctx.fillStyle = '#10b981';
-                    ctx.font = 'bold 12px monospace';
-                    ctx.fillText('✓ 週期連續', canvas.width - 80, 20);
-                } else {
-                    ctx.fillStyle = '#fbbf24';
-                    ctx.font = 'bold 12px monospace';
-                    ctx.fillText('⚠ 首尾高度不同', canvas.width - 110, 20);
-                }
-            }
-            
-            ctx.strokeStyle = '#475569';
-            ctx.lineWidth = 1;
-            ctx.setLineDash([5, 5]);
-            ctx.beginPath();
-            ctx.moveTo(0, height / 2);
-            ctx.lineTo(canvas.width, height / 2);
-            ctx.stroke();
-            ctx.setLineDash([]);
-        }
+function stopVoice(id, release = 0.03) {
+    const v = voices.get(id);
+    if (!v) return;
+    voices.delete(id);
+    const t = ctx.currentTime;
+    const g = v.env.gain;
+    if (g.cancelAndHoldAtTime) g.cancelAndHoldAtTime(t);
+    else { g.cancelScheduledValues(t); g.setValueAtTime(g.value, t); }
+    g.setTargetAtTime(0, t, release);                       // 平滑釋音
+    v.osc.stop(t + release * 8);
+    v.osc.onended = () => { try { v.osc.disconnect(); v.env.disconnect(); } catch (e) {} };
+    lastActive = performance.now();
+    updateScopeInfo();
+    requestFrame();
+}
 
-        function convertPointsToWaveform(points) {
-            const canvas = document.getElementById('drawCanvas');
-            const height = canvas.height;
-            const width = canvas.width;
+/* ---------- 主播放(持續音) ---------- */
+async function startMain() {
+    held.add('main');
+    await ensureAudio();
+    if (!held.has('main') || voices.has('main')) return;
+    startVoice('main', state.freq);
+    setPlayUI(true);
+    clearTimeout(stopTimer);
+    if (!state.continuous) stopTimer = setTimeout(stopMain, state.duration * 1000);
+}
+function stopMain() {
+    held.delete('main');
+    clearTimeout(stopTimer);
+    stopTimer = null;
+    stopVoice('main');
+    setPlayUI(false);
+}
+function toggleMain() {
+    if (held.has('main')) stopMain(); else startMain();
+}
+function setPlayUI(on) {
+    const b = $('#playButton');
+    b.classList.toggle('playing', on);
+    $('#playIcon').textContent = on ? '⏹' : '▶';
+    $('#playText').textContent = on ? '停止播放' : '開始播放';
+}
 
-            const sampleCount = 8192;
-            const timeDomain = new Float32Array(sampleCount);
+/* ---------- 鋼琴聲部(可和弦) ---------- */
+async function noteOn(key) {
+    if (held.has(key.id)) return;
+    held.add(key.id);
+    key.el.classList.add('active');
+    await ensureAudio();
+    if (!held.has(key.id) || voices.has(key.id)) return;
+    startVoice(key.id, key.freq, { decay: state.instrument === 'piano' });
+}
+function noteOff(key) {
+    held.delete(key.id);
+    key.el.classList.remove('active');
+    stopVoice(key.id, state.instrument === 'piano' ? 0.12 : 0.03);
+}
+function stopAll() {
+    stopMain();
+    PIANO.forEach(k => { if (held.has(k.id) || voices.has(k.id)) noteOff(k); });
+    pointerKey.clear();
+}
 
-            const sortedPoints = [...points].sort((a, b) => a.x - b.x);
-            
-            if (sortedPoints[0].x > 5) {
-                sortedPoints.unshift({ x: 0, y: sortedPoints[0].y });
-            }
-            
-            if (sortedPoints[sortedPoints.length - 1].x < width - 5) {
-                sortedPoints.push({ x: width, y: sortedPoints[0].y });
-            } else {
-                sortedPoints[sortedPoints.length - 1].y = sortedPoints[0].y;
-            }
+/* =========================================================
+ * 頻率 / 音量 / 播放設定
+ * ========================================================= */
+const freqToSlider = f => Math.round(SLIDER_STEPS * Math.log(f / FMIN) / Math.log(FMAX / FMIN));
+const sliderToFreq = v => FMIN * Math.pow(FMAX / FMIN, v / SLIDER_STEPS);
 
-            for (let i = 0; i < sampleCount; i++) {
-                const x = (i / sampleCount) * width;
-                let y = height / 2;
+function setFreq(f, { fromSlider = false } = {}) {
+    if (!isFinite(f)) return;
+    f = Math.min(FMAX, Math.max(FMIN, f));
+    state.freq = f;
+    $('#freqInput').value = f.toFixed(2);
+    if (!fromSlider) $('#freqSlider').value = freqToSlider(f);
+    const label = noteLabel(f);
+    $('#noteName').textContent = '≈ ' + label;
+    $('#topFreq').textContent = f.toFixed(2) + ' Hz · ' + label;
+    $$('.note-btn').forEach(b => b.classList.toggle('active', Math.abs(parseFloat(b.dataset.freq) - f) < 0.01));
 
-                for (let j = 0; j < sortedPoints.length - 1; j++) {
-                    const p1 = sortedPoints[j];
-                    const p2 = sortedPoints[j + 1];
+    const main = voices.get('main');
+    if (main) {
+        main.osc.frequency.setTargetAtTime(f, ctx.currentTime, 0.008);  // 平滑變化,避免拉鍊雜音
+        main.freq = f;
+        displayFreq = f;
+    }
+    updateScopeInfo();
+    if (state.frozen) return;
+    requestFrame();
+}
 
-                    if (x >= p1.x && x <= p2.x) {
-                        const t = (x - p1.x) / (p2.x - p1.x);
-                        y = p1.y + t * (p2.y - p1.y);
-                        break;
-                    }
-                }
+function setVolume(v) {
+    state.volume = v;
+    $('#volumeValue').textContent = Math.round(v * 100) + '%';
+    if (master) master.gain.setTargetAtTime(v, ctx.currentTime, 0.015);
+}
 
-                timeDomain[i] = (height / 2 - y) / (height / 2);
-            }
+/* =========================================================
+ * Canvas 工具(支援高解析度螢幕)
+ * ========================================================= */
+function fit(canvas) {
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    if (!w || !h) return null;   // 面板收合或隱藏時不繪製
+    const dpr = window.devicePixelRatio || 1;
+    const W = Math.round(w * dpr), H = Math.round(h * dpr);
+    if (canvas.width !== W || canvas.height !== H) { canvas.width = W; canvas.height = H; }
+    const c = canvas.getContext('2d');
+    c.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return { c, w, h };
+}
 
-            const harmonics = 256;
-            const real = new Float32Array(harmonics);
-            const imag = new Float32Array(harmonics);
+function drawGrid(c, w, h, nx = 10, ny = 4) {
+    c.fillStyle = '#1e293b';
+    c.fillRect(0, 0, w, h);
+    c.strokeStyle = '#334155';
+    c.lineWidth = 1;
+    c.beginPath();
+    for (let i = 1; i < nx; i++) { const x = Math.round(w / nx * i) + 0.5; c.moveTo(x, 0); c.lineTo(x, h); }
+    for (let i = 1; i < ny; i++) { const y = Math.round(h / ny * i) + 0.5; c.moveTo(0, y); c.lineTo(w, y); }
+    c.stroke();
+    c.strokeStyle = '#475569';
+    c.lineWidth = 2;
+    c.beginPath();
+    c.moveTo(0, h / 2); c.lineTo(w, h / 2);
+    c.stroke();
+}
 
-            let dcSum = 0;
-            for (let n = 0; n < sampleCount; n++) {
-                dcSum += timeDomain[n];
-            }
-            real[0] = dcSum / sampleCount;
-            imag[0] = 0;
+/* =========================================================
+ * 繪圖迴圈(單一迴圈,不會重複堆疊)
+ * ========================================================= */
+let rafId = null, lastActive = 0;
+function requestFrame() {
+    if (rafId == null) rafId = requestAnimationFrame(tick);
+}
+function tick() {
+    rafId = null;
+    const now = performance.now();
+    if (voices.size) lastActive = now;
+    const live = !!ctx && (voices.size > 0 || now - lastActive < 400);  // 停止後多畫一小段,看得到釋音
 
-            for (let k = 1; k < harmonics; k++) {
-                let sumReal = 0;
-                let sumImag = 0;
+    let tData = null, sData = null, f = displayFreq;
+    if (state.frozen && snap) {
+        tData = snap.time; sData = snap.spec; f = snap.freq;
+    } else if (live) {
+        analyser.getFloatTimeDomainData(timeBuf);
+        specAn.getFloatFrequencyData(specBuf);
+        tData = timeBuf; sData = specBuf;
+    }
+    drawScope(tData, f);
+    drawSpectrum(sData, f);
 
-                for (let n = 0; n < sampleCount; n++) {
-                    const angle = (2 * Math.PI * k * n) / sampleCount;
-                    sumReal += timeDomain[n] * Math.cos(angle);
-                    sumImag += timeDomain[n] * Math.sin(angle);
-                }
+    if (live && !state.frozen) requestFrame();
+}
 
-                real[k] = (2 / sampleCount) * sumReal;
-                imag[k] = -(2 / sampleCount) * sumImag;
-            }
+/* ---------- 波形 / 示波器 ---------- */
+const scopeCanvas = $('#scopeCanvas');
+function drawScope(data, freq) {
+    const r = fit(scopeCanvas);
+    if (!r) return;
+    const { c, w, h } = r;
+    drawGrid(c, w, h, 10, 4);
+    const toY = v => h / 2 - v * (h / 2) * 0.9;   // 正電壓在上方(與觸發線一致)
 
-            real[0] = 0;
+    if (!data) {
+        c.fillStyle = 'rgba(191,219,254,0.55)';
+        c.font = '13px sans-serif';
+        c.textAlign = 'center';
+        c.fillText('按下播放或彈奏鋼琴', w / 2, h / 2 - 10);
+        c.textAlign = 'left';
+        return;
+    }
 
-            return { real, imag, timeDomain };
-        }
+    const N = data.length, sr = ctx.sampleRate;
+    let t0, count, triggered = true, clamped = false;
+    c.font = '10px ui-monospace, Menlo, monospace';
 
-        function drawWaveform() {
-            const canvas = document.getElementById('displayCanvas');
-            const ctx = canvas.getContext('2d');
-            const width = canvas.width;
-            const height = canvas.height;
-            const bufferLength = analyser.frequencyBinCount;
-            const dataArray = new Uint8Array(bufferLength);
-
-            function draw() {
-                if (isFrozen) return;
-                
-                animationId = requestAnimationFrame(draw);
-
-                analyser.getByteTimeDomainData(dataArray);
-
-                ctx.fillStyle = '#1e293b';
-                ctx.fillRect(0, 0, width, height);
-
-                ctx.strokeStyle = '#334155';
-                ctx.lineWidth = 1;
-                for (let i = 0; i <= 10; i++) {
-                    ctx.beginPath();
-                    ctx.moveTo((width / 10) * i, 0);
-                    ctx.lineTo((width / 10) * i, height);
-                    ctx.stroke();
-                }
-                for (let i = 0; i <= 4; i++) {
-                    ctx.beginPath();
-                    ctx.moveTo(0, (height / 4) * i);
-                    ctx.lineTo(width, (height / 4) * i);
-                    ctx.stroke();
-                }
-
-                ctx.strokeStyle = '#475569';
-                ctx.lineWidth = 2;
-                ctx.beginPath();
-                ctx.moveTo(0, height / 2);
-                ctx.lineTo(width, height / 2);
-                ctx.stroke();
-
-                let triggerPoint = 0;
-                let samplesToShow = bufferLength;
-
-                if (displayMode === 'oscilloscope') {
-                    const threshold = Math.round((triggerLevel / 100) * 255);
-                    
-                    if (triggerSlope === 'rising') {
-                        for (let i = 1; i < bufferLength - 1; i++) {
-                            if (dataArray[i - 1] < threshold && dataArray[i] >= threshold) {
-                                triggerPoint = i;
-                                break;
-                            }
-                        }
-                    } else {
-                        for (let i = 1; i < bufferLength - 1; i++) {
-                            if (dataArray[i - 1] > threshold && dataArray[i] <= threshold) {
-                                triggerPoint = i;
-                                break;
-                            }
-                        }
-                    }
-
-                    const period = 1 / frequency;
-                    const sampleRate = audioContext.sampleRate;
-                    const samplesPerPeriod = sampleRate * period;
-                    samplesToShow = Math.round(samplesPerPeriod * displayCycles);
-                    samplesToShow = Math.min(samplesToShow, bufferLength - triggerPoint);
-
-                    const triggerY = height - (triggerLevel / 100) * height;
-                    ctx.strokeStyle = '#ef4444';
-                    ctx.lineWidth = 2;
-                    ctx.setLineDash([5, 5]);
-                    ctx.beginPath();
-                    ctx.moveTo(0, triggerY);
-                    ctx.lineTo(width, triggerY);
-                    ctx.stroke();
-                    ctx.setLineDash([]);
-
-                    ctx.fillStyle = '#ef4444';
-                    ctx.beginPath();
-                    ctx.arc(5, triggerY, 5, 0, Math.PI * 2);
-                    ctx.fill();
-                    
-                    ctx.fillStyle = '#fca5a5';
-                    ctx.font = 'bold 11px monospace';
-                    const triggerText = triggerSlope === 'rising' ? '↗️' : '↘️';
-                    ctx.fillText(triggerText + triggerLevel + '%', 15, triggerY + 4);
-
-                    ctx.fillStyle = '#93c5fd';
-                    ctx.font = '10px monospace';
-                    const timePerDiv = (period * displayCycles / 10) * 1000;
-                    for (let i = 0; i <= 10; i += 2) {
-                        const timeMs = (timePerDiv * i).toFixed(2);
-                        ctx.fillText(timeMs + 'ms', (width / 10) * i + 2, height - 2);
-                    }
-                } else {
-                    samplesToShow = Math.min(2048, bufferLength);
-                }
-
-                ctx.strokeStyle = '#10b981';
-                ctx.lineWidth = 3;
-                ctx.beginPath();
-
-                const sliceWidth = width / samplesToShow;
-                let x = 0;
-
-                for (let i = 0; i < samplesToShow; i++) {
-                    const dataIndex = triggerPoint + i;
-                    if (dataIndex >= bufferLength) break;
-                    
-                    const v = dataArray[dataIndex] / 128.0;
-                    const y = (v * height) / 2;
-
-                    if (i === 0) {
-                        ctx.moveTo(x, y);
-                    } else {
-                        ctx.lineTo(x, y);
-                    }
-
-                    x += sliceWidth;
-                }
-
-                ctx.stroke();
-            }
-
-            draw();
-        }
-
-        function updateTimebaseInfo() {
-            const period = 1 / frequency;
-            const totalTime = period * displayCycles;
-            const timePerDiv = totalTime / 10;
-            const timePerDivMs = timePerDiv * 1000;
-
-            document.getElementById('cyclesValue').textContent = displayCycles.toFixed(1) + ' 週期';
-            document.getElementById('timebaseInfo').textContent = 
-                `時基 = ${timePerDivMs.toFixed(2)} ms/格 | 週期 = ${(period * 1000).toFixed(2)} ms | 顯示總時間 = ${(totalTime * 1000).toFixed(2)} ms`;
-
-            const isInteger = Math.abs(displayCycles - Math.round(displayCycles)) < 0.01;
-            const indicator = document.getElementById('syncIndicator');
-            const hint = document.getElementById('syncHint');
-
-            if (isInteger) {
-                indicator.className = 'sync-indicator synced';
-                indicator.textContent = '✓ 已同步';
-                hint.textContent = `完美!顯示 ${Math.round(displayCycles)} 個完整週期。波形起點與終點完美對齊,形成閉合迴路。`;
-                hint.style.color = '#6ee7b7';
-            } else {
-                indicator.className = 'sync-indicator unsynced';
-                indicator.textContent = '⚠️ 未同步';
-                const wholePart = Math.floor(displayCycles);
-                const fractionalPart = (displayCycles - wholePart).toFixed(1);
-                hint.textContent = `顯示 ${wholePart} 個完整週期 + ${fractionalPart} 個週期(${(fractionalPart * 100).toFixed(0)}%)。雖然觸發機制讓波形穩定顯示,但注意右側波形未閉合。試著調整到整數讓起點與終點對齊!`;
-                hint.style.color = '#fbbf24';
+    if (state.mode === 'osc') {
+        const spp = sr / freq;                         // 每週期的取樣數
+        count = Math.round(spp * state.cycles);
+        if (count > N - 4) { count = N - 4; clamped = true; }
+        const lvl = state.trigLevel / 50 - 1;          // 0~100% → -1~+1
+        const rising = state.trigSlope === 'rising';
+        const hi = N - count - 2;
+        const lo = Math.max(1, hi - Math.ceil(spp * 2));
+        t0 = -1;
+        for (let i = hi; i >= lo; i--) {               // 由新到舊找最近一次觸發
+            const a = data[i - 1], b = data[i];
+            if (rising ? (a < lvl && b >= lvl) : (a > lvl && b <= lvl)) {
+                t0 = (i - 1) + (lvl - a) / (b - a);   // 次取樣內插,畫面不抖動
+                break;
             }
         }
+        if (t0 < 0) { t0 = hi; triggered = false; }
 
-        function toggleFreeze() {
-            const canvas = document.getElementById('displayCanvas');
-            const ctx = canvas.getContext('2d');
-            const button = document.getElementById('freezeButton');
+        // 觸發線
+        const ty = toY(lvl);
+        c.strokeStyle = '#ef4444'; c.lineWidth = 1.5;
+        c.setLineDash([5, 5]);
+        c.beginPath(); c.moveTo(0, ty); c.lineTo(w, ty); c.stroke();
+        c.setLineDash([]);
+        c.fillStyle = '#ef4444';
+        c.beginPath(); c.arc(5, ty, 4, 0, Math.PI * 2); c.fill();
+        c.fillStyle = '#fca5a5';
+        c.fillText((rising ? '↗ ' : '↘ ') + state.trigLevel + '%', 13, ty - 4);
 
-            if (!isFrozen) {
-                frozenImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                isFrozen = true;
-                button.textContent = '▶️ 繼續播放';
-                button.style.background = 'rgba(16, 185, 129, 0.3)';
-                
-                if (animationId) {
-                    cancelAnimationFrame(animationId);
-                    animationId = null;
-                }
-            } else {
-                isFrozen = false;
-                frozenImageData = null;
-                button.textContent = '❄️ 凍結波形';
-                button.style.background = 'rgba(255, 255, 255, 0.2)';
-                
-                if (isPlaying) {
-                    drawWaveform();
-                }
+        // 時間刻度
+        const msPerDiv = count / sr * 1000 / 10;
+        c.fillStyle = '#93c5fd';
+        const lblStep = w < 520 ? 5 : 2;
+        for (let i = 0; i <= 10; i += lblStep) {
+            c.textAlign = i === 0 ? 'left' : i === 10 ? 'right' : 'center';
+            c.fillText(fmtMs(msPerDiv * i), w / 10 * i + (i === 0 ? 3 : i === 10 ? -3 : 0), h - 4);
+        }
+        c.textAlign = 'right';
+        if (!triggered) { c.fillStyle = '#fbbf24'; c.fillText('⚠ 未觸發:觸發電位超出波形範圍', w - 6, 13); }
+        else if (clamped) { c.fillStyle = '#fbbf24'; c.fillText('已達緩衝上限,顯示的週期數較少', w - 6, 13); }
+        c.textAlign = 'left';
+    } else {
+        count = Math.min(NORMAL_SAMPLES, N - 1);
+        t0 = N - count - 1;
+    }
+
+    c.strokeStyle = '#10b981';
+    c.lineWidth = 2;
+    c.lineJoin = 'round';
+    c.beginPath();
+    const first = Math.ceil(t0), last = Math.min(N - 1, Math.floor(t0 + count));
+    const step = Math.max(1, Math.floor(count / (w * 3)));
+    let started = false;
+    for (let j = first; j <= last; j += step) {
+        const x = (j - t0) / count * w;
+        const y = toY(data[j]);
+        if (started) c.lineTo(x, y); else { c.moveTo(x, y); started = true; }
+    }
+    c.stroke();
+}
+
+/* ---------- 頻譜 ---------- */
+const specCanvas = $('#specCanvas');
+function drawSpectrum(data, freq) {
+    const r = fit(specCanvas);
+    if (!r) return;
+    const { c, w, h } = r;
+    const maxF = state.specMax, minDb = -100, maxDb = 0;
+
+    c.fillStyle = '#1e293b';
+    c.fillRect(0, 0, w, h);
+    c.strokeStyle = '#334155'; c.lineWidth = 1;
+    c.font = '10px ui-monospace, Menlo, monospace';
+    c.fillStyle = '#94a3b8';
+    c.beginPath();
+    for (let i = 1; i < 5; i++) { const x = Math.round(w / 5 * i) + 0.5; c.moveTo(x, 0); c.lineTo(x, h); }
+    for (let db = -20; db > minDb; db -= 20) { const y = Math.round(h * (maxDb - db) / (maxDb - minDb)) + 0.5; c.moveTo(0, y); c.lineTo(w, y); }
+    c.stroke();
+    for (let i = 1; i <= 5; i++) {
+        c.textAlign = i === 5 ? 'right' : 'center';
+        c.fillText(fmtHz(maxF / 5 * i) + (i === 5 ? ' Hz' : ''), w / 5 * i + (i === 5 ? -3 : 0), h - 4);
+    }
+    c.textAlign = 'left';
+    for (let db = -20; db > minDb; db -= 20) c.fillText(db + ' dB', 3, h * (maxDb - db) / (maxDb - minDb) - 3);
+
+    if (!data) return;
+
+    // 諧波標記
+    if (state.showHarmonics && freq > 0) {
+        const spacing = freq / maxF * w;
+        if (spacing >= 5) {
+            c.strokeStyle = 'rgba(253,224,71,0.35)';
+            c.setLineDash([3, 4]);
+            c.beginPath();
+            for (let k = 1; k * freq <= maxF; k++) { const x = Math.round(k * freq / maxF * w) + 0.5; c.moveTo(x, 12); c.lineTo(x, h); }
+            c.stroke();
+            c.setLineDash([]);
+            if (spacing >= 18) {
+                c.fillStyle = '#fde047';
+                c.textAlign = 'center';
+                for (let k = 1; k * freq <= maxF && k <= 30; k++) c.fillText(k + '×', k * freq / maxF * w, 10);
+                c.textAlign = 'left';
             }
         }
+    }
 
-        function stopWaveform() {
-            if (animationId) {
-                cancelAnimationFrame(animationId);
-                animationId = null;
-            }
+    const binHz = ctx.sampleRate / specAn.fftSize;
+    const grad = c.createLinearGradient(0, 0, 0, h);
+    grad.addColorStop(0, 'rgba(244,114,182,0.75)');
+    grad.addColorStop(1, 'rgba(99,102,241,0.15)');
+    c.beginPath();
+    c.moveTo(0, h);
+    for (let x = 0; x < w; x++) {
+        const b0 = Math.floor(x / w * maxF / binHz);
+        const b1 = Math.max(b0 + 1, Math.ceil((x + 1) / w * maxF / binHz));
+        let m = -Infinity;
+        for (let b = b0; b < b1 && b < data.length; b++) if (data[b] > m) m = data[b];
+        const t = Math.max(0, Math.min(1, (m - minDb) / (maxDb - minDb)));
+        c.lineTo(x, h - t * h);
+    }
+    c.lineTo(w, h);
+    c.closePath();
+    c.fillStyle = grad;
+    c.fill();
+    c.strokeStyle = '#f472b6';
+    c.lineWidth = 1.2;
+    c.stroke();
+}
 
-            isFrozen = false;
-            frozenImageData = null;
-            const button = document.getElementById('freezeButton');
-            button.textContent = '❄️ 凍結波形';
-            button.style.background = 'rgba(255, 255, 255, 0.2)';
-            button.style.display = 'none';
-            document.getElementById('oscilloscopeSection').style.display = 'none';
+/* ---------- 示波器說明文字 ---------- */
+function updateScopeInfo() {
+    $('#oscControls').hidden = state.mode !== 'osc';
+    $('#cyclesValue').textContent = state.cycles.toFixed(1) + ' 週期';
 
-            const canvas = document.getElementById('displayCanvas');
-            drawGrid(canvas);
+    const f = (state.frozen && snap) ? snap.freq : displayFreq;
+    const period = 1 / f;
+    const total = period * state.cycles;
+    $('#timebaseInfo').textContent =
+        `參考頻率 ${f.toFixed(2)} Hz|週期 ${fmtMs(period * 1000)}|時基 ${fmtMs(total * 100)}/格|畫面總長 ${fmtMs(total * 1000)}`;
+
+    const ind = $('#syncIndicator'), hint = $('#syncHint');
+    const whole = Math.floor(state.cycles + 1e-6);
+    const frac = Math.round((state.cycles - whole) * 100);
+    if (frac === 0 || frac === 100) {
+        ind.className = 'badge ok'; ind.textContent = '✓ 已同步';
+        hint.textContent = `顯示 ${Math.round(state.cycles)} 個完整週期:畫面右端剛好回到與左端相同的相位。`;
+        hint.style.color = '#6ee7b7';
+    } else {
+        ind.className = 'badge warn'; ind.textContent = '⚠ 未同步';
+        hint.textContent = `顯示 ${whole} 個週期又 ${frac}%:觸發讓畫面保持穩定,但右端停在週期中途。調成整數可讓兩端相位對齊。`;
+        hint.style.color = '#fbbf24';
+    }
+
+    const playing = voices.size > 0;
+    let msg;
+    if (state.frozen) msg = '❄️ 已凍結:仍可切換模式、調整週期數與觸發設定來觀察這一格畫面';
+    else if (!playing) msg = state.mode === 'osc' ? '📡 示波器模式:播放後可精確控制顯示週期與觸發' : '按下播放或彈奏鋼琴即可看到波形';
+    else if (state.mode === 'osc') msg = '📡 示波器模式:以觸發點對齊,畫面寬度 = 指定的週期數';
+    else {
+        const ms = ctx ? (NORMAL_SAMPLES / ctx.sampleRate * 1000).toFixed(0) : '43';
+        msg = `🌊 一般模式:固定顯示最近約 ${ms} ms,頻率越高波形越密,且未對齊所以會流動`;
+    }
+    $('#scopeHint').textContent = msg;
+}
+
+function toggleFreeze() {
+    const b = $('#freezeButton');
+    if (!state.frozen) {
+        if (!ctx || voices.size === 0) { $('#scopeHint').textContent = '請先播放聲音再凍結波形'; return; }
+        analyser.getFloatTimeDomainData(timeBuf);
+        specAn.getFloatFrequencyData(specBuf);
+        snap = { time: timeBuf.slice(), spec: specBuf.slice(), freq: displayFreq };
+        state.frozen = true;
+        b.textContent = '▶️ 解除凍結';
+        b.classList.add('on');
+    } else {
+        state.frozen = false;
+        snap = null;
+        b.textContent = '❄️ 凍結';
+        b.classList.remove('on');
+    }
+    updateScopeInfo();
+    requestFrame();
+}
+
+/* =========================================================
+ * 自訂波形
+ * ========================================================= */
+const drawCanvas = $('#drawCanvas');
+let drawing = false;
+
+function renderDraw() {
+    const r = fit(drawCanvas);
+    if (!r) return;
+    const { c, w, h } = r;
+    drawGrid(c, w, h, 10, 4);
+    const pts = custom.points;
+    if (pts.length < 2) {
+        c.fillStyle = 'rgba(191,219,254,0.55)';
+        c.font = '13px sans-serif';
+        c.textAlign = 'center';
+        c.fillText('在這裡按住並拖曳,畫出「一個週期」的波形', w / 2, h / 2 - 12);
+        c.textAlign = 'left';
+        return;
+    }
+    const X = x => x * w, Y = y => h / 2 - y * (h / 2);
+
+    if (custom.recon) {
+        c.strokeStyle = 'rgba(251,191,36,0.9)';
+        c.lineWidth = 1.5;
+        c.setLineDash([6, 4]);
+        c.beginPath();
+        custom.recon.forEach((v, i) => {
+            const x = i / (custom.recon.length - 1) * w;
+            if (i) c.lineTo(x, Y(v)); else c.moveTo(x, Y(v));
+        });
+        c.stroke();
+        c.setLineDash([]);
+    }
+
+    c.strokeStyle = '#3b82f6';
+    c.lineWidth = 2.5;
+    c.lineCap = 'round';
+    c.lineJoin = 'round';
+    c.beginPath();
+    c.moveTo(X(pts[0].x), Y(pts[0].y));
+    for (let i = 1; i < pts.length; i++) c.lineTo(X(pts[i].x), Y(pts[i].y));
+    c.stroke();
+
+    const a = pts[0], z = pts[pts.length - 1];
+    c.fillStyle = '#10b981'; c.beginPath(); c.arc(X(a.x), Y(a.y), 5, 0, Math.PI * 2); c.fill();
+    c.fillStyle = '#ef4444'; c.beginPath(); c.arc(X(z.x), Y(z.y), 5, 0, Math.PI * 2); c.fill();
+
+    c.font = 'bold 11px sans-serif';
+    c.textAlign = 'right';
+    const continuous = Math.abs(a.y - z.y) * h / 2 < 10;
+    c.fillStyle = continuous ? '#10b981' : '#fbbf24';
+    c.fillText(continuous ? '✓ 週期連續' : '⚠ 首尾高度不同(會自動接合)', w - 6, 14);
+    if (custom.recon) {
+        c.textAlign = 'left';
+        c.font = '10px sans-serif';
+        c.fillStyle = '#93c5fd'; c.fillText('━ 你畫的', 6, h - 6);
+        c.fillStyle = '#fbbf24'; c.fillText('┅ 實際合成', 62, h - 6);
+    }
+    c.textAlign = 'left';
+}
+
+function pointerToNorm(e) {
+    const r = drawCanvas.getBoundingClientRect();
+    return {
+        x: Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)),
+        y: Math.min(1, Math.max(-1, 1 - 2 * (e.clientY - r.top) / r.height))
+    };
+}
+
+function computeCustom() {
+    const N = 2048, H = 128;
+    // 複製後排序,不改動原始筆跡
+    const pts = custom.points.map(p => ({ x: p.x, y: p.y })).sort((p, q) => p.x - q.x);
+    const startY = pts[0].y;
+    if (pts[0].x > 0.005) pts.unshift({ x: 0, y: startY });
+    if (pts[pts.length - 1].x < 0.995) pts.push({ x: 1, y: startY });
+    else pts[pts.length - 1] = { x: 1, y: startY };      // 週期首尾接合
+
+    // 等間距取樣(指標遞增,O(N))
+    const td = new Float32Array(N);
+    let j = 0, mean = 0;
+    for (let i = 0; i < N; i++) {
+        const x = i / N;
+        while (j < pts.length - 2 && pts[j + 1].x < x) j++;
+        const p1 = pts[j], p2 = pts[j + 1];
+        const dx = p2.x - p1.x;
+        const t = dx > 0 ? Math.min(1, Math.max(0, (x - p1.x) / dx)) : 0;
+        td[i] = p1.y + t * (p2.y - p1.y);
+        mean += td[i];
+    }
+    mean /= N;
+
+    // 離散傅立葉轉換:x(t) = Σ a_k cos(kωt) + b_k sin(kωt)
+    const cosT = new Float32Array(N), sinT = new Float32Array(N);
+    for (let n = 0; n < N; n++) { cosT[n] = Math.cos(2 * Math.PI * n / N); sinT[n] = Math.sin(2 * Math.PI * n / N); }
+    const real = new Float32Array(H), imag = new Float32Array(H);
+    for (let k = 1; k < H; k++) {
+        let sr = 0, si = 0, idx = 0;
+        for (let n = 0; n < N; n++) {
+            sr += td[n] * cosT[idx];
+            si += td[n] * sinT[idx];
+            idx = (idx + k) & (N - 1);
         }
+        real[k] = 2 * sr / N;
+        imag[k] = 2 * si / N;   // 正號:與 Web Audio PeriodicWave 定義一致
+    }
 
-        async function startSound() {
-            if (audioContext.state === 'suspended') {
-                await audioContext.resume();
-            }
+    // 傅立葉重建(畫成黃色虛線,讓學生看到實際合成的形狀)
+    const M = 400, recon = new Float32Array(M + 1);
+    for (let i = 0; i <= M; i++) {
+        const th = 2 * Math.PI * i / M;
+        let v = mean;
+        for (let k = 1; k < H; k++) v += real[k] * Math.cos(k * th) + imag[k] * Math.sin(k * th);
+        recon[i] = v;
+    }
 
-            oscillator = audioContext.createOscillator();
+    custom.coeffs = { real, imag };
+    custom.wave = null;
+    custom.recon = recon;
+}
 
-            if (currentInstrument === 'custom' && customWaveData) {
-                try {
-                    const correctedReal = new Float32Array(customWaveData.real);
-                    const correctedImag = new Float32Array(customWaveData.imag);
-                    correctedReal[0] = 0;
-                    correctedImag[0] = 0;
+function finishDrawing() {
+    if (!drawing) return;
+    drawing = false;
+    if (custom.points.length > 10) {
+        computeCustom();
+        const a = custom.points[0], z = custom.points[custom.points.length - 1];
+        const ok = Math.abs(a.y - z.y) * drawCanvas.clientHeight / 2 < 10;
+        const badge = $('#savedBadge');
+        badge.hidden = false;
+        badge.className = 'badge ' + (ok ? 'ok' : 'warn');
+        badge.textContent = ok ? '✓ 已套用' : '✓ 已接合';
+        badge.title = ok ? '週期完美,首尾高度相同' : '首尾高度不同,已自動接合成週期';
+        if (state.instrument === 'custom') retimbreAll();   // 播放中重畫也立即生效
+    } else if (custom.points.length <= 10 && !custom.coeffs) {
+        custom.points = [];
+    }
+    renderDraw();
+    updateCustomHint();
+}
 
-                    const periodicWave = audioContext.createPeriodicWave(
-                        correctedReal,
-                        correctedImag,
-                        { disableNormalization: false }
-                    );
-                    oscillator.setPeriodicWave(periodicWave);
-                } catch (error) {
-                    oscillator.type = 'sine';
-                }
-            } else if (['flute', 'violin', 'piano'].includes(currentInstrument)) {
-                const waveform = getInstrumentWaveform(currentInstrument);
-                if (waveform) {
-                    try {
-                        const periodicWave = audioContext.createPeriodicWave(
-                            waveform.real,
-                            waveform.imag,
-                            { disableNormalization: false }
-                        );
-                        oscillator.setPeriodicWave(periodicWave);
-                    } catch (error) {
-                        oscillator.type = 'sine';
-                    }
-                } else {
-                    oscillator.type = 'sine';
-                }
-            } else {
-                oscillator.type = currentInstrument;
-            }
+function clearCustom() {
+    custom.points = [];
+    custom.coeffs = null;
+    custom.wave = null;
+    custom.recon = null;
+    $('#savedBadge').hidden = true;
+    if (state.instrument === 'custom') retimbreAll();
+    renderDraw();
+    updateCustomHint();
+}
 
-            oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime);
-            oscillator.connect(gainNode);
-            gainNode.gain.setValueAtTime(volume, audioContext.currentTime);
+function updateCustomHint() {
+    const h = $('#customHint');
+    if (state.instrument === 'custom' && !custom.coeffs) {
+        h.className = 'hint warn';
+        h.textContent = '⚠ 尚未繪製波形,目前以正弦波代替。請在上方畫布按住並拖曳,畫出一個週期。';
+    } else {
+        h.className = 'hint';
+        h.textContent = '💡 按住滑鼠或手指,由左到右畫出「一個週期」。首尾高度不同也可以(例如鋸齒波),系統會自動接合。放開後,黃色虛線就是實際合成出來的波形(前 127 個諧波)。';
+    }
+}
 
-            oscillator.start();
-            isPlaying = true;
+/* =========================================================
+ * 樂器選擇
+ * ========================================================= */
+function selectInstrument(name) {
+    state.instrument = name;
+    $$('.inst-btn').forEach(b => b.classList.toggle('active', b.dataset.instrument === name));
+    retimbreAll();
+    if (name === 'custom') revealPanel('custom');
+    updateCustomHint();
+}
 
-            updatePlayButton();
-            drawWaveform();
-            document.getElementById('displayHint').textContent = '🎵 正在播放中...';
-            document.getElementById('freezeButton').style.display = 'flex';
-            
-            if (displayMode === 'oscilloscope') {
-                document.getElementById('oscilloscopeSection').style.display = 'block';
-                updateTimebaseInfo();
-            }
+/* =========================================================
+ * 鋼琴鍵盤
+ * ========================================================= */
+const pointerKey = new Map();   // pointerId -> key(null 表示按住但不在琴鍵上)
 
-            if (!isContinuousPlay && playDuration > 0) {
-                stopTimeout = setTimeout(() => {
-                    stopSound();
-                }, playDuration * 1000);
-            }
+function buildPiano() {
+    const wrap = $('#pianoKeys');
+    let whiteIdx = 0;
+    PIANO.forEach(k => {
+        const el = document.createElement('button');
+        el.type = 'button';
+        el.tabIndex = -1;
+        el.className = k.black ? 'black-key' : 'white-key';
+        el.setAttribute('aria-label', k.name);
+        el.innerHTML = `<span>${k.black ? k.short : k.name}</span><span class="kb">${k.kb.toUpperCase()}</span>`;
+        if (k.black) el.style.setProperty('--i', whiteIdx);   // 黑鍵位置交給 CSS 計算
+        else whiteIdx++;
+        k.el = el;
+
+        el.addEventListener('pointerdown', e => {
+            if (e.pointerType === 'mouse' && e.button !== 0) return;
+            e.preventDefault();
+            if (el.hasPointerCapture && el.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId);
+            const prev = pointerKey.get(e.pointerId);
+            if (prev && prev !== k) noteOff(prev);
+            pointerKey.set(e.pointerId, k);
+            noteOn(k);
+        });
+        el.addEventListener('pointerenter', e => {          // 滑奏
+            if (!pointerKey.has(e.pointerId) || pointerKey.get(e.pointerId) === k) return;
+            pointerKey.set(e.pointerId, k);
+            noteOn(k);
+        });
+        el.addEventListener('pointerleave', e => {
+            if (pointerKey.get(e.pointerId) !== k) return;
+            pointerKey.set(e.pointerId, null);
+            noteOff(k);
+        });
+        el.addEventListener('contextmenu', e => e.preventDefault());
+        wrap.appendChild(el);
+    });
+
+    const end = e => {
+        if (!pointerKey.has(e.pointerId)) return;
+        const k = pointerKey.get(e.pointerId);
+        pointerKey.delete(e.pointerId);
+        if (k) noteOff(k);
+    };
+    document.addEventListener('pointerup', end);
+    document.addEventListener('pointercancel', end);
+}
+
+/* =========================================================
+ * 版面:收合、排序、隱藏、寬度(存在 localStorage)
+ * ========================================================= */
+const LAYOUT_KEY = 'wavegen.layout.v2';
+const DEFAULT_LAYOUT = {
+    order: ['instruments', 'frequency', 'scope', 'custom', 'spectrum', 'piano'],
+    collapsed: {},
+    hidden: {},
+    half: { instruments: true, frequency: true, custom: true, spectrum: true }
+};
+const board = $('#board');
+const panels = () => $$('.panel', board);
+const panelById = id => board.querySelector(`.panel[data-id="${id}"]`);
+const isWide = () => window.matchMedia('(min-width: 900px)').matches;
+let layout;
+
+function loadLayout() {
+    try {
+        const s = JSON.parse(localStorage.getItem(LAYOUT_KEY));
+        if (s && Array.isArray(s.order)) {
+            return { order: s.order, collapsed: s.collapsed || {}, hidden: s.hidden || {}, half: s.half || {} };
         }
+    } catch (e) {}
+    return JSON.parse(JSON.stringify(DEFAULT_LAYOUT));
+}
+function saveLayout() {
+    layout.order = panels().map(p => p.dataset.id);
+    layout.collapsed = {}; layout.hidden = {}; layout.half = {};
+    panels().forEach(p => {
+        const id = p.dataset.id;
+        if (p.classList.contains('collapsed')) layout.collapsed[id] = true;
+        if (p.hidden) layout.hidden[id] = true;
+        if (p.classList.contains('half')) layout.half[id] = true;
+    });
+    try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(layout)); } catch (e) {}
+    syncMenu();
+}
+function applyLayout() {
+    const all = panels();
+    layout.order.forEach(id => { const p = panelById(id); if (p) board.appendChild(p); });
+    all.forEach(p => { if (!layout.order.includes(p.dataset.id)) board.appendChild(p); });
+    panels().forEach(p => {
+        const id = p.dataset.id;
+        p.classList.toggle('collapsed', !!layout.collapsed[id]);
+        p.classList.toggle('half', !!layout.half[id]);
+        p.hidden = !!layout.hidden[id];
+    });
+    syncMenu();
+    refreshCanvases();
+}
 
-        function stopSound() {
-            if (stopTimeout) {
-                clearTimeout(stopTimeout);
-                stopTimeout = null;
-            }
-
-            if (oscillator) {
-                try {
-                    oscillator.stop();
-                    oscillator.disconnect();
-                } catch (e) {}
-                oscillator = null;
-            }
-            isPlaying = false;
-
-            updatePlayButton();
-            stopWaveform();
-            document.getElementById('displayHint').textContent = '按下播放按鈕即可看到波形';
+function buildPanelHeads() {
+    panels().forEach(panel => {
+        const head = document.createElement('div');
+        head.className = 'panel-head';
+        head.innerHTML = `
+            <span class="drag-handle" title="拖曳調整順序" aria-label="拖曳調整順序">⠿</span>
+            <span class="panel-title">${panel.dataset.title}</span>
+            <span class="panel-extra"></span>
+            <button type="button" class="icon-btn" data-act="up" title="上移" aria-label="上移">↑</button>
+            <button type="button" class="icon-btn" data-act="down" title="下移" aria-label="下移">↓</button>
+            <button type="button" class="icon-btn wide-btn" data-act="width" title="切換全寬/半寬" aria-label="切換寬度">⇔</button>
+            <button type="button" class="icon-btn" data-act="hide" title="隱藏此面板(可在「版面」選單中恢復)" aria-label="隱藏">✕</button>
+            <button type="button" class="icon-btn chev" data-act="toggle" title="收合/展開" aria-label="收合或展開">▾</button>`;
+        const extra = panel.querySelector('[data-head]');
+        if (extra) {
+            const slot = head.querySelector('.panel-extra');
+            while (extra.firstChild) slot.appendChild(extra.firstChild);
+            extra.remove();
         }
+        panel.prepend(head);
 
-        function updatePlayButton() {
-            const button = document.getElementById('playButton');
-            const icon = document.getElementById('playIcon');
-            const text = document.getElementById('playText');
+        head.addEventListener('click', e => {
+            const btn = e.target.closest('[data-act]');
+            if (btn) { panelAction(panel, btn.dataset.act); return; }
+            if (e.target.closest('.panel-extra, .drag-handle')) return;
+            panelAction(panel, 'toggle');
+        });
+        bindDrag(panel, head.querySelector('.drag-handle'));
+    });
+}
 
-            if (isPlaying) {
-                button.className = 'play-button playing';
-                icon.textContent = '⏹';
-                text.textContent = '停止播放';
-            } else {
-                button.className = 'play-button stopped';
-                icon.textContent = '▶';
-                text.textContent = '開始播放';
-            }
+function visibleSibling(p, dir) {
+    let s = dir < 0 ? p.previousElementSibling : p.nextElementSibling;
+    while (s && s.hidden) s = dir < 0 ? s.previousElementSibling : s.nextElementSibling;
+    return s;
+}
+
+function panelAction(panel, act) {
+    if (act === 'toggle') panel.classList.toggle('collapsed');
+    else if (act === 'hide') panel.hidden = true;
+    else if (act === 'width') panel.classList.toggle('half');
+    else if (act === 'up') { const s = visibleSibling(panel, -1); if (s) board.insertBefore(panel, s); }
+    else if (act === 'down') { const s = visibleSibling(panel, 1); if (s) board.insertBefore(panel, s.nextElementSibling); }
+    saveLayout();
+    refreshCanvases();
+}
+
+function revealPanel(id) {
+    const p = panelById(id);
+    if (!p) return;
+    const changed = p.hidden || p.classList.contains('collapsed');
+    p.hidden = false;
+    p.classList.remove('collapsed');
+    if (changed) {
+        saveLayout();
+        refreshCanvases();
+        p.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+}
+
+function bindDrag(panel, handle) {
+    handle.addEventListener('pointerdown', e => {
+        if (e.pointerType === 'mouse' && e.button !== 0) return;
+        e.preventDefault();
+        handle.setPointerCapture(e.pointerId);
+        panel.classList.add('dragging');
+        document.body.classList.add('is-dragging');
+
+        let scrollV = 0, scrollRaf = null;
+        const autoScroll = () => {
+            if (!scrollV) { scrollRaf = null; return; }
+            window.scrollBy(0, scrollV);
+            scrollRaf = requestAnimationFrame(autoScroll);
+        };
+        const move = ev => {
+            const vh = window.innerHeight;
+            scrollV = ev.clientY < 70 ? -10 : ev.clientY > vh - 50 ? 10 : 0;
+            if (scrollV && !scrollRaf) scrollRaf = requestAnimationFrame(autoScroll);
+
+            const el = document.elementFromPoint(ev.clientX, ev.clientY);
+            const target = el && el.closest('.panel');
+            if (!target || target === panel || target.parentElement !== board) return;
+            const r = target.getBoundingClientRect();
+            const sideBySide = isWide() && target.classList.contains('half');
+            const after = sideBySide ? ev.clientX > r.left + r.width / 2 : ev.clientY > r.top + r.height / 2;
+            if (after) { if (target.nextElementSibling !== panel) board.insertBefore(panel, target.nextElementSibling); }
+            else { if (target.previousElementSibling !== panel) board.insertBefore(panel, target); }
+        };
+        const up = () => {
+            scrollV = 0;
+            panel.classList.remove('dragging');
+            document.body.classList.remove('is-dragging');
+            handle.removeEventListener('pointermove', move);
+            handle.removeEventListener('pointerup', up);
+            handle.removeEventListener('pointercancel', up);
+            saveLayout();
+            refreshCanvases();
+        };
+        handle.addEventListener('pointermove', move);
+        handle.addEventListener('pointerup', up);
+        handle.addEventListener('pointercancel', up);
+    });
+}
+
+function buildMenu() {
+    const box = $('#panelToggles');
+    panels().forEach(p => {
+        const label = document.createElement('label');
+        label.innerHTML = `<input type="checkbox" data-panel="${p.dataset.id}"> ${p.dataset.title}`;
+        box.appendChild(label);
+    });
+    box.addEventListener('change', e => {
+        const id = e.target.dataset.panel;
+        if (!id) return;
+        panelById(id).hidden = !e.target.checked;
+        saveLayout();
+        refreshCanvases();
+    });
+    $('#expandAll').addEventListener('click', () => { panels().forEach(p => p.classList.remove('collapsed')); saveLayout(); refreshCanvases(); });
+    $('#collapseAll').addEventListener('click', () => { panels().forEach(p => p.classList.add('collapsed')); saveLayout(); });
+    $('#resetLayout').addEventListener('click', () => {
+        layout = JSON.parse(JSON.stringify(DEFAULT_LAYOUT));
+        try { localStorage.removeItem(LAYOUT_KEY); } catch (e) {}
+        applyLayout();
+    });
+    document.addEventListener('click', e => {
+        const m = $('#layoutMenu');
+        if (m.open && !m.contains(e.target)) m.open = false;
+    });
+}
+function syncMenu() {
+    $$('#panelToggles input').forEach(cb => { cb.checked = !panelById(cb.dataset.panel).hidden; });
+}
+
+function refreshCanvases() {
+    renderDraw();
+    requestFrame();
+}
+
+/* =========================================================
+ * 事件綁定
+ * ========================================================= */
+function bindControls() {
+    $('#playButton').addEventListener('click', toggleMain);
+
+    $('#instruments').addEventListener('click', e => {
+        const b = e.target.closest('.inst-btn');
+        if (b) selectInstrument(b.dataset.instrument);
+    });
+
+    $('#freqSlider').addEventListener('input', e => setFreq(sliderToFreq(+e.target.value), { fromSlider: true }));
+    $('#freqInput').addEventListener('change', e => {
+        const v = parseFloat(e.target.value);
+        if (isFinite(v)) setFreq(v); else e.target.value = state.freq.toFixed(2);
+    });
+    $('#notes').addEventListener('click', e => {
+        const b = e.target.closest('.note-btn');
+        if (!b) return;
+        setFreq(parseFloat(b.dataset.freq));
+        if (!held.has('main')) startMain();
+    });
+
+    $('#volumeSlider').addEventListener('input', e => setVolume(parseFloat(e.target.value)));
+
+    $('#durationInput').addEventListener('change', e => {
+        let v = parseFloat(e.target.value);
+        if (!isFinite(v)) v = state.duration;
+        v = Math.min(60, Math.max(0.1, v));
+        state.duration = v;
+        e.target.value = v;
+    });
+    $('#continuousPlay').addEventListener('change', e => {
+        state.continuous = e.target.checked;
+        clearTimeout(stopTimer);
+        stopTimer = null;
+        if (!state.continuous && held.has('main')) stopTimer = setTimeout(stopMain, state.duration * 1000);
+    });
+
+    $('#modeSeg').addEventListener('click', e => {
+        const b = e.target.closest('[data-mode]');
+        if (!b) return;
+        state.mode = b.dataset.mode;
+        $$('#modeSeg button').forEach(x => x.classList.toggle('active', x === b));
+        updateScopeInfo();
+        requestFrame();
+    });
+    $('#freezeButton').addEventListener('click', toggleFreeze);
+    $('#cyclesSlider').addEventListener('input', e => { state.cycles = parseFloat(e.target.value); updateScopeInfo(); requestFrame(); });
+    $('#triggerSlider').addEventListener('input', e => {
+        state.trigLevel = parseInt(e.target.value, 10);
+        $('#triggerValue').textContent = state.trigLevel + '%';
+        requestFrame();
+    });
+    $('#slopeSeg').addEventListener('click', e => {
+        const b = e.target.closest('[data-slope]');
+        if (!b) return;
+        state.trigSlope = b.dataset.slope;
+        $$('#slopeSeg button').forEach(x => x.classList.toggle('active', x === b));
+        requestFrame();
+    });
+
+    $('#specMax').addEventListener('change', e => { state.specMax = parseInt(e.target.value, 10); requestFrame(); });
+    $('#showHarmonics').addEventListener('change', e => { state.showHarmonics = e.target.checked; requestFrame(); });
+
+    // 自訂波形繪製(Pointer Events:滑鼠、觸控、觸控筆共用)
+    drawCanvas.addEventListener('pointerdown', e => {
+        if (e.pointerType === 'mouse' && e.button !== 0) return;
+        e.preventDefault();
+        drawCanvas.setPointerCapture(e.pointerId);
+        drawing = true;
+        custom.points = [pointerToNorm(e)];
+        custom.recon = null;
+        renderDraw();
+    });
+    drawCanvas.addEventListener('pointermove', e => {
+        if (!drawing) return;
+        custom.points.push(pointerToNorm(e));
+        renderDraw();
+    });
+    drawCanvas.addEventListener('pointerup', finishDrawing);
+    drawCanvas.addEventListener('pointercancel', finishDrawing);
+    $('#clearButton').addEventListener('click', clearCustom);
+
+    // 電腦鍵盤
+    document.addEventListener('keydown', e => {
+        if (e.ctrlKey || e.metaKey || e.altKey) return;
+        const t = e.target;
+        if (t.closest && t.closest('input, select, textarea')) return;
+        if (e.key === ' ') {
+            if (t.closest && t.closest('button, summary')) return;
+            e.preventDefault();
+            if (!e.repeat) toggleMain();
+            return;
         }
+        if (e.key === 'Escape') { stopAll(); return; }
+        if (e.repeat) return;
+        const k = KB_MAP.get(e.key.toLowerCase());
+        if (k) { e.preventDefault(); noteOn(k); }
+    });
+    document.addEventListener('keyup', e => {
+        const k = KB_MAP.get((e.key || '').toLowerCase());
+        if (k && held.has(k.id)) noteOff(k);
+    });
+    window.addEventListener('blur', () => {   // 切換視窗時避免琴鍵卡住
+        PIANO.forEach(k => { if (held.has(k.id)) noteOff(k); });
+        pointerKey.clear();
+    });
 
-        async function playNote(freq) {
-            if (oscillator) {
-                try {
-                    oscillator.stop();
-                    oscillator.disconnect();
-                } catch (e) {}
-                oscillator = null;
-            }
+    // 畫布尺寸改變(旋轉手機、收合/展開、拖曳排版)時重畫
+    if ('ResizeObserver' in window) {
+        let pending = false;
+        const ro = new ResizeObserver(() => {
+            if (pending) return;
+            pending = true;
+            requestAnimationFrame(() => { pending = false; refreshCanvases(); });
+        });
+        [scopeCanvas, drawCanvas, specCanvas].forEach(cv => ro.observe(cv));
+    } else {
+        window.addEventListener('resize', refreshCanvases);
+    }
+}
 
-            if (audioContext.state === 'suspended') {
-                await audioContext.resume();
-            }
+/* =========================================================
+ * 啟動
+ * ========================================================= */
+function init() {
+    buildPanelHeads();
+    buildMenu();
+    layout = loadLayout();
+    applyLayout();
+    buildPiano();
+    bindControls();
+    setFreq(440);
+    setVolume(0.3);
+    updateCustomHint();
+    updateScopeInfo();
+    refreshCanvases();
+}
 
-            oscillator = audioContext.createOscillator();
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+else init();
 
-            if (currentInstrument === 'custom' && customWaveData) {
-                try {
-                    const correctedReal = new Float32Array(customWaveData.real);
-                    const correctedImag = new Float32Array(customWaveData.imag);
-                    correctedReal[0] = 0;
-                    correctedImag[0] = 0;
-
-                    const periodicWave = audioContext.createPeriodicWave(
-                        correctedReal,
-                        correctedImag,
-                        { disableNormalization: false }
-                    );
-                    oscillator.setPeriodicWave(periodicWave);
-                } catch (error) {
-                    oscillator.type = 'sine';
-                }
-            } else if (['flute', 'violin', 'piano'].includes(currentInstrument)) {
-                const waveform = getInstrumentWaveform(currentInstrument);
-                if (waveform) {
-                    try {
-                        const periodicWave = audioContext.createPeriodicWave(
-                            waveform.real,
-                            waveform.imag,
-                            { disableNormalization: false }
-                        );
-                        oscillator.setPeriodicWave(periodicWave);
-                    } catch (error) {
-                        oscillator.type = 'sine';
-                    }
-                } else {
-                    oscillator.type = 'sine';
-                }
-            } else {
-                oscillator.type = currentInstrument;
-            }
-
-            oscillator.frequency.setValueAtTime(freq, audioContext.currentTime);
-            oscillator.connect(gainNode);
-            gainNode.gain.setValueAtTime(volume, audioContext.currentTime);
-
-            oscillator.start();
-            isPlaying = true;
-            frequency = freq;
-
-            document.getElementById('frequencySlider').value = freq;
-            document.getElementById('frequencyValue').textContent = freq.toFixed(2) + ' Hz';
-
-            updatePlayButton();
-            drawWaveform();
-            document.getElementById('displayHint').textContent = '🎵 正在播放中...';
-            document.getElementById('freezeButton').style.display = 'flex';
-            
-            if (displayMode === 'oscilloscope') {
-                document.getElementById('oscilloscopeSection').style.display = 'block';
-                updateTimebaseInfo();
-            }
-        }
-
-        function stopNote() {
-            stopSound();
-        }
-
-        function initPianoKeys() {
-            const pianoKeys = [
-                { name: 'C3', freq: 130.81, isBlack: false, label: 'C3' },
-                { name: 'C#3', freq: 138.59, isBlack: true, label: 'C#' },
-                { name: 'D3', freq: 146.83, isBlack: false, label: 'D3' },
-                { name: 'D#3', freq: 155.56, isBlack: true, label: 'D#' },
-                { name: 'E3', freq: 164.81, isBlack: false, label: 'E3' },
-                { name: 'F3', freq: 174.61, isBlack: false, label: 'F3' },
-                { name: 'F#3', freq: 185.00, isBlack: true, label: 'F#' },
-                { name: 'G3', freq: 196.00, isBlack: false, label: 'G3' },
-                { name: 'G#3', freq: 207.65, isBlack: true, label: 'G#' },
-                { name: 'A3', freq: 220.00, isBlack: false, label: 'A3' },
-                { name: 'A#3', freq: 233.08, isBlack: true, label: 'A#' },
-                { name: 'B3', freq: 246.94, isBlack: false, label: 'B3' },
-                { name: 'C4', freq: 261.63, isBlack: false, label: 'C4' },
-                { name: 'C#4', freq: 277.18, isBlack: true, label: 'C#' },
-                { name: 'D4', freq: 293.66, isBlack: false, label: 'D4' },
-                { name: 'D#4', freq: 311.13, isBlack: true, label: 'D#' },
-                { name: 'E4', freq: 329.63, isBlack: false, label: 'E4' },
-                { name: 'F4', freq: 349.23, isBlack: false, label: 'F4' },
-                { name: 'F#4', freq: 369.99, isBlack: true, label: 'F#' },
-                { name: 'G4', freq: 392.00, isBlack: false, label: 'G4' },
-                { name: 'G#4', freq: 415.30, isBlack: true, label: 'G#' },
-                { name: 'A4', freq: 440.00, isBlack: false, label: 'A4' },
-                { name: 'A#4', freq: 466.16, isBlack: true, label: 'A#' },
-                { name: 'B4', freq: 493.88, isBlack: false, label: 'B4' },
-                { name: 'C5', freq: 523.25, isBlack: false, label: 'C5' }
-            ];
-
-            const container = document.getElementById('pianoKeys');
-            const whiteKeys = pianoKeys.filter(k => !k.isBlack);
-            const blackKeys = pianoKeys.filter(k => k.isBlack);
-
-            whiteKeys.forEach(key => {
-                const button = document.createElement('button');
-                button.className = 'white-key';
-                button.textContent = key.label;
-                button.dataset.freq = key.freq;
-
-                button.addEventListener('mousedown', () => {
-                    currentPressedKey = button;
-                    playNote(key.freq);
-                });
-                button.addEventListener('mouseup', () => {
-                    if (currentPressedKey === button) {
-                        currentPressedKey = null;
-                        stopNote();
-                    }
-                });
-                button.addEventListener('mouseleave', () => {
-                    if (currentPressedKey === button) {
-                        currentPressedKey = null;
-                        stopNote();
-                    }
-                });
-                
-                button.addEventListener('touchstart', (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    currentPressedKey = button;
-                    playNote(key.freq);
-                }, { passive: false });
-                
-                button.addEventListener('touchend', (e) => {
-                    e.preventDefault();
-                    if (currentPressedKey === button) {
-                        currentPressedKey = null;
-                        stopNote();
-                    }
-                }, { passive: false });
-                
-                button.addEventListener('touchcancel', (e) => {
-                    e.preventDefault();
-                    if (currentPressedKey === button) {
-                        currentPressedKey = null;
-                        stopNote();
-                    }
-                }, { passive: false });
-
-                container.appendChild(button);
-            });
-
-            blackKeys.forEach((key) => {
-                const button = document.createElement('button');
-                button.className = 'black-key';
-                button.textContent = key.label;
-                button.dataset.freq = key.freq;
-
-                const keyIndex = pianoKeys.indexOf(key);
-                const whiteKeysBefore = pianoKeys.slice(0, keyIndex).filter(k => !k.isBlack).length;
-                
-                const whiteKeyWidth = 38;
-                const blackKeyWidth = 26;
-                const leftPosition = whiteKeysBefore * whiteKeyWidth - (blackKeyWidth / 2) + 10;
-                
-                button.style.left = `${leftPosition}px`;
-
-                button.addEventListener('mousedown', () => {
-                    currentPressedKey = button;
-                    playNote(key.freq);
-                });
-                button.addEventListener('mouseup', () => {
-                    if (currentPressedKey === button) {
-                        currentPressedKey = null;
-                        stopNote();
-                    }
-                });
-                button.addEventListener('mouseleave', () => {
-                    if (currentPressedKey === button) {
-                        currentPressedKey = null;
-                        stopNote();
-                    }
-                });
-                
-                button.addEventListener('touchstart', (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    currentPressedKey = button;
-                    playNote(key.freq);
-                }, { passive: false });
-                
-                button.addEventListener('touchend', (e) => {
-                    e.preventDefault();
-                    if (currentPressedKey === button) {
-                        currentPressedKey = null;
-                        stopNote();
-                    }
-                }, { passive: false });
-                
-                button.addEventListener('touchcancel', (e) => {
-                    e.preventDefault();
-                    if (currentPressedKey === button) {
-                        currentPressedKey = null;
-                        stopNote();
-                    }
-                }, { passive: false });
-
-                container.appendChild(button);
-            });
-
-            document.addEventListener('touchend', () => {
-                if (currentPressedKey) {
-                    currentPressedKey = null;
-                    stopNote();
-                }
-            }, { passive: true });
-
-            document.addEventListener('touchcancel', () => {
-                if (currentPressedKey) {
-                    currentPressedKey = null;
-                    stopNote();
-                }
-            }, { passive: true });
-        }
-
-        function setupEventListeners() {
-            document.getElementById('playButton').addEventListener('click', () => {
-                if (isPlaying) {
-                    stopSound();
-                } else {
-                    startSound();
-                }
-            });
-
-            document.querySelectorAll('.instrument-btn').forEach(btn => {
-                btn.addEventListener('click', async () => {
-                    const wasPlaying = isPlaying;
-                    const instrument = btn.dataset.instrument;
-
-                    document.querySelectorAll('.instrument-btn').forEach(b => b.classList.remove('active'));
-                    btn.classList.add('active');
-
-                    currentInstrument = instrument;
-
-                    if (instrument === 'custom') {
-                        document.getElementById('customWaveSection').style.display = 'block';
-                    } else {
-                        document.getElementById('customWaveSection').style.display = 'none';
-                    }
-
-                    if (wasPlaying) {
-                        if (oscillator) {
-                            try {
-                                oscillator.stop();
-                                oscillator.disconnect();
-                            } catch (e) {}
-                            oscillator = null;
-                        }
-                        stopWaveform();
-
-                        await new Promise(resolve => setTimeout(resolve, 100));
-
-                        oscillator = audioContext.createOscillator();
-
-                        if (instrument === 'custom' && customWaveData) {
-                            try {
-                                const correctedReal = new Float32Array(customWaveData.real);
-                                const correctedImag = new Float32Array(customWaveData.imag);
-                                correctedReal[0] = 0;
-                                correctedImag[0] = 0;
-
-                                const periodicWave = audioContext.createPeriodicWave(
-                                    correctedReal,
-                                    correctedImag,
-                                    { disableNormalization: false }
-                                );
-                                oscillator.setPeriodicWave(periodicWave);
-                            } catch (error) {
-                                oscillator.type = 'sine';
-                            }
-                        } else if (['flute', 'violin', 'piano'].includes(instrument)) {
-                            const waveform = getInstrumentWaveform(instrument);
-                            if (waveform) {
-                                try {
-                                    const periodicWave = audioContext.createPeriodicWave(
-                                        waveform.real,
-                                        waveform.imag,
-                                        { disableNormalization: false }
-                                    );
-                                    oscillator.setPeriodicWave(periodicWave);
-                                } catch (error) {
-                                    oscillator.type = 'sine';
-                                }
-                            } else {
-                                oscillator.type = 'sine';
-                            }
-                        } else {
-                            oscillator.type = instrument;
-                        }
-
-                        oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime);
-                        oscillator.connect(gainNode);
-                        gainNode.gain.setValueAtTime(volume, audioContext.currentTime);
-
-                        oscillator.start();
-                        isPlaying = true;
-                        drawWaveform();
-                    }
-                });
-            });
-
-            document.getElementById('frequencySlider').addEventListener('input', (e) => {
-                frequency = parseFloat(e.target.value);
-                document.getElementById('frequencyValue').textContent = frequency.toFixed(2) + ' Hz';
-
-                if (oscillator) {
-                    oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime);
-                }
-
-                if (isPlaying) {
-                    updateTimebaseInfo();
-                }
-            });
-
-            document.getElementById('volumeSlider').addEventListener('input', (e) => {
-                volume = parseFloat(e.target.value);
-                document.getElementById('volumeValue').textContent = Math.round(volume * 100) + '%';
-
-                if (gainNode) {
-                    gainNode.gain.setValueAtTime(volume, audioContext.currentTime);
-                }
-            });
-
-            document.querySelectorAll('.note-btn').forEach(btn => {
-                btn.addEventListener('click', () => {
-                    frequency = parseFloat(btn.dataset.freq);
-                    document.getElementById('frequencySlider').value = frequency;
-                    document.getElementById('frequencyValue').textContent = frequency.toFixed(2) + ' Hz';
-
-                    if (oscillator) {
-                        oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime);
-                    }
-
-                    if (isPlaying) {
-                        updateTimebaseInfo();
-                    }
-                });
-            });
-
-            const drawCanvas = document.getElementById('drawCanvas');
-
-            function getCanvasCoords(e, canvas) {
-                const rect = canvas.getBoundingClientRect();
-                const scaleX = canvas.width / rect.width;
-                const scaleY = canvas.height / rect.height;
-
-                if (e.touches) {
-                    return {
-                        x: (e.touches[0].clientX - rect.left) * scaleX,
-                        y: (e.touches[0].clientY - rect.top) * scaleY
-                    };
-                } else {
-                    return {
-                        x: (e.clientX - rect.left) * scaleX,
-                        y: (e.clientY - rect.top) * scaleY
-                    };
-                }
-            }
-
-            drawCanvas.addEventListener('mousedown', (e) => {
-                isDrawing = true;
-                const coords = getCanvasCoords(e, drawCanvas);
-                drawingPoints = [coords];
-            });
-
-            drawCanvas.addEventListener('mousemove', (e) => {
-                if (!isDrawing) return;
-                const coords = getCanvasCoords(e, drawCanvas);
-                drawingPoints.push(coords);
-                drawUserWave(drawingPoints);
-            });
-
-            drawCanvas.addEventListener('mouseup', () => {
-                if (isDrawing && drawingPoints.length > 10) {
-                    customWaveData = convertPointsToWaveform(drawingPoints);
-                    
-                    const yDiff = Math.abs(drawingPoints[0].y - drawingPoints[drawingPoints.length - 1].y);
-                    const badge = document.getElementById('savedBadge');
-                    
-                    if (yDiff < 10) {
-                        badge.textContent = '✓ 已儲存(週期完美)';
-                        badge.style.background = '#10b981';
-                    } else {
-                        badge.textContent = '✓ 已儲存(已自動修正)';
-                        badge.style.background = '#f59e0b';
-                    }
-                    badge.style.display = 'inline-block';
-                }
-                isDrawing = false;
-            });
-
-            drawCanvas.addEventListener('mouseleave', () => {
-                if (isDrawing && drawingPoints.length > 10) {
-                    customWaveData = convertPointsToWaveform(drawingPoints);
-                    
-                    const yDiff = Math.abs(drawingPoints[0].y - drawingPoints[drawingPoints.length - 1].y);
-                    const badge = document.getElementById('savedBadge');
-                    
-                    if (yDiff < 10) {
-                        badge.textContent = '✓ 已儲存(週期完美)';
-                        badge.style.background = '#10b981';
-                    } else {
-                        badge.textContent = '✓ 已儲存(已自動修正)';
-                        badge.style.background = '#f59e0b';
-                    }
-                    badge.style.display = 'inline-block';
-                }
-                isDrawing = false;
-            });
-
-            drawCanvas.addEventListener('touchstart', (e) => {
-                e.preventDefault();
-                isDrawing = true;
-                const coords = getCanvasCoords(e, drawCanvas);
-                drawingPoints = [coords];
-            });
-
-            drawCanvas.addEventListener('touchmove', (e) => {
-                e.preventDefault();
-                if (!isDrawing) return;
-                const coords = getCanvasCoords(e, drawCanvas);
-                drawingPoints.push(coords);
-                drawUserWave(drawingPoints);
-            });
-
-            drawCanvas.addEventListener('touchend', (e) => {
-                e.preventDefault();
-                if (isDrawing && drawingPoints.length > 10) {
-                    customWaveData = convertPointsToWaveform(drawingPoints);
-                    
-                    const yDiff = Math.abs(drawingPoints[0].y - drawingPoints[drawingPoints.length - 1].y);
-                    const badge = document.getElementById('savedBadge');
-                    
-                    if (yDiff < 10) {
-                        badge.textContent = '✓ 已儲存(週期完美)';
-                        badge.style.background = '#10b981';
-                    } else {
-                        badge.textContent = '✓ 已儲存(已自動修正)';
-                        badge.style.background = '#f59e0b';
-                    }
-                    badge.style.display = 'inline-block';
-                }
-                isDrawing = false;
-            });
-
-            document.getElementById('clearButton').addEventListener('click', () => {
-                drawingPoints = [];
-                customWaveData = null;
-                drawGrid(drawCanvas);
-                document.getElementById('savedBadge').style.display = 'none';
-            });
-
-            document.getElementById('freezeButton').addEventListener('click', toggleFreeze);
-
-            document.getElementById('cyclesSlider').addEventListener('input', (e) => {
-                displayCycles = parseFloat(e.target.value);
-                updateTimebaseInfo();
-                
-                if (isPlaying && !isFrozen) {
-                    if (animationId) {
-                        cancelAnimationFrame(animationId);
-                        animationId = null;
-                    }
-                    drawWaveform();
-                }
-            });
-
-            document.getElementById('triggerSlider').addEventListener('input', (e) => {
-                triggerLevel = parseFloat(e.target.value);
-                document.getElementById('triggerValue').textContent = triggerLevel.toFixed(0) + '%';
-            });
-
-            document.getElementById('triggerRising').addEventListener('click', () => {
-                triggerSlope = 'rising';
-                document.getElementById('triggerRising').style.background = 'rgba(16, 185, 129, 0.3)';
-                document.getElementById('triggerFalling').style.background = 'rgba(255, 255, 255, 0.2)';
-            });
-
-            document.getElementById('triggerFalling').addEventListener('click', () => {
-                triggerSlope = 'falling';
-                document.getElementById('triggerFalling').style.background = 'rgba(239, 68, 68, 0.3)';
-                document.getElementById('triggerRising').style.background = 'rgba(255, 255, 255, 0.2)';
-            });
-
-            document.getElementById('advancedToggle').addEventListener('click', () => {
-                const content = document.getElementById('advancedTrigger');
-                const icon = document.getElementById('toggleIcon');
-                const button = document.getElementById('advancedToggle');
-                
-                if (content.classList.contains('expanded')) {
-                    content.classList.remove('expanded');
-                    icon.classList.remove('rotated');
-                    button.classList.remove('active');
-                } else {
-                    content.classList.add('expanded');
-                    icon.classList.add('rotated');
-                    button.classList.add('active');
-                }
-            });
-
-            document.getElementById('normalMode').addEventListener('click', () => {
-                displayMode = 'normal';
-                document.getElementById('normalMode').classList.add('active');
-                document.getElementById('oscilloscopeMode').classList.remove('active');
-                document.getElementById('oscilloscopeSection').style.display = 'none';
-                document.getElementById('displayHint').textContent = isPlaying 
-                    ? '🎵 一般模式 - 波形隨頻率變化密集度,有自然流動感' 
-                    : '按下播放按鈕即可看到波形';
-                
-                if (isPlaying && !isFrozen) {
-                    if (animationId) {
-                        cancelAnimationFrame(animationId);
-                        animationId = null;
-                    }
-                    drawWaveform();
-                }
-            });
-
-            document.getElementById('oscilloscopeMode').addEventListener('click', () => {
-                displayMode = 'oscilloscope';
-                document.getElementById('oscilloscopeMode').classList.add('active');
-                document.getElementById('normalMode').classList.remove('active');
-                
-                if (isPlaying) {
-                    document.getElementById('oscilloscopeSection').style.display = 'block';
-                    updateTimebaseInfo();
-                    document.getElementById('displayHint').textContent = '📡 示波器模式 - 使用觸發同步,可精確控制顯示週期';
-                    
-                    if (!isFrozen) {
-                        if (animationId) {
-                            cancelAnimationFrame(animationId);
-                            animationId = null;
-                        }
-                        drawWaveform();
-                    }
-                } else {
-                    document.getElementById('displayHint').textContent = '📡 示波器模式 - 播放後可精確控制顯示週期與觸發設定';
-                }
-            });
-
-            document.getElementById('durationInput').addEventListener('input', (e) => {
-                let value = parseFloat(e.target.value);
-                if (value < 0.1) value = 0.1;
-                if (value > 60) value = 60;
-                playDuration = value;
-                e.target.value = value;
-            });
-
-            document.getElementById('continuousPlay').addEventListener('change', (e) => {
-                isContinuousPlay = e.target.checked;
-                
-                if (!isContinuousPlay && isPlaying) {
-                    if (stopTimeout) {
-                        clearTimeout(stopTimeout);
-                    }
-                    stopTimeout = setTimeout(() => {
-                        stopSound();
-                    }, playDuration * 1000);
-                } else if (isContinuousPlay && stopTimeout) {
-                    clearTimeout(stopTimeout);
-                    stopTimeout = null;
-                }
-            });
-        }
-
-        window.addEventListener('load', init);
-    </script>
+})();
+</script>
 </body>
 </html>
