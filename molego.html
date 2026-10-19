@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>3D 分子建構器V18</title>
+    <title>3D 分子建構器V19</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
@@ -1237,9 +1237,48 @@ function exportMC() {
     document.body.appendChild(a);a.click();a.remove();
 }
 
+// ---- 匯入資料驗證 ----
+// .mc 檔可能被改過：先把資料過濾成「只含合法元素、有限座標、存在的鍵結」的乾淨版本，
+// 驗證通過才動到場景，壞檔不會清掉學生目前的分子，也不會讓程式在載入一半時當掉。
+const MC_MAX_ATOMS = 1000, MC_MAX_BONDS = 3000, MC_MAX_COORD = 1000;
+function sanitizeMCData(data) {
+    if (!data || typeof data !== 'object' || !Array.isArray(data.atoms)) throw new Error('格式不符');
+    if (data.atoms.length > MC_MAX_ATOMS) throw new Error('原子數過多');
+    const own = (o, k) => typeof k === 'string' && Object.prototype.hasOwnProperty.call(o, k);
+    const coord = v => typeof v === 'number' && isFinite(v) && Math.abs(v) <= MC_MAX_COORD;
+    const cleanId = v => (typeof v === 'string' && /^[A-Za-z0-9_-]{1,40}$/.test(v)) ? v : (Number.isInteger(v) ? String(v) : null);
+    const atomsOut = [], ids = new Set();
+    data.atoms.forEach(a => {
+        if (!a || typeof a !== 'object' || !own(ELEMENTS, a.element)) return;
+        if (!coord(a.x) || !coord(a.y) || !coord(a.z)) return;
+        let id = cleanId(a.id);
+        if (id === null || ids.has(id)) return;      // 沒有 id 或重複 id 的原子無法對應鍵結，略過
+        ids.add(id);
+        atomsOut.push({ id, element: a.element, x: a.x, y: a.y, z: a.z });
+    });
+    const bondsOut = [], pairs = new Set(), bondIds = new Set();
+    (Array.isArray(data.bonds) ? data.bonds : []).slice(0, MC_MAX_BONDS).forEach(b => {
+        if (!b || typeof b !== 'object') return;
+        const a1 = cleanId(b.atom1_id), a2 = cleanId(b.atom2_id);
+        if (a1 === null || a2 === null || a1 === a2 || !ids.has(a1) || !ids.has(a2)) return;
+        const pair = a1 < a2 ? a1 + '|' + a2 : a2 + '|' + a1;
+        if (pairs.has(pair)) return;
+        pairs.add(pair);
+        const order = (b.order === 2 || b.order === 3) ? b.order : 1;
+        const bondType = (b.bondType === 'ionic' || b.bondType === 'covalent') ? b.bondType : undefined;
+        let id = cleanId(b.id);
+        if (id === null || bondIds.has(id)) id = Math.random().toString(36).substr(2, 9);
+        bondIds.add(id);
+        bondsOut.push({ id, atom1_id: a1, atom2_id: a2, order, bondType });
+    });
+    if (!atomsOut.length && data.atoms.length) throw new Error('沒有可用的原子');
+    return { version: '1.0', atoms: atomsOut, bonds: bondsOut };
+}
+
 // 從 JSON 資料載入場景（replace=取代, merge=合併）
 function loadMCData(data, mode) {
     try {
+        data = sanitizeMCData(data);   // 驗證失敗會直接跳到 catch，場景不受影響
         if (mode === 'replace') {
             pushHistory();
             atoms.slice().forEach(a => deleteAtom(a.id)); atoms = []; bonds = [];
@@ -1249,15 +1288,15 @@ function loadMCData(data, mode) {
         }
 
         // id 對照表（合併時舊 id → 新 id）
-        let idMap = {};
-        if (data.atoms) data.atoms.forEach(a => {
+        let idMap = new Map();
+        data.atoms.forEach(a => {
             let newId = mode === 'replace' ? a.id : Math.random().toString(36).substr(2, 9);
-            idMap[a.id] = newId;
+            idMap.set(a.id, newId);
             createAtom(a.element, new THREE.Vector3(a.x, a.y, a.z), newId);
         });
-        if (data.bonds) data.bonds.forEach(b => {
-            let a1id = idMap[b.atom1_id] || b.atom1_id;
-            let a2id = idMap[b.atom2_id] || b.atom2_id;
+        data.bonds.forEach(b => {
+            let a1id = idMap.get(b.atom1_id);
+            let a2id = idMap.get(b.atom2_id);
             let a1 = atoms.find(a => a.id === a1id);
             let a2 = atoms.find(a => a.id === a2id);
             if (!a1 || !a2) return;
@@ -1286,6 +1325,7 @@ function loadMCData(data, mode) {
 // 按鈕匯入：取代模式
 function importMC(event) {
     let file = event.target.files[0]; if (!file) return;
+    if (file.size > 5 * 1024 * 1024) { showToast("❌ 檔案太大，不像是分子檔"); event.target.value = ''; return; }
     let reader = new FileReader();
     reader.onload = function(e) {
         try { loadMCData(JSON.parse(e.target.result), 'replace'); }
@@ -1541,6 +1581,7 @@ function initDragDrop() {
         overlay.style.display = 'none';
         const file = Array.from(e.dataTransfer.files).find(f => f.name.endsWith('.mc'));
         if (!file) { showToast("請拖曳 .mc 檔案"); return; }
+        if (file.size > 5 * 1024 * 1024) { showToast("❌ 檔案太大，不像是分子檔"); return; }
         let reader = new FileReader();
         reader.onload = function(ev) {
             try { loadMCData(JSON.parse(ev.target.result), 'merge'); }
