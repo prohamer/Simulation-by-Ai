@@ -1,0 +1,2098 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#020617">
+  <!-- 加入主畫面後以全螢幕 App 模式開啟（iPhone / iPad） -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="光學解密工坊">
+  <title>光與色彩科學・濾鏡解密教學工作坊</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/@phosphor-icons/web@2.1.1"></script>
+
+  <style>
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body { margin: 0; height: 100%; overscroll-behavior: none; }
+    body {
+      font-family: 'Noto Sans TC', sans-serif;
+      overflow: hidden;
+      -webkit-user-select: none; user-select: none;
+      -webkit-touch-callout: none;
+    }
+    /* 輸入框必須可選取，否則 iOS Safari 可能無法輸入 */
+    input, textarea { -webkit-user-select: text; user-select: text; }
+    button, label, .qb-dot { touch-action: manipulation; }
+
+    ::-webkit-scrollbar { width: 4px; height: 4px; }
+    ::-webkit-scrollbar-track { background: #0f172a; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
+    .mono-font { font-family: 'JetBrains Mono', monospace; }
+
+    /* ================= APP SHELL：以固定定位撐滿可視區，避開 iOS 網址列高度問題 ================= */
+    #app {
+      position: fixed; inset: 0;
+      display: flex; flex-direction: column;
+      padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+      background: #020617;
+    }
+    #workspace {
+      flex: 1 1 auto; min-height: 0;
+      display: flex; gap: 8px; padding: 8px;
+      position: relative;
+      width: 100%; max-width: 1800px; margin: 0 auto;
+    }
+    body.layout-wide #workspace { flex-direction: row; }
+    body.layout-tall #workspace { flex-direction: column; }
+
+    #stage { flex: 1 1 auto; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 6px; }
+    body.layout-tall:not(.focus-mode) #stage { flex: 0 0 auto; }
+
+    #canvasBox {
+      flex: 1 1 auto; min-height: 0; position: relative; overflow: hidden;
+      background: rgba(15,23,42,0.4); border: 1px solid rgba(30,41,59,0.8); border-radius: 12px;
+    }
+    body.layout-tall:not(.focus-mode) #canvasBox { flex: 0 0 auto; }
+    #canvasFrame { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); }
+    #mainCanvas {
+      display: block; width: 100%; height: 100%;
+      border-radius: 8px; box-shadow: 0 20px 40px -10px rgba(0,0,0,.6);
+      background: #fff;
+      touch-action: none; /* 只鎖定畫布的觸控手勢，其他區域仍可正常捲動 */
+      cursor: grab;
+    }
+    #mainCanvas.is-grabbing { cursor: grabbing; }
+    #mainCanvas.is-drawing { cursor: crosshair; }
+
+    /* ---------- Sidebar：寬版停靠左側、直式停靠下方、小螢幕或專注模式改為抽屜 ---------- */
+    #leftSidebar { display: flex; flex-direction: column; gap: 6px; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+    body.layout-wide #leftSidebar { flex: 0 0 264px; width: 264px; }
+    body.layout-tall #leftSidebar { flex: 1 1 auto; min-height: 120px; }
+    body.sidebar-collapsed:not(.sidebar-overlay) #leftSidebar { display: none; }
+
+    body.sidebar-overlay #leftSidebar {
+      position: absolute; z-index: 45;
+      background: rgba(2,6,23,0.97); border: 1px solid #1e293b; border-radius: 14px;
+      padding: 6px; box-shadow: 0 20px 50px rgba(0,0,0,.7);
+      transition: transform .22s ease;
+    }
+    body.sidebar-overlay.layout-wide #leftSidebar { top: 8px; bottom: 8px; left: 8px; width: min(300px, 85vw); transform: translateX(-115%); }
+    body.sidebar-overlay.layout-tall #leftSidebar { left: 8px; right: 8px; bottom: 8px; max-height: 58%; width: auto; transform: translateY(115%); }
+    body.sidebar-overlay.sidebar-open #leftSidebar { transform: none; }
+    #scrim { position: absolute; inset: 0; z-index: 44; background: rgba(2,6,23,.45); display: none; }
+    body.sidebar-overlay.sidebar-open #scrim { display: block; }
+
+    body.focus-mode #appHeader, body.focus-mode #appFooter { display: none; }
+    @media (max-height: 640px) { #appFooter { display: none; } }
+
+    /* ---------- Quick bar：畫布下方的快速操作列 ---------- */
+    #quickbar {
+      flex: 0 0 auto;
+      display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px;
+      padding: 4px; background: rgba(15,23,42,.92); border: 1px solid #1e293b; border-radius: 14px;
+    }
+    .qb-group { display: flex; align-items: center; gap: 3px; padding: 2px; background: #020617; border: 1px solid #1e293b; border-radius: 10px; }
+    .qb-btn {
+      min-width: 34px; height: 34px; padding: 0 8px; border-radius: 8px;
+      display: inline-flex; align-items: center; justify-content: center; gap: 4px;
+      color: #cbd5e1; font-size: 12px; font-weight: 700; white-space: nowrap;
+      transition: background .15s, color .15s;
+    }
+    .qb-btn i { font-size: 16px; }
+    .qb-btn:hover { background: #1e293b; color: #fff; }
+    .qb-btn.is-active { background: #4f46e5; color: #fff; }
+    .qb-btn:disabled { opacity: .3; pointer-events: none; }
+    .qb-dot {
+      width: 34px; height: 34px; border-radius: 999px;
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: 12px; font-weight: 900; color: #fff;
+      background: var(--c); border: 2px solid rgba(255,255,255,.15);
+      opacity: .32; transition: opacity .15s, box-shadow .15s, transform .1s;
+    }
+    .qb-dot.dark-text { color: #0f172a; }
+    .qb-dot.is-on { opacity: 1; border-color: #fff; box-shadow: 0 0 0 2px rgba(255,255,255,.18), 0 0 14px var(--c); }
+    .qb-dot:active { transform: scale(.92); }
+    @media (pointer: coarse) {
+      .qb-btn { min-width: 44px; height: 44px; font-size: 13px; }
+      .qb-btn i { font-size: 19px; }
+      .qb-dot { width: 44px; height: 44px; font-size: 13px; }
+    }
+    @media (max-width: 560px) { .qb-lbl { display: none; } }
+
+    .qb-pop {
+      position: fixed; z-index: 60; padding: 8px; border-radius: 12px;
+      background: rgba(15,23,42,.97); border: 1px solid #334155; box-shadow: 0 16px 40px rgba(0,0,0,.6);
+      display: grid; grid-template-columns: repeat(4, auto); gap: 6px;
+    }
+
+    /* ---------- Canvas overlays ---------- */
+    .canvas-badge { position: absolute; pointer-events: none; background: rgba(2,6,23,.82); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); border: 1px solid rgba(51,65,85,.7); border-radius: 8px; }
+    body.small-canvas #opticalStatusBadge { display: none; }
+    #toast {
+      position: absolute; left: 50%; top: 10px; transform: translateX(-50%); z-index: 30;
+      max-width: min(92%, 520px); padding: 8px 12px; border-radius: 10px;
+      background: rgba(30,27,75,.96); border: 1px solid rgba(129,140,248,.6); color: #e0e7ff;
+      font-size: 12px; line-height: 1.5; box-shadow: 0 10px 30px rgba(0,0,0,.5);
+      display: none;
+    }
+    #toast.show { display: block; }
+    #toast a { color: #fde68a; font-weight: 700; text-decoration: underline; }
+
+    /* ---------- Swatches / accordion / glass ---------- */
+    .swatch-active { outline: 2px solid #38bdf8; outline-offset: 1px; transform: scale(1.08); }
+    .glass-panel {
+      background: rgba(15, 23, 42, 0.95);
+      -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+      border: 1px solid rgba(71, 85, 105, 0.65);
+      box-shadow: 0 15px 30px -5px rgba(0, 0, 0, 0.6);
+    }
+    .fold-chevron { transition: transform 0.18s ease; }
+    .fold-closed .fold-chevron { transform: rotate(-90deg); }
+    .fold-closed .fold-body { display: none; }
+
+    /* ---------- 浮動工具箱：桌機/平板可拖曳；手機改為底部面板 ---------- */
+    #doodleToolbox {
+      position: fixed; z-index: 50; width: 292px;
+      top: calc(56px + env(safe-area-inset-top)); right: calc(12px + env(safe-area-inset-right));
+      max-height: calc(100% - 80px); overflow-y: auto;
+    }
+    @media (max-width: 640px) {
+      #doodleToolbox {
+        left: 8px !important; right: 8px !important; top: auto !important;
+        bottom: calc(8px + env(safe-area-inset-bottom)) !important;
+        width: auto; max-height: 56%;
+      }
+      #doodleHeader { cursor: default !important; }
+    }
+    @media (pointer: coarse) {
+      #doodleToolbox .text-color-swatch, #doodleToolbox .doodle-color-btn { width: 30px; height: 30px; }
+      #leftSidebar button { min-height: 30px; }
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 layout-wide">
+<div id="app">
+
+  <!-- ================= 精簡頂部列：品牌、說明、檔案操作 ================= -->
+  <header id="appHeader" class="bg-slate-900 border-b border-slate-800 px-2.5 py-1 shrink-0 z-40 shadow">
+    <div class="max-w-[1800px] mx-auto flex items-center justify-between gap-1.5">
+      <div class="flex items-center gap-1.5 min-w-0">
+        <button id="btnToggleSidebar" title="收合/展開設定選單" class="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition">
+          <i class="ph-bold ph-sidebar-simple text-sm"></i>
+        </button>
+        <div class="w-6 h-6 rounded-md bg-gradient-to-br from-rose-500 via-emerald-500 to-cyan-500 flex items-center justify-center shadow shrink-0">
+          <i class="ph-bold ph-eyeglasses text-white text-xs"></i>
+        </div>
+        <span class="font-black text-xs tracking-tight text-white truncate">光學解密工坊</span>
+        <button id="btnOpenHelp" title="使用說明與教學建議" class="w-6 h-6 rounded-full bg-indigo-500/20 hover:bg-indigo-500/40 border border-indigo-400/50 text-indigo-300 hover:text-white flex items-center justify-center transition shrink-0">
+          <i class="ph-bold ph-question text-xs"></i>
+        </button>
+      </div>
+
+      <div class="flex items-center gap-0.5 bg-slate-800 rounded-lg p-0.5 border border-slate-700 shrink-0">
+        <button id="btnExportJSON" title="匯出設計檔 (.json)" class="px-2 py-1 rounded hover:bg-slate-700 text-[11px] font-semibold text-slate-200 flex items-center gap-0.5 transition">
+          <i class="ph-bold ph-download-simple text-sm"></i> <span class="hidden md:inline">匯出</span>
+        </button>
+        <label for="inputImportJSON" title="匯入設計檔 (.json)" class="px-2 py-1 rounded hover:bg-slate-700 text-[11px] font-semibold text-slate-200 flex items-center gap-0.5 cursor-pointer transition">
+          <i class="ph-bold ph-upload-simple text-sm"></i> <span class="hidden md:inline">匯入</span>
+          <input type="file" id="inputImportJSON" accept=".json,application/json" class="hidden">
+        </label>
+        <button id="btnExportPNG" title="下載圖片 (.png)" class="px-2 py-1 rounded hover:bg-slate-700 text-[11px] font-semibold text-emerald-400 flex items-center gap-0.5 transition">
+          <i class="ph-bold ph-image text-sm"></i> <span class="hidden md:inline">存圖</span>
+        </button>
+        <button id="btnResetAll" title="重置回預設狀態（需按兩次）" class="px-2 py-1 rounded hover:bg-rose-900/50 text-[11px] font-semibold text-rose-400 flex items-center transition">
+          <i class="ph-bold ph-arrow-counter-clockwise text-sm"></i>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ================= 主要工作區 ================= -->
+  <div id="workspace">
+    <div id="scrim"></div>
+
+    <!-- ================= 設定選單（依場景切換內容） ================= -->
+    <aside id="leftSidebar">
+
+      <!-- ===== 場景 3：濾鏡解密 ===== -->
+      <div id="panelDecoder" class="hidden flex-col gap-1.5">
+
+        <div class="fold-panel bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+          <button type="button" class="fold-header w-full px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800/80 flex items-center justify-between text-left transition">
+            <span class="text-[11px] font-bold text-white flex items-center gap-1.5">
+              <i class="ph-fill ph-eyeglasses text-rose-400 text-xs"></i><span>光學濾鏡開關</span>
+            </span>
+            <i class="ph-bold ph-caret-down fold-chevron text-slate-400 text-xs"></i>
+          </button>
+          <div class="fold-body p-2 pt-1 border-t border-slate-800/80 space-y-2 bg-slate-950/60">
+            <div class="grid grid-cols-7 gap-1">
+              <button data-lens="red" class="lens-toggle-btn"><span class="w-2.5 h-2.5 rounded-full bg-[#FF0000]"></span><span>紅R</span></button>
+              <button data-lens="green" class="lens-toggle-btn"><span class="w-2.5 h-2.5 rounded-full bg-[#00FF00]"></span><span>綠G</span></button>
+              <button data-lens="blue" class="lens-toggle-btn"><span class="w-2.5 h-2.5 rounded-full bg-[#0000FF]"></span><span>藍B</span></button>
+              <button data-lens="cyan" class="lens-toggle-btn"><span class="w-2.5 h-2.5 rounded-full bg-[#00FFFF]"></span><span>青C</span></button>
+              <button data-lens="magenta" class="lens-toggle-btn"><span class="w-2.5 h-2.5 rounded-full bg-[#FF00FF]"></span><span>洋M</span></button>
+              <button data-lens="yellow" class="lens-toggle-btn"><span class="w-2.5 h-2.5 rounded-full bg-[#FFFF00]"></span><span>黃Y</span></button>
+              <button data-lens="custom" class="lens-toggle-btn"><span id="customLensDot" class="w-2.5 h-2.5 rounded-full bg-[#FF8800]"></span><span>自訂</span></button>
+            </div>
+            <div class="grid grid-cols-3 gap-1 pt-0.5">
+              <button id="btnDemoOverlapRC" class="py-1 px-1 rounded bg-slate-800 hover:bg-slate-700 text-[10px] text-slate-300 border border-slate-700 transition">紅+青重疊(黑)</button>
+              <button id="btnDemoOverlapCY" class="py-1 px-1 rounded bg-slate-800 hover:bg-slate-700 text-[10px] text-slate-300 border border-slate-700 transition">青+黃重疊(綠)</button>
+              <button id="btnDemoOverlapCMY" class="py-1 px-1 rounded bg-slate-800 hover:bg-slate-700 text-[10px] text-slate-300 border border-slate-700 transition">CMY三鏡交疊</button>
+            </div>
+            <div class="flex items-center justify-between gap-1.5 text-[10px]">
+              <label class="flex items-center gap-1 text-slate-400 cursor-pointer shrink-0">
+                <span>自訂鏡:</span>
+                <input type="color" id="pickerCustomLens" value="#ff8800" class="w-5 h-5 rounded cursor-pointer bg-transparent border-0">
+              </label>
+              <div class="flex items-center gap-1 flex-1">
+                <span class="text-slate-400 shrink-0">半徑:</span>
+                <input type="range" id="sliderLensRadius" min="60" max="155" value="105" class="w-full h-1 bg-slate-800 rounded accent-rose-500">
+              </div>
+              <button id="btnResetFilterPos" class="px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 shrink-0">歸位</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="fold-panel bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+          <button type="button" class="fold-header w-full px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800/80 flex items-center justify-between text-left transition">
+            <span class="text-[11px] font-bold text-white flex items-center gap-1.5">
+              <i class="ph-fill ph-lightbulb-filament text-amber-400 text-xs"></i><span>環境色光照射（暗室投射燈）</span>
+            </span>
+            <i class="ph-bold ph-caret-down fold-chevron text-slate-400 text-xs"></i>
+          </button>
+          <div class="fold-body p-2 pt-1 border-t border-slate-800/80 space-y-1.5 bg-slate-950/60">
+            <div class="grid grid-cols-4 gap-1">
+              <button data-ambient="#FFFFFF" class="ambient-light-btn"><span class="w-2 h-2 rounded-full bg-white"></span>白光</button>
+              <button data-ambient="#FF0000" class="ambient-light-btn"><span class="w-2 h-2 rounded-full bg-[#FF0000]"></span>紅光</button>
+              <button data-ambient="#00FF00" class="ambient-light-btn"><span class="w-2 h-2 rounded-full bg-[#00FF00]"></span>綠光</button>
+              <button data-ambient="#0000FF" class="ambient-light-btn"><span class="w-2 h-2 rounded-full bg-[#0000FF]"></span>藍光</button>
+              <button data-ambient="#00FFFF" class="ambient-light-btn"><span class="w-2 h-2 rounded-full bg-[#00FFFF]"></span>青光</button>
+              <button data-ambient="#FFFF00" class="ambient-light-btn"><span class="w-2 h-2 rounded-full bg-[#FFFF00]"></span>黃光</button>
+              <button data-ambient="#FF00FF" class="ambient-light-btn"><span class="w-2 h-2 rounded-full bg-[#FF00FF]"></span>洋紅</button>
+              <button data-ambient="custom" class="ambient-light-btn"><span id="customLightDot" class="w-2 h-2 rounded-full bg-[#FF00FF]"></span>自訂</button>
+            </div>
+            <div class="flex items-center justify-between text-[10px] text-slate-400 pt-0.5">
+              <span>點選色光模擬暗室單色光源</span>
+              <label class="flex items-center gap-1 cursor-pointer text-slate-300">
+                <span>選色:</span>
+                <input type="color" id="pickerCustomLight" value="#ff00ff" class="w-5 h-5 rounded cursor-pointer bg-transparent border-0">
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div class="fold-panel bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+          <button type="button" class="fold-header w-full px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800/80 flex items-center justify-between text-left transition">
+            <span class="text-[11px] font-bold text-white flex items-center gap-1.5">
+              <i class="ph-fill ph-dots-nine text-emerald-400 text-xs"></i><span>背景與干擾雜點設定</span>
+            </span>
+            <i class="ph-bold ph-caret-down fold-chevron text-slate-400 text-xs"></i>
+          </button>
+          <div class="fold-body p-2 pt-1 border-t border-slate-800/80 space-y-2 bg-slate-950/60">
+            <div class="grid grid-cols-3 gap-1 text-[10px]">
+              <button data-bgmode="classic" class="bg-mode-btn">經典格線(預設)</button>
+              <button data-bgmode="none" class="bg-mode-btn">純白底</button>
+              <button data-bgmode="transparent" class="bg-mode-btn">全透明底</button>
+              <button data-bgmode="dots" class="bg-mode-btn">彩色圓點</button>
+              <button data-bgmode="grid" class="bg-mode-btn">迷彩線段</button>
+              <button data-bgmode="chars" class="bg-mode-btn">密碼亂字</button>
+            </div>
+            <div id="noiseControlsBox" class="space-y-1.5 pt-1 border-t border-slate-800/80">
+              <div class="flex items-center justify-between">
+                <span class="text-[10px] text-slate-400">雜點色系(可複選):</span>
+                <button id="btnRegenNoise" class="px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-[10px] text-slate-300 flex items-center gap-0.5">
+                  <i class="ph-bold ph-shuffle"></i> 重排
+                </button>
+              </div>
+              <div class="grid grid-cols-6 gap-1">
+                <button data-ncolor="#FF0000" class="noise-color-btn">紅</button>
+                <button data-ncolor="#00FF00" class="noise-color-btn">綠</button>
+                <button data-ncolor="#0000FF" class="noise-color-btn">藍</button>
+                <button data-ncolor="#00FFFF" class="noise-color-btn">青</button>
+                <button data-ncolor="#FF00FF" class="noise-color-btn">洋</button>
+                <button data-ncolor="#FFFF00" class="noise-color-btn">黃</button>
+              </div>
+              <div class="grid grid-cols-2 gap-1.5 pt-0.5">
+                <div>
+                  <div class="flex justify-between text-[10px] text-slate-400"><span>密度</span><span id="lblNoiseDensity" class="mono-font">60%</span></div>
+                  <input type="range" id="sliderNoiseDensity" min="10" max="100" value="60" class="w-full h-1 bg-slate-800 rounded accent-emerald-500">
+                </div>
+                <div>
+                  <div class="flex justify-between text-[10px] text-slate-400"><span>尺寸</span><span id="lblNoiseSize" class="mono-font">11px</span></div>
+                  <input type="range" id="sliderNoiseSize" min="4" max="26" value="11" class="w-full h-1 bg-slate-800 rounded accent-emerald-500">
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="fold-panel bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+          <button type="button" class="fold-header w-full px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800/80 flex items-center justify-between text-left transition">
+            <span class="text-[11px] font-bold text-white flex items-center gap-1.5">
+              <i class="ph-fill ph-magic-wand text-indigo-400 text-xs"></i><span>課程範本與字詞快選</span>
+            </span>
+            <i class="ph-bold ph-caret-down fold-chevron text-slate-400 text-xs"></i>
+          </button>
+          <div class="fold-body p-2 pt-1 border-t border-slate-800/80 space-y-1.5 bg-slate-950/60">
+            <div class="grid grid-cols-3 gap-1">
+              <button data-preset="classic" class="preset-btn py-1 px-1 rounded bg-slate-800 hover:bg-slate-700 text-[10px] font-semibold text-slate-200 border border-slate-700">經典紅青雙解</button>
+              <button data-preset="rgb3" class="preset-btn py-1 px-1 rounded bg-slate-800 hover:bg-slate-700 text-[10px] font-semibold text-slate-200 border border-slate-700">紅綠藍三密語</button>
+              <button data-preset="exam" class="preset-btn py-1 px-1 rounded bg-slate-800 hover:bg-slate-700 text-[10px] font-semibold text-slate-200 border border-slate-700">理化考題問答</button>
+            </div>
+            <button id="btnOpenTextToolbox" class="w-full py-1 px-2 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-300 text-[10px] font-bold flex items-center justify-center gap-1 transition">
+              <i class="ph-bold ph-text-t"></i><span>開啟「塗鴉與文字工具箱」編輯字詞</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="fold-panel fold-closed bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+          <button type="button" class="fold-header w-full px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800/80 flex items-center justify-between text-left transition">
+            <span class="text-[11px] font-bold text-white flex items-center gap-1.5">
+              <i class="ph-fill ph-book-open text-sky-400 text-xs"></i><span>光學解密原理解析</span>
+            </span>
+            <i class="ph-bold ph-caret-down fold-chevron text-slate-400 text-xs"></i>
+          </button>
+          <div class="fold-body p-2 pt-1 border-t border-slate-800/80 text-[10px] text-slate-300 space-y-1 bg-slate-950/60 leading-relaxed">
+            <p>• <strong class="text-rose-400">同色隱形</strong>：紅濾鏡只讓紅光通過，白底與紅字皆呈亮紅色，欠缺對比而隱形。</p>
+            <p>• <strong class="text-cyan-400">互補顯黑</strong>：青色字吸收紅光，透過紅濾鏡無光穿透，呈深黑色清晰顯影！</p>
+            <p>• <strong class="text-amber-300">多濾鏡重疊（T₁ × T₂）</strong>：濾鏡重疊時穿透色光取交集（相乘），如「紅＋青＝全黑不透光」、「青＋黃＝僅綠光通過」。</p>
+            <p>• <strong class="text-slate-200">模擬限制</strong>：本程式以「理想濾鏡」計算。實體玻璃紙會漏光、印表機也印不出純青色，實作學習單時效果會比畫面略差，這正好可以作為討論題。</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== 場景 1：色光加色法 ===== -->
+      <div id="panelAdditive" class="hidden flex-col gap-1.5">
+        <div class="fold-panel bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+          <button type="button" class="fold-header w-full px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800/80 flex items-center justify-between text-left">
+            <span class="text-[11px] font-bold text-white flex items-center gap-1.5">
+              <i class="ph-fill ph-sun text-amber-400 text-xs"></i><span>色光加色法（RGB 三原光）</span>
+            </span>
+            <i class="ph-bold ph-caret-down fold-chevron text-slate-400 text-xs"></i>
+          </button>
+          <div class="fold-body p-2 pt-1 border-t border-slate-800/80 space-y-2 bg-slate-950/60">
+            <div class="grid grid-cols-2 gap-1 bg-slate-900 p-0.5 rounded-lg border border-slate-800">
+              <button id="btnAddModeSolid" class="py-1 rounded text-[10px] font-bold">🌕 連續色光</button>
+              <button id="btnAddModeDots" class="py-1 rounded text-[10px] font-bold">🔬 螢幕像素</button>
+            </div>
+            <div class="grid grid-cols-3 gap-1">
+              <button data-light="R" class="toggle-add-light py-1.5 rounded-lg bg-red-600/20 border border-red-500 text-red-300 font-bold text-[10px] flex flex-col items-center gap-0.5"><span class="w-3 h-3 rounded-full bg-[#FF0000]"></span>紅光 R</button>
+              <button data-light="G" class="toggle-add-light py-1.5 rounded-lg bg-green-600/20 border border-green-500 text-green-300 font-bold text-[10px] flex flex-col items-center gap-0.5"><span class="w-3 h-3 rounded-full bg-[#00FF00]"></span>綠光 G</button>
+              <button data-light="B" class="toggle-add-light py-1.5 rounded-lg bg-blue-600/20 border border-blue-500 text-blue-300 font-bold text-[10px] flex flex-col items-center gap-0.5"><span class="w-3 h-3 rounded-full bg-[#0000FF]"></span>藍光 B</button>
+            </div>
+            <div class="space-y-1.5 pt-1 border-t border-slate-800 text-[10px]">
+              <div class="flex justify-between"><span class="text-slate-400">光圈半徑</span><span id="lblAddRadius" class="mono-font text-slate-300">135 px</span></div>
+              <input type="range" id="sliderAddRadius" min="70" max="200" value="135" class="w-full h-1 bg-slate-800 rounded accent-indigo-500">
+              <div id="boxAddDotSize" class="hidden pt-1">
+                <div class="flex justify-between text-amber-300"><span>像素間距</span><span id="lblAddDotSize" class="mono-font">16 px</span></div>
+                <input type="range" id="sliderAddDotSize" min="8" max="32" value="16" class="w-full h-1 bg-slate-800 rounded accent-amber-500">
+              </div>
+              <button id="btnResetAdditive" class="w-full py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold mt-1">重置光圈位置</button>
+            </div>
+          </div>
+        </div>
+        <div class="fold-panel bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+          <button type="button" class="fold-header w-full px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800/80 flex items-center justify-between text-left">
+            <span class="text-[11px] font-bold text-white flex items-center gap-1.5">
+              <i class="ph-fill ph-flask text-indigo-400 text-xs"></i><span>色光加法公式整理</span>
+            </span>
+            <i class="ph-bold ph-caret-down fold-chevron text-slate-400 text-xs"></i>
+          </button>
+          <div class="fold-body p-2 pt-1 border-t border-slate-800/80 space-y-1 text-[10px] bg-slate-950/60">
+            <div class="flex justify-between"><span><b class="text-red-400">紅R</b> + <b class="text-green-400">綠G</b></span><span class="px-1.5 rounded bg-yellow-400 text-slate-950 font-bold">黃光 Y</span></div>
+            <div class="flex justify-between"><span><b class="text-green-400">綠G</b> + <b class="text-blue-400">藍B</b></span><span class="px-1.5 rounded bg-cyan-400 text-slate-950 font-bold">青光 C</span></div>
+            <div class="flex justify-between"><span><b class="text-red-400">紅R</b> + <b class="text-blue-400">藍B</b></span><span class="px-1.5 rounded bg-fuchsia-400 text-slate-950 font-bold">洋紅 M</span></div>
+            <div class="flex justify-between"><span><b>R + G + B</b></span><span class="px-1.5 rounded bg-white text-slate-950 font-bold">白光 W</span></div>
+            <p class="text-slate-400 pt-1">舞台為暗室投影幕：沒有光的地方是黑色，色光越疊越亮。</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== 場景 2：顏料減色法 ===== -->
+      <div id="panelSubtractive" class="hidden flex-col gap-1.5">
+        <div class="fold-panel bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+          <button type="button" class="fold-header w-full px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800/80 flex items-center justify-between text-left">
+            <span class="text-[11px] font-bold text-white flex items-center gap-1.5">
+              <i class="ph-fill ph-palette text-cyan-400 text-xs"></i><span>顏料減色法（CMY 三原色）</span>
+            </span>
+            <i class="ph-bold ph-caret-down fold-chevron text-slate-400 text-xs"></i>
+          </button>
+          <div class="fold-body p-2 pt-1 border-t border-slate-800/80 space-y-2 bg-slate-950/60">
+            <div class="grid grid-cols-2 gap-1 bg-slate-900 p-0.5 rounded-lg border border-slate-800">
+              <button id="btnSubModeSolid" class="py-1 rounded text-[10px] font-bold">🎨 連續色塊</button>
+              <button id="btnSubModeDots" class="py-1 rounded text-[10px] font-bold">📰 印刷網點</button>
+            </div>
+            <div class="grid grid-cols-3 gap-1">
+              <button data-pigment="C" class="toggle-sub-pigment py-1.5 rounded-lg bg-cyan-500/20 border border-cyan-400 text-cyan-200 font-bold text-[10px] flex flex-col items-center gap-0.5"><span class="w-3 h-3 rounded-full bg-[#00FFFF]"></span>青色 C</button>
+              <button data-pigment="M" class="toggle-sub-pigment py-1.5 rounded-lg bg-fuchsia-500/20 border border-fuchsia-400 text-fuchsia-200 font-bold text-[10px] flex flex-col items-center gap-0.5"><span class="w-3 h-3 rounded-full bg-[#FF00FF]"></span>洋紅 M</button>
+              <button data-pigment="Y" class="toggle-sub-pigment py-1.5 rounded-lg bg-yellow-500/20 border border-yellow-400 text-yellow-200 font-bold text-[10px] flex flex-col items-center gap-0.5"><span class="w-3 h-3 rounded-full bg-[#FFFF00]"></span>黃色 Y</button>
+            </div>
+            <div class="space-y-1.5 pt-1 border-t border-slate-800 text-[10px]">
+              <div class="flex justify-between"><span class="text-slate-400">色塊半徑</span><span id="lblSubRadius" class="mono-font text-slate-300">135 px</span></div>
+              <input type="range" id="sliderSubRadius" min="70" max="200" value="135" class="w-full h-1 bg-slate-800 rounded accent-indigo-500">
+              <div id="boxSubDotSize" class="hidden pt-1">
+                <div class="flex justify-between text-cyan-300"><span>印刷網點大小</span><span id="lblSubDotSize" class="mono-font">14 px</span></div>
+                <input type="range" id="sliderSubDotSize" min="8" max="28" value="14" class="w-full h-1 bg-slate-800 rounded accent-cyan-500">
+                <p class="text-slate-500 pt-1">網點依真實印刷的「網屏角度」排列（C 15°、M 75°、Y 0°），重疊處會出現玫瑰紋。</p>
+              </div>
+              <button id="btnResetSubtractive" class="w-full py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold mt-1">重置色塊位置</button>
+            </div>
+          </div>
+        </div>
+        <div class="fold-panel bg-slate-900 border border-slate-800 rounded-xl overflow-hidden">
+          <button type="button" class="fold-header w-full px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800/80 flex items-center justify-between text-left">
+            <span class="text-[11px] font-bold text-white flex items-center gap-1.5">
+              <i class="ph-fill ph-drop-half-bottom text-cyan-400 text-xs"></i><span>顏料減法吸收原理</span>
+            </span>
+            <i class="ph-bold ph-caret-down fold-chevron text-slate-400 text-xs"></i>
+          </button>
+          <div class="fold-body p-2 pt-1 border-t border-slate-800/80 space-y-1 text-[10px] bg-slate-950/60">
+            <div class="flex justify-between"><span><b class="text-cyan-400">青C</b> + <b class="text-yellow-400">黃Y</b></span><span class="px-1.5 rounded bg-green-600 text-white font-bold">綠 Green</span></div>
+            <div class="flex justify-between"><span><b class="text-fuchsia-400">洋紅M</b> + <b class="text-yellow-400">黃Y</b></span><span class="px-1.5 rounded bg-red-600 text-white font-bold">紅 Red</span></div>
+            <div class="flex justify-between"><span><b class="text-cyan-400">青C</b> + <b class="text-fuchsia-400">洋紅M</b></span><span class="px-1.5 rounded bg-blue-600 text-white font-bold">藍 Blue</span></div>
+            <div class="flex justify-between"><span><b>C + M + Y</b></span><span class="px-1.5 rounded bg-slate-950 text-white border border-slate-600 font-bold">黑 Black</span></div>
+          </div>
+        </div>
+      </div>
+
+    </aside>
+
+    <!-- ================= 畫布舞台 + 快速操作列 ================= -->
+    <main id="stage">
+      <div id="canvasBox">
+        <div id="canvasFrame">
+          <canvas id="mainCanvas" width="960" height="580"></canvas>
+
+          <div id="opticalStatusBadge" class="canvas-badge top-2 left-2 px-2.5 py-1 flex items-center gap-1.5 text-[11px]">
+            <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+            <span id="statusText" class="font-semibold text-slate-200"></span>
+          </div>
+          <div id="pixelInspector" class="canvas-badge bottom-2 right-2 px-2 py-1 flex items-center gap-1.5 text-[10px]">
+            <span id="inspectorSwatch" class="w-3 h-3 rounded-sm border border-white/40 bg-white"></span>
+            <span id="inspectorLabel" class="mono-font text-slate-300">RGB(255, 255, 255)</span>
+          </div>
+          <div id="toast" role="status" aria-live="polite"></div>
+        </div>
+      </div>
+
+      <nav id="quickbar" aria-label="快速操作列">
+        <div class="qb-group" id="qbScenes">
+          <button class="qb-btn qb-scene" data-scene="additive" title="1. 色光加色法"><i class="ph-fill ph-sun"></i><span class="qb-lbl">1 加色</span></button>
+          <button class="qb-btn qb-scene" data-scene="subtractive" title="2. 顏料減色法"><i class="ph-fill ph-palette"></i><span class="qb-lbl">2 減色</span></button>
+          <button class="qb-btn qb-scene" data-scene="decoder" title="3. 濾鏡解密"><i class="ph-fill ph-magnifying-glass"></i><span class="qb-lbl">3 解密</span></button>
+        </div>
+
+        <div class="qb-group hidden" id="qbAdditive">
+          <button class="qb-dot qb-light" data-light="R" style="--c:#FF0000" title="紅光">R</button>
+          <button class="qb-dot qb-light dark-text" data-light="G" style="--c:#00FF00" title="綠光">G</button>
+          <button class="qb-dot qb-light" data-light="B" style="--c:#0000FF" title="藍光">B</button>
+          <button class="qb-btn" id="qbAddMode" title="切換連續色光／螢幕像素"><i class="ph-bold ph-circle-half"></i><span class="qb-lbl" id="qbAddModeLbl">像素</span></button>
+        </div>
+
+        <div class="qb-group hidden" id="qbSubtractive">
+          <button class="qb-dot qb-pigment dark-text" data-pigment="C" style="--c:#00FFFF" title="青色">C</button>
+          <button class="qb-dot qb-pigment" data-pigment="M" style="--c:#FF00FF" title="洋紅">M</button>
+          <button class="qb-dot qb-pigment dark-text" data-pigment="Y" style="--c:#FFFF00" title="黃色">Y</button>
+          <button class="qb-btn" id="qbSubMode" title="切換連續色塊／印刷網點"><i class="ph-bold ph-dots-nine"></i><span class="qb-lbl" id="qbSubModeLbl">網點</span></button>
+        </div>
+
+        <div class="qb-group hidden" id="qbDecoder">
+          <button class="qb-dot qb-lens" data-lens="red" style="--c:#FF0000" title="紅色濾鏡">R</button>
+          <button class="qb-dot qb-lens dark-text" data-lens="green" style="--c:#00FF00" title="綠色濾鏡">G</button>
+          <button class="qb-dot qb-lens" data-lens="blue" style="--c:#0000FF" title="藍色濾鏡">B</button>
+          <button class="qb-dot qb-lens dark-text" data-lens="cyan" style="--c:#00FFFF" title="青色濾鏡">C</button>
+          <button class="qb-dot qb-lens" data-lens="magenta" style="--c:#FF00FF" title="洋紅濾鏡">M</button>
+          <button class="qb-dot qb-lens dark-text" data-lens="yellow" style="--c:#FFFF00" title="黃色濾鏡">Y</button>
+          <button class="qb-btn" id="qbAmbient" title="環境色光"><span id="qbAmbientDot" class="w-3.5 h-3.5 rounded-full border border-white/50 bg-white"></span><span class="qb-lbl">燈光</span></button>
+          <button class="qb-btn" id="qbLensReset" title="濾鏡歸位"><i class="ph-bold ph-crosshair"></i></button>
+        </div>
+
+        <div class="qb-group">
+          <button class="qb-btn" id="btnUndo" title="復原 (Ctrl+Z)"><i class="ph-bold ph-arrow-u-up-left"></i></button>
+          <button class="qb-btn" id="btnRedo" title="重做 (Ctrl+Y)"><i class="ph-bold ph-arrow-u-up-right"></i></button>
+        </div>
+
+        <div class="qb-group">
+          <button class="qb-btn" id="btnToggleDoodle" title="塗鴉與文字工具箱">
+            <i class="ph-bold ph-paint-brush-broad text-amber-300"></i><span class="qb-lbl">工具箱</span>
+            <span id="doodleActiveDot" class="w-1.5 h-1.5 rounded-full bg-amber-400 hidden animate-pulse"></span>
+          </button>
+          <button class="qb-btn" id="qbMenu" title="設定選單"><i class="ph-bold ph-sliders-horizontal"></i></button>
+          <button class="qb-btn" id="qbFullscreen" title="全螢幕／專注模式 (F)"><i id="qbFullscreenIcon" class="ph-bold ph-arrows-out"></i></button>
+        </div>
+      </nav>
+    </main>
+  </div>
+
+  <!-- ================= 底部狀態列 ================= -->
+  <footer id="appFooter" class="bg-slate-900 border-t border-slate-800 px-3 py-1 text-[11px] text-slate-400 shrink-0">
+    <div class="max-w-[1800px] mx-auto flex flex-wrap items-center justify-between gap-2">
+      <span class="truncate"><b class="text-slate-200">光學口訣：</b>透明濾鏡看「穿透光」・不透明字詞看「反射光」・與背景同色即隱形，被濾鏡吸收即顯黑！</span>
+      <span id="storageStatus" class="text-[10px] text-emerald-400 mono-font flex items-center gap-1"><i class="ph-fill ph-check-circle"></i> 自動儲存就緒</span>
+    </div>
+  </footer>
+
+  <!-- ================= 環境色光快選彈出框 ================= -->
+  <div id="ambientPop" class="qb-pop hidden">
+    <button class="qb-dot is-on" data-amb="#FFFFFF" style="--c:#FFFFFF;color:#0f172a" title="白光">白</button>
+    <button class="qb-dot is-on" data-amb="#FF0000" style="--c:#FF0000" title="紅光">紅</button>
+    <button class="qb-dot is-on dark-text" data-amb="#00FF00" style="--c:#00FF00" title="綠光">綠</button>
+    <button class="qb-dot is-on" data-amb="#0000FF" style="--c:#0000FF" title="藍光">藍</button>
+    <button class="qb-dot is-on dark-text" data-amb="#00FFFF" style="--c:#00FFFF" title="青光">青</button>
+    <button class="qb-dot is-on dark-text" data-amb="#FFFF00" style="--c:#FFFF00" title="黃光">黃</button>
+    <button class="qb-dot is-on" data-amb="#FF00FF" style="--c:#FF00FF" title="洋紅光">洋</button>
+    <button class="qb-dot is-on" data-amb="custom" id="ambPopCustom" style="--c:#FF00FF" title="自訂色光">自</button>
+  </div>
+
+  <!-- ================= 浮動工具箱（文字 + 塗鴉） ================= -->
+  <div id="doodleToolbox" class="glass-panel rounded-xl p-2.5 text-xs hidden">
+    <div id="doodleHeader" class="flex items-center justify-between border-b border-slate-700/80 pb-1.5 mb-2 cursor-move">
+      <div class="flex items-center gap-1.5 font-bold text-amber-300 text-xs">
+        <i class="ph-fill ph-paint-brush-broad text-sm"></i><span>塗鴉與自訂文字工具箱</span>
+      </div>
+      <button id="btnCloseDoodle" class="text-slate-400 hover:text-white p-1 rounded"><i class="ph-bold ph-x text-sm"></i></button>
+    </div>
+
+    <div class="grid grid-cols-2 gap-1 bg-slate-950 p-0.5 rounded-lg border border-slate-800 mb-2 text-[11px]">
+      <button id="tabToolText" class="py-1.5 rounded font-bold flex items-center justify-center gap-1 transition"><i class="ph-bold ph-text-t"></i> 自訂字詞</button>
+      <button id="tabToolBrush" class="py-1.5 rounded font-bold flex items-center justify-center gap-1 transition"><i class="ph-bold ph-paint-brush"></i> 光／顏料塗鴉</button>
+    </div>
+
+    <div id="toolboxTextSection" class="space-y-2">
+      <div id="textSceneHint" class="hidden text-[10px] text-amber-200 bg-amber-500/10 border border-amber-500/30 rounded px-2 py-1">字詞只在「3. 濾鏡解密」場景顯示。</div>
+      <div class="flex items-center justify-between">
+        <span class="text-[10px] text-slate-400">點選或在畫布直接拖曳字詞：</span>
+        <button id="btnAddTextItem" class="px-2 py-1 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-bold flex items-center gap-0.5 shadow"><i class="ph-bold ph-plus"></i> 新增字詞</button>
+      </div>
+      <div id="textItemsList" class="space-y-1 max-h-28 overflow-y-auto pr-0.5"></div>
+      <div id="selectedTextEditor" class="pt-1.5 border-t border-slate-800 space-y-2">
+        <div class="flex gap-1">
+          <input type="text" id="inputSelectedText" maxlength="40" placeholder="輸入隱藏或顯示文字..." class="flex-1 min-w-0 bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-[16px] sm:text-xs text-white focus:outline-none focus:border-indigo-500">
+          <button id="btnDeleteTextItem" title="刪除此字詞" class="px-2 py-1 rounded bg-rose-950/80 hover:bg-rose-900 text-rose-300 border border-rose-800/60 text-xs disabled:opacity-30 disabled:pointer-events-none"><i class="ph-bold ph-trash"></i></button>
+        </div>
+        <div>
+          <div class="flex items-center justify-between mb-1">
+            <span class="text-[10px] text-slate-400">字詞光學純色 / 自訂色：</span>
+            <span id="selectedColorCode" class="mono-font text-[10px] text-indigo-300">#FF0000</span>
+          </div>
+          <div class="flex items-center gap-1 flex-wrap">
+            <button data-color="#FF0000" title="純紅" class="text-color-swatch w-5 h-5 rounded bg-[#FF0000] border border-white/30"></button>
+            <button data-color="#00FF00" title="純綠" class="text-color-swatch w-5 h-5 rounded bg-[#00FF00] border border-white/30"></button>
+            <button data-color="#0000FF" title="純藍" class="text-color-swatch w-5 h-5 rounded bg-[#0000FF] border border-white/30"></button>
+            <button data-color="#00FFFF" title="純青" class="text-color-swatch w-5 h-5 rounded bg-[#00FFFF] border border-white/30"></button>
+            <button data-color="#FF00FF" title="洋紅" class="text-color-swatch w-5 h-5 rounded bg-[#FF00FF] border border-white/30"></button>
+            <button data-color="#FFFF00" title="純黃" class="text-color-swatch w-5 h-5 rounded bg-[#FFFF00] border border-white/30"></button>
+            <button data-color="#000000" title="純黑" class="text-color-swatch w-5 h-5 rounded bg-[#000000] border border-white/40"></button>
+            <label class="flex items-center gap-1 ml-auto bg-slate-900 px-1.5 py-0.5 rounded border border-slate-700 cursor-pointer text-[10px] text-slate-300">
+              <span>自訂</span><input type="color" id="pickerTextColor" value="#ff0000" class="w-5 h-5 rounded bg-transparent border-0 cursor-pointer">
+            </label>
+          </div>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <span class="text-[10px] text-slate-400 shrink-0">字級:</span>
+          <input type="range" id="sliderTextSize" min="20" max="110" value="58" class="flex-1 h-1 bg-slate-800 rounded accent-indigo-500">
+          <span id="lblTextSize" class="mono-font text-[10px] text-slate-400 w-9 text-right">58px</span>
+        </div>
+      </div>
+    </div>
+
+    <div id="toolboxBrushSection" class="space-y-2.5 hidden">
+      <div class="grid grid-cols-2 gap-1 text-[11px]">
+        <button data-dmode="pointer" class="doodle-mode-btn"><i class="ph-bold ph-hand-pointing"></i> 拖曳物件</button>
+        <button data-dmode="pigment" class="doodle-mode-btn"><i class="ph-bold ph-highlighter"></i> 顏料筆(減色)</button>
+        <button data-dmode="light" class="doodle-mode-btn"><i class="ph-bold ph-sparkle"></i> 色光筆(加色)</button>
+        <button data-dmode="eraser" class="doodle-mode-btn"><i class="ph-bold ph-eraser"></i> 橡皮擦</button>
+      </div>
+      <div class="flex items-center justify-between bg-slate-900/90 p-1 rounded-lg border border-slate-800 text-[10px]">
+        <span class="text-slate-400 pl-1">筆觸類型：</span>
+        <div class="flex gap-1">
+          <button id="btnShapeFree" class="px-2 py-1 rounded font-semibold">自由曲線</button>
+          <button id="btnShapeLine" class="px-2 py-1 rounded font-semibold">直線光束</button>
+        </div>
+      </div>
+      <div>
+        <div class="flex justify-between items-center mb-1 text-[10px]">
+          <span class="text-slate-400">畫筆顏色：</span>
+          <input type="color" id="pickerDoodleColor" value="#ff0000" class="w-5 h-5 rounded cursor-pointer bg-transparent border-0">
+        </div>
+        <div class="flex items-center justify-between gap-1">
+          <button data-bcolor="#FF0000" class="doodle-color-btn w-5 h-5 rounded-full bg-[#FF0000] swatch-active"></button>
+          <button data-bcolor="#00FF00" class="doodle-color-btn w-5 h-5 rounded-full bg-[#00FF00]"></button>
+          <button data-bcolor="#0000FF" class="doodle-color-btn w-5 h-5 rounded-full bg-[#0000FF]"></button>
+          <button data-bcolor="#00FFFF" class="doodle-color-btn w-5 h-5 rounded-full bg-[#00FFFF]"></button>
+          <button data-bcolor="#FF00FF" class="doodle-color-btn w-5 h-5 rounded-full bg-[#FF00FF]"></button>
+          <button data-bcolor="#FFFF00" class="doodle-color-btn w-5 h-5 rounded-full bg-[#FFFF00]"></button>
+          <button data-bcolor="#000000" class="doodle-color-btn w-5 h-5 rounded-full bg-[#000000] border border-white/40"></button>
+        </div>
+      </div>
+      <div class="flex items-center gap-2 text-[10px]">
+        <span class="text-slate-400 shrink-0">筆刷粗細:</span>
+        <input type="range" id="sliderDoodleSize" min="3" max="50" value="12" class="flex-1 h-1 bg-slate-800 rounded accent-amber-400">
+        <span id="lblDoodleSize" class="mono-font text-slate-300 w-8 text-right">12px</span>
+      </div>
+      <button id="btnClearDoodles" class="w-full py-1.5 rounded-lg bg-rose-950/70 hover:bg-rose-900/80 border border-rose-800/60 text-rose-300 text-[11px] font-bold flex items-center justify-center gap-1 transition"><i class="ph-bold ph-trash"></i> 清除所有手繪塗鴉</button>
+    </div>
+  </div>
+
+  <!-- ================= 使用說明 ================= -->
+  <div id="helpModal" class="fixed inset-0 z-[70] bg-slate-950/80 flex items-center justify-center p-3 hidden">
+    <div class="glass-panel w-full max-w-2xl rounded-2xl border border-slate-700 overflow-hidden shadow-2xl flex flex-col max-h-[88%]">
+      <div class="px-4 py-3 bg-slate-900/90 border-b border-slate-800 flex items-center justify-between gap-2">
+        <div class="flex items-center gap-2 min-w-0">
+          <div class="w-7 h-7 rounded-lg bg-indigo-600/30 border border-indigo-500/50 flex items-center justify-center text-indigo-300 shrink-0"><i class="ph-fill ph-book-open-text text-base"></i></div>
+          <div class="min-w-0">
+            <h2 class="text-sm font-black text-white">使用說明與課堂教學建議</h2>
+            <p class="text-[11px] text-slate-400 truncate">從色光加色、顏料減色到多濾鏡解密的一站式互動教具</p>
+          </div>
+        </div>
+        <button id="btnCloseHelp" class="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition"><i class="ph-bold ph-x text-sm"></i></button>
+      </div>
+      <div class="p-4 overflow-y-auto space-y-4 text-xs leading-relaxed text-slate-300" style="-webkit-overflow-scrolling:touch">
+        <div class="bg-slate-900/70 border border-slate-800 rounded-xl p-3 space-y-2.5">
+          <div class="text-indigo-300 font-bold flex items-center gap-1.5"><i class="ph-fill ph-chalkboard-teacher text-sm"></i>建議教學流程</div>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
+            <div class="bg-slate-950/70 border border-slate-800/90 rounded-lg p-2.5 space-y-1">
+              <div class="font-bold text-amber-300"><i class="ph-fill ph-sun"></i> 1. 色光加色法</div>
+              <p class="text-[11px] text-slate-400">在暗室投影幕上拖曳 R、G、B 光圈，觀察越疊越亮（紅+綠=黃、三光=白）。切到「螢幕像素」可說明手機螢幕如何用紅綠藍子像素混色。</p>
+            </div>
+            <div class="bg-slate-950/70 border border-slate-800/90 rounded-lg p-2.5 space-y-1">
+              <div class="font-bold text-cyan-300"><i class="ph-fill ph-palette"></i> 2. 顏料減色法</div>
+              <p class="text-[11px] text-slate-400">拖曳 C、M、Y 色塊，理解顏料「吸收部分色光、反射其餘」，因此越疊越暗。切到「印刷網點」觀察彩色印刷的玫瑰紋。</p>
+            </div>
+            <div class="bg-slate-950/70 border border-slate-800/90 rounded-lg p-2.5 space-y-1">
+              <div class="font-bold text-rose-300"><i class="ph-fill ph-magnifying-glass"></i> 3. 濾鏡解密</div>
+              <p class="text-[11px] text-slate-400">提問：「為什麼紅濾鏡下紅字消失、青字變黑？」再用多片濾鏡交疊（紅+青=黑、青+黃=綠）驗證。</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="bg-slate-900/70 border border-slate-800 rounded-xl p-3 space-y-2">
+          <div class="text-emerald-300 font-bold flex items-center gap-1.5"><i class="ph-fill ph-hand-tap text-sm"></i>操作方式</div>
+          <ul class="space-y-1.5 text-[11px] text-slate-300 list-disc pl-4">
+            <li><b>畫布下方快速列</b>：切換場景、開關光圈/色塊/濾鏡、切換環境燈光、復原/重做，全螢幕時也能直接操作。</li>
+            <li><b>全螢幕鍵（右下 ⤢ 或按 F）</b>：會隱藏頂部與底部列，只留畫布和快速列；需要詳細設定時按「滑桿」鍵開啟設定抽屜。</li>
+            <li><b>濾鏡重疊</b>：同時開啟多片濾鏡並拖曳重疊，重疊處會標示合成後的穿透光；若環境光不是白光，會同時顯示「實際看到的顏色」。</li>
+            <li><b>工具箱</b>：可自訂密語文字、字級與顏色，也能用「顏料筆」或「色光筆」在畫布上出題。</li>
+            <li><b>匯出 / 匯入 / 存圖</b>：教師可先設計謎題，匯出 .json 分享給學生，或存成 .png 印成學習單搭配玻璃紙操作。</li>
+          </ul>
+        </div>
+
+        <div class="bg-slate-900/70 border border-slate-800 rounded-xl p-3 space-y-1.5">
+          <div class="text-sky-300 font-bold flex items-center gap-1.5"><i class="ph-fill ph-arrows-out text-sm"></i>關於全螢幕</div>
+          <ul class="space-y-1 text-[11px] text-slate-300 list-disc pl-4">
+            <li>電腦、Android、iPad 直接開啟網址時，全螢幕鍵可進入真正的全螢幕。</li>
+            <li>iPhone 的 Safari 不支援網頁全螢幕，會改用「專注模式」；想要完整全螢幕，可在 Safari 按「分享 → 加入主畫面」，從主畫面圖示開啟。</li>
+            <li>嵌入在 Google 協作平台等網站時，瀏覽器不允許全螢幕，按鈕會提供「在新分頁開啟」的連結。</li>
+          </ul>
+        </div>
+
+        <div class="bg-indigo-950/30 border border-indigo-500/30 rounded-xl p-3 space-y-1.5">
+          <div class="text-amber-300 font-bold flex items-center gap-1.5"><i class="ph-fill ph-lightbulb text-sm"></i>課堂提問小撇步</div>
+          <p class="text-[11px] text-slate-300">
+            1. <b>預測後驗證</b>：先在白光下觀察字詞顏色，請學生預測「改開綠光（或蓋綠濾鏡），哪一行字會隱形、哪一行會變黑？」再實際操作。<br>
+            2. <b>右下角色碼檢測器</b>：滑鼠移動或手指拖曳時顯示該點的 <code class="mono-font text-indigo-300">RGB(r, g, b)</code>，可從數值觀察色光通道的保留與歸零。<br>
+            3. <b>色光筆畫在白紙上看不到</b>：這是正確的！白紙已反射所有色光，再加色光仍是白色，可藉此討論加色與減色的差別。
+          </p>
+        </div>
+      </div>
+      <div class="px-4 py-2.5 bg-slate-900/90 border-t border-slate-800 flex items-center justify-between gap-2">
+        <span class="text-[11px] text-slate-400">隨時可點左上角「？」再次開啟</span>
+        <button id="btnCloseHelpBottom" class="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition shadow">開始探索</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+(() => {
+  'use strict';
+
+  const STORAGE_KEY = 'OPTICS_DECODER_STUDIO_V5';
+  const HELP_SEEN_KEY = 'OPTICS_DECODER_HELP_SEEN';
+  const W = 960, H = 580;
+  const HEX_RE = /^#[0-9a-fA-F]{6}$/;
+  const SCENES = ['additive', 'subtractive', 'decoder'];
+  const BG_MODES = ['classic', 'none', 'transparent', 'dots', 'grid', 'chars'];
+  const isCoarse = window.matchMedia('(pointer: coarse)').matches;
+
+  // ================= DEFAULT STATE =================
+  function getDefaultState() {
+    return {
+      currentScene: 'additive',
+      additive: {
+        mode: 'solid', radius: 135, dotPitch: 16,
+        lights: [
+          { id: 'R', label: '紅光 R', color: '#FF0000', x: 400, y: 230, visible: true },
+          { id: 'G', label: '綠光 G', color: '#00FF00', x: 560, y: 230, visible: true },
+          { id: 'B', label: '藍光 B', color: '#0000FF', x: 480, y: 365, visible: true }
+        ]
+      },
+      subtractive: {
+        mode: 'solid', radius: 135, dotPitch: 14,
+        pigments: [
+          { id: 'C', label: '青色 C', color: '#00FFFF', x: 400, y: 230, visible: true, angle: 15 },
+          { id: 'M', label: '洋紅 M', color: '#FF00FF', x: 560, y: 230, visible: true, angle: 75 },
+          { id: 'Y', label: '黃色 Y', color: '#FFFF00', x: 480, y: 365, visible: true, angle: 0 }
+        ]
+      },
+      decoder: {
+        ambientLight: '#FFFFFF',
+        customLightColor: '#FF00FF',
+        bgMode: 'classic',
+        noiseColors: ['#FF0000', '#00FFFF'],
+        noiseDensity: 60, noiseSize: 11, noiseSeed: 12345,
+        selectedTextId: 't1',
+        textItems: [
+          { id: 't1', text: 'OPTICS 光學物理', x: 480, y: 235, fontSize: 64, color: '#FF0000' },
+          { id: 't2', text: 'SECRET 成功解密', x: 480, y: 345, fontSize: 64, color: '#00FFFF' }
+        ],
+        lensRadius: 105,
+        customLensColor: '#FF8800',
+        lenses: [
+          { id: 'red', name: '紅色濾鏡', color: '#FF0000', x: 225, y: 285, visible: true },
+          { id: 'green', name: '綠色濾鏡', color: '#00FF00', x: 360, y: 430, visible: false },
+          { id: 'blue', name: '藍色濾鏡', color: '#0000FF', x: 600, y: 430, visible: false },
+          { id: 'cyan', name: '青色濾鏡', color: '#00FFFF', x: 735, y: 285, visible: true },
+          { id: 'magenta', name: '洋紅濾鏡', color: '#FF00FF', x: 400, y: 170, visible: false },
+          { id: 'yellow', name: '黃色濾鏡', color: '#FFFF00', x: 560, y: 170, visible: false },
+          { id: 'custom', name: '自訂濾鏡', color: '#FF8800', x: 480, y: 285, visible: false }
+        ]
+      },
+      doodles: []
+    };
+  }
+
+  // ================= STATE VALIDATION（存檔與匯入共用，防止壞檔或惡意檔） =================
+  const isObj = v => v !== null && typeof v === 'object' && !Array.isArray(v);
+  const num = (v, def, min, max) => (typeof v === 'number' && isFinite(v)) ? Math.min(max, Math.max(min, v)) : def;
+  const hex = (v, def) => (typeof v === 'string' && HEX_RE.test(v)) ? v.toUpperCase() : def;
+  const str = (v, def, maxLen) => (typeof v === 'string') ? v.slice(0, maxLen) : def;
+
+  function mergeById(defList, rawList, fixer) {
+    const rawMap = new Map((Array.isArray(rawList) ? rawList : []).filter(isObj).map(o => [o.id, o]));
+    const merged = defList.map(d => fixer(d, rawMap.get(d.id) || {}));
+    // 保留原順序（決定上下疊放）
+    if (Array.isArray(rawList)) {
+      const order = rawList.filter(isObj).map(o => o.id);
+      merged.sort((a, b) => {
+        const ia = order.indexOf(a.id), ib = order.indexOf(b.id);
+        return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+      });
+    }
+    return merged;
+  }
+
+  function normalizeState(raw) {
+    const def = getDefaultState();
+    if (!isObj(raw)) return def;
+    const s = def;
+
+    s.currentScene = SCENES.includes(raw.currentScene) ? raw.currentScene : def.currentScene;
+
+    const ra = isObj(raw.additive) ? raw.additive : {};
+    s.additive.mode = ra.mode === 'dots' ? 'dots' : 'solid';
+    s.additive.radius = num(ra.radius, def.additive.radius, 70, 200);
+    s.additive.dotPitch = num(ra.dotPitch, def.additive.dotPitch, 8, 32);
+    s.additive.lights = mergeById(def.additive.lights, ra.lights, (d, r) => ({
+      ...d, x: num(r.x, d.x, 0, W), y: num(r.y, d.y, 0, H), visible: typeof r.visible === 'boolean' ? r.visible : d.visible
+    }));
+
+    const rs = isObj(raw.subtractive) ? raw.subtractive : {};
+    s.subtractive.mode = rs.mode === 'dots' ? 'dots' : 'solid';
+    s.subtractive.radius = num(rs.radius, def.subtractive.radius, 70, 200);
+    s.subtractive.dotPitch = num(rs.dotPitch, def.subtractive.dotPitch, 8, 28);
+    s.subtractive.pigments = mergeById(def.subtractive.pigments, rs.pigments, (d, r) => ({
+      ...d, x: num(r.x, d.x, 0, W), y: num(r.y, d.y, 0, H), visible: typeof r.visible === 'boolean' ? r.visible : d.visible
+    }));
+
+    const rd = isObj(raw.decoder) ? raw.decoder : {};
+    const sd = s.decoder;
+    sd.ambientLight = rd.ambientLight === 'custom' ? 'custom' : hex(rd.ambientLight, def.decoder.ambientLight);
+    sd.customLightColor = hex(rd.customLightColor, def.decoder.customLightColor);
+    sd.bgMode = BG_MODES.includes(rd.bgMode) ? rd.bgMode : def.decoder.bgMode;
+    if (Array.isArray(rd.noiseColors)) {
+      const nc = rd.noiseColors.filter(c => typeof c === 'string' && HEX_RE.test(c)).map(c => c.toUpperCase());
+      if (nc.length) sd.noiseColors = [...new Set(nc)];
+    }
+    sd.noiseDensity = num(rd.noiseDensity, def.decoder.noiseDensity, 10, 100);
+    sd.noiseSize = num(rd.noiseSize, def.decoder.noiseSize, 4, 26);
+    sd.noiseSeed = Math.floor(num(rd.noiseSeed, def.decoder.noiseSeed, 0, 2147483647));
+    sd.lensRadius = num(rd.lensRadius, def.decoder.lensRadius, 60, 155);
+    sd.customLensColor = hex(rd.customLensColor, def.decoder.customLensColor);
+    sd.lenses = mergeById(def.decoder.lenses, rd.lenses, (d, r) => ({
+      ...d, x: num(r.x, d.x, 0, W), y: num(r.y, d.y, 0, H), visible: typeof r.visible === 'boolean' ? r.visible : d.visible
+    }));
+
+    if (Array.isArray(rd.textItems)) {
+      const items = rd.textItems.filter(isObj).slice(0, 20).map((t, i) => ({
+        id: str(t.id, 't' + i, 40) || ('t' + i),
+        text: str(t.text, '', 40),
+        x: num(t.x, 480, 0, W), y: num(t.y, 290, 0, H),
+        fontSize: Math.round(num(t.fontSize, 58, 20, 110)),
+        color: hex(t.color, '#FF0000')
+      }));
+      // 去除重複 id
+      const seen = new Set();
+      items.forEach((t, i) => { if (seen.has(t.id)) t.id = 't' + Date.now() + i; seen.add(t.id); });
+      if (items.length) sd.textItems = items;
+    }
+    sd.selectedTextId = sd.textItems.some(t => t.id === rd.selectedTextId) ? rd.selectedTextId : sd.textItems[0].id;
+
+    if (Array.isArray(raw.doodles)) {
+      s.doodles = raw.doodles.filter(isObj).slice(0, 500).map(d => ({
+        mode: d.mode === 'light' ? 'light' : 'pigment',
+        shape: d.shape === 'line' ? 'line' : 'free',
+        color: hex(d.color, '#FF0000'),
+        size: num(d.size, 12, 1, 60),
+        points: (Array.isArray(d.points) ? d.points : []).filter(isObj).slice(0, 4000)
+          .map(p => ({ x: num(p.x, 0, -50, W + 50), y: num(p.y, 0, -50, H + 50) }))
+      })).filter(d => d.points.length > 0);
+    }
+    return s;
+  }
+
+  // ================= RUNTIME STATE =================
+  let state = getDefaultState();
+  let historyStack = [];
+  let historyIndex = -1;
+  const MAX_HISTORY = 40;
+
+  const doodleConfig = { isOpen: false, activeTab: 'text', activeMode: 'pointer', shape: 'free', color: '#FF0000', size: 12 };
+
+  const $ = id => document.getElementById(id);
+  const body = document.body;
+  const mainCanvas = $('mainCanvas');
+  const ctx = mainCanvas.getContext('2d');
+  const baseBuffer = document.createElement('canvas');
+  const baseCtx = baseBuffer.getContext('2d');
+  const transBuffer = document.createElement('canvas');
+  const transCtx = transBuffer.getContext('2d');
+  const allCanvases = [mainCanvas, baseBuffer, transBuffer];
+
+  let S = 1;                 // 畫布內部解析度倍率（Retina/投影清晰度）
+  let baseKey = null;        // 解密場景底圖快取鍵
+  let doodleRev = 0;         // 塗鴉變更計數
+  let cachedNoise = [];
+  let dragTarget = null;
+  let currentStroke = null;
+  let activePointer = null;
+
+  // ================= HELPERS =================
+  function hexToRgb(h) {
+    const n = parseInt(h.replace('#', ''), 16);
+    return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
+  }
+  function mulberry32(a) {
+    return function () {
+      let t = a += 0x6D2B79F5;
+      t = Math.imul(t ^ t >>> 15, t | 1);
+      t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+  }
+  // roundRect 相容舊版 iPadOS（15 以前沒有 ctx.roundRect）
+  function rrPath(c, x, y, w, h, r) {
+    c.beginPath();
+    if (c.roundRect) { c.roundRect(x, y, w, h, r); return; }
+    c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r);
+    c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath();
+  }
+  function logical(c) { c.setTransform(S, 0, 0, S, 0, 0); }
+  function identity(c) { c.setTransform(1, 0, 0, 1, 0, 0); }
+
+  function drawPillLabel(c, text, cx, cy, w, strokeColor) {
+    c.save();
+    c.fillStyle = '#0f172a';
+    rrPath(c, cx - w / 2, cy - 11, w, 22, 11);
+    c.fill();
+    c.strokeStyle = strokeColor; c.lineWidth = 1.5; c.stroke();
+    c.fillStyle = '#ffffff';
+    c.font = 'bold 11px "Noto Sans TC", sans-serif';
+    c.textAlign = 'center'; c.textBaseline = 'middle';
+    c.fillText(text, cx, cy + 0.5);
+    c.restore();
+  }
+
+  // ================= FRAME SCHEDULER（每幀最多重繪一次） =================
+  let frameRequested = false, needRender = false, inspectPt = null;
+  function requestFrame() { if (!frameRequested) { frameRequested = true; requestAnimationFrame(onFrame); } }
+  function requestRender() { needRender = true; requestFrame(); }
+  function onFrame() {
+    frameRequested = false;
+    if (needRender) { needRender = false; render(); }
+    if (inspectPt) { updatePixelInspector(inspectPt.x, inspectPt.y); inspectPt = null; }
+  }
+
+  // ================= TOAST & HINTS =================
+  let toastTimer = null;
+  function showToast(message, opts = {}) {
+    const el = $('toast');
+    el.textContent = message;
+    if (opts.linkText && opts.href) {
+      el.appendChild(document.createElement('br'));
+      const a = document.createElement('a');
+      a.href = opts.href; a.target = '_blank'; a.rel = 'noopener';
+      a.textContent = opts.linkText;
+      el.appendChild(a);
+    }
+    el.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.remove('show'), opts.ms || 4000);
+  }
+  $('toast').addEventListener('click', e => { if (e.target.tagName !== 'A') $('toast').classList.remove('show'); });
+  const hintsShown = new Set();
+  function hintOnce(key, msg) { if (hintsShown.has(key)) return; hintsShown.add(key); showToast(msg, { ms: 6500 }); }
+
+  // ================= HISTORY & PERSISTENCE =================
+  function pushHistory() {
+    const snap = JSON.stringify(state);
+    if (historyIndex >= 0 && historyStack[historyIndex] === snap) return;
+    historyStack = historyStack.slice(0, historyIndex + 1);
+    historyStack.push(snap);
+    if (historyStack.length > MAX_HISTORY) historyStack.shift(); else historyIndex++;
+    updateHistoryButtons();
+    saveToLocalStorage(snap);
+  }
+  function onStateReplaced() {
+    doodleRev++; baseKey = null;
+    syncUIFromState();
+    requestRender();
+  }
+  function undo() {
+    if (historyIndex <= 0) return;
+    historyIndex--;
+    state = JSON.parse(historyStack[historyIndex]);
+    onStateReplaced(); updateHistoryButtons(); saveToLocalStorage(historyStack[historyIndex]);
+  }
+  function redo() {
+    if (historyIndex >= historyStack.length - 1) return;
+    historyIndex++;
+    state = JSON.parse(historyStack[historyIndex]);
+    onStateReplaced(); updateHistoryButtons(); saveToLocalStorage(historyStack[historyIndex]);
+  }
+  function updateHistoryButtons() {
+    $('btnUndo').disabled = historyIndex <= 0;
+    $('btnRedo').disabled = historyIndex >= historyStack.length - 1;
+  }
+  function saveToLocalStorage(snap) {
+    try {
+      localStorage.setItem(STORAGE_KEY, snap || JSON.stringify(state));
+      $('storageStatus').lastChild.textContent = ' 已儲存 (' + new Date().toLocaleTimeString() + ')';
+    } catch (e) { /* 隱私模式或嵌入頁面可能無法儲存 */ }
+  }
+  function loadFromLocalStorage() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) state = normalizeState(JSON.parse(raw));
+    } catch (e) { state = getDefaultState(); }
+  }
+
+  // ================= OPTICS HELPERS =================
+  function describePassBand(r, g, b) {
+    if (r < 25 && g < 25 && b < 25) return '無光穿透（全黑）';
+    if (r > 200 && g < 40 && b < 40) return '僅紅光 R';
+    if (r < 40 && g > 200 && b < 40) return '僅綠光 G';
+    if (r < 40 && g < 40 && b > 200) return '僅藍光 B';
+    if (r < 40 && g > 200 && b > 200) return '青光（G+B）';
+    if (r > 200 && g < 40 && b > 200) return '洋紅（R+B）';
+    if (r > 200 && g > 200 && b < 40) return '黃光（R+G）';
+    if (r > 200 && g > 200 && b > 200) return '白光（全通過）';
+    return `RGB(${r},${g},${b})`;
+  }
+  const mulRgb = (a, b) => ({ r: Math.round(a.r * b.r / 255), g: Math.round(a.g * b.g / 255), b: Math.round(a.b * b.b / 255) });
+  const ambientHex = () => state.decoder.ambientLight === 'custom' ? state.decoder.customLightColor : state.decoder.ambientLight;
+  const lensHex = l => l.id === 'custom' ? state.decoder.customLensColor : l.color;
+
+  // ================= RENDER =================
+  function render() {
+    logical(ctx);
+    ctx.globalCompositeOperation = 'source-over';
+    if (state.currentScene === 'additive') renderSceneAdditive();
+    else if (state.currentScene === 'subtractive') renderSceneSubtractive();
+    else renderSceneDecoder();
+  }
+
+  // ---------- 場景 1：色光加色（暗室投影幕） ----------
+  const SUBPIXEL_INDEX = { R: -1, G: 0, B: 1 };
+  function renderSceneAdditive() {
+    const add = state.additive, r = add.radius;
+    ctx.save();
+    ctx.fillStyle = '#05070d';
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = 'rgba(148,163,184,.35)';
+    ctx.font = '600 12px "Noto Sans TC", sans-serif';
+    ctx.textAlign = 'left'; ctx.textBaseline = 'bottom';
+    ctx.fillText('暗室投影幕 · 沒有光的地方是黑色', 14, H - 12);
+
+    const lights = add.lights.filter(l => l.visible);
+    ctx.globalCompositeOperation = 'lighter';
+    if (add.mode === 'solid') {
+      lights.forEach(l => {
+        ctx.beginPath(); ctx.arc(l.x, l.y, r, 0, Math.PI * 2);
+        ctx.fillStyle = l.color; ctx.fill();
+      });
+    } else {
+      // 固定在螢幕上的像素格；每格有 R/G/B 三個子像素，被該色光圈照到才會亮
+      const pitch = add.dotPitch, subR = Math.max(1.6, pitch * 0.15);
+      lights.forEach(l => {
+        const off = (SUBPIXEL_INDEX[l.id] || 0) * pitch / 3;
+        ctx.fillStyle = l.color;
+        ctx.beginPath();
+        const x0 = Math.floor((l.x - r) / pitch) * pitch, y0 = Math.floor((l.y - r) / pitch) * pitch;
+        for (let y = y0; y <= l.y + r; y += pitch) {
+          for (let x = x0; x <= l.x + r; x += pitch) {
+            const cx = x + pitch / 2, cy = y + pitch / 2;
+            if (Math.hypot(cx - l.x, cy - l.y) <= r) {
+              ctx.moveTo(cx + off + subR, cy);
+              ctx.arc(cx + off, cy, subR, 0, Math.PI * 2);
+            }
+          }
+        }
+        ctx.fill();
+      });
+    }
+    ctx.globalCompositeOperation = 'source-over';
+    renderDoodles(ctx);
+
+    lights.forEach(l => {
+      ctx.beginPath(); ctx.arc(l.x, l.y, r, 0, Math.PI * 2);
+      ctx.strokeStyle = l.color; ctx.lineWidth = 2; ctx.globalAlpha = .7; ctx.stroke(); ctx.globalAlpha = 1;
+      drawPillLabel(ctx, l.label, l.x, l.y - r - 3, 72, l.color);
+    });
+    ctx.restore();
+  }
+
+  // ---------- 場景 2：顏料減色（白紙） ----------
+  function renderSceneSubtractive() {
+    const sub = state.subtractive, r = sub.radius;
+    ctx.save();
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(0, 0, W, H);
+    const pigs = sub.pigments.filter(p => p.visible);
+
+    ctx.globalCompositeOperation = 'multiply';
+    if (sub.mode === 'solid') {
+      pigs.forEach(p => {
+        ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+        ctx.fillStyle = p.color; ctx.fill();
+      });
+    } else {
+      // 依網屏角度旋轉、固定於紙面的半色調網點
+      const pitch = sub.dotPitch, dotR = Math.max(2.2, pitch * 0.36);
+      pigs.forEach(p => {
+        const a = (p.angle || 0) * Math.PI / 180, ca = Math.cos(a), sa = Math.sin(a);
+        const cu = p.x * ca + p.y * sa, cv = -p.x * sa + p.y * ca;
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        for (let i = Math.floor((cu - r) / pitch); i <= Math.ceil((cu + r) / pitch); i++) {
+          for (let j = Math.floor((cv - r) / pitch); j <= Math.ceil((cv + r) / pitch); j++) {
+            const u = i * pitch, v = j * pitch;
+            const px = u * ca - v * sa, py = u * sa + v * ca;
+            if (Math.hypot(px - p.x, py - p.y) <= r - dotR * 0.5) {
+              ctx.moveTo(px + dotR, py);
+              ctx.arc(px, py, dotR, 0, Math.PI * 2);
+            }
+          }
+        }
+        ctx.fill();
+      });
+    }
+    ctx.globalCompositeOperation = 'source-over';
+    renderDoodles(ctx);
+
+    pigs.forEach(p => {
+      ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+      ctx.strokeStyle = '#334155'; ctx.lineWidth = 2; ctx.setLineDash([6, 4]); ctx.stroke(); ctx.setLineDash([]);
+      drawPillLabel(ctx, p.label, p.x, p.y - r - 3, 72, p.color);
+    });
+    ctx.restore();
+  }
+
+  // ---------- 場景 3：濾鏡解密 ----------
+  function generateNoiseCache() {
+    cachedNoise = [];
+    const dec = state.decoder;
+    if (dec.bgMode === 'none' || dec.bgMode === 'transparent' || !dec.noiseColors.length) return;
+    const rand = mulberry32(dec.noiseSeed);
+    const count = Math.floor((dec.noiseDensity / 100) * (dec.bgMode === 'classic' ? 850 : 1350));
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789?@#$%&*光色紅綠藍青黃解密';
+    for (let i = 0; i < count; i++) {
+      cachedNoise.push({
+        x: rand() * W, y: rand() * H,
+        color: dec.noiseColors[Math.floor(rand() * dec.noiseColors.length)],
+        r: (0.45 + rand() * 0.85) * dec.noiseSize,
+        angle: rand() * Math.PI * 2,
+        char: chars[Math.floor(rand() * chars.length)]
+      });
+    }
+  }
+
+  function decoderBaseKey() {
+    const d = state.decoder;
+    return JSON.stringify([d.bgMode, d.noiseColors, d.noiseDensity, d.noiseSize, d.noiseSeed, d.textItems]) + '|' + doodleRev + '|' + S;
+  }
+
+  function rebuildDecoderBase() {
+    const dec = state.decoder;
+    generateNoiseCache();
+    logical(baseCtx);
+    baseCtx.globalCompositeOperation = 'source-over';
+    baseCtx.clearRect(0, 0, W, H);
+
+    if (dec.bgMode === 'transparent') {
+      const tile = 20;
+      for (let y = 0; y < H; y += tile) for (let x = 0; x < W; x += tile) {
+        baseCtx.fillStyle = ((x / tile + y / tile) % 2 === 0) ? '#FFFFFF' : '#f1f5f9';
+        baseCtx.fillRect(x, y, tile, tile);
+      }
+    } else {
+      baseCtx.fillStyle = '#FFFFFF';
+      baseCtx.fillRect(0, 0, W, H);
+    }
+
+    if (dec.bgMode !== 'none' && dec.bgMode !== 'transparent') {
+      baseCtx.save();
+      baseCtx.globalCompositeOperation = 'multiply';
+      if (dec.bgMode === 'classic') {
+        const colors = dec.noiseColors.length ? dec.noiseColors : ['#FF0000', '#00FFFF'];
+        const c1 = colors[0], c2 = colors[1 % colors.length];
+        const step = Math.max(14, 34 - Math.floor(dec.noiseDensity * 0.2));
+        baseCtx.lineWidth = 1.6; baseCtx.globalAlpha = 0.55;
+        baseCtx.beginPath();
+        for (let i = -H; i < W + H; i += step) { baseCtx.moveTo(i, 0); baseCtx.lineTo(i + H, H); }
+        baseCtx.strokeStyle = c1; baseCtx.stroke();
+        baseCtx.beginPath();
+        for (let i = -H; i < W + H; i += step) { baseCtx.moveTo(i + H, 0); baseCtx.lineTo(i, H); }
+        baseCtx.strokeStyle = c2; baseCtx.stroke();
+        baseCtx.globalAlpha = 0.85;
+        cachedNoise.forEach(el => {
+          baseCtx.beginPath(); baseCtx.arc(el.x, el.y, el.r * 0.75, 0, Math.PI * 2);
+          baseCtx.fillStyle = el.color; baseCtx.fill();
+        });
+        baseCtx.globalAlpha = 1;
+      } else if (dec.bgMode === 'dots') {
+        cachedNoise.forEach(el => {
+          baseCtx.beginPath(); baseCtx.arc(el.x, el.y, el.r, 0, Math.PI * 2);
+          baseCtx.fillStyle = el.color; baseCtx.fill();
+        });
+      } else if (dec.bgMode === 'grid') {
+        baseCtx.lineWidth = Math.max(2, dec.noiseSize * 0.25);
+        cachedNoise.forEach(el => {
+          const len = el.r * 3.2;
+          baseCtx.beginPath();
+          baseCtx.moveTo(el.x - Math.cos(el.angle) * len, el.y - Math.sin(el.angle) * len);
+          baseCtx.lineTo(el.x + Math.cos(el.angle) * len, el.y + Math.sin(el.angle) * len);
+          baseCtx.strokeStyle = el.color; baseCtx.stroke();
+        });
+      } else if (dec.bgMode === 'chars') {
+        baseCtx.textAlign = 'center'; baseCtx.textBaseline = 'middle';
+        cachedNoise.forEach(el => {
+          baseCtx.font = `900 ${Math.round(el.r * 2.1)}px "Noto Sans TC", monospace`;
+          baseCtx.fillStyle = el.color;
+          baseCtx.fillText(el.char, el.x, el.y);
+        });
+      }
+      baseCtx.restore();
+    }
+
+    baseCtx.save();
+    baseCtx.globalCompositeOperation = 'multiply';
+    baseCtx.textAlign = 'center'; baseCtx.textBaseline = 'middle';
+    dec.textItems.forEach(item => {
+      baseCtx.font = `900 ${item.fontSize}px "Noto Sans TC", sans-serif`;
+      baseCtx.fillStyle = item.color;
+      baseCtx.fillText(item.text, item.x, item.y);
+    });
+    baseCtx.restore();
+
+    renderDoodles(baseCtx);
+  }
+
+  function renderSceneDecoder() {
+    const dec = state.decoder;
+    const key = decoderBaseKey();
+    if (key !== baseKey) { rebuildDecoderBase(); baseKey = key; }
+
+    // 累積穿透率圖：環境光 × 每一片覆蓋該點的濾鏡
+    const amb = ambientHex();
+    const lensR = dec.lensRadius;
+    const active = dec.lenses.filter(l => l.visible);
+    logical(transCtx);
+    transCtx.globalCompositeOperation = 'source-over';
+    transCtx.fillStyle = amb;
+    transCtx.fillRect(0, 0, W, H);
+    transCtx.globalCompositeOperation = 'multiply';
+    active.forEach(l => {
+      transCtx.beginPath(); transCtx.arc(l.x, l.y, lensR, 0, Math.PI * 2);
+      transCtx.fillStyle = lensHex(l); transCtx.fill();
+    });
+
+    // 合成：底圖 × 穿透率
+    ctx.save();
+    identity(ctx);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.drawImage(baseBuffer, 0, 0);
+    ctx.globalCompositeOperation = 'multiply';
+    ctx.drawImage(transBuffer, 0, 0);
+    ctx.restore();
+    logical(ctx);
+    ctx.globalCompositeOperation = 'source-over';
+
+    // 選取框
+    if (doodleConfig.isOpen && doodleConfig.activeTab === 'text') {
+      const sel = dec.textItems.find(t => t.id === dec.selectedTextId);
+      if (sel) {
+        ctx.save();
+        ctx.font = `900 ${sel.fontSize}px "Noto Sans TC", sans-serif`;
+        const bw = Math.max(ctx.measureText(sel.text).width + 24, 70), bh = sel.fontSize + 16;
+        ctx.strokeStyle = 'rgba(99,102,241,.85)'; ctx.lineWidth = 2; ctx.setLineDash([5, 4]);
+        ctx.strokeRect(sel.x - bw / 2, sel.y - bh / 2, bw, bh);
+        ctx.restore();
+      }
+    }
+
+    // 鏡片外框與標籤
+    active.forEach(l => {
+      const lh = lensHex(l);
+      ctx.save();
+      ctx.beginPath(); ctx.arc(l.x, l.y, lensR, 0, Math.PI * 2); ctx.clip();
+      const g = ctx.createLinearGradient(l.x - lensR, l.y - lensR, l.x + lensR, l.y + lensR);
+      g.addColorStop(0, 'rgba(255,255,255,0.16)'); g.addColorStop(0.4, 'rgba(255,255,255,0)');
+      ctx.fillStyle = g; ctx.fillRect(l.x - lensR, l.y - lensR, lensR * 2, lensR * 2);
+      ctx.restore();
+
+      ctx.save();
+      ctx.beginPath(); ctx.arc(l.x, l.y, lensR, 0, Math.PI * 2);
+      ctx.strokeStyle = lh; ctx.lineWidth = 5.5;
+      ctx.shadowColor = 'rgba(0,0,0,0.45)'; ctx.shadowBlur = 10; ctx.stroke();
+      ctx.shadowBlur = 0;
+      ctx.beginPath(); ctx.arc(l.x, l.y, lensR - 2.5, 0, Math.PI * 2);
+      ctx.strokeStyle = '#0f172a'; ctx.lineWidth = 1.5; ctx.stroke();
+      ctx.restore();
+      drawPillLabel(ctx, l.name, l.x, l.y + lensR - 1, 84, lh);
+    });
+
+    // 重疊標籤：直接以數學計算（不讀像素，較快也較準）
+    const ambRgb = hexToRgb(amb);
+    const ambIsWhite = amb.toUpperCase() === '#FFFFFF';
+    for (let i = 0; i < active.length; i++) {
+      for (let j = i + 1; j < active.length; j++) {
+        const a = active[i], b = active[j];
+        if (Math.hypot(a.x - b.x, a.y - b.y) >= lensR * 1.85) continue;
+        const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+        let filt = { r: 255, g: 255, b: 255 };
+        active.forEach(l => { if (Math.hypot(mx - l.x, my - l.y) <= lensR) filt = mulRgb(filt, hexToRgb(lensHex(l))); });
+        const seen = mulRgb(filt, ambRgb);
+        const label = ambIsWhite
+          ? '穿透：' + describePassBand(filt.r, filt.g, filt.b)
+          : `濾鏡：${describePassBand(filt.r, filt.g, filt.b)} → 此燈光下：${describePassBand(seen.r, seen.g, seen.b)}`;
+        const dot = `rgb(${seen.r},${seen.g},${seen.b})`;
+
+        ctx.save();
+        ctx.font = 'bold 10px "Noto Sans TC", sans-serif';
+        const boxW = ctx.measureText(label).width + 28, boxH = 20;
+        ctx.fillStyle = 'rgba(15,23,42,.92)';
+        rrPath(ctx, mx - boxW / 2, my - boxH / 2, boxW, boxH, 10); ctx.fill();
+        ctx.strokeStyle = 'rgba(255,255,255,.45)'; ctx.lineWidth = 1; ctx.stroke();
+        ctx.beginPath(); ctx.arc(mx - boxW / 2 + 10, my, 4.5, 0, Math.PI * 2);
+        ctx.fillStyle = dot; ctx.fill(); ctx.strokeStyle = '#fff'; ctx.stroke();
+        ctx.fillStyle = '#f8fafc'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+        ctx.fillText(label, mx - boxW / 2 + 19, my + 0.5);
+        ctx.restore();
+      }
+    }
+  }
+
+  // ---------- 塗鴉 ----------
+  function renderDoodles(c) {
+    const strokes = currentStroke ? [...state.doodles, currentStroke] : state.doodles;
+    strokes.forEach(st => {
+      if (!st.points || !st.points.length) return;
+      c.save();
+      if (st.mode === 'light') {
+        c.globalCompositeOperation = 'lighter';
+        c.shadowColor = st.color; c.shadowBlur = 8;
+      } else {
+        c.globalCompositeOperation = 'multiply';
+      }
+      c.strokeStyle = st.color; c.fillStyle = st.color;
+      c.lineWidth = st.size; c.lineCap = 'round'; c.lineJoin = 'round';
+      c.beginPath();
+      if (st.points.length === 1) {
+        c.arc(st.points[0].x, st.points[0].y, st.size / 2, 0, Math.PI * 2); c.fill();
+      } else {
+        c.moveTo(st.points[0].x, st.points[0].y);
+        for (let k = 1; k < st.points.length; k++) c.lineTo(st.points[k].x, st.points[k].y);
+        c.stroke();
+      }
+      c.restore();
+    });
+  }
+
+  // ================= CANVAS FIT & RESOLUTION =================
+  function setBackingScale(s) {
+    s = Math.round(s * 4) / 4;
+    if (s === S && mainCanvas.width === Math.round(W * s)) return;
+    S = s;
+    allCanvases.forEach(c => { c.width = Math.round(W * S); c.height = Math.round(H * S); });
+    baseKey = null;
+    requestRender();
+  }
+
+  function fitCanvas() {
+    const box = $('canvasBox'), frame = $('canvasFrame');
+    const tallDocked = body.classList.contains('layout-tall') && !body.classList.contains('focus-mode');
+    let availW, availH;
+    if (tallDocked) {
+      availW = box.clientWidth;
+      const ws = $('workspace').clientHeight - 16;
+      const qb = $('quickbar').offsetHeight + 6;
+      const collapsed = body.classList.contains('sidebar-collapsed');
+      availH = Math.max(150, collapsed ? ws - qb : Math.min(ws * 0.64, ws - qb - 130));
+    } else {
+      box.style.height = '';
+      availW = box.clientWidth;
+      availH = box.clientHeight;
+    }
+    availW = Math.max(100, availW - 8); availH = Math.max(60, availH - 8);
+    let w = availW, h = w * H / W;
+    if (h > availH) { h = availH; w = h * W / H; }
+    frame.style.width = Math.floor(w) + 'px';
+    frame.style.height = Math.floor(h) + 'px';
+    if (tallDocked) box.style.height = Math.ceil(h + 8) + 'px';
+    body.classList.toggle('small-canvas', w < 560);
+    const dpr = window.devicePixelRatio || 1;
+    setBackingScale(Math.min(2, Math.max(1, (w * dpr) / W)));
+  }
+
+  function updateLayout() {
+    const vw = window.innerWidth, vh = window.innerHeight;
+    const wide = vw > vh && vw >= 640;
+    body.classList.toggle('layout-wide', wide);
+    body.classList.toggle('layout-tall', !wide);
+    const overlay = body.classList.contains('focus-mode') || (wide && vw < 1000);
+    body.classList.toggle('sidebar-overlay', overlay);
+    if (!overlay) body.classList.remove('sidebar-open');
+    fitCanvas();
+  }
+
+  function toggleSidebar() {
+    if (body.classList.contains('sidebar-overlay')) body.classList.toggle('sidebar-open');
+    else { body.classList.toggle('sidebar-collapsed'); fitCanvas(); }
+  }
+
+  // ================= FULLSCREEN / FOCUS MODE =================
+  const fsEnabled = () => !!(document.fullscreenEnabled || document.webkitFullscreenEnabled);
+  const fsElement = () => document.fullscreenElement || document.webkitFullscreenElement;
+  const inIframe = (() => { try { return window.self !== window.top; } catch (e) { return true; } })();
+  const isIOSPhone = /iPhone|iPod/.test(navigator.userAgent);
+  const isStandalone = window.navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches;
+
+  function setFocus(on) {
+    body.classList.toggle('focus-mode', on);
+    body.classList.remove('sidebar-open');
+    $('qbFullscreenIcon').className = 'ph-bold ' + (on ? 'ph-arrows-in' : 'ph-arrows-out');
+    updateLayout();
+  }
+
+  function requestNativeFs() {
+    const el = document.documentElement;
+    try {
+      if (el.requestFullscreen) return el.requestFullscreen({ navigationUI: 'hide' }).then(() => true, () => false);
+      if (el.webkitRequestFullscreen) { el.webkitRequestFullscreen(); return Promise.resolve(true); }
+    } catch (e) { /* fall through */ }
+    return Promise.resolve(false);
+  }
+
+  function exitNativeFs() {
+    if (document.exitFullscreen) document.exitFullscreen().catch(() => {});
+    else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+  }
+
+  function fullscreenFallbackNotice() {
+    if (isStandalone) return;
+    if (inIframe) {
+      showToast('此頁面嵌在其他網站中，瀏覽器不允許全螢幕，已改為專注模式。', { linkText: '↗ 在新分頁開啟（可使用全螢幕）', href: location.href, ms: 9000 });
+    } else if (isIOSPhone) {
+      showToast('iPhone Safari 不支援網頁全螢幕，已改為專注模式。想完整全螢幕：分享 → 加入主畫面，再從主畫面開啟。', { ms: 8000 });
+    } else {
+      showToast('瀏覽器拒絕全螢幕，已改為專注模式。', { ms: 4000 });
+    }
+  }
+
+  function toggleFullscreen() {
+    if (fsElement()) { exitNativeFs(); return; }
+    if (body.classList.contains('focus-mode')) { setFocus(false); return; }
+    setFocus(true);
+    if (fsEnabled() && !isStandalone) {
+      requestNativeFs().then(ok => { if (!ok) fullscreenFallbackNotice(); });
+    } else {
+      fullscreenFallbackNotice();
+    }
+  }
+
+  function onFsChange() {
+    if (fsElement()) { if (!body.classList.contains('focus-mode')) setFocus(true); }
+    else if (body.classList.contains('focus-mode')) setFocus(false);
+    setTimeout(updateLayout, 120);
+  }
+  document.addEventListener('fullscreenchange', onFsChange);
+  document.addEventListener('webkitfullscreenchange', onFsChange);
+
+  // ================= POINTER INTERACTION =================
+  function getCanvasCoords(e) {
+    const rect = mainCanvas.getBoundingClientRect();
+    return { x: (e.clientX - rect.left) * (W / rect.width), y: (e.clientY - rect.top) * (H / rect.height) };
+  }
+  const brushActive = () => doodleConfig.isOpen && doodleConfig.activeTab === 'brush' && doodleConfig.activeMode !== 'pointer';
+
+  mainCanvas.addEventListener('pointerdown', e => {
+    if (activePointer !== null) return;          // 忽略第二指與手掌
+    activePointer = e.pointerId;
+    try { mainCanvas.setPointerCapture(e.pointerId); } catch (err) {}
+    closeAmbientPop();
+    const pt = getCanvasCoords(e);
+    if (e.pointerType !== 'mouse') inspectPt = pt, requestFrame();
+
+    if (brushActive()) {
+      if (doodleConfig.activeMode === 'eraser') {
+        eraseStrokeAt(pt.x, pt.y);
+        dragTarget = { type: 'eraser' };
+        return;
+      }
+      currentStroke = { mode: doodleConfig.activeMode, shape: doodleConfig.shape, color: doodleConfig.color, size: doodleConfig.size, points: [{ x: pt.x, y: pt.y }] };
+      dragTarget = { type: 'doodle', startX: pt.x, startY: pt.y };
+      doodleRev++; requestRender();
+      return;
+    }
+
+    const extra = isCoarse ? 22 : 12;
+    if (state.currentScene === 'additive' || state.currentScene === 'subtractive') {
+      const isAdd = state.currentScene === 'additive';
+      const list = isAdd ? state.additive.lights : state.subtractive.pigments;
+      const r = isAdd ? state.additive.radius : state.subtractive.radius;
+      for (let i = list.length - 1; i >= 0; i--) {
+        const it = list[i];
+        if (it.visible && Math.hypot(pt.x - it.x, pt.y - it.y) <= r + extra * 0.5) {
+          dragTarget = { type: 'item', item: it, offsetX: pt.x - it.x, offsetY: pt.y - it.y };
+          mainCanvas.classList.add('is-grabbing');
+          return;
+        }
+      }
+      return;
+    }
+
+    const dec = state.decoder;
+    for (let i = dec.lenses.length - 1; i >= 0; i--) {
+      const l = dec.lenses[i];
+      if (l.visible && Math.hypot(pt.x - l.x, pt.y - l.y) <= dec.lensRadius + extra) {
+        dragTarget = { type: 'lens', item: l, list: dec.lenses, offsetX: pt.x - l.x, offsetY: pt.y - l.y, moved: false, sx: pt.x, sy: pt.y };
+        mainCanvas.classList.add('is-grabbing');
+        return;
+      }
+    }
+    for (let i = dec.textItems.length - 1; i >= 0; i--) {
+      const t = dec.textItems[i];
+      ctx.font = `900 ${t.fontSize}px "Noto Sans TC", sans-serif`;
+      const w = Math.max(ctx.measureText(t.text).width + 24, 80), h = t.fontSize + 20;
+      if (Math.abs(pt.x - t.x) <= w / 2 && Math.abs(pt.y - t.y) <= h / 2) {
+        if (dec.selectedTextId !== t.id) { dec.selectedTextId = t.id; syncTextListUI(); }
+        dragTarget = { type: 'text', item: t, list: dec.textItems, offsetX: pt.x - t.x, offsetY: pt.y - t.y, moved: false, sx: pt.x, sy: pt.y };
+        mainCanvas.classList.add('is-grabbing');
+        requestRender();
+        return;
+      }
+    }
+  });
+
+  mainCanvas.addEventListener('pointermove', e => {
+    if (activePointer !== null && e.pointerId !== activePointer) return;
+    const pt = getCanvasCoords(e);
+    inspectPt = pt; requestFrame();
+    if (!dragTarget) return;
+
+    if (dragTarget.type === 'doodle' && currentStroke) {
+      if (currentStroke.shape === 'line') currentStroke.points = [{ x: dragTarget.startX, y: dragTarget.startY }, { x: pt.x, y: pt.y }];
+      else {
+        const last = currentStroke.points[currentStroke.points.length - 1];
+        if (Math.hypot(pt.x - last.x, pt.y - last.y) < 1.5) return;
+        currentStroke.points.push({ x: pt.x, y: pt.y });
+      }
+      doodleRev++; requestRender();
+      return;
+    }
+    if (dragTarget.type === 'eraser') { eraseStrokeAt(pt.x, pt.y); return; }
+
+    if (dragTarget.item) {
+      if (dragTarget.list && !dragTarget.moved) {
+        if (Math.hypot(pt.x - dragTarget.sx, pt.y - dragTarget.sy) < 3) return;
+        dragTarget.moved = true;
+        const idx = dragTarget.list.indexOf(dragTarget.item);   // 真的拖動才移到最上層
+        if (idx >= 0 && idx !== dragTarget.list.length - 1) { dragTarget.list.splice(idx, 1); dragTarget.list.push(dragTarget.item); }
+      }
+      dragTarget.item.x = Math.max(20, Math.min(W - 20, pt.x - dragTarget.offsetX));
+      dragTarget.item.y = Math.max(20, Math.min(H - 20, pt.y - dragTarget.offsetY));
+      requestRender();
+    }
+  });
+
+  function finishPointer(e) {
+    if (e.pointerId !== activePointer) return;
+    activePointer = null;
+    mainCanvas.classList.remove('is-grabbing');
+    if (!dragTarget) return;
+    if (dragTarget.type === 'doodle' && currentStroke) {
+      const st = currentStroke;
+      state.doodles.push(st);
+      currentStroke = null; doodleRev++;
+      if (st.mode === 'light' && state.currentScene !== 'additive') {
+        hintOnce('light-on-white', '白紙已反射所有色光，再疊加色光仍是白色，所以只有在較暗的地方看得到色光筆跡。請改用「顏料筆」，或到「1 加色」暗室場景中使用色光筆。');
+      } else if (st.mode === 'pigment' && state.currentScene === 'additive') {
+        hintOnce('pigment-in-dark', '暗室裡沒有光可以反射，顏料筆只有在光圈照到的地方才看得見。');
+      }
+    }
+    dragTarget = null;
+    pushHistory();
+    requestRender();
+  }
+  mainCanvas.addEventListener('pointerup', finishPointer);
+  mainCanvas.addEventListener('pointercancel', finishPointer);
+  mainCanvas.addEventListener('pointerleave', () => { if (activePointer === null) inspectPt = null; });
+
+  function eraseStrokeAt(x, y) {
+    const before = state.doodles.length;
+    state.doodles = state.doodles.filter(st => !st.points.some(p => Math.hypot(p.x - x, p.y - y) <= st.size / 2 + (isCoarse ? 20 : 12)));
+    if (state.doodles.length !== before) { doodleRev++; requestRender(); }
+  }
+
+  function updatePixelInspector(x, y) {
+    const ix = Math.max(0, Math.min(mainCanvas.width - 1, Math.floor(x * S)));
+    const iy = Math.max(0, Math.min(mainCanvas.height - 1, Math.floor(y * S)));
+    let p;
+    try { p = ctx.getImageData(ix, iy, 1, 1).data; } catch (e) { return; }
+    $('inspectorSwatch').style.backgroundColor = `rgb(${p[0]},${p[1]},${p[2]})`;
+    $('inspectorLabel').textContent = `RGB(${p[0]}, ${p[1]}, ${p[2]})`;
+  }
+
+  // ================= UI SYNC =================
+  const cls = (el, on, onCls, offCls) => { el.className = el.className.split(' ').filter(c => c && !onCls.split(' ').includes(c) && !offCls.split(' ').includes(c)).concat((on ? onCls : offCls).split(' ')).join(' '); };
+
+  function syncUIFromState() {
+    const scene = state.currentScene;
+    ['Additive', 'Subtractive', 'Decoder'].forEach(n => {
+      const on = scene === n.toLowerCase();
+      $('panel' + n).classList.toggle('hidden', !on);
+      $('panel' + n).classList.toggle('flex', on);
+      $('qb' + n).classList.toggle('hidden', !on);
+    });
+    document.querySelectorAll('.qb-scene').forEach(b => b.classList.toggle('is-active', b.dataset.scene === scene));
+
+    $('statusText').textContent = scene === 'additive' ? '色光加色法 — 拖曳紅綠藍光圈觀察疊合'
+      : scene === 'subtractive' ? '顏料減色法 — 拖曳青、洋紅、黃色塊觀察吸收'
+      : '濾鏡解密 — 拖曳濾鏡或字詞，體驗隱形與顯影';
+
+    // 加色
+    const add = state.additive;
+    cls($('btnAddModeSolid'), add.mode === 'solid', 'bg-indigo-600 text-white', 'text-slate-400 hover:text-white');
+    cls($('btnAddModeDots'), add.mode === 'dots', 'bg-indigo-600 text-white', 'text-slate-400 hover:text-white');
+    $('boxAddDotSize').classList.toggle('hidden', add.mode !== 'dots');
+    $('sliderAddRadius').value = add.radius; $('lblAddRadius').textContent = `${add.radius} px`;
+    $('sliderAddDotSize').value = add.dotPitch; $('lblAddDotSize').textContent = `${add.dotPitch} px`;
+    document.querySelectorAll('.toggle-add-light').forEach(b => { const it = add.lights.find(l => l.id === b.dataset.light); b.style.opacity = it && it.visible ? '1' : '0.35'; });
+    document.querySelectorAll('.qb-light').forEach(b => { const it = add.lights.find(l => l.id === b.dataset.light); b.classList.toggle('is-on', !!(it && it.visible)); });
+    $('qbAddMode').classList.toggle('is-active', add.mode === 'dots');
+
+    // 減色
+    const sub = state.subtractive;
+    cls($('btnSubModeSolid'), sub.mode === 'solid', 'bg-indigo-600 text-white', 'text-slate-400 hover:text-white');
+    cls($('btnSubModeDots'), sub.mode === 'dots', 'bg-indigo-600 text-white', 'text-slate-400 hover:text-white');
+    $('boxSubDotSize').classList.toggle('hidden', sub.mode !== 'dots');
+    $('sliderSubRadius').value = sub.radius; $('lblSubRadius').textContent = `${sub.radius} px`;
+    $('sliderSubDotSize').value = sub.dotPitch; $('lblSubDotSize').textContent = `${sub.dotPitch} px`;
+    document.querySelectorAll('.toggle-sub-pigment').forEach(b => { const it = sub.pigments.find(p => p.id === b.dataset.pigment); b.style.opacity = it && it.visible ? '1' : '0.35'; });
+    document.querySelectorAll('.qb-pigment').forEach(b => { const it = sub.pigments.find(p => p.id === b.dataset.pigment); b.classList.toggle('is-on', !!(it && it.visible)); });
+    $('qbSubMode').classList.toggle('is-active', sub.mode === 'dots');
+
+    // 解密
+    const dec = state.decoder;
+    document.querySelectorAll('.lens-toggle-btn').forEach(b => {
+      const l = dec.lenses.find(it => it.id === b.dataset.lens);
+      b.className = 'lens-toggle-btn py-1.5 px-0.5 rounded border text-[10px] font-bold flex flex-col items-center gap-0.5 transition ' +
+        (l && l.visible ? 'border-indigo-400 bg-indigo-500/25 text-white shadow' : 'border-slate-700 bg-slate-900 text-slate-400 opacity-60');
+    });
+    document.querySelectorAll('.qb-lens').forEach(b => { const l = dec.lenses.find(it => it.id === b.dataset.lens); b.classList.toggle('is-on', !!(l && l.visible)); });
+    $('pickerCustomLens').value = dec.customLensColor.toLowerCase();
+    $('customLensDot').style.backgroundColor = dec.customLensColor;
+    $('sliderLensRadius').value = dec.lensRadius;
+
+    document.querySelectorAll('.ambient-light-btn').forEach(b => {
+      const on = b.dataset.ambient === dec.ambientLight;
+      b.className = 'ambient-light-btn py-1.5 px-1 rounded text-[10px] font-bold flex items-center justify-center gap-1 border transition ' +
+        (on ? 'bg-blue-600 text-white border-white/30 shadow' : 'bg-slate-900 text-slate-300 hover:text-white border-slate-800');
+    });
+    $('pickerCustomLight').value = dec.customLightColor.toLowerCase();
+    $('customLightDot').style.backgroundColor = dec.customLightColor;
+    $('ambPopCustom').style.setProperty('--c', dec.customLightColor);
+    $('qbAmbientDot').style.backgroundColor = ambientHex();
+    document.querySelectorAll('#ambientPop [data-amb]').forEach(b => {
+      b.style.outline = b.dataset.amb === dec.ambientLight ? '3px solid #818cf8' : 'none';
+      b.style.outlineOffset = '2px';
+    });
+
+    document.querySelectorAll('.bg-mode-btn').forEach(b => {
+      const on = b.dataset.bgmode === dec.bgMode;
+      b.className = 'bg-mode-btn py-1.5 px-1 rounded font-bold transition ' + (on ? 'bg-emerald-600 text-white shadow' : 'bg-slate-900 text-slate-400 hover:text-white');
+    });
+    $('noiseControlsBox').classList.toggle('hidden', dec.bgMode === 'none' || dec.bgMode === 'transparent');
+    document.querySelectorAll('.noise-color-btn').forEach(b => {
+      const on = dec.noiseColors.includes(b.dataset.ncolor);
+      b.className = 'noise-color-btn py-1 rounded text-[10px] font-bold flex items-center justify-center transition ' +
+        (on ? 'border border-emerald-400 bg-emerald-500/25 text-white' : 'border border-slate-700 bg-slate-900 text-slate-500');
+    });
+    $('sliderNoiseDensity').value = dec.noiseDensity; $('lblNoiseDensity').textContent = `${dec.noiseDensity}%`;
+    $('sliderNoiseSize').value = dec.noiseSize; $('lblNoiseSize').textContent = `${dec.noiseSize}px`;
+
+    $('textSceneHint').classList.toggle('hidden', scene === 'decoder');
+    syncTextListUI();
+  }
+
+  function syncTextListUI() {
+    const dec = state.decoder;
+    const listEl = $('textItemsList');
+    listEl.replaceChildren();
+    dec.textItems.forEach((item, idx) => {
+      const selected = item.id === dec.selectedTextId;
+      const row = document.createElement('div');
+      row.className = 'flex items-center justify-between px-2 py-1.5 rounded cursor-pointer border text-[11px] transition ' +
+        (selected ? 'bg-indigo-600/30 border-indigo-500 text-white font-bold' : 'bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800');
+      const left = document.createElement('div');
+      left.className = 'flex items-center gap-1.5 min-w-0';
+      const dot = document.createElement('span');
+      dot.className = 'w-2.5 h-2.5 rounded-full shrink-0 border border-white/40';
+      dot.style.backgroundColor = item.color;
+      const label = document.createElement('span');
+      label.className = 'truncate';
+      label.textContent = `${idx + 1}. ${item.text || '(空白)'}`;   // textContent：避免匯入檔夾帶 HTML
+      left.append(dot, label);
+      const size = document.createElement('span');
+      size.className = 'mono-font text-[9px] text-slate-400 ml-1';
+      size.textContent = item.fontSize + 'px';
+      row.append(left, size);
+      row.addEventListener('click', () => { dec.selectedTextId = item.id; syncTextListUI(); requestRender(); });
+      listEl.appendChild(row);
+    });
+
+    const sel = dec.textItems.find(t => t.id === dec.selectedTextId);
+    const editor = $('selectedTextEditor');
+    $('btnDeleteTextItem').disabled = dec.textItems.length <= 1;
+    if (sel) {
+      editor.classList.remove('opacity-40', 'pointer-events-none');
+      if (document.activeElement !== $('inputSelectedText')) $('inputSelectedText').value = sel.text;
+      $('selectedColorCode').textContent = sel.color.toUpperCase();
+      $('pickerTextColor').value = sel.color.toLowerCase();
+      $('sliderTextSize').value = sel.fontSize;
+      $('lblTextSize').textContent = `${sel.fontSize}px`;
+      document.querySelectorAll('.text-color-swatch').forEach(sw => sw.classList.toggle('swatch-active', sw.dataset.color.toUpperCase() === sel.color.toUpperCase()));
+    } else {
+      editor.classList.add('opacity-40', 'pointer-events-none');
+    }
+  }
+
+  // ================= AMBIENT POPOVER =================
+  function openAmbientPop() {
+    const pop = $('ambientPop'), btn = $('qbAmbient');
+    pop.classList.remove('hidden');
+    const r = btn.getBoundingClientRect(), pw = pop.offsetWidth, ph = pop.offsetHeight;
+    let left = r.left + r.width / 2 - pw / 2;
+    left = Math.max(8, Math.min(window.innerWidth - pw - 8, left));
+    let top = r.top - ph - 8;
+    if (top < 8) top = r.bottom + 8;
+    pop.style.left = left + 'px'; pop.style.top = top + 'px';
+  }
+  function closeAmbientPop() { $('ambientPop').classList.add('hidden'); }
+
+  // ================= EVENT BINDING =================
+  function setScene(scene) {
+    if (!SCENES.includes(scene) || state.currentScene === scene) return;
+    state.currentScene = scene;
+    closeAmbientPop();
+    syncUIFromState(); pushHistory(); requestRender();
+  }
+  function commit() { syncUIFromState(); pushHistory(); requestRender(); }
+
+  function bindEvents() {
+    // 版面
+    $('btnToggleSidebar').addEventListener('click', toggleSidebar);
+    $('qbMenu').addEventListener('click', toggleSidebar);
+    $('scrim').addEventListener('click', () => body.classList.remove('sidebar-open'));
+    $('qbFullscreen').addEventListener('click', toggleFullscreen);
+
+    // 說明
+    const helpModal = $('helpModal');
+    const closeHelp = () => { helpModal.classList.add('hidden'); try { localStorage.setItem(HELP_SEEN_KEY, '1'); } catch (e) {} };
+    $('btnOpenHelp').addEventListener('click', () => helpModal.classList.remove('hidden'));
+    $('btnCloseHelp').addEventListener('click', closeHelp);
+    $('btnCloseHelpBottom').addEventListener('click', closeHelp);
+    helpModal.addEventListener('click', e => { if (e.target === helpModal) closeHelp(); });
+
+    // 鍵盤
+    window.addEventListener('keydown', e => {
+      const typing = e.target.tagName === 'INPUT' && e.target.type === 'text';
+      if (e.key === 'Escape') {
+        if (!helpModal.classList.contains('hidden')) { closeHelp(); return; }
+        if (!$('ambientPop').classList.contains('hidden')) { closeAmbientPop(); return; }
+        if (body.classList.contains('sidebar-open')) { body.classList.remove('sidebar-open'); return; }
+        if (body.classList.contains('focus-mode') && !fsElement()) { setFocus(false); return; }
+      }
+      if (typing) return;
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); }
+      else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') { e.preventDefault(); redo(); }
+      else if (!e.ctrlKey && !e.metaKey && !e.altKey) {
+        if (e.key === 'f' || e.key === 'F') toggleFullscreen();
+        else if (e.key === '1') setScene('additive');
+        else if (e.key === '2') setScene('subtractive');
+        else if (e.key === '3') setScene('decoder');
+      }
+    });
+
+    // 摺疊面板
+    document.querySelectorAll('.fold-header').forEach(h => h.addEventListener('click', () => h.closest('.fold-panel').classList.toggle('fold-closed')));
+
+    // 場景
+    document.querySelectorAll('.qb-scene').forEach(b => b.addEventListener('click', () => setScene(b.dataset.scene)));
+
+    // 復原 / 重做
+    $('btnUndo').addEventListener('click', undo);
+    $('btnRedo').addEventListener('click', redo);
+
+    // 加色
+    $('btnAddModeSolid').addEventListener('click', () => { state.additive.mode = 'solid'; commit(); });
+    $('btnAddModeDots').addEventListener('click', () => { state.additive.mode = 'dots'; commit(); });
+    $('qbAddMode').addEventListener('click', () => { state.additive.mode = state.additive.mode === 'dots' ? 'solid' : 'dots'; commit(); });
+    document.querySelectorAll('.toggle-add-light, .qb-light').forEach(b => b.addEventListener('click', () => {
+      const it = state.additive.lights.find(l => l.id === b.dataset.light); if (it) it.visible = !it.visible; commit();
+    }));
+    $('sliderAddRadius').addEventListener('input', e => { state.additive.radius = +e.target.value; $('lblAddRadius').textContent = `${state.additive.radius} px`; requestRender(); });
+    $('sliderAddRadius').addEventListener('change', pushHistory);
+    $('sliderAddDotSize').addEventListener('input', e => { state.additive.dotPitch = +e.target.value; $('lblAddDotSize').textContent = `${state.additive.dotPitch} px`; requestRender(); });
+    $('sliderAddDotSize').addEventListener('change', pushHistory);
+    $('btnResetAdditive').addEventListener('click', () => { state.additive = getDefaultState().additive; commit(); });
+
+    // 減色
+    $('btnSubModeSolid').addEventListener('click', () => { state.subtractive.mode = 'solid'; commit(); });
+    $('btnSubModeDots').addEventListener('click', () => { state.subtractive.mode = 'dots'; commit(); });
+    $('qbSubMode').addEventListener('click', () => { state.subtractive.mode = state.subtractive.mode === 'dots' ? 'solid' : 'dots'; commit(); });
+    document.querySelectorAll('.toggle-sub-pigment, .qb-pigment').forEach(b => b.addEventListener('click', () => {
+      const it = state.subtractive.pigments.find(p => p.id === b.dataset.pigment); if (it) it.visible = !it.visible; commit();
+    }));
+    $('sliderSubRadius').addEventListener('input', e => { state.subtractive.radius = +e.target.value; $('lblSubRadius').textContent = `${state.subtractive.radius} px`; requestRender(); });
+    $('sliderSubRadius').addEventListener('change', pushHistory);
+    $('sliderSubDotSize').addEventListener('input', e => { state.subtractive.dotPitch = +e.target.value; $('lblSubDotSize').textContent = `${state.subtractive.dotPitch} px`; requestRender(); });
+    $('sliderSubDotSize').addEventListener('change', pushHistory);
+    $('btnResetSubtractive').addEventListener('click', () => { state.subtractive = getDefaultState().subtractive; commit(); });
+
+    // 濾鏡
+    document.querySelectorAll('.lens-toggle-btn, .qb-lens').forEach(b => b.addEventListener('click', () => {
+      const l = state.decoder.lenses.find(it => it.id === b.dataset.lens); if (l) l.visible = !l.visible; commit();
+    }));
+    $('pickerCustomLens').addEventListener('input', e => {
+      state.decoder.customLensColor = e.target.value.toUpperCase();
+      const c = state.decoder.lenses.find(l => l.id === 'custom'); if (c) c.visible = true;
+      syncUIFromState(); requestRender();
+    });
+    $('pickerCustomLens').addEventListener('change', pushHistory);
+    $('sliderLensRadius').addEventListener('input', e => { state.decoder.lensRadius = +e.target.value; requestRender(); });
+    $('sliderLensRadius').addEventListener('change', pushHistory);
+    const resetLenses = () => {
+      const vis = new Map(state.decoder.lenses.map(l => [l.id, l.visible]));
+      state.decoder.lenses = getDefaultState().decoder.lenses.map(l => ({ ...l, visible: vis.has(l.id) ? vis.get(l.id) : l.visible }));
+      commit();
+    };
+    $('btnResetFilterPos').addEventListener('click', resetLenses);
+    $('qbLensReset').addEventListener('click', resetLenses);
+
+    const demo = layout => {
+      state.decoder.lenses.forEach(l => {
+        const p = layout[l.id];
+        if (p) { l.visible = true; l.x = p[0]; l.y = p[1]; } else l.visible = false;
+      });
+      commit();
+    };
+    $('btnDemoOverlapRC').addEventListener('click', () => demo({ red: [425, 285], cyan: [535, 285] }));
+    $('btnDemoOverlapCY').addEventListener('click', () => demo({ cyan: [425, 285], yellow: [535, 285] }));
+    $('btnDemoOverlapCMY').addEventListener('click', () => demo({ cyan: [430, 245], magenta: [530, 245], yellow: [480, 330] }));
+
+    // 環境燈光
+    document.querySelectorAll('.ambient-light-btn').forEach(b => b.addEventListener('click', () => { state.decoder.ambientLight = b.dataset.ambient; commit(); }));
+    $('pickerCustomLight').addEventListener('input', e => { state.decoder.customLightColor = e.target.value.toUpperCase(); state.decoder.ambientLight = 'custom'; syncUIFromState(); requestRender(); });
+    $('pickerCustomLight').addEventListener('change', pushHistory);
+    $('qbAmbient').addEventListener('click', e => { e.stopPropagation(); $('ambientPop').classList.contains('hidden') ? openAmbientPop() : closeAmbientPop(); });
+    document.querySelectorAll('#ambientPop [data-amb]').forEach(b => b.addEventListener('click', () => { state.decoder.ambientLight = b.dataset.amb; commit(); }));
+    document.addEventListener('pointerdown', e => {
+      if (!$('ambientPop').contains(e.target) && !$('qbAmbient').contains(e.target)) closeAmbientPop();
+    });
+
+    // 範本
+    document.querySelectorAll('.preset-btn').forEach(b => b.addEventListener('click', () => {
+      const p = b.dataset.preset, dec = state.decoder;
+      if (p === 'classic') {
+        dec.bgMode = 'classic';
+        dec.textItems = [
+          { id: 't1', text: 'OPTICS 光學物理', x: 480, y: 235, fontSize: 64, color: '#FF0000' },
+          { id: 't2', text: 'SECRET 成功解密', x: 480, y: 345, fontSize: 64, color: '#00FFFF' }
+        ];
+        dec.noiseColors = ['#FF0000', '#00FFFF'];
+      } else if (p === 'rgb3') {
+        dec.bgMode = 'dots';
+        dec.textItems = [
+          { id: 't1', text: '1. 純紅秘密 RED', x: 480, y: 185, fontSize: 58, color: '#FF0000' },
+          { id: 't2', text: '2. 純綠秘密 GREEN', x: 480, y: 290, fontSize: 58, color: '#00FF00' },
+          { id: 't3', text: '3. 純藍秘密 BLUE', x: 480, y: 395, fontSize: 58, color: '#0000FF' }
+        ];
+        dec.noiseColors = ['#FF0000', '#00FF00', '#0000FF', '#FFFF00'];
+      } else if (p === 'exam') {
+        dec.bgMode = 'classic';
+        dec.textItems = [
+          { id: 't1', text: 'Q: 綠光照射紅蘋果呈何色？', x: 480, y: 225, fontSize: 48, color: '#FF00FF' },
+          { id: 't2', text: 'A: 吸收綠光，呈現黑色！', x: 480, y: 345, fontSize: 54, color: '#00FFFF' }
+        ];
+        dec.noiseColors = ['#FF0000', '#00FFFF', '#FFFF00'];
+      }
+      dec.selectedTextId = dec.textItems[0].id;
+      commit();
+    }));
+
+    // 背景與雜點
+    document.querySelectorAll('.bg-mode-btn').forEach(b => b.addEventListener('click', () => { state.decoder.bgMode = b.dataset.bgmode; commit(); }));
+    document.querySelectorAll('.noise-color-btn').forEach(b => b.addEventListener('click', () => {
+      const c = b.dataset.ncolor, arr = state.decoder.noiseColors;
+      if (arr.includes(c)) { if (arr.length > 1) state.decoder.noiseColors = arr.filter(x => x !== c); }
+      else arr.push(c);
+      commit();
+    }));
+    $('sliderNoiseDensity').addEventListener('input', e => { state.decoder.noiseDensity = +e.target.value; $('lblNoiseDensity').textContent = `${state.decoder.noiseDensity}%`; requestRender(); });
+    $('sliderNoiseDensity').addEventListener('change', pushHistory);
+    $('sliderNoiseSize').addEventListener('input', e => { state.decoder.noiseSize = +e.target.value; $('lblNoiseSize').textContent = `${state.decoder.noiseSize}px`; requestRender(); });
+    $('sliderNoiseSize').addEventListener('change', pushHistory);
+    $('btnRegenNoise').addEventListener('click', () => { state.decoder.noiseSeed = Math.floor(Math.random() * 999999); pushHistory(); requestRender(); });
+
+    // ===== 工具箱 =====
+    const toolbox = $('doodleToolbox');
+    function setToolboxTab(tab) {
+      doodleConfig.activeTab = tab;
+      const isText = tab === 'text';
+      cls($('tabToolText'), isText, 'bg-indigo-600 text-white shadow', 'text-slate-400 hover:text-white');
+      cls($('tabToolBrush'), !isText, 'bg-indigo-600 text-white shadow', 'text-slate-400 hover:text-white');
+      $('toolboxTextSection').classList.toggle('hidden', !isText);
+      $('toolboxBrushSection').classList.toggle('hidden', isText);
+      if (isText) setDoodleMode('pointer'); else updateDrawingIndicator();
+      requestRender();
+    }
+    function toggleToolbox(force, tab) {
+      doodleConfig.isOpen = typeof force === 'boolean' ? force : !doodleConfig.isOpen;
+      toolbox.classList.toggle('hidden', !doodleConfig.isOpen);
+      $('btnToggleDoodle').classList.toggle('is-active', doodleConfig.isOpen);
+      if (doodleConfig.isOpen && tab) setToolboxTab(tab);
+      if (!doodleConfig.isOpen) setDoodleMode('pointer');
+      if (doodleConfig.isOpen) body.classList.remove('sidebar-open');
+      requestRender();
+    }
+    function updateDrawingIndicator() {
+      const drawing = brushActive();
+      $('doodleActiveDot').classList.toggle('hidden', !drawing);
+      mainCanvas.classList.toggle('is-drawing', drawing);
+    }
+    function setDoodleMode(mode) {
+      doodleConfig.activeMode = mode;
+      document.querySelectorAll('.doodle-mode-btn').forEach(b => {
+        b.className = 'doodle-mode-btn py-1.5 px-1.5 rounded font-bold flex items-center gap-1 justify-center transition ' +
+          (b.dataset.dmode === mode ? 'bg-indigo-600 text-white shadow' : 'bg-slate-800 text-slate-300 hover:text-white');
+      });
+      updateDrawingIndicator();
+    }
+    function setShape(shape) {
+      doodleConfig.shape = shape;
+      cls($('btnShapeFree'), shape === 'free', 'bg-slate-700 text-white', 'text-slate-400 hover:text-white');
+      cls($('btnShapeLine'), shape === 'line', 'bg-slate-700 text-white', 'text-slate-400 hover:text-white');
+    }
+    setToolboxTab('text'); setDoodleMode('pointer'); setShape('free');
+
+    $('btnToggleDoodle').addEventListener('click', () => toggleToolbox());
+    $('btnOpenTextToolbox').addEventListener('click', () => toggleToolbox(true, 'text'));
+    $('btnCloseDoodle').addEventListener('click', () => toggleToolbox(false));
+    $('tabToolText').addEventListener('click', () => setToolboxTab('text'));
+    $('tabToolBrush').addEventListener('click', () => setToolboxTab('brush'));
+
+    // 工具箱拖曳（手機版為固定底部面板，不拖曳）
+    let tbDrag = null;
+    $('doodleHeader').addEventListener('pointerdown', e => {
+      if (window.innerWidth <= 640 || e.target.closest('button')) return;
+      const r = toolbox.getBoundingClientRect();
+      tbDrag = { id: e.pointerId, dx: e.clientX - r.left, dy: e.clientY - r.top };
+      $('doodleHeader').setPointerCapture(e.pointerId);
+    });
+    $('doodleHeader').addEventListener('pointermove', e => {
+      if (!tbDrag || e.pointerId !== tbDrag.id) return;
+      const maxL = window.innerWidth - toolbox.offsetWidth - 4, maxT = window.innerHeight - 60;
+      toolbox.style.left = Math.max(4, Math.min(maxL, e.clientX - tbDrag.dx)) + 'px';
+      toolbox.style.top = Math.max(4, Math.min(maxT, e.clientY - tbDrag.dy)) + 'px';
+      toolbox.style.right = 'auto';
+    });
+    const endTb = e => { if (tbDrag && e.pointerId === tbDrag.id) tbDrag = null; };
+    $('doodleHeader').addEventListener('pointerup', endTb);
+    $('doodleHeader').addEventListener('pointercancel', endTb);
+
+    // 文字
+    $('btnAddTextItem').addEventListener('click', () => {
+      const dec = state.decoder;
+      if (dec.textItems.length >= 20) { showToast('最多 20 個字詞'); return; }
+      const id = 't' + Date.now();
+      const palette = ['#FF0000', '#00FFFF', '#00FF00', '#FFFF00', '#FF00FF', '#0000FF'];
+      dec.textItems.push({ id, text: '新秘密字詞', x: 480, y: 170 + (dec.textItems.length * 45) % 260, fontSize: 54, color: palette[dec.textItems.length % palette.length] });
+      dec.selectedTextId = id;
+      if (state.currentScene !== 'decoder') setScene('decoder');
+      commit();
+    });
+    $('btnDeleteTextItem').addEventListener('click', () => {
+      const dec = state.decoder;
+      if (dec.textItems.length <= 1) return;
+      dec.textItems = dec.textItems.filter(t => t.id !== dec.selectedTextId);
+      dec.selectedTextId = dec.textItems[0].id;
+      commit();
+    });
+    $('inputSelectedText').addEventListener('input', e => {
+      const sel = state.decoder.textItems.find(t => t.id === state.decoder.selectedTextId);
+      if (sel) { sel.text = e.target.value.slice(0, 40); syncTextListUI(); requestRender(); }
+    });
+    $('inputSelectedText').addEventListener('change', pushHistory);
+    document.querySelectorAll('.text-color-swatch').forEach(sw => sw.addEventListener('click', () => {
+      const sel = state.decoder.textItems.find(t => t.id === state.decoder.selectedTextId);
+      if (sel) { sel.color = sw.dataset.color; commit(); }
+    }));
+    $('pickerTextColor').addEventListener('input', e => {
+      const sel = state.decoder.textItems.find(t => t.id === state.decoder.selectedTextId);
+      if (sel) { sel.color = e.target.value.toUpperCase(); syncTextListUI(); requestRender(); }
+    });
+    $('pickerTextColor').addEventListener('change', pushHistory);
+    $('sliderTextSize').addEventListener('input', e => {
+      const sel = state.decoder.textItems.find(t => t.id === state.decoder.selectedTextId);
+      if (sel) { sel.fontSize = +e.target.value; $('lblTextSize').textContent = `${sel.fontSize}px`; requestRender(); }
+    });
+    $('sliderTextSize').addEventListener('change', () => { syncTextListUI(); pushHistory(); });
+
+    // 畫筆
+    document.querySelectorAll('.doodle-mode-btn').forEach(b => b.addEventListener('click', () => setDoodleMode(b.dataset.dmode)));
+    $('btnShapeFree').addEventListener('click', () => setShape('free'));
+    $('btnShapeLine').addEventListener('click', () => setShape('line'));
+    document.querySelectorAll('.doodle-color-btn').forEach(b => b.addEventListener('click', () => {
+      doodleConfig.color = b.dataset.bcolor;
+      $('pickerDoodleColor').value = doodleConfig.color.toLowerCase();
+      document.querySelectorAll('.doodle-color-btn').forEach(x => x.classList.remove('swatch-active'));
+      b.classList.add('swatch-active');
+      if (doodleConfig.activeMode === 'pointer' || doodleConfig.activeMode === 'eraser') setDoodleMode('pigment');
+    }));
+    $('pickerDoodleColor').addEventListener('input', e => {
+      doodleConfig.color = e.target.value.toUpperCase();
+      document.querySelectorAll('.doodle-color-btn').forEach(x => x.classList.remove('swatch-active'));
+      if (doodleConfig.activeMode === 'pointer' || doodleConfig.activeMode === 'eraser') setDoodleMode('pigment');
+    });
+    $('sliderDoodleSize').addEventListener('input', e => { doodleConfig.size = +e.target.value; $('lblDoodleSize').textContent = `${doodleConfig.size}px`; });
+    $('btnClearDoodles').addEventListener('click', () => {
+      if (!state.doodles.length) return;
+      state.doodles = []; doodleRev++; pushHistory(); requestRender();
+      showToast('已清除塗鴉（可按復原找回）');
+    });
+
+    // ===== 檔案 =====
+    function download(blob, filename) {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = filename;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 4000);
+    }
+    $('btnExportJSON').addEventListener('click', () => {
+      download(new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' }), `optics-decoder-${new Date().toISOString().slice(0, 10)}.json`);
+    });
+    $('inputImportJSON').addEventListener('change', e => {
+      const file = e.target.files[0];
+      e.target.value = '';
+      if (!file) return;
+      if (file.size > 2 * 1024 * 1024) { showToast('檔案過大，無法匯入'); return; }
+      const reader = new FileReader();
+      reader.onload = ev => {
+        try {
+          state = normalizeState(JSON.parse(ev.target.result));
+          onStateReplaced(); pushHistory();
+          showToast('匯入完成');
+        } catch (err) { showToast('檔案格式錯誤，無法匯入'); }
+      };
+      reader.readAsText(file);
+    });
+    $('btnExportPNG').addEventListener('click', () => {
+      render();
+      mainCanvas.toBlob(blob => { if (blob) download(blob, `optics-canvas-${state.currentScene}.png`); }, 'image/png');
+    });
+
+    // 重置：按兩次確認（嵌入頁面中 confirm() 可能被封鎖，所以不用它）
+    let resetArmed = false, resetTimer = null;
+    $('btnResetAll').addEventListener('click', () => {
+      const btn = $('btnResetAll');
+      if (!resetArmed) {
+        resetArmed = true; btn.classList.add('bg-rose-600', 'text-white');
+        showToast('再按一次「重置」即回到預設狀態（之後仍可按復原找回）', { ms: 3000 });
+        resetTimer = setTimeout(() => { resetArmed = false; btn.classList.remove('bg-rose-600', 'text-white'); }, 3000);
+        return;
+      }
+      clearTimeout(resetTimer); resetArmed = false; btn.classList.remove('bg-rose-600', 'text-white');
+      const scene = state.currentScene;
+      state = getDefaultState(); state.currentScene = scene;
+      onStateReplaced(); pushHistory();
+      showToast('已重置');
+    });
+
+    // 版面變化
+    window.addEventListener('resize', updateLayout);
+    window.addEventListener('orientationchange', () => setTimeout(updateLayout, 250));
+    if (window.ResizeObserver) {
+      const ro = new ResizeObserver(() => fitCanvas());
+      ro.observe($('workspace')); ro.observe($('quickbar'));
+    }
+  }
+
+  // ================= INIT =================
+  function init() {
+    loadFromLocalStorage();
+    bindEvents();
+    updateLayout();
+    syncUIFromState();
+    pushHistory();
+    requestRender();
+
+    // 字型下載完成後重繪（避免第一次以後備字型繪製；之後輸入新字也會觸發）
+    if (document.fonts) {
+      Promise.all([
+        document.fonts.load('900 64px "Noto Sans TC"', '光學ABC'),
+        document.fonts.load('bold 11px "Noto Sans TC"', '紅綠藍')
+      ]).catch(() => {}).then(() => { baseKey = null; requestRender(); });
+      document.fonts.addEventListener && document.fonts.addEventListener('loadingdone', () => { baseKey = null; requestRender(); });
+    }
+
+    let seen = false;
+    try { seen = localStorage.getItem(HELP_SEEN_KEY) === '1'; } catch (e) {}
+    if (!seen) $('helpModal').classList.remove('hidden');
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+})();
+</script>
+</body>
+</html>
