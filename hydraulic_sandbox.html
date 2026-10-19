@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"><meta name="apple-mobile-web-app-capable" content="yes">
-    <title>PipemanV3.7.3</title>
+    <title>PipemanV3.7.4</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
     <style>
@@ -547,7 +547,7 @@
 <!-- Top Bar -->
 <div class="top-bar">
     <div class="title-group">
-        <h1>水路與電流類比v3.7.3 <button class="help-btn" onclick="openHelp()" title="使用說明" aria-label="使用說明">?</button></h1>
+        <h1>水路與電流類比v3.7.4 <button class="help-btn" onclick="openHelp()" title="使用說明" aria-label="使用說明">?</button></h1>
         <p>水流＝電流（正電荷的流動方向）｜ 幫浦＝3 號電池 (1.5 V、內阻 0.2 Ω) ｜ 可切換電子流觀點</p>
     </div>
     <div class="preset-group">
@@ -2281,12 +2281,85 @@ function serializeState(includeSettings = false) {
     return JSON.stringify(st);
 }
 
+// ---------------- 外部資料驗證（v3.7.4）----------------
+// 匯入檔、自動儲存、我的範本都可能被改過，一律先過濾成「只含合法型別與範圍」的乾淨資料，
+// 避免怪資料讓求解器或動畫迴圈當掉（甚至被自動儲存後每次開啟都當掉），也避免任何字串流進 innerHTML。
+function escapeHTML(s) {
+    return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+const _own = (obj, k) => typeof k === 'string' && Object.prototype.hasOwnProperty.call(obj, k);
+const _num = v => (typeof v === 'number' && isFinite(v)) ? v : NaN;
+const _int = (v, lo, hi) => { const n = _num(v); return Number.isInteger(n) && n >= lo && n <= hi ? n : null; };
+const GRID_LIMIT = 500;
+const SETTING_RANGES = { wireR: [0.001, 1], cellR: [0.001, 5], flowR: [0.001, 10], voltSens: [100, 1e7], ampR50: [0.001, 20] };
+
+function sanitizeItem(d, posKeys) {
+    if (!d || typeof d !== 'object') return null;
+    if (!_own(PIPE_SHAPES, d.pipeShape) || !_own(ADDON_DEFS, d.addon)) return null;
+    const out = { pipeShape: d.pipeShape, addon: d.addon };
+    for (const k of posKeys) {
+        const v = _int(d[k], -GRID_LIMIT, GRID_LIMIT);
+        if (v === null) return null;
+        out[k] = v;
+    }
+    out.rot = _int(d.rot, 0, 3) ?? 0;
+    const R = _num(d.R);
+    out.R = R >= RES_MIN && R <= RES_MAX ? R : null;
+    out.valveOpen = d.valveOpen !== false;
+    out.range = _int(d.range, 0, 2) ?? 2;
+    out.blown = d.blown === true;
+    if (PIPE_SHAPES[out.pipeShape].isBridge) out.addon = 'none';
+    if (TWO_TERMINAL_ADDONS.has(out.addon) && out.pipeShape !== 'pipe_straight') out.addon = 'none';
+    return out;
+}
+function sanitizeItems(arr, posKeys) {
+    if (!Array.isArray(arr)) return [];
+    const seen = new Set(), out = [];
+    for (const d of arr) {
+        if (out.length >= MAX_BLOCKS) break;
+        const it = sanitizeItem(d, posKeys);
+        if (!it) continue;
+        const key = posKeys.map(k => it[k]).join(',');
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push(it);
+    }
+    return out;
+}
+function sanitizeSettings(s) {
+    if (!s || typeof s !== 'object') return null;
+    const out = {};
+    Object.entries(SETTING_RANGES).forEach(([k, [lo, hi]]) => {
+        const v = _num(s[k]);
+        if (v >= lo && v <= hi) out[k] = v;
+    });
+    const cc = _int(s.cellCount, 1, 4);
+    if (cc !== null) out.cellCount = cc;
+    return out;
+}
+function sanitizeGridRef(r) {
+    if (!r || typeof r !== 'object') return null;
+    const gx = _int(r.gx, -GRID_LIMIT, GRID_LIMIT), gz = _int(r.gz, -GRID_LIMIT, GRID_LIMIT);
+    return gx === null || gz === null ? null : { gx, gz };
+}
+function sanitizeState(raw) {
+    if (!raw || typeof raw !== 'object' || !Array.isArray(raw.blocks)) throw new Error('格式不符');
+    const lim = GRID_LIMIT * TILE_SIZE;
+    const probes = (Array.isArray(raw.probes) ? raw.probes : []).slice(0, 20).map(p => {
+        if (!p || (p.kind !== 'volt' && p.kind !== 'amp')) return null;
+        const x = _num(p.x), z = _num(p.z);
+        if (!(Math.abs(x) <= lim && Math.abs(z) <= lim)) return null;
+        return { kind: p.kind, x, z, range: _int(p.range, 0, 2) ?? 2, blown: p.blown === true, plus: sanitizeGridRef(p.plus), minus: sanitizeGridRef(p.minus) };
+    }).filter(Boolean);
+    return { v: 3, blocks: sanitizeItems(raw.blocks, ['gx', 'gz']), probes, settings: sanitizeSettings(raw.settings) };
+}
+
 let advControls = {};
 function applySettingsFromState(s) {
+    s = sanitizeSettings(s);
     if (!s) return;
-    ['wireR', 'cellR', 'flowR'].forEach(k => { if (isFinite(s[k]) && s[k] > 0) settings[k] = s[k]; });
-    Object.keys(settings).forEach(k => { if (s[k] !== undefined && isFinite(s[k])) settings[k] = s[k]; });
-    if (s.cellCount >= 1 && s.cellCount <= 4) {
+    Object.keys(SETTING_RANGES).forEach(k => { if (s[k] !== undefined) settings[k] = s[k]; });
+    if (s.cellCount !== undefined) {
         cellCount = s.cellCount;
         nominalPumpV = AA_CELL_EMF * cellCount;
         const el = document.getElementById('cell-count');
@@ -2297,12 +2370,11 @@ function applySettingsFromState(s) {
 }
 
 function restoreState(json, withSettings = false) {
-    const st = typeof json === 'string' ? JSON.parse(json) : json;
+    const st = sanitizeState(typeof json === 'string' ? JSON.parse(json) : json);   // 先驗證再動畫布，壞檔不會清掉目前的電路
     if (withSettings) applySettingsFromState(st.settings);
     clearAllBlocks(false);
-    (st.blocks || []).forEach(d => {
-        if (!PIPE_SHAPES[d.pipeShape] || !ADDON_DEFS[d.addon]) return;
-        createOrUpdateBlock(d.gx, d.gz, d.pipeShape, d.addon, d.rot, isFinite(d.R) ? d.R : null, { silent: true, valveOpen: d.valveOpen !== false, range: d.range, blown: d.blown });
+    st.blocks.forEach(d => {
+        createOrUpdateBlock(d.gx, d.gz, d.pipeShape, d.addon, d.rot, d.R, { silent: true, valveOpen: d.valveOpen, range: d.range, blown: d.blown });
     });
     restoreHooks.forEach(fn => fn(st));
     selectBlock(null);
@@ -2394,8 +2466,8 @@ function importCircuit(input) {
     const reader = new FileReader();
     reader.onload = () => {
         try {
-            const st = JSON.parse(reader.result);
-            if (!Array.isArray(st.blocks)) throw new Error('格式不符');
+            if (f.size > 2 * 1024 * 1024) throw new Error('檔案太大');
+            const st = sanitizeState(JSON.parse(reader.result));
             checkpoint();
             restoreState(st, true);
             fitCameraToBlocks();
@@ -2728,7 +2800,15 @@ const SCENES = {
 };
 
 function loadMyTemplates() {
-    try { return JSON.parse(localStorage.getItem(STORAGE_TEMPLATES) || '[]'); } catch (e) { return []; }
+    let list;
+    try { list = JSON.parse(localStorage.getItem(STORAGE_TEMPLATES) || '[]'); } catch (e) { return []; }
+    if (!Array.isArray(list)) return [];
+    return list.map(t => {
+        if (!t || typeof t !== 'object') return null;
+        const items = sanitizeItems(t.items, ['dx', 'dz']);
+        if (!items.length) return null;
+        return { name: String(t.name ?? '我的範本').slice(0, 40), items };
+    }).filter(Boolean);
 }
 function saveMyTemplates(list) {
     try { localStorage.setItem(STORAGE_TEMPLATES, JSON.stringify(list)); return true; } catch (e) { return false; }
@@ -2752,7 +2832,7 @@ function buildTemplateSelect() {
     let html = '<option value="">➕ 加入電路範本…</option>' +
         Object.entries(groups).map(([g, opts]) => `<optgroup label="${g}">${opts.join('')}</optgroup>`).join('');
     if (mine.length) {
-        html += `<optgroup label="⭐ 我的範本">${mine.map((t, i) => `<option value="my:${i}">${t.name.replace(/</g, '&lt;')}</option>`).join('')}</optgroup>`;
+        html += `<optgroup label="⭐ 我的範本">${mine.map((t, i) => `<option value="my:${i}">${escapeHTML(t.name)}</option>`).join('')}</optgroup>`;
         html += '<optgroup label="管理"><option value="clear-mine">🗑️ 清除所有我的範本</option></optgroup>';
     }
     sel.innerHTML = html;
@@ -2864,7 +2944,7 @@ function focusCircuitRow(i) {
 // ---------------- 提示列 ----------------
 function setHint() {
     const el = document.querySelector('.hint-banner');
-    if (stamp) el.innerHTML = `📍 <b>${stamp.name}</b>：移動滑鼠選位置，綠色可放、紅色重疊 ｜ <b>點擊放置</b> ｜ R 旋轉 ｜ Esc 取消`;
+    if (stamp) el.innerHTML = `📍 <b>${escapeHTML(stamp.name)}</b>：移動滑鼠選位置，綠色可放、紅色重疊 ｜ <b>點擊放置</b> ｜ R 旋轉 ｜ Esc 取消`;
     else if (multiMode) el.innerHTML = '☑️ <b>多選模式</b>：點選元件加入/移除選取 ｜ 空白處拖曳框選 ｜ 拖曳已選元件整組移動 ｜ R 整組旋轉 ｜ Ctrl+C / V 複製貼上';
     else el.innerHTML = '🖱️ <b>左鍵拖入管件或元件</b> ｜ 點選後按中央移動、拉金球旋轉 (R) ｜ Shift＋點選可多選 ｜ Ctrl+Z 復原 ｜ 右鍵轉視角、滾輪縮放';
 }
@@ -4663,7 +4743,7 @@ function updateFab() {
     const compact = document.body.classList.contains('compact');
     let html = '';
     if (stamp) {
-        html = `<span class="fab-title">📍 ${stamp.name}${IS_TOUCH ? '：拖曳預覽到綠色位置' : ''}</span>` +
+        html = `<span class="fab-title">📍 ${escapeHTML(stamp.name)}${IS_TOUCH ? '：拖曳預覽到綠色位置' : ''}</span>` +
             fabBtn('↻ 旋轉', 'rotateStamp()') +
             fabBtn('✓ 放下', 'fabPlaceStamp()', 'primary') +
             fabBtn('✕ 取消', 'cancelStamp()');
@@ -4711,7 +4791,7 @@ setHint = function () {
     const el = document.querySelector('.hint-banner');
     const connecting = typeof connectState !== 'undefined' && connectState;
     if (IS_TOUCH && !connecting) {
-        if (stamp) el.innerHTML = `📍 <b>${stamp.name}</b>：手指拖曳綠色預覽到空位，按下方「✓ 放下」`;
+        if (stamp) el.innerHTML = `📍 <b>${escapeHTML(stamp.name)}</b>：手指拖曳綠色預覽到空位，按下方「✓ 放下」`;
         else if (multiMode) el.innerHTML = '☑️ <b>多選模式</b>：點元件加入／移除 ｜ 空白處拖曳框選 ｜ 拖已選元件整組移動';
         else el.innerHTML = '👆 <b>按住元件往右拖進畫布</b> ｜ 點管件選取、拖曳移動 ｜ 單指拖空白處平移 ｜ 雙指捏合縮放、雙指拖轉視角';
     }
