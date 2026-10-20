@@ -1,4 +1,4 @@
-<title>Wavelab V12</title>
+<title>WavelabV13</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -449,15 +449,28 @@ function allSourceRefs() {
 const RT = new WeakMap();
 function buildRT(r) {
   const N = clamp(Math.round(r.L * 60), 120, 600), dx = r.L / N;
-  const R = { L: r.L, N, dx, y: new Float64Array(N + 1), yp: new Float64Array(N + 1), yn: new Float64Array(N + 1), c2: new Float64Array(N + 1), cmax: 1, h: 0, tSim: S.t };
+  // 隱形延伸段：吸收端在可見繩之外加入幽靈節點，波進入後被阻尼吸收
+  const gN = Math.max(15, Math.round(N * 0.20)); // 每側幽靈節點數
+  const oL = r.leftEnd === 'absorb' ? gN : 0;    // 左側偏移
+  const oR = r.rightEnd === 'absorb' ? gN : 0;   // 右側偏移
+  const M = oL + N + oR;                           // 總模擬節點數
+  const R = { L: r.L, N, M, dx, o: oL, oR,
+    le: r.leftEnd, re: r.rightEnd,
+    y: new Float64Array(M + 1), yp: new Float64Array(M + 1), yn: new Float64Array(M + 1),
+    c2: new Float64Array(M + 1), cmax: 1, h: 0, tSim: S.t };
   RT.set(r, R); updateC2(r); return R;
 }
-function rt(r) { const R = RT.get(r); return (!R || R.L !== r.L) ? buildRT(r) : R; }
+function rt(r) { const R = RT.get(r); return (!R || R.L !== r.L || R.le !== r.leftEnd || R.re !== r.rightEnd) ? buildRT(r) : R; }
 function muAt(r, x) { return (r.junction.on && x >= r.junction.pos * r.L) ? r.mu * r.junction.ratio : r.mu; }
 function updateC2(r) {
   const R = RT.get(r); if (!R) return;
   let cm = 0;
-  for (let i = 0; i <= R.N; i++) { const c2 = r.F / muAt(r, i * R.dx); R.c2[i] = c2; if (c2 > cm) cm = c2; }
+  // 可見區域 [o .. o+N]
+  for (let i = 0; i <= R.N; i++) { const c2 = r.F / muAt(r, i * R.dx); R.c2[R.o + i] = c2; if (c2 > cm) cm = c2; }
+  // 幽靈節點：與最近端點同波速（避免阻抗不匹配）
+  const cL = R.c2[R.o], cR = R.c2[R.o + R.N];
+  for (let i = 0; i < R.o; i++) R.c2[i] = cL;
+  for (let i = R.o + R.N + 1; i <= R.M; i++) R.c2[i] = cR;
   R.cmax = Math.sqrt(cm);
 }
 const speed = (r, x = 0) => Math.sqrt(r.F / muAt(r, x));
@@ -488,7 +501,7 @@ function stepRope(r, ri, t0, dur) {
   const h = Math.min(0.85 * R.dx / R.cmax, 0.004);
   if (R.h && Math.abs(h - R.h) > 1e-12) {
     // 參數改變導致步長改變時，保持各點速度不變
-    const k = h / R.h; for (let i = 0; i <= N; i++) R.yp[i] = R.y[i] - (R.y[i] - R.yp[i]) * k;
+    const k = h / R.h; for (let i = 0; i <= R.M; i++) R.yp[i] = R.y[i] - (R.y[i] - R.yp[i]) * k;
   }
   R.h = h;
   if (!(R.tSim <= t0 + dur) || R.tSim < t0 - 1) R.tSim = t0;
@@ -498,32 +511,45 @@ function stepRope(r, ri, t0, dur) {
   const tBase = R.tSim;
   const lam = h * h / (R.dx * R.dx), b = r.damping * h / 2, ib = 1 / (1 + b);
   const sLim = springAmpMax(r);
-  const drv = r.sources.map((src, j) => ({ e: eff(r, j), idx: Math.round(clamp(src.pos, 0, 1) * N), lim: sLim }));
+  const drv = r.sources.map((src, j) => ({ e: eff(r, j), idx: R.o + Math.round(clamp(src.pos, 0, 1) * N), lim: sLim }));
   let y = R.y, yp = R.yp, yn = R.yn; const c2 = R.c2;
-  const chL = Math.sqrt(c2[0]) * h, chR = Math.sqrt(c2[N]) * h;
-  // 海綿層：在吸收端附近逐漸增加阻尼，消除反射
-  const spongeN = Math.max(6, Math.round(N * 0.08)); // 使用 8% 的節點作為海綿層
-  const spongeMax = 40; // 海綿層最大阻尼（遠大於一般阻尼）
-  const leftAbs = r.leftEnd === 'absorb', rightAbs = r.rightEnd === 'absorb';
+  const M = R.M, o = R.o;
+  // 幽靈節點阻尼（隱形延伸段，可見區域外）——預計算
+  let gB = null;
+  if (o > 0 || R.oR > 0) {
+    gB = new Float64Array(M + 1);
+    const gMax = 25;
+    for (let i = 0; i <= M; i++) {
+      let extra = 0;
+      if (o > 0 && i < o) { const u = 1 - i / o; extra = gMax * u * u * u; }
+      if (R.oR > 0 && i > o + N) { const u = (i - o - N) / R.oR; extra = gMax * u * u * u; }
+      gB[i] = (r.damping + extra) * h / 2;
+    }
+  }
+  // 邊界：吸收端的 Mur ABC 在幽靈區遠端；可見端用原邊界類型
+  const bcL = o > 0 ? 'absorb' : r.leftEnd;   // 幽靈區遠端
+  const bcR = R.oR > 0 ? 'absorb' : r.rightEnd;
+  const chL = Math.sqrt(c2[0]) * h, chR = Math.sqrt(c2[M]) * h;
   for (let k = 0; k < n; k++) {
     const t = tBase + (k + 1) * h;
-    for (let i = 1; i < N; i++) {
-      // 在海綿區域使用局部增強阻尼
-      let localB = b;
-      if (leftAbs && i <= spongeN) { const u = 1 - i / spongeN; localB = (r.damping + spongeMax * u * u) * h / 2; }
-      if (rightAbs && i >= N - spongeN) { const u = 1 - (N - i) / spongeN; localB = (r.damping + spongeMax * u * u) * h / 2; }
-      const ilb = 1 / (1 + localB);
-      yn[i] = (2 * y[i] - (1 - localB) * yp[i] + lam * c2[i] * (y[i + 1] - 2 * y[i] + y[i - 1])) * ilb;
+    if (gB) {
+      for (let i = 1; i < M; i++) {
+        const bi = gB[i], ibi = 1 / (1 + bi);
+        yn[i] = (2 * y[i] - (1 - bi) * yp[i] + lam * c2[i] * (y[i + 1] - 2 * y[i] + y[i - 1])) * ibi;
+      }
+    } else {
+      for (let i = 1; i < M; i++) yn[i] = (2 * y[i] - (1 - b) * yp[i] + lam * c2[i] * (y[i + 1] - 2 * y[i] + y[i - 1])) * ib;
     }
-    boundary(r.leftEnd, yn, y, 0, 1, chL, R.dx);
-    boundary(r.rightEnd, yn, y, N, N - 1, chR, R.dx);
+    // 邊界條件：吸收端在幽靈區遠端（Mur ABC），非吸收端在可見邊界
+    boundary(bcL, yn, y, 0, 1, chL, R.dx);
+    boundary(bcR, yn, y, M, M - 1, chR, R.dx);
     for (const d of drv) { let v = driveVal(d.e.src, d.e.s, t); if (v !== null) { if (d.lim < 1.6) v = clamp(v, -d.lim, d.lim); yn[d.idx] = v; } }
     if (ri === 0 && drv.length) histPush(t, yn[drv[0].idx]);
     const tmp = yp; yp = y; y = yn; yn = tmp;
   }
   R.y = y; R.yp = yp; R.yn = yn; R.tSim = tBase + n * h;
   let bad = false;
-  for (let i = 0; i <= N; i += 7) if (!(Math.abs(y[i]) < 40)) { bad = true; break; }
+  for (let i = 0; i <= M; i += 7) if (!(Math.abs(y[i]) < 40)) { bad = true; break; }
   if (bad) { y.fill(0); yp.fill(0); toast('數值發散，已重設「' + r.name + '」'); }
 }
 function advance(dt) {
@@ -787,7 +813,7 @@ function buildFixtures() {
 }
 function centerPoint(r, R, s, base, out, i0) {
   const f = clamp(s / R.dx, 0, R.N), i = Math.min(R.N - 1, Math.floor(f)), u = f - i;
-  const v = R.y[i] * (1 - u) + R.y[i + 1] * u;
+  const v = R.y[R.o + i] * (1 - u) + R.y[R.o + i + 1] * u;
   if (r.pol === 'transverse') { out[i0] = LAY.x0 + s; out[i0 + 1] = base + v; }
   else { out[i0] = LAY.x0 + s + v; out[i0 + 1] = base; }
   out[i0 + 2] = 0; return v;
@@ -932,18 +958,28 @@ function updateVisuals() {
         // 先算所有取樣點的速度，找最大值
         const vels = [];
         for (let k = 0; k <= vaN; k++) {
-          const idx = Math.min(k * nodeStep, R.N);
+          const idx = R.o + Math.min(k * nodeStep, R.N);
           vels.push((R.y[idx] - R.yp[idx]) / R.h); // 真實速度
         }
         const maxV = vels.reduce((mx, v) => Math.max(mx, Math.abs(v)), 0);
         const arrowMax = 0.18; // 最大箭頭長度（場景座標）
-        const scale = maxV > 1e-9 ? arrowMax / maxV : 0;
+        // 絕對門檻：速度必須夠大才顯示，避免數值殘留或靜態偏移被放大
+        // 同時檢查位移變化：算各取樣點的 |y - yp| 最大值，若位移幾乎不變也不顯示
+        let maxDy = 0;
+        for (let k = 0; k <= vaN; k++) {
+          const idx = R.o + Math.min(k * nodeStep, R.N);
+          const dy = Math.abs(R.y[idx] - R.yp[idx]);
+          if (dy > maxDy) maxDy = dy;
+        }
+        const vRef = speed(r) * 0.005;
+        const dyRef = 5e-5; // 位移變化量絕對門檻
+        const scale = (maxV > vRef && maxDy > dyRef) ? arrowMax / maxV : 0;
         const minFrac = 0.04; // 速度低於最大值 4% 的不顯示
         for (let k = 0; k <= vaN; k++) {
-          const idx = Math.min(k * nodeStep, R.N);
+          const visIdx = Math.min(k * nodeStep, R.N);
           const vel = vels[k];
           const absV = Math.abs(vel);
-          const s = idx * R.dx;
+          const s = visIdx * R.dx;
           centerPoint(r, R, s, base, tmp3, 0);
           const px = tmp3[0], py = tmp3[1];
           const { shaft, tip } = va[k];
@@ -979,7 +1015,7 @@ function updateVisuals() {
         const arr = V.disp.ln.geometry.attributes.position.array, n = V.disp.n;
         for (let k = 0; k < n; k++) {
           const s = k / (n - 1) * r.L, f = clamp(s / R.dx, 0, R.N), i = Math.min(R.N - 1, Math.floor(f)), u = f - i;
-          arr[k * 3] = LAY.x0 + s; arr[k * 3 + 1] = yb + (R.y[i] * (1 - u) + R.y[i + 1] * u); arr[k * 3 + 2] = 0;
+          arr[k * 3] = LAY.x0 + s; arr[k * 3 + 1] = yb + (R.y[R.o + i] * (1 - u) + R.y[R.o + i + 1] * u); arr[k * 3 + 2] = 0;
         }
         V.disp.ln.geometry.attributes.position.needsUpdate = true;
         V.dispAxis.position.y = yb; V.dispLabel.position.set(LAY.x0 + r.L + 0.1, yb, 0);
@@ -1015,22 +1051,22 @@ function buildMeasure() {
   const lineMat = () => new THREE.LineBasicMaterial({ color: 0xa9dcf2 });
   S.ropes.forEach((r, ri) => {
     if (r.pol !== 'transverse') return;
-    const R = rt(r), base = LAY.bases[ri], y = R.y;
-    let mx = 0; for (let i = 0; i <= R.N; i++) mx = Math.max(mx, y[i]);
+    const R = rt(r), base = LAY.bases[ri], y = R.y, o = R.o;
+    let mx = 0; for (let i = 0; i <= R.N; i++) mx = Math.max(mx, y[o + i]);
     // 平衡位置
     const eq = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(LAY.x0, base, 0.01), new THREE.Vector3(LAY.x0 + r.L, base, 0.01)]),
       new THREE.LineDashedMaterial({ color: 0xa9dcf2, dashSize: 0.07, gapSize: 0.06, transparent: true, opacity: 0.6 }));
     eq.computeLineDistances(); measureG.add(eq);
     if (mx < 0.02) return;
     const crests = [];
-    for (let i = 2; i < R.N - 1; i++) if (y[i] > 0.4 * mx && y[i] >= y[i - 1] && y[i] > y[i + 1]) {
+    for (let i = 2; i < R.N - 1; i++) if (y[o + i] > 0.4 * mx && y[o + i] >= y[o + i - 1] && y[o + i] > y[o + i + 1]) {
       if (!crests.length || i - crests[crests.length - 1] > 6) crests.push(i);
     }
     const top = base + mx + 0.2;
     crests.forEach(i => {
       const x = LAY.x0 + i * R.dx;
       const tri = new THREE.Mesh(new THREE.ConeGeometry(0.045, 0.1, 3), new THREE.MeshBasicMaterial({ color: 0xa9dcf2 }));
-      tri.rotation.z = Math.PI; tri.position.set(x, base + y[i] + 0.11, 0.02); measureG.add(tri);
+      tri.rotation.z = Math.PI; tri.position.set(x, base + y[o + i] + 0.11, 0.02); measureG.add(tri);
     });
     const gaps = []; for (let k = 0; k + 1 < crests.length; k++) gaps.push(crests[k + 1] - crests[k]);
     const gm = gaps.reduce((a, b) => a + b, 0) / (gaps.length || 1);
@@ -1429,7 +1465,7 @@ const chart = $('#chart'), cctx = chart.getContext('2d');
 function chartSample() {
   const r0 = S.ropes[clamp(S.probe.rope, 0, S.ropes.length - 1)]; if (!r0) return;
   const R = rt(r0), src = r0.sources[0];
-  const vs = src ? R.y[Math.round(src.pos * R.N)] : 0, vp = R.y[Math.round(S.probe.pos * R.N)];
+  const vs = src ? R.y[R.o + Math.round(src.pos * R.N)] : 0, vp = R.y[R.o + Math.round(S.probe.pos * R.N)];
   const n = CH.t.length; if (n && S.t - CH.t[n - 1] < 0.004) return;
   CH.t.push(S.t); CH.a.push(vs); CH.b.push(vp);
   while (CH.t.length && S.t - CH.t[0] > 6.5) { CH.t.shift(); CH.a.shift(); CH.b.shift(); }
