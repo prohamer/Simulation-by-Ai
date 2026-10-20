@@ -1,4 +1,4 @@
-<title>WaveLabV11</title>
+<title>Wavelab V12</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -248,6 +248,7 @@ canvas.freehand{width:100%;height:130px;display:block;border-radius:8px;backgrou
       <button class="tb" data-act="view" data-v="oblique" type="button">斜視</button>
       <button class="tb" data-act="view" data-v="top" type="button">俯視</button>
       <button class="tb" id="bLock" data-act="lockView" type="button" title="鎖定／解鎖視角旋轉縮放（L）">🔓</button>
+      <button class="tb" id="bFullscreen" data-act="fullscreen" type="button" title="全螢幕（F11）"><svg viewBox="0 0 24 24"><path d="M3 3h6v2H5v4H3zm12 0h6v6h-2V5h-4zm-12 12h2v4h4v2H3zm18 0v6h-6v-2h4v-4z"/></svg></button>
       <span class="tclock" id="clock">t = 0.000 s</span>
     </div>
     <div id="toast" hidden></div>
@@ -278,6 +279,7 @@ canvas.freehand{width:100%;height:130px;display:block;border-radius:8px;backgrou
 const $ = s => document.querySelector(s);
 const TAU = Math.PI * 2;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const sanitizeColor = c => /^#[0-9a-fA-F]{3,8}$/.test(c) ? c : null;
 const fmt = (v, d = 2) => (Math.abs(v) < 1e-9 ? 0 : v).toFixed(d);
 const ROPE_COLORS = ['#f2c14e', '#7cc6e8', '#ef8a74', '#b9a3f0', '#9bd97c', '#f39cc3'];
 const ARROW_COLORS = ['#f2c14e', '#7cc6e8', '#ef8a74', '#9bd97c', '#b9a3f0', '#f39cc3'];
@@ -499,9 +501,20 @@ function stepRope(r, ri, t0, dur) {
   const drv = r.sources.map((src, j) => ({ e: eff(r, j), idx: Math.round(clamp(src.pos, 0, 1) * N), lim: sLim }));
   let y = R.y, yp = R.yp, yn = R.yn; const c2 = R.c2;
   const chL = Math.sqrt(c2[0]) * h, chR = Math.sqrt(c2[N]) * h;
+  // 海綿層：在吸收端附近逐漸增加阻尼，消除反射
+  const spongeN = Math.max(6, Math.round(N * 0.08)); // 使用 8% 的節點作為海綿層
+  const spongeMax = 40; // 海綿層最大阻尼（遠大於一般阻尼）
+  const leftAbs = r.leftEnd === 'absorb', rightAbs = r.rightEnd === 'absorb';
   for (let k = 0; k < n; k++) {
     const t = tBase + (k + 1) * h;
-    for (let i = 1; i < N; i++) yn[i] = (2 * y[i] - (1 - b) * yp[i] + lam * c2[i] * (y[i + 1] - 2 * y[i] + y[i - 1])) * ib;
+    for (let i = 1; i < N; i++) {
+      // 在海綿區域使用局部增強阻尼
+      let localB = b;
+      if (leftAbs && i <= spongeN) { const u = 1 - i / spongeN; localB = (r.damping + spongeMax * u * u) * h / 2; }
+      if (rightAbs && i >= N - spongeN) { const u = 1 - (N - i) / spongeN; localB = (r.damping + spongeMax * u * u) * h / 2; }
+      const ilb = 1 / (1 + localB);
+      yn[i] = (2 * y[i] - (1 - localB) * yp[i] + lam * c2[i] * (y[i + 1] - 2 * y[i] + y[i - 1])) * ilb;
+    }
     boundary(r.leftEnd, yn, y, 0, 1, chL, R.dx);
     boundary(r.rightEnd, yn, y, N, N - 1, chR, R.dx);
     for (const d of drv) { let v = driveVal(d.e.src, d.e.s, t); if (v !== null) { if (d.lim < 1.6) v = clamp(v, -d.lim, d.lim); yn[d.idx] = v; } }
@@ -703,7 +716,13 @@ function buildScene() {
       const guide = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 2.4, 6), new THREE.MeshBasicMaterial({ color: CHALK, transparent: true, opacity: 0.25 }));
       if (r.pol === 'longitudinal') guide.rotation.z = Math.PI / 2;
       g.add(guide);
-      V.handles.push({ m: hm, guide });
+      // 波源振動指示箭頭（自訂模式播放時顯示當前振動方向）
+      const diShaft = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,0,0), new THREE.Vector3(0,1,0)]),
+        new THREE.LineBasicMaterial({ color: 0xff9944, linewidth: 2 }));
+      const diTipGeo = new THREE.ConeGeometry(0.05, 0.14, 6);
+      const diTip = new THREE.Mesh(diTipGeo, new THREE.MeshBasicMaterial({ color: 0xff9944, transparent: true, opacity: 0.9 }));
+      diShaft.visible = false; diTip.visible = false; g.add(diShaft); g.add(diTip);
+      V.handles.push({ m: hm, guide, diShaft, diTip });
     });
     // 質點標記
     const K = isSpring ? Math.max(4, Math.floor(r.turns / 3)) : 20;
@@ -833,12 +852,60 @@ function updateVisuals() {
       const h = V.handles[j]; if (!h) return;
       centerPoint(r, R, clamp(src.pos, 0, 1) * r.L, base, tmp3, 0);
       h.m.position.set(tmp3[0], tmp3[1], 0);
-      const mode = eff(r, j).src.mode;
+      const e = eff(r, j);
+      const mode = e.src.mode;
       h.guide.visible = mode === 'manual';
       h.guide.position.set(LAY.x0 + src.pos * r.L, base, 0);
-      const live = !!eff(r, j).s.kind;
+      const live = !!e.s.kind;
       h.m.material.emissiveIntensity = live ? 0.9 : 0.35;
       if (r.medium !== 'spring') h.m.scale.setScalar(mode === 'manual' ? 1.35 : 1);
+      // 波源振動方向指示（自訂箭頭序列播放時）
+      if (h.diShaft) {
+        let showDi = false;
+        if (e.s.kind === 'custom' && e.s.seq && e.s.seq.kind === 'arrows') {
+          const dt = S.t - e.s.t0;
+          let tt = dt;
+          if (tt >= 0 && (tt < e.s.seq.total || e.src.custom.loop)) {
+            if (e.src.custom.loop && tt >= e.s.seq.total) tt %= e.s.seq.total;
+            const curVal = seqVal(e.s.seq, tt);
+            const eps = 0.01, nextVal = seqVal(e.s.seq, Math.min(tt + eps, e.s.seq.total));
+            const vel = (nextVal - curVal) / eps;
+            const px = tmp3[0], py = tmp3[1];
+            const absV = Math.abs(vel);
+            if (absV > 0.001) {
+              showDi = true;
+              const len = clamp(absV * 0.15, 0.06, 0.25);
+              if (r.pol === 'transverse') {
+                const dir = vel > 0 ? 1 : -1;
+                const sp = h.diShaft.geometry.attributes.position.array;
+                sp[0] = px; sp[1] = py; sp[2] = 0.08;
+                sp[3] = px; sp[4] = py + dir * len; sp[5] = 0.08;
+                h.diShaft.geometry.attributes.position.needsUpdate = true;
+                h.diTip.position.set(px, py + dir * len, 0.08);
+                h.diTip.rotation.set(0, 0, dir > 0 ? 0 : Math.PI);
+              } else {
+                const dir = vel > 0 ? 1 : -1;
+                const sp = h.diShaft.geometry.attributes.position.array;
+                sp[0] = px; sp[1] = py; sp[2] = 0.08;
+                sp[3] = px + dir * len; sp[4] = py; sp[5] = 0.08;
+                h.diShaft.geometry.attributes.position.needsUpdate = true;
+                h.diTip.position.set(px + dir * len, py, 0.08);
+                h.diTip.rotation.set(0, 0, dir > 0 ? -Math.PI / 2 : Math.PI / 2);
+              }
+              h.diTip.scale.setScalar(clamp(len * 4, 0.4, 1));
+              // 使用當前箭頭顏色
+              let ai = 0; const T = e.s.seq.times;
+              for (let k = 1; k < T.length; k++) { if (T[k] >= tt) { ai = k - 1; break; } ai = k - 1; }
+              ai = Math.min(ai, e.s.seq.nArrows - 1);
+              const ac = ARROW_COLORS[ai % ARROW_COLORS.length];
+              h.diShaft.material.color.set(ac);
+              h.diTip.material.color.set(ac);
+            }
+          }
+        }
+        h.diShaft.visible = showDi;
+        h.diTip.visible = showDi;
+      }
     });
     // 自由端圓環
     if (V.ring0) { centerPoint(r, R, 0, base, tmp3, 0); V.ring0.position.set(LAY.x0 - 0.03, tmp3[1], 0); }
@@ -1131,7 +1198,7 @@ function setPanel(open) {
   const b = $('#bTool'); b.classList.toggle('on', !open); b.setAttribute('aria-pressed', String(open));
   try { localStorage.setItem('rwl.panel', open ? '1' : '0'); } catch (e) {}
 }
-let curView = 'front', viewLocked = false;
+let curView = 'front', viewLocked = true;
 function setViewLock(on) {
   viewLocked = on;
   controls.enabled = !on;
@@ -1571,6 +1638,10 @@ const PRESETS = [
     notes: ['上面一條：兩個向上脈衝相遇 → 相加變高。', '下面一條：一上一下相遇 → 瞬間幾乎抵消。', '用「時間凍結」停在相遇瞬間觀察，再恢復看它們各自穿過。'],
     ropes: [{ name: '同相', leftEnd: 'absorb', rightEnd: 'absorb', sources: [{ pos: 0, mode: 'pulse', amp: 0.3, width: 0.4 }, { pos: 1, mode: 'pulse', amp: 0.3, width: 0.4 }] },
             { name: '反相', color: ROPE_COLORS[2], leftEnd: 'absorb', rightEnd: 'absorb', sources: [{ pos: 0, mode: 'pulse', amp: 0.3, width: 0.4 }, { pos: 1, mode: 'pulse', amp: 0.3, width: 0.4, sign: -1 }] }] },
+  { id: 'diff-freq', tag: '疊加', title: '同介質・不同頻率', desc: '相同的繩子，頻率 1 Hz 與 2 Hz 同步發射比較。', speed: 0.5, start: 'periodic',
+    notes: ['兩條繩的材質完全相同，只有波源頻率不同。', '觀察：波速相同，但頻率 2 Hz 的波長是 1 Hz 的一半。', '驗證 v = fλ：波速不變時，頻率加倍 → 波長減半。'],
+    ropes: [{ name: 'f = 1 Hz', L: 8, rightEnd: 'absorb', sources: [{ mode: 'periodic', amp: 0.3, freq: 1 }] },
+            { name: 'f = 2 Hz', color: ROPE_COLORS[1], L: 8, rightEnd: 'absorb', sources: [{ mode: 'periodic', amp: 0.3, freq: 2 }] }] },
   { id: 'standing', tag: '駐波', title: '駐波：兩端固定', desc: '以第 3 諧音頻率振動，形成 3 個波腹。', speed: 0.6, start: 'periodic',
     notes: ['波源振幅很小，但在共振頻率下駐波振幅會被放大。', '觀察：波節不動、波腹振動最大；相鄰波節相距 λ/2。', '到「介質」分頁按 f₁、f₂、f₄ 換其他諧音。'],
     ropes: [{ name: '弦', L: 6, F: 4, mu: 0.25, damping: 0.35, sources: [{ mode: 'periodic', amp: 0.05, freq: 1 }] }] },
@@ -1623,7 +1694,7 @@ function renderScenario() {
 }
 $('#formula').addEventListener('click', () => { $('#formula').classList.toggle('mini'); $('#formula').dataset.h = ''; });
 $('#scnToggle').addEventListener('click', () => { const c = $('#scn').classList.toggle('collapsed'); $('#scnToggle').textContent = c ? '展開' : '收合'; });
-const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 /* =========================================================
    面板 UI
@@ -1893,6 +1964,11 @@ document.addEventListener('click', ev => {
     case 'ghostClear': clearGroup(ghosts); break;
     case 'view': fitView(t.dataset.v); break;
     case 'lockView': setViewLock(!viewLocked); break;
+    case 'fullscreen': {
+      if (!document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {});
+      else document.exitFullscreen().catch(() => {});
+      break;
+    }
     case 'preset': loadPreset(t.dataset.id); break;
     case 'sel': S.sel = +t.dataset.i; renderPanel(); break;
     case 'addRope': {
@@ -1996,11 +2072,18 @@ function importJSON(txt) {
   try { o = JSON.parse(txt); } catch (e) { toast('無法解析：請確認貼上的是完整的 JSON 文字'); return; }
   if (!o || !Array.isArray(o.ropes) || !o.ropes.length) { toast('格式不符：找不到 ropes 介質清單'); return; }
   const num = (v, a, b, d) => (typeof v === 'number' && isFinite(v)) ? clamp(v, a, b) : d;
-  const ropes = o.ropes.slice(0, 6).map(r => Object.assign({}, r, {
+  const str = v => typeof v === 'string' ? v.slice(0, 100) : '';
+  const ropes = o.ropes.slice(0, 6).map((r, i) => Object.assign({}, r, {
+    name: str(r.name) || ('繩' + (i + 1)),
+    color: sanitizeColor(r.color) || ROPE_COLORS[i % ROPE_COLORS.length],
     L: num(r.L, 1, 12, 6), F: num(r.F, 0.2, 50, 4), mu: num(r.mu, 0.02, 2, 0.25), damping: num(r.damping, 0, 2, 0.05),
+    medium: ['rope', 'spring'].includes(r.medium) ? r.medium : 'rope',
+    pol: ['transverse', 'longitudinal'].includes(r.pol) ? r.pol : 'transverse',
+    leftEnd: ['fixed', 'free', 'absorb'].includes(r.leftEnd) ? r.leftEnd : 'fixed',
+    rightEnd: ['fixed', 'free', 'absorb'].includes(r.rightEnd) ? r.rightEnd : 'fixed',
     sources: (Array.isArray(r.sources) && r.sources.length ? r.sources : [{}]).slice(0, 3)
   }));
-  applyState({ ropes, title: o.title || '匯入的設定', notes: Array.isArray(o.notes) ? o.notes : [], speed: num(o.timeScale, SPEED_MIN, SPEED_MAX, 1),
+  applyState({ ropes, title: str(o.title) || '匯入的設定', notes: Array.isArray(o.notes) ? o.notes.slice(0, 20).map(n => str(n)) : [], speed: num(o.timeScale, SPEED_MIN, SPEED_MAX, 1),
     display: o.display, probe: o.probe, formula: ['strip', 'bus'].includes(o.formula) ? o.formula : 'none', start: null });
   toast('已匯入「' + (o.title || '設定') + '」');
 }
@@ -2031,10 +2114,17 @@ document.addEventListener('keydown', ev => {
   else if (ev.key === 't' || ev.key === 'T') setPanel($('#app').classList.contains('nopanel'));
   else if (ev.key === 'l' || ev.key === 'L') setViewLock(!viewLocked);
   else if (ev.key === 'Escape' && DR.on) exitDraw();
+  else if (ev.key === 'F11') { ev.preventDefault(); if (!document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {}); else document.exitFullscreen().catch(() => {}); }
+});
+document.addEventListener('fullscreenchange', () => {
+  const on = !!document.fullscreenElement;
+  const b = $('#bFullscreen'); if (b) b.classList.toggle('on', on);
+  setTimeout(resize, 100);
 });
 
 /* ---------- 啟動 ---------- */
 resize();
+setViewLock(true);
 try { if (localStorage.getItem('rwl.panel') === '0') setPanel(false); } catch (e) {}
 setPaused(false);
 loadPreset('strip');
