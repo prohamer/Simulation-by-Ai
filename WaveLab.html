@@ -1,4 +1,4 @@
-<title>WavelabV13</title>
+<title>WaveLab V14</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -321,7 +321,7 @@ function newRope(o = {}) {
 
 const S = {
   ropes: [], sel: 0, tab: 'scene', t: 0, paused: false, timeScale: 1,
-  display: { markers: true, ruler: true, labels: true, chart: true, dispCurve: true, measure: false, grid: true, velArrows: false },
+  display: { markers: true, ruler: true, labels: true, chart: false, dispCurve: true, measure: false, grid: true, velArrows: false },
   probe: { rope: 0, pos: 0.5 },
   formula: { mode: 'none', tStart: null },
   scenario: { id: null, title: '繩波實驗台', notes: [] }
@@ -479,21 +479,24 @@ function boundary(type, yn, y, e, nb, ch, dx) {
   else if (type === 'free') yn[e] = yn[nb];
   else yn[e] = y[nb] + (ch - dx) / (ch + dx) * (yn[nb] - y[e]);
 }
-const HIST = { t: [], v: [] };
-function histPush(t, v) {
-  const n = HIST.t.length;
-  if (n && t - HIST.t[n - 1] < 0.002) return;
-  HIST.t.push(t); HIST.v.push(v);
-  if (HIST.t.length > 40000) { HIST.t.splice(0, 10000); HIST.v.splice(0, 10000); }
+const HIST = [];
+function histEnsure(ri) { if (!HIST[ri]) HIST[ri] = { t: [], v: [] }; return HIST[ri]; }
+function histPush(t, v, ri = 0) {
+  const h = histEnsure(ri);
+  const n = h.t.length;
+  if (n && t - h.t[n - 1] < 0.002) return;
+  h.t.push(t); h.v.push(v);
+  if (h.t.length > 40000) { h.t.splice(0, 10000); h.v.splice(0, 10000); }
 }
-function histVal(t) {
-  const T = HIST.t, n = T.length;
+function histVal(t, ri = 0) {
+  const h = histEnsure(ri);
+  const T = h.t, n = T.length;
   if (!n || t < T[0]) return 0;
-  if (t >= T[n - 1]) return HIST.v[n - 1];
+  if (t >= T[n - 1]) return h.v[n - 1];
   let lo = 0, hi = n - 1;
   while (hi - lo > 1) { const m = (lo + hi) >> 1; if (T[m] <= t) lo = m; else hi = m; }
   const u = (t - T[lo]) / (T[hi] - T[lo] || 1);
-  return HIST.v[lo] + (HIST.v[hi] - HIST.v[lo]) * u;
+  return h.v[lo] + (h.v[hi] - h.v[lo]) * u;
 }
 // 固定時間步長：與螢幕更新率無關（iPad ProMotion 會動態改變幀率，變動步長會讓差分法發散）
 function stepRope(r, ri, t0, dur) {
@@ -544,7 +547,7 @@ function stepRope(r, ri, t0, dur) {
     boundary(bcL, yn, y, 0, 1, chL, R.dx);
     boundary(bcR, yn, y, M, M - 1, chR, R.dx);
     for (const d of drv) { let v = driveVal(d.e.src, d.e.s, t); if (v !== null) { if (d.lim < 1.6) v = clamp(v, -d.lim, d.lim); yn[d.idx] = v; } }
-    if (ri === 0 && drv.length) histPush(t, yn[drv[0].idx]);
+    if (drv.length) histPush(t, yn[drv[0].idx], ri);
     const tmp = yp; yp = y; y = yn; yn = tmp;
   }
   R.y = y; R.yp = yp; R.yn = yn; R.tSim = tBase + n * h;
@@ -559,7 +562,7 @@ function advance(dt) {
   for (const e of allSourceRefs()) if (e.s.kind && driveVal(e.src, e.s, S.t) === null && S.t > e.s.t0) e.s.kind = null;
 }
 function resetWaves() {
-  S.t = 0; HIST.t.length = 0; HIST.v.length = 0; S.formula.tStart = null; CH.t.length = CH.a.length = CH.b.length = 0;
+  S.t = 0; HIST.length = 0; S.formula.tStart = null; CH.t.length = CH.a.length = CH.b.length = 0;
   S.ropes.forEach(r => { const R = rt(r); R.y.fill(0); R.yp.fill(0); R.yn.fill(0); R.tSim = 0; r.sources.forEach(src => { const s = srt(src); s.kind = null; s.dragging = false; }); });
 }
 
@@ -686,7 +689,7 @@ function computeLayout() {
     if (i > 0) y -= a + 0.55;
     LAY.bases.push(y); y -= a + 0.55;
     if (i === 0) LAY.top = a + 0.45;
-    if (i === 0 && S.formula.mode !== 'none') { y -= 2 * a + 1.4; }
+    if (S.formula.mode !== 'none') { y -= 2 * a + 1.4; }
   });
   LAY.bottom = y;
 }
@@ -996,11 +999,12 @@ function updateVisuals() {
             tip.rotation.set(0, 0, dir > 0 ? 0 : Math.PI);
           } else {
             const dir = vel > 0 ? 1 : -1;
+            const ay = py + (r.medium === 'spring' ? r.coilR + 0.06 : 0);
             const sp = shaft.geometry.attributes.position.array;
-            sp[0] = px; sp[1] = py; sp[2] = 0;
-            sp[3] = px + dir * len; sp[4] = py; sp[5] = 0;
+            sp[0] = px; sp[1] = ay; sp[2] = 0;
+            sp[3] = px + dir * len; sp[4] = ay; sp[5] = 0;
             shaft.geometry.attributes.position.needsUpdate = true;
-            tip.position.set(px + dir * len, py, 0);
+            tip.position.set(px + dir * len, ay, 0);
             tip.rotation.set(0, 0, dir > 0 ? -Math.PI / 2 : Math.PI / 2);
           }
           tip.scale.setScalar(clamp(len * 5, 0.3, 1));
@@ -1091,7 +1095,7 @@ function buildMeasure() {
 /* =========================================================
    v = fλ 教學場景：紙帶 / 公車
    ========================================================= */
-const FV = { strip: new THREE.Group(), bus: new THREE.Group(), key: '' };
+const FV = { strip: new THREE.Group(), bus: new THREE.Group(), key: '', perRope: [] };
 scene.add(FV.strip); scene.add(FV.bus);
 const labelCache = new Map();
 function cachedLabel(text, opt) {
@@ -1102,108 +1106,123 @@ function cachedLabel(text, opt) {
 function buildFormulaObjects() {
   clearGroup(FV.strip); clearGroup(FV.bus); FV.key = '';
   FV.strip.visible = FV.bus.visible = false;
+  FV.perRope = [];
   if (S.formula.mode === 'none' || !S.ropes.length) return;
-  const r = S.ropes[0], src = eff(r, 0).src, A = Math.max(0.15, src.amp);
-  const v = speed(r, 0), f = src.freq, lam = v / f, x0s = LAY.x0 + src.pos * r.L, xEnd = LAY.x0 + r.L;
-  const h = 2 * A + 0.34, cy = LAY.bases[0] - ropeAmpEst(r) - 0.55 - h / 2;
-  FV.geo = { A, v, f, lam, x0s, xEnd, h, cy, Tp: 1 / f };
-  if (S.formula.mode === 'strip') {
-    const paper = new THREE.Mesh(new THREE.PlaneGeometry(1, h), new THREE.MeshBasicMaterial({ color: 0xf3eedf, side: THREE.DoubleSide }));
-    paper.position.set(x0s, cy, -0.02); FV.paper = paper; FV.strip.add(paper);
-    const n = 600, lg = new THREE.BufferGeometry(); lg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(n * 3), 3));
-    const ln = new THREE.Line(lg, new THREE.LineBasicMaterial({ color: 0x1f3b6e })); ln.frustumCulled = false; FV.stripLine = ln; FV.stripN = n; FV.strip.add(ln);
-    const mid = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, 0), new THREE.Vector3(1, 0, 0)]), new THREE.LineBasicMaterial({ color: 0x9a9480 }));
-    mid.position.set(x0s, cy, -0.01); FV.stripMid = mid; FV.strip.add(mid);
-    // 捲筒
-    const cv = document.createElement('canvas'); cv.width = 128; cv.height = 32; const c = cv.getContext('2d');
-    c.fillStyle = '#efe8d4'; c.fillRect(0, 0, 128, 32); c.fillStyle = '#b8ae92'; for (let i = 0; i < 8; i++) c.fillRect(i * 16, 0, 5, 32);
-    const roll = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, h + 0.06, 28), new THREE.MeshStandardMaterial({ map: new THREE.CanvasTexture(cv), roughness: 0.9 }));
-    roll.position.set(x0s - 0.2, cy, -0.2); FV.roll = roll; FV.strip.add(roll);
-    const tg = makeLabel('紙帶以波速 v 捲出', { size: 0.16, color: '#eef0e6', ax: 0 }); tg.position.set(x0s - 0.42, cy - h / 2 - 0.2, 0); FV.strip.add(tg);
-    FV.tickG = new THREE.Group(); FV.strip.add(FV.tickG);
-  } else {
-    const L = Math.min(9.5, Math.max(1, lam));
-    const clip = [new THREE.Plane(new THREE.Vector3(1, 0, 0), -x0s), new THREE.Plane(new THREE.Vector3(-1, 0, 0), xEnd + 0.02)];
-    FV.clip = clip;
-    const road = new THREE.Mesh(new THREE.BoxGeometry(r.L + 1.2, 0.03, 0.9), new THREE.MeshStandardMaterial({ color: 0x3a4d46, roughness: 1 }));
-    road.position.set(LAY.x0 + r.L / 2 + 0.1, cy - h / 2 - 0.15, -0.2); FV.bus.add(road);
-    const st = new THREE.Mesh(new THREE.BoxGeometry(0.5, h + 0.3, 0.7), new THREE.MeshStandardMaterial({ color: 0x5b7d6f, roughness: 0.9 }));
-    st.position.set(x0s - 0.27, cy + 0.02, -0.2); FV.bus.add(st);
-    const sign = makeLabel('波源站：每 T＝' + fmt(1 / f, 2) + ' s 發一班車', { size: 0.15, color: '#22190a', bg: '#f2c14e', ax: 0 });
-    sign.position.set(x0s - 0.5, cy + h / 2 + 0.33, 0.2); FV.bus.add(sign);
-    FV.buses = [];
-    const nBus = Math.ceil(r.L / lam) + 2;
-    for (let k = 0; k < nBus; k++) {
-      const b = new THREE.Group();
-      const body = new THREE.Mesh(new THREE.BoxGeometry(lam * 0.97, h, 0.36), new THREE.MeshStandardMaterial({ color: 0xf2b33a, roughness: 0.6, clippingPlanes: clip }));
-      body.position.set(-lam / 2, 0, -0.2); b.add(body);
-      const glass = new THREE.Mesh(new THREE.BoxGeometry(0.04, h * 0.45, 0.37), new THREE.MeshStandardMaterial({ color: 0x24353a, clippingPlanes: clip }));
-      glass.position.set(-0.03, h * 0.18, -0.2); b.add(glass);
-      [-0.2 * lam - 0.05, -0.8 * lam].forEach(wx => {
-        const w = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.4, 16), new THREE.MeshStandardMaterial({ color: 0x1b1f1e, clippingPlanes: clip }));
-        w.rotation.x = Math.PI / 2; w.position.set(wx, -h / 2 - 0.02, -0.2); b.add(w);
-      });
-      const pts = [];
-      for (let q = 0; q <= 160; q++) {
-        const d = q / 160 * lam;
-        pts.push(new THREE.Vector3(-d, src.amp * waveFn(src.wave, TAU * d / lam + src.phase * Math.PI / 180), -0.015));
+  S.ropes.forEach((r, ri) => {
+    const src = eff(r, 0).src, A = Math.max(0.15, src.amp);
+    const v = speed(r, 0), f = src.freq, lam = v / f, x0s = LAY.x0 + src.pos * r.L, xEnd = LAY.x0 + r.L;
+    const h = 2 * A + 0.34, cy = LAY.bases[ri] - ropeAmpEst(r) - 0.55 - h / 2;
+    const pr = { geo: { A, v, f, lam, x0s, xEnd, h, cy, Tp: 1 / f } };
+    if (S.formula.mode === 'strip') {
+      const paper = new THREE.Mesh(new THREE.PlaneGeometry(1, h), new THREE.MeshBasicMaterial({ color: 0xf3eedf, side: THREE.DoubleSide }));
+      paper.position.set(x0s, cy, -0.02); pr.paper = paper; FV.strip.add(paper);
+      const n = 600, lg = new THREE.BufferGeometry(); lg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(n * 3), 3));
+      const ln = new THREE.Line(lg, new THREE.LineBasicMaterial({ color: 0x1f3b6e })); ln.frustumCulled = false; pr.stripLine = ln; pr.stripN = n; FV.strip.add(ln);
+      const mid = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, 0), new THREE.Vector3(1, 0, 0)]), new THREE.LineBasicMaterial({ color: 0x9a9480 }));
+      mid.position.set(x0s, cy, -0.01); pr.stripMid = mid; FV.strip.add(mid);
+      const cv = document.createElement('canvas'); cv.width = 128; cv.height = 32; const c = cv.getContext('2d');
+      c.fillStyle = '#efe8d4'; c.fillRect(0, 0, 128, 32); c.fillStyle = '#b8ae92'; for (let i = 0; i < 8; i++) c.fillRect(i * 16, 0, 5, 32);
+      const roll = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, h + 0.06, 28), new THREE.MeshStandardMaterial({ map: new THREE.CanvasTexture(cv), roughness: 0.9 }));
+      roll.position.set(x0s - 0.2, cy, -0.2); pr.roll = roll; FV.strip.add(roll);
+      const tg = makeLabel(ri === 0 ? '紙帶以波速 v 捲出' : r.name, { size: 0.16, color: '#eef0e6', ax: 0 }); tg.position.set(x0s - 0.42, cy - h / 2 - 0.2, 0); FV.strip.add(tg);
+      pr.tickG = new THREE.Group(); FV.strip.add(pr.tickG);
+    } else {
+      const clip = [new THREE.Plane(new THREE.Vector3(1, 0, 0), -x0s), new THREE.Plane(new THREE.Vector3(-1, 0, 0), xEnd + 0.02)];
+      pr.clip = clip;
+      const road = new THREE.Mesh(new THREE.BoxGeometry(r.L + 1.2, 0.03, 0.9), new THREE.MeshStandardMaterial({ color: 0x3a4d46, roughness: 1 }));
+      road.position.set(LAY.x0 + r.L / 2 + 0.1, cy - h / 2 - 0.15, -0.2); FV.bus.add(road);
+      const st = new THREE.Mesh(new THREE.BoxGeometry(0.5, h + 0.3, 0.7), new THREE.MeshStandardMaterial({ color: 0x5b7d6f, roughness: 0.9 }));
+      st.position.set(x0s - 0.27, cy + 0.02, -0.2); FV.bus.add(st);
+      const sign = makeLabel((ri > 0 ? r.name + '：' : '') + '每 T＝' + fmt(1 / f, 2) + ' s 發一班車', { size: 0.15, color: '#22190a', bg: '#f2c14e', ax: 0 });
+      sign.position.set(x0s - 0.5, cy + h / 2 + 0.33, 0.2); FV.bus.add(sign);
+      pr.buses = [];
+      const nBus = Math.ceil(r.L / lam) + 2;
+      for (let k = 0; k < nBus; k++) {
+        const b = new THREE.Group();
+        const body = new THREE.Mesh(new THREE.BoxGeometry(lam * 0.97, h, 0.36), new THREE.MeshStandardMaterial({ color: 0xf2b33a, roughness: 0.6, clippingPlanes: clip }));
+        body.position.set(-lam / 2, 0, -0.2); b.add(body);
+        const glass = new THREE.Mesh(new THREE.BoxGeometry(0.04, h * 0.45, 0.37), new THREE.MeshStandardMaterial({ color: 0x24353a, clippingPlanes: clip }));
+        glass.position.set(-0.03, h * 0.18, -0.2); b.add(glass);
+        [-0.2 * lam - 0.05, -0.8 * lam].forEach(wx => {
+          const w = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.4, 16), new THREE.MeshStandardMaterial({ color: 0x1b1f1e, clippingPlanes: clip }));
+          w.rotation.x = Math.PI / 2; w.position.set(wx, -h / 2 - 0.02, -0.2); b.add(w);
+        });
+        const pts = [];
+        for (let q = 0; q <= 160; q++) {
+          const d = q / 160 * lam;
+          pts.push(new THREE.Vector3(-d, src.amp * waveFn(src.wave, TAU * d / lam + src.phase * Math.PI / 180), -0.015));
+        }
+        const wl = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: 0x1f2a5a, clippingPlanes: clip }));
+        b.add(wl);
+        const mid = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, -0.016), new THREE.Vector3(-lam * 0.97, 0, -0.016)]), new THREE.LineBasicMaterial({ color: 0x9a7a2a, clippingPlanes: clip }));
+        b.add(mid);
+        const lb = makeLabel('第' + (k + 1) + '班', { size: 0.15, color: '#22190a', clip });
+        lb.position.set(-lam / 2, h / 2 - 0.12, 0.0); b.add(lb);
+        b.position.y = cy; FV.bus.add(b); pr.buses.push(b);
       }
-      const wl = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: 0x1f2a5a, clippingPlanes: clip }));
-      b.add(wl);
-      const mid = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, -0.016), new THREE.Vector3(-lam * 0.97, 0, -0.016)]), new THREE.LineBasicMaterial({ color: 0x9a7a2a, clippingPlanes: clip }));
-      b.add(mid);
-      const lb = makeLabel('第' + (k + 1) + '班', { size: 0.15, color: '#22190a', clip });
-      lb.position.set(-lam / 2, h / 2 - 0.12, 0.0); b.add(lb);
-      b.position.y = cy; FV.bus.add(b); FV.buses.push(b);
     }
-  }
+    FV.perRope.push(pr);
+  });
+  // backward compat: alias first rope's data
+  if (FV.perRope.length) { const p = FV.perRope[0]; FV.geo = p.geo; FV.paper = p.paper; FV.stripLine = p.stripLine; FV.stripN = p.stripN; FV.stripMid = p.stripMid; FV.roll = p.roll; FV.tickG = p.tickG; FV.clip = p.clip; FV.buses = p.buses; }
 }
 function updateFormula() {
   const card = $('#formula');
-  if (S.formula.mode === 'none' || !S.ropes.length || !FV.geo) { card.hidden = true; FV.strip.visible = FV.bus.visible = false; return; }
-  const r = S.ropes[0], e = eff(r, 0), src = e.src, G = FV.geo;
+  if (S.formula.mode === 'none' || !S.ropes.length || !FV.perRope.length) { card.hidden = true; FV.strip.visible = FV.bus.visible = false; return; }
   const el = S.formula.tStart === null ? 0 : Math.max(0, S.t - S.formula.tStart);
-  const len = clamp(G.v * el, 0, G.xEnd - G.x0s);
-  const periodic = src.mode === 'periodic';
-  if (S.formula.mode === 'strip') {
-    FV.strip.visible = true;
-    FV.paper.scale.x = Math.max(len, 0.001); FV.paper.position.x = G.x0s + len / 2;
-    FV.stripMid.scale.x = Math.max(len, 0.001);
-    const arr = FV.stripLine.geometry.attributes.position.array, n = FV.stripN;
-    for (let k = 0; k < n; k++) {
-      const d = k / (n - 1) * len;
-      arr[k * 3] = G.x0s + d; arr[k * 3 + 1] = G.cy + clamp(histVal(S.t - d / G.v), -G.h / 2 + 0.02, G.h / 2 - 0.02); arr[k * 3 + 2] = 0;
-    }
-    FV.stripLine.geometry.attributes.position.needsUpdate = true;
-    FV.roll.rotation.y = -len / 0.2;
-    // 刻度
-    const step = periodic ? G.lam : 1, want = Math.floor(len / step + 1e-6);
-    if (FV.tickG.userData.n !== want || FV.tickG.userData.step !== step) {
-      clearGroup(FV.tickG); FV.tickG.userData = { n: want, step };
-      for (let k = 1; k <= want && k <= 30; k++) {
-        const x = G.x0s + k * step;
-        const g = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(x, G.cy - G.h / 2, 0.001), new THREE.Vector3(x, G.cy + G.h / 2, 0.001)]);
-        FV.tickG.add(new THREE.Line(g, new THREE.LineBasicMaterial({ color: 0xc0563a })));
-        const txt = periodic ? k + 'T：' + k + 'λ' : k + ' m（' + fmt(k / G.v, 2) + ' s）';
-        const lb = makeLabel(txt, { size: 0.14, color: '#eef0e6' }); lb.position.set(x, G.cy - G.h / 2 - 0.16, 0); FV.tickG.add(lb);
+  FV.perRope.forEach((pr, ri) => {
+    const r = S.ropes[ri]; if (!r) return;
+    const e = eff(r, 0), src = e.src, G = pr.geo;
+    const len = clamp(G.v * el, 0, G.xEnd - G.x0s);
+    const periodic = src.mode === 'periodic';
+    if (S.formula.mode === 'strip') {
+      FV.strip.visible = true;
+      pr.paper.scale.x = Math.max(len, 0.001); pr.paper.position.x = G.x0s + len / 2;
+      pr.stripMid.scale.x = Math.max(len, 0.001);
+      const arr = pr.stripLine.geometry.attributes.position.array, n = pr.stripN;
+      for (let k = 0; k < n; k++) {
+        const d = k / (n - 1) * len;
+        arr[k * 3] = G.x0s + d; arr[k * 3 + 1] = G.cy + clamp(histVal(S.t - d / G.v, ri), -G.h / 2 + 0.02, G.h / 2 - 0.02); arr[k * 3 + 2] = 0;
       }
+      pr.stripLine.geometry.attributes.position.needsUpdate = true;
+      pr.roll.rotation.y = -len / 0.2;
+      const step = periodic ? G.lam : 1, want = Math.floor(len / step + 1e-6);
+      if (pr.tickG.userData.n !== want || pr.tickG.userData.step !== step) {
+        clearGroup(pr.tickG); pr.tickG.userData = { n: want, step };
+        for (let k = 1; k <= want && k <= 30; k++) {
+          const x = G.x0s + k * step;
+          const g = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(x, G.cy - G.h / 2, 0.001), new THREE.Vector3(x, G.cy + G.h / 2, 0.001)]);
+          pr.tickG.add(new THREE.Line(g, new THREE.LineBasicMaterial({ color: 0xc0563a })));
+          const txt = periodic ? k + 'T：' + k + 'λ' : k + ' m（' + fmt(k / G.v, 2) + ' s）';
+          const lb = makeLabel(txt, { size: 0.14, color: '#eef0e6' }); lb.position.set(x, G.cy - G.h / 2 - 0.16, 0); pr.tickG.add(lb);
+        }
+      }
+    } else {
+      FV.bus.visible = true;
+      const Tp = 1 / src.freq;
+      pr.buses.forEach((b, k) => {
+        const front = G.x0s + G.v * (el - k * Tp);
+        const on = periodic && S.formula.tStart !== null && front > G.x0s && front - G.lam < G.xEnd + 0.5 && (e.s.kind === 'periodic' ? true : (e.s.stopAt - S.formula.tStart) > k * Tp - 1e-6);
+        b.visible = on; if (on) b.position.x = front;
+      });
     }
-  } else {
-    FV.bus.visible = true;
-    const Tp = 1 / src.freq;
-    FV.buses.forEach((b, k) => {
-      const front = G.x0s + G.v * (el - k * Tp);
-      const on = periodic && S.formula.tStart !== null && front > G.x0s && front - G.lam < G.xEnd + 0.5 && (e.s.kind === 'periodic' ? true : (e.s.stopAt - S.formula.tStart) > k * Tp - 1e-6);
-      b.visible = on; if (on) b.position.x = front;
-    });
-  }
-  // 公式卡
-  const cyc = periodic ? el * src.freq : 0;
-  const v = G.v;
+  });
+  // 公式卡 — show info for first rope
+  const r = S.ropes[0], e0 = eff(r, 0), src0 = e0.src, G0 = FV.perRope[0].geo;
+  const len0 = clamp(G0.v * el, 0, G0.xEnd - G0.x0s);
+  const periodic0 = src0.mode === 'periodic';
+  const cyc = periodic0 ? el * src0.freq : 0;
+  const v = G0.v;
   let html = `<div class="eq">v = √(F/μ) = √(${fmt(r.F, 2)}/${fmt(r.mu, 3)}) = <b>${fmt(v, 2)} m/s</b>`;
-  if (periodic) html += `<br>f = <b>${fmt(src.freq, 2)} Hz</b>　T = 1/f = <b>${fmt(1 / src.freq, 2)} s</b><br>λ = v/f = <b>${fmt(v / src.freq, 2)} m</b>`;
-  html += `<br>經過 ${fmt(el, 2)} s，送出 ${fmt(len, 2)} m</div>`;
-  if (periodic) {
+  if (periodic0) html += `<br>f = <b>${fmt(src0.freq, 2)} Hz</b>　T = 1/f = <b>${fmt(1 / src0.freq, 2)} s</b><br>λ = v/f = <b>${fmt(v / src0.freq, 2)} m</b>`;
+  html += `<br>經過 ${fmt(el, 2)} s，送出 ${fmt(len0, 2)} m</div>`;
+  if (S.ropes.length > 1) {
+    const r2 = S.ropes[1], e2 = eff(r2, 0), src2 = e2.src, G2 = FV.perRope[1].geo;
+    html += `<div class="eq" style="margin-top:6px;border-top:1px solid rgba(255,255,255,.15);padding-top:6px"><small>${r2.name}：</small>v = <b>${fmt(G2.v, 2)} m/s</b>`;
+    if (src2.mode === 'periodic') html += `　f = <b>${fmt(src2.freq, 2)} Hz</b>　λ = <b>${fmt(G2.v / src2.freq, 2)} m</b>`;
+    html += `</div>`;
+  }
+  if (periodic0) {
     html += S.formula.mode === 'strip'
       ? `<div class="say">每振動 1 次（T），紙帶送出 1 個 λ ⇒ v = λ/T = fλ<br>已振動 ${fmt(cyc, 1)} 次 → ${fmt(cyc, 1)} λ</div>`
       : `<div class="say">每 T 發一班、每班長 λ ⇒ 1 秒內開出 f 班 ⇒ v = fλ<br>已發出 ${Math.min(Math.ceil(cyc - 1e-6), 99)} 班（${fmt(cyc, 1)} T）</div>`;
@@ -1650,6 +1669,33 @@ function fireRope(r) {
    教學情境
    ========================================================= */
 const PRESETS = [
+  { id: 'strip', tag: '公式', title: '波速公式 v = fλ：紙帶', desc: '紙帶以波速捲出，記錄波源振動。', speed: 0.5, start: 'periodic', formula: 'strip',
+    notes: ['紙帶與波同步，以速率 v 從波源捲出。', '波源每振動一次（經過 T），紙帶剛好送出一個 λ。', '所以 v = λ / T = fλ。可用「時間凍結」數數看。'],
+    ropes: [{ name: '繩子', L: 8, F: 1, mu: 0.25, rightEnd: 'absorb', sources: [{ mode: 'periodic', amp: 0.32, freq: 1 }] }] },
+  { id: 'bus', tag: '公式', title: '波速公式 v = fλ：公車', desc: '每 T 秒發一班長 λ 的公車，車速就是波速。', speed: 0.5, start: 'periodic', formula: 'bus',
+    notes: ['每輛公車車身畫著一個完整波長。', '波源站每 T 秒發一班，1 秒發出 f 班。', '1 秒內開出 f 輛、每輛長 λ ⇒ 車速 v = fλ。'],
+    ropes: [{ name: '繩子', L: 8, F: 1, mu: 0.25, rightEnd: 'absorb', sources: [{ mode: 'periodic', amp: 0.32, freq: 1 }] }] },
+  { id: 'bus-compare', tag: '公式', title: '公車比較：f=1 vs f=2', desc: '同介質兩組公車，頻率不同但車速相同。', speed: 0.5, start: 'periodic', formula: 'bus',
+    notes: ['兩條繩材質完全相同，波速 v 一樣。', '上方 f=1 Hz：車身長（λ 大），每秒發 1 班。', '下方 f=2 Hz：車身短（λ 小），每秒發 2 班。但 v = fλ 不變！'],
+    ropes: [{ name: 'f = 1 Hz', L: 8, F: 1, mu: 0.25, rightEnd: 'absorb', sources: [{ mode: 'periodic', amp: 0.32, freq: 1 }] },
+            { name: 'f = 2 Hz', color: ROPE_COLORS[1], L: 8, F: 1, mu: 0.25, rightEnd: 'absorb', sources: [{ mode: 'periodic', amp: 0.32, freq: 2 }] }] },
+  { id: 'spring-both', tag: '彈簧', title: '彈簧：橫波與縱波', desc: '兩條相同彈簧同步振動，一條橫向、一條縱向。', speed: 0.5, start: 'periodic',
+    notes: ['同一個波源節奏，兩種振動方向。', '觀察：兩者的波長與波速相同。', '橫波的波峰位置對應縱波的哪裡？'],
+    ropes: [{ name: '橫波彈簧', medium: 'spring', pol: 'transverse', L: 6, F: 2.25, mu: 0.25, turns: 48, coilR: 0.16, rightEnd: 'absorb', sources: [{ mode: 'periodic', amp: 0.25, freq: 1 }] },
+            { name: '縱波彈簧', medium: 'spring', pol: 'longitudinal', color: ROPE_COLORS[1], L: 6, F: 2.25, mu: 0.25, turns: 48, coilR: 0.16, rightEnd: 'absorb', sync: true, sources: [{}] }] },
+  { id: 'spring-long', tag: '彈簧', title: '彈簧縱波（疏密波）', desc: '彈簧沿長度方向振動，出現疏部與密部。', speed: 0.5, start: 'periodic',
+    notes: ['質點振動方向與波的傳播方向平行。', '觀察白色標記：只在原位置附近左右來回。', '上方曲線把「向右位移」畫成「向上」，對照密部、疏部的位置。'],
+    ropes: [{ name: '彈簧', medium: 'spring', pol: 'longitudinal', L: 6, F: 2.25, mu: 0.25, turns: 48, coilR: 0.2, rightEnd: 'absorb', sources: [{ mode: 'periodic', amp: 0.1, freq: 1 }] }] },
+  { id: 'manual', tag: '手動', title: '手動拉扯繩子', desc: '用滑鼠或手指拖曳波源握把，自己甩出波。', speed: 0.6, start: null,
+    notes: ['按住左端發亮的握把上下拖曳。', '試試快速甩一下、慢慢拉一下，波形寬度有何不同？', '試試規律地上下擺動，形成連續週期波。'],
+    ropes: [{ name: '手中的繩', L: 7, rightEnd: 'absorb', sources: [{ mode: 'manual', amp: 0.5 }] }] },
+  { id: 'arrows', tag: '自訂', title: '自訂振動：箭頭', desc: '先上、再下、回原點：畫出一個完整波形。', speed: 0.5, start: 'armed',
+    notes: ['畫面上的 1、2、3 號箭頭就是波源的動作順序。', '按 ▶ 恢復模擬，波源依箭頭運動並產生波。', '到「波源」分頁按「在畫面上繪製」，自己設計振動。'],
+    ropes: [{ name: '繩子', L: 7, rightEnd: 'absorb', sources: [{ mode: 'custom', amp: 0.4, custom: { kind: 'arrows', arrows: [{ d: 0.4 }, { d: -0.4 }, { d: -0.4 }, { d: 0.4 }], segDur: 0.25 } }] }] },
+  { id: 'diff-freq', tag: '疊加', title: '同介質・不同頻率', desc: '相同的繩子，頻率 1 Hz 與 2 Hz 同步發射比較。', speed: 0.5, start: 'periodic',
+    notes: ['兩條繩的材質完全相同，只有波源頻率不同。', '觀察：波速相同，但頻率 2 Hz 的波長是 1 Hz 的一半。', '驗證 v = fλ：波速不變時，頻率加倍 → 波長減半。'],
+    ropes: [{ name: 'f = 1 Hz', L: 8, rightEnd: 'absorb', sources: [{ mode: 'periodic', amp: 0.3, freq: 1 }] },
+            { name: 'f = 2 Hz', color: ROPE_COLORS[1], L: 8, rightEnd: 'absorb', sources: [{ mode: 'periodic', amp: 0.3, freq: 2 }] }] },
   { id: 'fixed', tag: '反射', title: '脈衝・固定端反射', desc: '單一脈衝撞上固定端，反射後上下顛倒。', speed: 0.5, start: 'pulse',
     notes: ['按「發射」送出向上的脈衝。', '觀察：反射脈衝的方向與入射脈衝相反。', '提問：為什麼固定端會讓脈衝翻轉？'],
     ropes: [{ name: '繩子', rightEnd: 'fixed', sources: [{ mode: 'pulse', amp: 0.45, width: 0.35 }] }] },
@@ -1674,32 +1720,9 @@ const PRESETS = [
     notes: ['上面一條：兩個向上脈衝相遇 → 相加變高。', '下面一條：一上一下相遇 → 瞬間幾乎抵消。', '用「時間凍結」停在相遇瞬間觀察，再恢復看它們各自穿過。'],
     ropes: [{ name: '同相', leftEnd: 'absorb', rightEnd: 'absorb', sources: [{ pos: 0, mode: 'pulse', amp: 0.3, width: 0.4 }, { pos: 1, mode: 'pulse', amp: 0.3, width: 0.4 }] },
             { name: '反相', color: ROPE_COLORS[2], leftEnd: 'absorb', rightEnd: 'absorb', sources: [{ pos: 0, mode: 'pulse', amp: 0.3, width: 0.4 }, { pos: 1, mode: 'pulse', amp: 0.3, width: 0.4, sign: -1 }] }] },
-  { id: 'diff-freq', tag: '疊加', title: '同介質・不同頻率', desc: '相同的繩子，頻率 1 Hz 與 2 Hz 同步發射比較。', speed: 0.5, start: 'periodic',
-    notes: ['兩條繩的材質完全相同，只有波源頻率不同。', '觀察：波速相同，但頻率 2 Hz 的波長是 1 Hz 的一半。', '驗證 v = fλ：波速不變時，頻率加倍 → 波長減半。'],
-    ropes: [{ name: 'f = 1 Hz', L: 8, rightEnd: 'absorb', sources: [{ mode: 'periodic', amp: 0.3, freq: 1 }] },
-            { name: 'f = 2 Hz', color: ROPE_COLORS[1], L: 8, rightEnd: 'absorb', sources: [{ mode: 'periodic', amp: 0.3, freq: 2 }] }] },
   { id: 'standing', tag: '駐波', title: '駐波：兩端固定', desc: '以第 3 諧音頻率振動，形成 3 個波腹。', speed: 0.6, start: 'periodic',
     notes: ['波源振幅很小，但在共振頻率下駐波振幅會被放大。', '觀察：波節不動、波腹振動最大；相鄰波節相距 λ/2。', '到「介質」分頁按 f₁、f₂、f₄ 換其他諧音。'],
-    ropes: [{ name: '弦', L: 6, F: 4, mu: 0.25, damping: 0.35, sources: [{ mode: 'periodic', amp: 0.05, freq: 1 }] }] },
-  { id: 'manual', tag: '手動', title: '手動拉扯繩子', desc: '用滑鼠或手指拖曳波源握把，自己甩出波。', speed: 0.6, start: null,
-    notes: ['按住左端發亮的握把上下拖曳。', '試試快速甩一下、慢慢拉一下，波形寬度有何不同？', '試試規律地上下擺動，形成連續週期波。'],
-    ropes: [{ name: '手中的繩', L: 7, rightEnd: 'absorb', sources: [{ mode: 'manual', amp: 0.5 }] }] },
-  { id: 'spring-long', tag: '彈簧', title: '彈簧縱波（疏密波）', desc: '彈簧沿長度方向振動，出現疏部與密部。', speed: 0.5, start: 'periodic',
-    notes: ['質點振動方向與波的傳播方向平行。', '觀察白色標記：只在原位置附近左右來回。', '上方曲線把「向右位移」畫成「向上」，對照密部、疏部的位置。'],
-    ropes: [{ name: '彈簧', medium: 'spring', pol: 'longitudinal', L: 6, F: 2.25, mu: 0.25, turns: 48, coilR: 0.2, rightEnd: 'absorb', sources: [{ mode: 'periodic', amp: 0.1, freq: 1 }] }] },
-  { id: 'spring-both', tag: '彈簧', title: '彈簧：橫波與縱波', desc: '兩條相同彈簧同步振動，一條橫向、一條縱向。', speed: 0.5, start: 'periodic',
-    notes: ['同一個波源節奏，兩種振動方向。', '觀察：兩者的波長與波速相同。', '橫波的波峰位置對應縱波的哪裡？'],
-    ropes: [{ name: '橫波彈簧', medium: 'spring', pol: 'transverse', L: 6, F: 2.25, mu: 0.25, turns: 48, coilR: 0.16, rightEnd: 'absorb', sources: [{ mode: 'periodic', amp: 0.25, freq: 1 }] },
-            { name: '縱波彈簧', medium: 'spring', pol: 'longitudinal', color: ROPE_COLORS[1], L: 6, F: 2.25, mu: 0.25, turns: 48, coilR: 0.16, rightEnd: 'absorb', sync: true, sources: [{}] }] },
-  { id: 'arrows', tag: '自訂', title: '自訂振動：箭頭', desc: '先上、再下、回原點：畫出一個完整波形。', speed: 0.5, start: 'armed',
-    notes: ['畫面上的 1、2、3 號箭頭就是波源的動作順序。', '按 ▶ 恢復模擬，波源依箭頭運動並產生波。', '到「波源」分頁按「在畫面上繪製」，自己設計振動。'],
-    ropes: [{ name: '繩子', L: 7, rightEnd: 'absorb', sources: [{ mode: 'custom', amp: 0.4, custom: { kind: 'arrows', arrows: [{ d: 0.4 }, { d: -0.4 }, { d: -0.4 }, { d: 0.4 }], segDur: 0.25 } }] }] },
-  { id: 'strip', tag: '公式', title: '波速公式 v = fλ：紙帶', desc: '紙帶以波速捲出，記錄波源振動。', speed: 0.5, start: 'periodic', formula: 'strip',
-    notes: ['紙帶與波同步，以速率 v 從波源捲出。', '波源每振動一次（經過 T），紙帶剛好送出一個 λ。', '所以 v = λ / T = fλ。可用「時間凍結」數數看。'],
-    ropes: [{ name: '繩子', L: 8, F: 1, mu: 0.25, rightEnd: 'absorb', sources: [{ mode: 'periodic', amp: 0.32, freq: 1 }] }] },
-  { id: 'bus', tag: '公式', title: '波速公式 v = fλ：公車', desc: '每 T 秒發一班長 λ 的公車，車速就是波速。', speed: 0.5, start: 'periodic', formula: 'bus',
-    notes: ['每輛公車車身畫著一個完整波長。', '波源站每 T 秒發一班，1 秒發出 f 班。', '1 秒內開出 f 輛、每輛長 λ ⇒ 車速 v = fλ。'],
-    ropes: [{ name: '繩子', L: 8, F: 1, mu: 0.25, rightEnd: 'absorb', sources: [{ mode: 'periodic', amp: 0.32, freq: 1 }] }] }
+    ropes: [{ name: '弦', L: 6, F: 4, mu: 0.25, damping: 0.35, sources: [{ mode: 'periodic', amp: 0.05, freq: 1 }] }] }
 ];
 function applyState(st, opts = {}) {
   S.ropes = st.ropes.map((o, i) => newRope(Object.assign({ name: '繩' + (i + 1), color: ROPE_COLORS[i % ROPE_COLORS.length] }, o)));
@@ -1800,7 +1823,8 @@ function renderPanel() {
     ${S.ropes.length > 1 ? `<button type="button" class="btn warn" data-act="delRope">刪除「${esc(r.name)}」</button>` : ''}`;
   } else if (S.tab === 'source' && r) {
     h += `<div class="sec"><h3>波源（屬於所選的裝置）</h3>${ropeChips(true)}${groupTools(r)}
-      <div class="card"><div class="row"><label>這組是</label>${seg('rope.medium', r.medium, [['rope', '繩子'], ['spring', '彈簧']], 'scene,panel')}${seg('rope.pol', r.pol, [['transverse', '橫波'], ['longitudinal', '縱波']], 'scene,panel')}</div>
+      <div class="card"><div class="row"><label>這組是</label>${seg('rope.medium', r.medium, [['rope', '繩子'], ['spring', '彈簧']], 'scene,panel')}${r.medium === 'spring' ? seg('rope.pol', r.pol, [['transverse', '橫波'], ['longitudinal', '縱波']], 'scene,panel') : '<span style="color:var(--muted);font-size:12px;margin-left:6px">（橫波）</span>'}</div>
+      <div class="row"><label class="ck"><input type="checkbox" id="ckRename" ${r._renaming ? 'checked' : ''}><span>更名</span></label>${r._renaming ? `<input type="text" data-bind="rope.name" data-re="scene,chips" value="${esc(r.name)}" style="flex:1;min-width:0;padding:4px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg);font-size:13px" placeholder="輸入名稱">` : `<span style="color:var(--muted);font-size:13px;margin-left:6px">${esc(r.name)}</span>`}</div>
       <p class="hint">繩子或彈簧是「裝置」的屬性，同一組上的所有波源共用。想要一條繩、一條彈簧，請「複製整組」後把其中一組改成彈簧。</p></div></div>`;
     h += r.sources.map((_, j) => srcCard(r, j)).join('');
     h += `<div class="row">${r.sources.length < 3 ? `<button type="button" class="btn" data-act="addSrc">＋ 在這組上新增波源</button>` : ''}<button type="button" class="btn pri" data-act="fireRope">觸發「${esc(r.name)}」全部波源</button></div>`;
@@ -1934,6 +1958,7 @@ function afterChange(re, bind) {
   if (set.has('amp') || set.has('fpanel')) { if (S.formula.mode !== 'none' && S.sel === 0) set.add('scene'); }
   if (bind === 'formula.mode' && S.formula.tStart === null && S.ropes[0]) { const e = eff(S.ropes[0], 0); if (e.s.kind) S.formula.tStart = e.s.t0; }
   if (/^src\.\d+\.mode$/.test(bind)) { const e = eff(r, +bind.split('.')[1]); e.s.kind = null; e.s.armed = false; }
+  if (bind && bind.endsWith('.medium') && r && r.medium === 'rope' && r.pol === 'longitudinal') { r.pol = 'transverse'; }
   if (set.has('scene')) buildScene();
   if (set.has('fit')) fitView('front');
   if (set.has('measure')) buildMeasure();
@@ -1976,6 +2001,7 @@ pbody.addEventListener('input', ev => {
 });
 pbody.addEventListener('change', ev => {
   const el = ev.target;
+  if (el.id === 'ckRename') { const r = selRope(); if (r) { r._renaming = el.checked; renderPanel(); } return; }
   if (el.dataset.arrow) { renderPanel(); return; }
   if (/phys|\bL\b/.test(el.dataset.re || '') && S.tab === 'medium') renderPanel();
 });
