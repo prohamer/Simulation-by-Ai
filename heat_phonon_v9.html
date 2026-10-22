@@ -1,0 +1,1627 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>雙物質微觀熱傳導模擬器（高密度聲子晶格 ＋ 紅點自由電子高速傳熱）</title>
+    <style>
+        :root {
+            --bg-cream: #fdf6e3;
+            --panel-bg: #ffffff;
+            --border-color: #d3cbb8;
+            --primary: #2563eb;
+        }
+        * {
+            box-sizing: border-box;
+        }
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            font-family: "Microsoft JhengHei", Arial, sans-serif;
+            margin: 0;
+            padding: 10px;
+            background-color: var(--bg-cream);
+            color: #1e293b;
+        }
+        h2 {
+            margin: 2px 0 8px 0;
+            color: #0f172a;
+            font-size: 1.35rem;
+            text-align: center;
+        }
+        .main-wrapper {
+            width: 100%;
+            max-width: 1320px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        /* 控制面板區 */
+        .controls-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 12px;
+            align-items: start;
+        }
+        .controls {
+            background: var(--panel-bg);
+            padding: 12px 16px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+        }
+        .simulation-title {
+            font-weight: bold;
+            font-size: 1.02rem;
+            margin-bottom: 8px;
+            padding-bottom: 6px;
+            border-bottom: 2px solid #e2e8f0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .title-right {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .collapse-btn {
+            padding: 2px 9px;
+            font-size: 0.78rem;
+            font-weight: normal;
+            background: #e2e8f0;
+            color: #334155;
+            border-radius: 12px;
+        }
+        .controls.collapsed .adv {
+            display: none;
+        }
+        .controls.collapsed .simulation-title {
+            margin-bottom: 4px;
+        }
+        .badge {
+            font-size: 0.78rem;
+            padding: 2px 8px;
+            border-radius: 12px;
+            background: #e2e8f0;
+            color: #334155;
+            font-weight: normal;
+        }
+        .slider-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin: 6px 0;
+            font-size: 0.88rem;
+        }
+        .slider-row label {
+            min-width: 140px;
+            font-weight: 500;
+        }
+        .slider-row input[type="range"] {
+            flex: 1;
+            cursor: pointer;
+        }
+        .slider-row select {
+            flex: 1;
+            padding: 4px 6px;
+            border-radius: 4px;
+            border: 1px solid #cbd5e1;
+            font-size: 0.88rem;
+        }
+        .val-box {
+            min-width: 88px;
+            text-align: right;
+            font-family: monospace;
+            font-weight: bold;
+            color: #0f172a;
+        }
+        .stats-bar {
+            display: flex;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-top: 8px;
+            padding-top: 8px;
+            border-top: 1px dashed #cbd5e1;
+            font-size: 0.8rem;
+            color: #475569;
+        }
+        .stats-bar span strong {
+            color: #0f172a;
+        }
+        /* 按鈕列 */
+        .button-container {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            align-items: center;
+            gap: 8px;
+            padding: 4px;
+        }
+        button {
+            padding: 6px 13px;
+            font-size: 0.9rem;
+            font-weight: bold;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            background: var(--primary);
+            color: white;
+            transition: opacity 0.15s, transform 0.1s;
+        }
+        button:hover {
+            opacity: 0.92;
+        }
+        button:active {
+            transform: scale(0.98);
+        }
+        button.secondary {
+            background: #475569;
+        }
+        button.warning {
+            background: #d97706;
+        }
+        button.active-sync {
+            background: #059669;
+        }
+        .main-wrapper:fullscreen {
+            max-width: none;
+            background: var(--bg-cream);
+            padding: 12px 16px;
+            overflow-y: auto;
+        }
+        .main-wrapper:-webkit-full-screen {
+            max-width: none;
+            width: 100%;
+            background: var(--bg-cream);
+            padding: 12px 16px;
+            overflow-y: auto;
+        }
+        .checkbox-label {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 0.86rem;
+            background: white;
+            padding: 5px 10px;
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+            cursor: pointer;
+            user-select: none;
+        }
+        /* 模擬畫布與溫度分布區 */
+        .simulation-area {
+            display: flex;
+            gap: 12px;
+            align-items: stretch;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        .canvas-box {
+            flex: 1;
+            min-width: 320px;
+            background: #ffffff;
+            border: 2px solid #cbd5e1;
+            border-radius: 8px;
+            overflow: hidden;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+        }
+        #simulator {
+            width: 100%;
+            height: auto;
+            display: block;
+            cursor: grab;
+            touch-action: none;
+        }
+        #simulator:active {
+            cursor: grabbing;
+        }
+        .temp-profiles {
+            width: 245px;
+            background: var(--panel-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+        }
+        .profile-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .temp-profile-canvas {
+            border: 1px solid #cbd5e1;
+            border-radius: 4px;
+            background: #fffdf9;
+            width: 100%;
+            height: auto;
+        }
+        .profile-label {
+            font-size: 0.8rem;
+            font-weight: bold;
+            color: #334155;
+            margin-top: 4px;
+            text-align: center;
+        }
+        .legend-bar {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 16px;
+            font-size: 0.83rem;
+            color: #475569;
+            margin-top: 2px;
+            flex-wrap: wrap;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .dot-lattice {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #B87333;
+            border: 1px solid #fff;
+        }
+        .dot-electron {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: #FF3333;
+            box-shadow: 0 0 5px #FF3333;
+        }
+        .dot-spring {
+            width: 16px;
+            height: 2px;
+            background: #94a3b8;
+        }
+    </style>
+</head>
+<body>
+    <h2>雙物質熱傳導微觀模擬器（高密度聲子晶格 ＋ 紅點自由電子高速傳熱）</h2>
+
+    <div class="main-wrapper">
+        <!-- 雙物質控制面板 -->
+        <div class="controls-container">
+            <!-- 物質 A -->
+            <div class="controls" id="panel1">
+                <div class="simulation-title">
+                    <span>物質 A（上方）</span>
+                    <span class="title-right">
+                        <span class="badge" id="structureBadge1">晶格: FCC</span>
+                        <button class="collapse-btn" onclick="togglePanel(1)" id="collapseBtn1" title="收合／展開進階參數">▲ 收合</button>
+                    </span>
+                </div>
+                <div class="slider-row">
+                    <label for="material1">預設材質：</label>
+                    <select id="material1" onchange="applyMaterialPreset(1)">
+                        <option value="silver">銀 Ag (FCC｜電子比 1.20｜429 W/m·K)</option>
+                        <option value="copper" selected>銅 Cu (FCC｜電子比 1.13｜401 W/m·K)</option>
+                        <option value="aluminum">鋁 Al (FCC｜電子比 0.63｜237 W/m·K)</option>
+                        <option value="iron">鐵 Fe (BCC｜電子比 0.19｜80 W/m·K)</option>
+                        <option value="titanium">鈦 Ti (HCP｜電子比 0.04｜22 W/m·K)</option>
+                        <option value="diamond">鑽石 C (共價四面體｜無電子＋超強聲子｜300*)</option>
+                        <option value="glass">玻璃 SiO₂ (非晶質亂序｜無電子＋極弱聲子｜0.8)</option>
+                        <option value="custom">自訂微觀參數 (Custom)</option>
+                    </select>
+                </div>
+                <div class="slider-row">
+                    <label for="temperature1">熱源控溫溫度：</label>
+                    <input type="range" id="temperature1" min="0" max="1000" value="300" step="10">
+                    <span class="val-box"><span id="tempValue1">300</span> K</span>
+                </div>
+                <div class="slider-row adv">
+                    <label for="phononCond1">聲子熱導 k<sub>p</sub>：</label>
+                    <input type="range" id="phononCond1" min="0.1" max="500" value="39.5" step="0.1">
+                    <span class="val-box"><span id="phononVal1">39.5</span> W/m·K</span>
+                </div>
+                <div class="slider-row adv">
+                    <label for="elecRatio1">自由電子/原子比 Z<sub>eff</sub>：</label>
+                    <input type="range" id="elecRatio1" min="0" max="1.5" value="1.13" step="0.01">
+                    <span class="val-box"><span id="elecVal1">1.13</span> 個/原子</span>
+                </div>
+                <div class="slider-row adv">
+                    <label for="envFactor1">環境冷卻因子：</label>
+                    <input type="range" id="envFactor1" min="0" max="0.001" value="0.0001" step="0.0001">
+                    <span class="val-box" id="envFactorValue1">0.0001</span>
+                </div>
+                <div class="stats-bar adv">
+                    <span>等效總熱導率: <strong id="totalK1">401</strong> W/m·K</span>
+                    <span>原子數: <strong id="aCount1">0</strong></span>
+                    <span>紅點電子數: <strong id="eCount1" style="color:#dc2626;">0</strong></span>
+                    <span>游標溫度: <strong id="currentTempA">-</strong> K</span>
+                </div>
+            </div>
+
+            <!-- 物質 B -->
+            <div class="controls" id="panel2">
+                <div class="simulation-title">
+                    <span>物質 B（下方）</span>
+                    <span class="title-right">
+                        <span class="badge" id="structureBadge2">晶格: BCC</span>
+                        <button class="collapse-btn" onclick="togglePanel(2)" id="collapseBtn2" title="收合／展開進階參數">▲ 收合</button>
+                    </span>
+                </div>
+                <div class="slider-row">
+                    <label for="material2">預設材質：</label>
+                    <select id="material2" onchange="applyMaterialPreset(2)">
+                        <option value="silver">銀 Ag (FCC｜電子比 1.20｜429 W/m·K)</option>
+                        <option value="copper">銅 Cu (FCC｜電子比 1.13｜401 W/m·K)</option>
+                        <option value="aluminum">鋁 Al (FCC｜電子比 0.63｜237 W/m·K)</option>
+                        <option value="iron" selected>鐵 Fe (BCC｜電子比 0.19｜80 W/m·K)</option>
+                        <option value="titanium">鈦 Ti (HCP｜電子比 0.04｜22 W/m·K)</option>
+                        <option value="diamond">鑽石 C (共價四面體｜無電子＋超強聲子｜300*)</option>
+                        <option value="glass">玻璃 SiO₂ (非晶質亂序｜無電子＋極弱聲子｜0.8)</option>
+                        <option value="custom">自訂微觀參數 (Custom)</option>
+                    </select>
+                </div>
+                <div class="slider-row">
+                    <label for="temperature2">熱源控溫溫度：</label>
+                    <input type="range" id="temperature2" min="0" max="1000" value="300" step="10">
+                    <span class="val-box"><span id="tempValue2">300</span> K</span>
+                </div>
+                <div class="slider-row adv">
+                    <label for="phononCond2">聲子熱導 k<sub>p</sub>：</label>
+                    <input type="range" id="phononCond2" min="0.1" max="500" value="19" step="0.1">
+                    <span class="val-box"><span id="phononVal2">19</span> W/m·K</span>
+                </div>
+                <div class="slider-row adv">
+                    <label for="elecRatio2">自由電子/原子比 Z<sub>eff</sub>：</label>
+                    <input type="range" id="elecRatio2" min="0" max="1.5" value="0.19" step="0.01">
+                    <span class="val-box"><span id="elecVal2">0.19</span> 個/原子</span>
+                </div>
+                <div class="slider-row adv">
+                    <label for="envFactor2">環境冷卻因子：</label>
+                    <input type="range" id="envFactor2" min="0" max="0.001" value="0.0001" step="0.0001">
+                    <span class="val-box" id="envFactorValue2">0.0001</span>
+                </div>
+                <div class="stats-bar adv">
+                    <span>等效總熱導率: <strong id="totalK2">80</strong> W/m·K</span>
+                    <span>原子數: <strong id="aCount2">0</strong></span>
+                    <span>紅點電子數: <strong id="eCount2" style="color:#dc2626;">0</strong></span>
+                    <span>游標溫度: <strong id="currentTempB">-</strong> K</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 全域控制按鈕列 -->
+        <div class="button-container">
+            <button onclick="toggleSimulation()" id="controlBtn">開始模擬</button>
+            <button onclick="resetSimulation()" class="secondary">重置回 300K</button>
+            <button onclick="toggleTempSync()" id="syncBtn" class="active-sync">溫控與熱源同步：開啟</button>
+            <button onclick="toggleHeating()" id="heatingBtn" class="warning">移除溫控（觀察熱消散）</button>
+            <button onclick="toggleBackground()" id="bgBtn" class="secondary">背景：白色</button>
+            <button onclick="toggleFullscreen()" id="fsBtn" class="secondary">⛶ 全螢幕</button>
+            <label class="checkbox-label" title="加快熱擴散的時間流速，不改變各材質之間的相對快慢">
+                時間倍率
+                <input type="range" id="timeScale" min="1" max="15" value="8" step="1" style="width:90px;">
+                <strong><span id="timeScaleVal">8</span>×</strong>
+            </label>
+            <label class="checkbox-label">
+                <input type="checkbox" id="showBonds" checked onchange="if(!isRunning) renderFrame()">
+                顯示晶格鍵結
+            </label>
+            <label class="checkbox-label">
+                <input type="checkbox" id="showElectrons" onchange="if(!isRunning) renderFrame()">
+                顯示紅點自由電子
+            </label>
+            <label class="checkbox-label" title="隱藏晶格原子與鍵結，只看電子的運動">
+                <input type="checkbox" id="hidePhonons" onchange="if(!isRunning) renderFrame()">
+                隱藏聲子
+            </label>
+            <label class="checkbox-label" title="勾選：關閉電荷回復電場，熱電子擴散到冷端造成電荷分離，並顯示真實材料的熱電電位差估算值。未勾選：電子受電中性約束，密度保持均勻（接近真實金屬）。">
+                <input type="checkbox" id="seebeckMode" onchange="if(!isRunning) renderFrame()">
+                塞貝克效應
+            </label>
+            <label class="checkbox-label" title="預設使用材質固有色，勾選後可依原子溫度變色">
+                <input type="checkbox" id="enableAtomTempColor" onchange="if(!isRunning) renderFrame()">
+                啟用原子溫度染色（預設關閉）
+            </label>
+        </div>
+
+        <!-- 模擬畫布與水平溫度分布圖 -->
+        <div class="simulation-area">
+            <div class="canvas-box">
+                <canvas id="simulator" width="920" height="480"></canvas>
+            </div>
+            <div class="temp-profiles">
+                <div class="simulation-title" style="margin-bottom:4px;">水平溫度分布 T(x)</div>
+                <div class="profile-container">
+                    <canvas id="tempProfileA" width="215" height="170" class="temp-profile-canvas"></canvas>
+                    <div class="profile-label" id="profileLabel1">物質 A 溫度梯度曲線</div>
+                </div>
+                <div class="profile-container">
+                    <canvas id="tempProfileB" width="215" height="170" class="temp-profile-canvas"></canvas>
+                    <div class="profile-label" id="profileLabel2">物質 B 溫度梯度曲線</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 圖例與操作說明 -->
+        <div class="legend-bar">
+            <div class="legend-item"><span class="dot-lattice"></span> <strong>晶格原子（材質本色）：</strong>觀察「振動振幅大小」判斷局部溫度高低</div>
+            <div class="legend-item"><span class="dot-electron"></span> <strong>自由電子（鮮紅小粒子）：</strong>數量反映電子熱導 kₑ；高溫區高速運動與頻繁散射</div>
+            <div class="legend-item"><span class="dot-spring"></span> <strong>晶格鍵結：</strong>傳遞聲子振動波｜傳熱速率依總熱導 k = kₚ + kₑ（沿用小P老師版公式）</div>
+            <div class="legend-item">💡 <em>提示：可直接左右拖曳控溫區；控溫低於 300K 時變成藍色冷源區</em></div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('simulator');
+        const ctx = canvas.getContext('2d');
+
+        // 系統常數與狀態
+        const AMBIENT_TEMP = 300; // 環境與初始溫度 300K
+        const MIN_TEMP = 0;
+        const MAX_TEMP = 1000;
+        // 動畫溫度刻度：0～800 K 線性對應到 0～1，800 K 以上維持最大效果
+        // （讓 300、400、600、800 K 的振動與散射差異都看得出來）
+        const VISUAL_SAT_TEMP = 800;
+        function visualLevel(T) {
+            return Math.max(0, Math.min(1, (T - MIN_TEMP) / (VISUAL_SAT_TEMP - MIN_TEMP)));
+        }
+        const PROFILE_BINS = 45;
+
+        // ===== 熱傳導速率（沿用小P老師版 heattransmit 的參數）=====
+        // 參考版：每格 transferRate = 0.1 × min(0.8, k / 500)，對 8 個鄰居的溫差求和；
+        //         30 欄網格，熱源區直接設為控溫溫度，環境冷卻每幀一次。
+        const KE_PER_Z = 320;          // 電子熱導 k_e = Z_eff × 320 W/m·K
+        const REF_GRID_COLS = 30;      // 參考版的欄數
+        let latticeDiffScale1 = 1, latticeDiffScale2 = 1;
+
+        function getTotalK(matNum) {
+            const kp = parseFloat(document.getElementById(`phononCond${matNum}`).value);
+            const z = parseFloat(document.getElementById(`elecRatio${matNum}`).value);
+            return kp + z * KE_PER_Z;
+        }
+
+        function referenceTransferRate(k) {
+            return 0.1 * Math.min(0.8, k / 500);
+        }
+
+        let isRunning = false;
+        let isTempSyncing = true;
+        let isHeating = true;
+
+        // 晶格與自由電子陣列
+        let lattice1 = [], lattice2 = [];
+        let electrons1 = [], electrons2 = [];
+
+        // 加熱區域範圍 (畫布比例 0.0 ~ 1.0)
+        let heatZone1 = { startRatio: 0.02, endRatio: 0.22 };
+        let heatZone2 = { startRatio: 0.02, endRatio: 0.22 };
+
+        // 拖曳狀態
+        let isDragging = false;
+        let draggedMaterial = null;
+        let dragStartXRatio = 0;
+        let dragInitialStart = 0;
+        let dragInitialEnd = 0;
+
+        // 材料預設微觀參數庫
+        const materialPresets = {
+            silver: {
+                name: '銀 Ag',
+                structure: 'FCC',
+                structureLabel: 'FCC 面心立方',
+                phononCond: 45,
+                elecRatio: 1.20,
+                spacingScale: 1.0,
+                seebeck: 1.5,
+                nuclearColor: '#D1D5DB'
+            },
+            copper: {
+                name: '銅 Cu',
+                structure: 'FCC',
+                structureLabel: 'FCC 面心立方',
+                phononCond: 39.5,
+                elecRatio: 1.13,
+                spacingScale: 0.96,
+                seebeck: 1.8,
+                nuclearColor: '#B87333'
+            },
+            aluminum: {
+                name: '鋁 Al',
+                structure: 'FCC',
+                structureLabel: 'FCC 面心立方',
+                phononCond: 35.5,
+                elecRatio: 0.63,
+                spacingScale: 1.04,
+                seebeck: -1.7,
+                nuclearColor: '#94A3B8'
+            },
+            iron: {
+                name: '鐵 Fe',
+                structure: 'BCC',
+                structureLabel: 'BCC 體心立方',
+                phononCond: 19,
+                elecRatio: 0.19,
+                spacingScale: 0.96,
+                seebeck: 15,
+                nuclearColor: '#A0522D'
+            },
+            titanium: {
+                name: '鈦 Ti',
+                structure: 'HCP',
+                structureLabel: 'HCP 六方最密',
+                phononCond: 9,
+                elecRatio: 0.04,
+                spacingScale: 1.02,
+                seebeck: null,
+                nuclearColor: '#708090'
+            },
+            diamond: {
+                name: '鑽石 C',
+                structure: 'DIAMOND',
+                structureLabel: '共價四面體晶格',
+                phononCond: 300,
+                elecRatio: 0.00,
+                spacingScale: 0.90,
+                seebeck: null,
+                nuclearColor: '#38BDF8'
+            },
+            glass: {
+                name: '玻璃 SiO₂',
+                structure: 'AMORPHOUS',
+                structureLabel: '非晶質亂序結構',
+                phononCond: 0.8,
+                elecRatio: 0.00,
+                spacingScale: 1.00,
+                seebeck: null,
+                nuclearColor: '#64748B'
+            }
+        };
+
+        // 畫布配色（預設白底，可切換黑底）
+        let isDarkBg = false;
+        const THEMES = {
+            light: { bg: '#ffffff', panel: '#f8fafc', panelStroke: '#cbd5e1', divider: '#94a3b8',
+                     bond: '71, 85, 105', atomStroke: 'rgba(15, 23, 42, 0.45)', electron: '#e11d22',
+                     hotText: '#b91c1c', coldText: '#1d4ed8', offText: '#64748b' },
+            dark:  { bg: '#111827', panel: '#0f172a', panelStroke: '#334155', divider: '#475569',
+                     bond: '148, 163, 184', atomStroke: null, electron: '#FF3333',
+                     hotText: 'rgba(254, 202, 202, 0.95)', coldText: '#bfdbfe', offText: 'rgba(203, 213, 225, 0.75)' }
+        };
+        function theme() { return isDarkBg ? THEMES.dark : THEMES.light; }
+
+        function toggleBackground() {
+            isDarkBg = !isDarkBg;
+            document.getElementById('bgBtn').textContent = isDarkBg ? '背景：黑色' : '背景：白色';
+            const box = document.querySelector('.canvas-box');
+            box.style.background = theme().bg;
+            box.style.borderColor = isDarkBg ? '#334155' : '#cbd5e1';
+            if (!isRunning) renderFrame();
+        }
+
+        // 控制面板收合：收合後只保留「選擇物質」與「控溫溫度」
+        function togglePanel(n) {
+            const panel = document.getElementById(`panel${n}`);
+            const collapsed = panel.classList.toggle('collapsed');
+            document.getElementById(`collapseBtn${n}`).textContent = collapsed ? '▼ 展開' : '▲ 收合';
+        }
+
+        // 畫面與溫度圖上顯示目前選擇的物質名稱
+        function materialName(n) {
+            const key = document.getElementById(`material${n}`).value;
+            return materialPresets[key] ? materialPresets[key].name : '自訂';
+        }
+        function updateMaterialLabels() {
+            [1, 2].forEach(n => {
+                const tag = n === 1 ? 'A' : 'B';
+                document.getElementById(`profileLabel${n}`).textContent = `物質 ${tag}：${materialName(n)} 溫度梯度曲線`;
+            });
+        }
+
+        // 全螢幕（整個操作介面一起放大，方便投影教學）
+        function toggleFullscreen() {
+            const el = document.querySelector('.main-wrapper');
+            const fsEl = document.fullscreenElement || document.webkitFullscreenElement;
+            if (!fsEl) {
+                if (el.requestFullscreen) el.requestFullscreen();
+                else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+            } else {
+                if (document.exitFullscreen) document.exitFullscreen();
+                else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+            }
+        }
+        function onFullscreenChange() {
+            const on = !!(document.fullscreenElement || document.webkitFullscreenElement);
+            document.getElementById('fsBtn').textContent = on ? '⛶ 離開全螢幕' : '⛶ 全螢幕';
+        }
+        document.addEventListener('fullscreenchange', onFullscreenChange);
+        document.addEventListener('webkitfullscreenchange', onFullscreenChange);
+
+        // 溫度轉熱力學顏色函數
+        function tempToColor(temp, alpha = 1.0) {
+            const t = Math.max(0, Math.min(1, (temp - MIN_TEMP) / (MAX_TEMP - MIN_TEMP)));
+            let r, g, b;
+            if (t < 0.35) {
+                const k = t / 0.35;
+                r = Math.round(30 + 20 * k);
+                g = Math.round(80 + 140 * k);
+                b = Math.round(210 + 30 * k);
+            } else if (t < 0.7) {
+                const k = (t - 0.35) / 0.35;
+                r = Math.round(50 + 205 * k);
+                g = Math.round(220 - 80 * k);
+                b = Math.round(240 - 210 * k);
+            } else {
+                const k = (t - 0.7) / 0.3;
+                r = 255;
+                g = Math.round(140 + 105 * k);
+                b = Math.round(30 + 180 * k);
+            }
+            return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+        }
+
+        // 兩物質各自的面板與原子活動範圍（中間留明顯間隙）
+        function getRegion(matNum) {
+            const W = canvas.width, H = canvas.height;
+            const padX = W * 0.025;
+            const padY = H * 0.035;
+            const gap = H * 0.10;
+            const bandH = (H - 2 * padY - gap) / 2;
+            const panelTop = matNum === 1 ? padY : padY + bandH + gap;
+            const panelBottom = panelTop + bandH;
+            const inset = Math.max(9, H * 0.022);
+            return {
+                panelTop, panelBottom, panelLeft: padX * 0.4, panelRight: W - padX * 0.4,
+                minX: padX, maxX: W - padX,
+                minY: panelTop + inset, maxY: panelBottom - inset
+            };
+        }
+
+        function updateTotalKDisplay(matNum) {
+            const kp = parseFloat(document.getElementById(`phononCond${matNum}`).value);
+            const zRatio = parseFloat(document.getElementById(`elecRatio${matNum}`).value);
+            const ke = zRatio * KE_PER_Z;
+            const kTotal = kp + ke;
+            document.getElementById(`totalK${matNum}`).textContent = kTotal < 10 ? kTotal.toFixed(1) : Math.round(kTotal);
+        }
+
+        function applyMaterialPreset(matNum) {
+            const matKey = document.getElementById(`material${matNum}`).value;
+            if (matKey === 'custom') {
+                document.getElementById(`structureBadge${matNum}`).textContent = '晶格: 自訂';
+                updateTotalKDisplay(matNum);
+                return;
+            }
+            const preset = materialPresets[matKey];
+            document.getElementById(`phononCond${matNum}`).value = preset.phononCond;
+            document.getElementById(`phononVal${matNum}`).textContent = preset.phononCond;
+            document.getElementById(`elecRatio${matNum}`).value = preset.elecRatio;
+            document.getElementById(`elecVal${matNum}`).textContent = preset.elecRatio.toFixed(2);
+            document.getElementById(`structureBadge${matNum}`).textContent = `晶格: ${preset.structureLabel}`;
+
+            updateTotalKDisplay(matNum);
+            buildMaterialSystem(matNum);
+            if (!isRunning) renderFrame();
+        }
+
+        // 晶格原子類別
+        class LatticeAtom {
+            constructor(x, y, matNum, baseColor) {
+                this.baseX = x;
+                this.baseY = y;
+                this.x = x;
+                this.y = y;
+                this.matNum = matNum;
+                this.baseColor = baseColor;
+                this.energy = AMBIENT_TEMP;
+                this.nextEnergy = AMBIENT_TEMP;
+                this.phaseX = Math.random() * Math.PI * 2;
+                this.phaseY = Math.random() * Math.PI * 2;
+                this.freqRatioY = 1.12 + Math.random() * 0.35;
+                this.neighbors = [];
+                this.nnDist = 12;   // 最近鄰距離（建晶格後計算）
+            }
+
+            isHeated(heatStartPx, heatEndPx) {
+                return isHeating && this.baseX >= heatStartPx && this.baseX <= heatEndPx;
+            }
+
+            // 參考版公式：ΔT = rate × Σ(T_neighbor − T)
+            computePhononTransfer(targetTemp, rate, heatStartPx, heatEndPx) {
+                if (this.isHeated(heatStartPx, heatEndPx)) {
+                    this.nextEnergy = targetTemp;
+                } else {
+                    let netFlow = 0;
+                    for (let i = 0; i < this.neighbors.length; i++) {
+                        netFlow += (this.neighbors[i].energy - this.energy);
+                    }
+                    this.nextEnergy = this.energy + netFlow * rate;
+                }
+            }
+
+            commitEnergy() {
+                this.energy = Math.max(MIN_TEMP, Math.min(MAX_TEMP, this.nextEnergy));
+            }
+
+            applyEnvCooling(envFactor, heatStartPx, heatEndPx) {
+                if (!this.isHeated(heatStartPx, heatEndPx)) {
+                    this.energy += (AMBIENT_TEMP - this.energy) * envFactor;
+                }
+            }
+
+            vibrate(maxAmp, bondRigidity) {
+                const v = visualLevel(this.energy);
+
+                // 林德曼準則：固體中原子振幅約為原子間距的 10～15%，超過就會熔化
+                // 古典熱振動 <u²> ∝ T，所以振幅 ∝ √T；鍵越硬（k_p 越大）振幅越小
+                const stiffnessDamp = 1.0 / (1.0 + bondRigidity * 0.0012);
+                // 振幅：上限為最近鄰距離的 15%（不重疊、不干擾電子），在 0～800 K 隨溫度遞增（略加強對比）
+                const amplitude = 0.15 * this.nnDist * Math.pow(v, 1.3) * stiffnessDamp;
+                // 振動速度：溫度越高振動越快（約 300 K 為 800 K 的 0.4 倍），與振幅一起呈現溫度差異
+                const phaseStep = (0.03 + 0.42 * v) * (1 + bondRigidity * 0.002);
+
+                this.phaseX += phaseStep;
+                this.phaseY += phaseStep * this.freqRatioY;
+
+                const jitter = 0.02 * this.nnDist * v;
+                this.x = this.baseX + Math.sin(this.phaseX) * amplitude + (Math.random() - 0.5) * jitter;
+                this.y = this.baseY + Math.cos(this.phaseY) * amplitude + (Math.random() - 0.5) * jitter;
+            }
+        }
+
+        // 自由電子類別
+        class FreeElectron {
+            constructor(x, y, minX, maxX, minY, maxY) {
+                this.x = x;
+                this.y = y;
+                this.minX = minX;
+                this.maxX = maxX;
+                this.minY = minY;
+                this.maxY = maxY;
+                this.energy = AMBIENT_TEMP;
+                const angle = Math.random() * Math.PI * 2;
+                const speed = this.getSpeedForEnergy();
+                this.vx = Math.cos(angle) * speed;
+                this.vy = Math.sin(angle) * speed;
+            }
+
+            getSpeedForEnergy() {
+                return 0.22 + Math.pow(visualLevel(this.energy), 0.85) * 5.6;
+            }
+
+            stepSubFrame(grid, targetTemp, heatStartPx, heatEndPx, baseCollisionRadius) {
+                if (isHeating && this.x >= heatStartPx && this.x <= heatEndPx) {
+                    this.energy += (targetTemp - this.energy) * 0.55;
+                }
+
+                const curSpd = Math.hypot(this.vx, this.vy) || 0.001;
+                const targetSpd = this.getSpeedForEnergy();
+                this.vx = (this.vx / curSpd) * targetSpd;
+                this.vy = (this.vy / curSpd) * targetSpd;
+
+                this.x += this.vx;
+                this.y += this.vy;
+
+                if (this.x < this.minX) { this.x = this.minX; this.vx = Math.abs(this.vx); }
+                if (this.x > this.maxX) { this.x = this.maxX; this.vx = -Math.abs(this.vx); }
+                if (this.y < this.minY) { this.y = this.minY; this.vy = Math.abs(this.vy); }
+                if (this.y > this.maxY) { this.y = this.maxY; this.vy = -Math.abs(this.vy); }
+
+                // 找「最近」的原子（舊版取陣列中第一個命中的原子，會讓電子一直被往右下推）
+                const cx = Math.floor((this.x - grid.x0) / grid.cell);
+                const cy = Math.floor((this.y - grid.y0) / grid.cell);
+                let nearest = null, nearestD2 = Infinity;
+                for (let gy = cy - 1; gy <= cy + 1; gy++) {
+                    if (gy < 0 || gy >= grid.rows) continue;
+                    for (let gx = cx - 1; gx <= cx + 1; gx++) {
+                        if (gx < 0 || gx >= grid.cols) continue;
+                        const bucket = grid.buckets[gy * grid.cols + gx];
+                        for (let k = 0; k < bucket.length; k++) {
+                            const atom = bucket[k];
+                            const dx = this.x - atom.baseX, dy = this.y - atom.baseY;
+                            const d2 = dx * dx + dy * dy;
+                            if (d2 < nearestD2) { nearestD2 = d2; nearest = atom; }
+                        }
+                    }
+                }
+
+                if (!nearest) { this.lastAtom = null; return; }
+                const atomNormT = visualLevel(nearest.energy);
+                const effectiveRadius = baseCollisionRadius * (0.45 + 0.25 * atomNormT);
+                if (nearestD2 >= effectiveRadius * effectiveRadius) { this.lastAtom = null; return; }
+
+                // 電子與碰撞原子熱平衡（傳熱速率由總熱導 k 決定，電子不另外注入能量）
+                this.energy += (nearest.energy - this.energy) * 0.35;
+
+                // 同一顆原子只散射一次，避免電子卡在原子內反覆打轉
+                if (nearest !== this.lastAtom) {
+                    const scatterProb = 0.10 + 0.30 * atomNormT;
+                    if (Math.random() < scatterProb) {
+                        // 聲子散射使動量方向隨機化：等向散射，沒有任何偏好方向
+                        const ang = Math.random() * Math.PI * 2;
+                        const newSpd = this.getSpeedForEnergy();
+                        this.vx = Math.cos(ang) * newSpd;
+                        this.vy = Math.sin(ang) * newSpd;
+                    }
+                }
+                this.lastAtom = nearest;
+            }
+        }
+
+        // 原子空間網格：讓電子只檢查附近的原子
+        function buildAtomGrid(atoms, region) {
+            const baseR = Math.max(4.5, canvas.width / 160);
+            const maxDisp = (canvas.width / 230) * 1.7 + 1;
+            const cell = baseR * 1.7 + maxDisp;
+            const x0 = region.minX - cell, y0 = region.minY - cell;
+            const cols = Math.ceil((region.maxX - x0 + cell) / cell) + 1;
+            const rows = Math.ceil((region.maxY - y0 + cell) / cell) + 1;
+            const buckets = Array.from({ length: cols * rows }, () => []);
+            for (let i = 0; i < atoms.length; i++) {
+                const a = atoms[i];
+                const gx = Math.floor((a.baseX - x0) / cell), gy = Math.floor((a.baseY - y0) / cell);
+                buckets[gy * cols + gx].push(a);
+            }
+            return { cell, x0, y0, cols, rows, buckets };
+        }
+        let atomGrid1 = null, atomGrid2 = null;
+
+        function buildMaterialSystem(matNum) {
+            const matKey = document.getElementById(`material${matNum}`).value;
+            const preset = materialPresets[matKey] || materialPresets.copper;
+            const structure = preset.structure;
+            const nuclearColor = preset.nuclearColor;
+
+            const { minX, maxX, minY, maxY } = getRegion(matNum);
+
+            const regionW = maxX - minX;
+            const regionH = maxY - minY;
+
+            // 原子間距放大 1.22 倍（原子數約減少 30%），騰出空間讓熱振動更明顯
+            const LATTICE_SPACING = 1.22;
+            const baseSpacing = Math.max(12.5, Math.min(16, canvas.width / 62)) * (preset.spacingScale || 1.0) * LATTICE_SPACING;
+            const atoms = [];
+
+            if (structure === 'BCC') {
+                const cols = Math.floor(regionW / baseSpacing) + 1;
+                const rows = Math.max(6, Math.floor(regionH / baseSpacing) + 1);
+                const stepX = regionW / (cols - 1);
+                const stepY = regionH / (rows - 1);
+                for (let r = 0; r < rows; r++) {
+                    for (let c = 0; c < cols; c++) {
+                        atoms.push(new LatticeAtom(minX + c * stepX, minY + r * stepY, matNum, nuclearColor));
+                    }
+                }
+            } else if (structure === 'FCC' || structure === 'DIAMOND') {
+                const sp = baseSpacing * 1.22;
+                const cols = Math.floor(regionW / sp) + 1;
+                const rows = Math.max(5, Math.floor(regionH / sp) + 1);
+                const stepX = regionW / (cols - 1);
+                const stepY = regionH / (rows - 1);
+                for (let r = 0; r < rows; r++) {
+                    for (let c = 0; c < cols; c++) {
+                        atoms.push(new LatticeAtom(minX + c * stepX, minY + r * stepY, matNum, nuclearColor));
+                        if (c < cols - 1 && r < rows - 1) {
+                            atoms.push(new LatticeAtom(minX + (c + 0.5) * stepX, minY + (r + 0.5) * stepY, matNum, nuclearColor));
+                        }
+                    }
+                }
+            } else if (structure === 'HCP') {
+                const sp = baseSpacing * 0.98;
+                const rowH = sp * Math.sqrt(3) / 2;
+                const cols = Math.floor(regionW / sp) + 1;
+                const rows = Math.max(6, Math.floor(regionH / rowH) + 1);
+                const stepX = regionW / (cols - 1);
+                const stepY = regionH / (rows - 1);
+                for (let r = 0; r < rows; r++) {
+                    const offset = (r % 2 === 1) ? stepX * 0.5 : 0;
+                    for (let c = 0; c < cols; c++) {
+                        const x = minX + c * stepX + offset;
+                        if (x <= maxX + 2) {
+                            atoms.push(new LatticeAtom(x, minY + r * stepY, matNum, nuclearColor));
+                        }
+                    }
+                }
+            } else {
+                const cols = Math.floor(regionW / baseSpacing) + 1;
+                const rows = Math.max(6, Math.floor(regionH / baseSpacing) + 1);
+                const stepX = regionW / (cols - 1);
+                const stepY = regionH / (rows - 1);
+                for (let r = 0; r < rows; r++) {
+                    for (let c = 0; c < cols; c++) {
+                        const randX = (c === 0 || c === cols - 1) ? 0 : (Math.random() - 0.5) * stepX * 0.30;
+                        const randY = (r === 0 || r === rows - 1) ? 0 : (Math.random() - 0.5) * stepY * 0.30;
+                        atoms.push(new LatticeAtom(minX + c * stepX + randX, minY + r * stepY + randY, matNum, nuclearColor));
+                    }
+                }
+            }
+
+            const maxBondDist = baseSpacing * 1.48;
+            const maxBondSq = maxBondDist * maxBondDist;
+            for (let i = 0; i < atoms.length; i++) {
+                for (let j = i + 1; j < atoms.length; j++) {
+                    const dx = atoms[i].baseX - atoms[j].baseX;
+                    const dy = atoms[i].baseY - atoms[j].baseY;
+                    if (dx * dx + dy * dy <= maxBondSq) {
+                        atoms[i].neighbors.push(atoms[j]);
+                        atoms[j].neighbors.push(atoms[i]);
+                    }
+                }
+            }
+
+            for (let i = 0; i < atoms.length; i++) {
+                const a = atoms[i];
+                let md = Infinity;
+                for (let j = 0; j < a.neighbors.length; j++) {
+                    md = Math.min(md, Math.hypot(a.neighbors[j].baseX - a.baseX, a.neighbors[j].baseY - a.baseY));
+                }
+                if (isFinite(md)) a.nnDist = md;
+            }
+
+            // 依晶格幾何換算：讓熱擴散在畫面上的速度與參考版 30 欄網格相同
+            // 參考版內部格點 Σ(Δx)² = 6a²（左右 + 4 個對角）
+            const aRef = (canvas.width * 0.94) / (REF_GRID_COLS - 1);
+            const xLo = minX + regionW * 0.2, xHi = minX + regionW * 0.8;
+            const yLo = minY + regionH * 0.2, yHi = minY + regionH * 0.8;
+            let sumDx2 = 0, cnt = 0;
+            for (let i = 0; i < atoms.length; i++) {
+                const a = atoms[i];
+                if (a.baseX < xLo || a.baseX > xHi || a.baseY < yLo || a.baseY > yHi) continue;
+                let s2 = 0;
+                for (let j = 0; j < a.neighbors.length; j++) {
+                    const d = a.neighbors[j].baseX - a.baseX;
+                    s2 += d * d;
+                }
+                sumDx2 += s2;
+                cnt++;
+            }
+            const avgDx2 = cnt > 0 && sumDx2 > 0 ? sumDx2 / cnt : 6 * aRef * aRef;
+            const diffScale = (6 * aRef * aRef) / avgDx2;
+
+            const grid = buildAtomGrid(atoms, { minX, maxX, minY, maxY });
+            if (matNum === 1) { lattice1 = atoms; latticeDiffScale1 = diffScale; electrons1.length = 0; atomGrid1 = grid; }
+            else { lattice2 = atoms; latticeDiffScale2 = diffScale; electrons2.length = 0; atomGrid2 = grid; }
+
+            document.getElementById(`aCount${matNum}`).textContent = atoms.length;
+            rebuildElectrons(matNum);
+        }
+
+        function rebuildElectrons(matNum) {
+            const zRatio = parseFloat(document.getElementById(`elecRatio${matNum}`).value);
+            const atoms = matNum === 1 ? lattice1 : lattice2;
+            const currentArr = matNum === 1 ? electrons1 : electrons2;
+
+            const { minX, maxX, minY, maxY } = getRegion(matNum);
+
+            const targetCount = Math.round(atoms.length * zRatio);
+
+            while (currentArr.length < targetCount) {
+                const baseAtom = atoms[currentArr.length % atoms.length];
+                const rx = baseAtom ? baseAtom.baseX + (Math.random() - 0.5) * 8 : minX + Math.random() * (maxX - minX);
+                const ry = baseAtom ? baseAtom.baseY + (Math.random() - 0.5) * 8 : minY + Math.random() * (maxY - minY);
+                const clampedX = Math.max(minX, Math.min(maxX, rx));
+                const clampedY = Math.max(minY, Math.min(maxY, ry));
+                currentArr.push(new FreeElectron(clampedX, clampedY, minX, maxX, minY, maxY));
+            }
+            if (currentArr.length > targetCount) {
+                currentArr.length = targetCount;
+            }
+            document.getElementById(`eCount${matNum}`).textContent = currentArr.length;
+        }
+
+        function drawHeatingZone(zone, matNum, targetTemp, nameText) {
+            const reg = getRegion(matNum);
+            const yTop = reg.panelTop, height = reg.panelBottom - reg.panelTop;
+            const xStart = zone.startRatio * canvas.width;
+            const width = (zone.endRatio - zone.startRatio) * canvas.width;
+            const th = theme();
+            const isCold = targetTemp < AMBIENT_TEMP;
+
+            ctx.save();
+            if (isHeating) {
+                const intensity = Math.min(1, Math.abs(targetTemp - AMBIENT_TEMP) / (MAX_TEMP - AMBIENT_TEMP));
+                const rgb = isCold ? '59, 130, 246' : '239, 68, 68';
+                ctx.fillStyle = `rgba(${rgb}, ${0.08 + intensity * 0.14})`;
+                ctx.strokeStyle = `rgba(${rgb}, ${0.55 + intensity * 0.35})`;
+            } else {
+                ctx.fillStyle = 'rgba(148, 163, 184, 0.08)';
+                ctx.strokeStyle = 'rgba(148, 163, 184, 0.5)';
+            }
+            ctx.fillRect(xStart, yTop, width, height);
+            ctx.lineWidth = 1.8;
+            ctx.setLineDash([5, 4]);
+            ctx.strokeRect(xStart, yTop, width, height);
+            ctx.setLineDash([]);
+
+            ctx.fillStyle = !isHeating ? th.offText : (isCold ? th.coldText : th.hotText);
+            ctx.font = 'bold 11px "Microsoft JhengHei", sans-serif';
+            const label = !isHeating ? '⏸ 溫控已移除' : `${isCold ? '❄' : '🔥'} ${nameText}${isCold ? '冷源區' : '熱源區'} (${targetTemp}K)`;
+            ctx.fillText(label, xStart + 5, yTop - 4);
+            ctx.restore();
+        }
+
+        function drawMaterialPanel(matNum, title) {
+            const reg = getRegion(matNum);
+            const th = theme();
+            ctx.save();
+            ctx.fillStyle = th.panel;
+            ctx.strokeStyle = th.panelStroke;
+            ctx.lineWidth = 1.2;
+            ctx.beginPath();
+            const w = reg.panelRight - reg.panelLeft, h = reg.panelBottom - reg.panelTop;
+            if (ctx.roundRect) ctx.roundRect(reg.panelLeft, reg.panelTop, w, h, 6);
+            else ctx.rect(reg.panelLeft, reg.panelTop, w, h);
+            ctx.fill();
+            ctx.stroke();
+            ctx.fillStyle = th.offText;
+            ctx.font = 'bold 11px "Microsoft JhengHei", sans-serif';
+            ctx.textAlign = 'right';
+            ctx.fillText(title, reg.panelRight - 4, reg.panelTop - 4);
+            ctx.restore();
+        }
+
+        function drawMaterialSystem(atoms, electrons, phononCond, particleRadius) {
+            const hidePhonons = document.getElementById('hidePhonons').checked;
+            const showBonds = document.getElementById('showBonds').checked && !hidePhonons;
+            const showElec = document.getElementById('showElectrons').checked;
+            const useTempColor = document.getElementById('enableAtomTempColor').checked;
+
+            if (showBonds) {
+                const kpNorm = Math.min(1, phononCond / 300);
+                // 不顯示電子時（聲子模式）：鍵結加粗加深，強調聲子沿鍵結傳熱
+                // 顯示電子時：鍵結淡化，讓電子清楚可見
+                const bondAlpha = showElec ? 0.08 + kpNorm * 0.32 : 0.38 + kpNorm * 0.30;
+                const bondWidth = showElec ? 0.5 + kpNorm * 1.1 : 1.0 + kpNorm * 0.9;
+                ctx.strokeStyle = `rgba(${theme().bond}, ${bondAlpha})`;
+                ctx.lineWidth = bondWidth;
+                ctx.beginPath();
+                for (let i = 0; i < atoms.length; i++) {
+                    const a = atoms[i];
+                    for (let j = 0; j < a.neighbors.length; j++) {
+                        const nb = a.neighbors[j];
+                        if (nb.baseX >= a.baseX) {
+                            ctx.moveTo(a.x, a.y);
+                            ctx.lineTo(nb.x, nb.y);
+                        }
+                    }
+                }
+                ctx.stroke();
+            }
+
+            if (!hidePhonons) {
+                const atomStroke = theme().atomStroke;
+                if (atomStroke) { ctx.strokeStyle = atomStroke; ctx.lineWidth = 0.7; }
+                if (!useTempColor && atoms.length > 0) {
+                    // 同色原子一次畫完（效能較好）
+                    ctx.beginPath();
+                    for (let i = 0; i < atoms.length; i++) {
+                        const a = atoms[i];
+                        ctx.moveTo(a.x + particleRadius, a.y);
+                        ctx.arc(a.x, a.y, particleRadius, 0, Math.PI * 2);
+                    }
+                    ctx.fillStyle = atoms[0].baseColor;
+                    ctx.fill();
+                    if (atomStroke) ctx.stroke();
+                } else {
+                    for (let i = 0; i < atoms.length; i++) {
+                        const a = atoms[i];
+                        ctx.beginPath();
+                        ctx.arc(a.x, a.y, particleRadius, 0, Math.PI * 2);
+                        ctx.fillStyle = tempToColor(a.energy);
+                        ctx.fill();
+                        if (atomStroke) ctx.stroke();
+                    }
+                }
+            }
+
+            if (showElec && electrons.length > 0) {
+                const eRadius = Math.max(1.5, particleRadius * 0.56);
+                ctx.fillStyle = theme().electron;
+                ctx.beginPath();
+                for (let i = 0; i < electrons.length; i++) {
+                    const e = electrons[i];
+                    ctx.moveTo(e.x + eRadius, e.y);
+                    ctx.arc(e.x, e.y, eRadius, 0, Math.PI * 2);
+                }
+                ctx.fill();
+            }
+        }
+
+        function drawTemperatureProfiles() {
+            updateMaterialLabels();
+            const profA = document.getElementById('tempProfileA');
+            const profB = document.getElementById('tempProfileB');
+            const ctxA = profA.getContext('2d');
+            const ctxB = profB.getContext('2d');
+
+            const padX = canvas.width * 0.025;
+            const effWidth = canvas.width - 2 * padX;
+
+            function computeProfile(atoms, electrons) {
+                const sums = new Array(PROFILE_BINS).fill(0);
+                const counts = new Array(PROFILE_BINS).fill(0);
+
+                for (let i = 0; i < atoms.length; i++) {
+                    const a = atoms[i];
+                    const idx = Math.max(0, Math.min(PROFILE_BINS - 1, Math.floor(((a.baseX - padX) / effWidth) * PROFILE_BINS)));
+                    sums[idx] += a.energy;
+                    counts[idx] += 1;
+                }
+                for (let i = 0; i < electrons.length; i++) {
+                    const e = electrons[i];
+                    const idx = Math.max(0, Math.min(PROFILE_BINS - 1, Math.floor(((e.x - padX) / effWidth) * PROFILE_BINS)));
+                    sums[idx] += e.energy * 0.35;
+                    counts[idx] += 0.35;
+                }
+
+                const raw = new Array(PROFILE_BINS).fill(AMBIENT_TEMP);
+                for (let i = 0; i < PROFILE_BINS; i++) {
+                    if (counts[i] > 0) raw[i] = sums[i] / counts[i];
+                    else if (i > 0) raw[i] = raw[i - 1];
+                }
+                const smoothed = new Array(PROFILE_BINS).fill(AMBIENT_TEMP);
+                for (let i = 0; i < PROFILE_BINS; i++) {
+                    const prev = i > 0 ? raw[i - 1] : raw[i];
+                    const next = i < PROFILE_BINS - 1 ? raw[i + 1] : raw[i];
+                    smoothed[i] = prev * 0.25 + raw[i] * 0.5 + next * 0.25;
+                }
+                return smoothed;
+            }
+
+            const dataA = computeProfile(lattice1, electrons1);
+            const dataB = computeProfile(lattice2, electrons2);
+
+            function renderChart(cCtx, data, strokeColor, fillColor) {
+                const w = cCtx.canvas.width;
+                const h = cCtx.canvas.height;
+                cCtx.clearRect(0, 0, w, h);
+
+                cCtx.strokeStyle = '#e2e8f0';
+                cCtx.lineWidth = 1;
+                cCtx.font = '10px monospace';
+                cCtx.fillStyle = '#64748b';
+                cCtx.textAlign = 'right';
+
+                for (let i = 0; i <= 4; i++) {
+                    const y = (i * h) / 4;
+                    cCtx.beginPath();
+                    cCtx.moveTo(0, y);
+                    cCtx.lineTo(w, y);
+                    cCtx.stroke();
+                    const labelT = Math.round(MAX_TEMP - (i / 4) * MAX_TEMP);
+                    if (i < 4) cCtx.fillText(`${labelT}K`, w - 4, y + 11);
+                }
+
+                const yAmb = h - (AMBIENT_TEMP / MAX_TEMP) * h;
+                cCtx.save();
+                cCtx.setLineDash([3, 3]);
+                cCtx.strokeStyle = '#94a3b8';
+                cCtx.beginPath(); cCtx.moveTo(0, yAmb); cCtx.lineTo(w, yAmb); cCtx.stroke();
+                cCtx.restore();
+
+                cCtx.beginPath();
+                cCtx.moveTo(0, h);
+                data.forEach((temp, i) => {
+                    const x = (i / (PROFILE_BINS - 1)) * w;
+                    const y = h - (temp / MAX_TEMP) * h;
+                    cCtx.lineTo(x, y);
+                });
+                cCtx.lineTo(w, h);
+                cCtx.closePath();
+                cCtx.fillStyle = fillColor;
+                cCtx.fill();
+
+                cCtx.beginPath();
+                data.forEach((temp, i) => {
+                    const x = (i / (PROFILE_BINS - 1)) * w;
+                    const y = h - (temp / MAX_TEMP) * h;
+                    if (i === 0) cCtx.moveTo(x, y);
+                    else cCtx.lineTo(x, y);
+                });
+                cCtx.strokeStyle = strokeColor;
+                cCtx.lineWidth = 2.2;
+                cCtx.stroke();
+            }
+
+            renderChart(ctxA, dataA, '#ef4444', 'rgba(239, 68, 68, 0.22)');
+            renderChart(ctxB, dataB, '#10b981', 'rgba(16, 185, 129, 0.22)');
+        }
+
+        // 一幀的晶格熱擴散：細分成數個子步，總效果 = 參考版一幀 × 時間倍率
+        function diffuseLattice(atoms, diffScale, rate, targetTemp, envFactor, hStart, hEnd) {
+            const timeScale = parseFloat(document.getElementById('timeScale').value);
+            const total = diffScale * timeScale;
+            const nSub = Math.max(1, Math.ceil(total));
+            const r = rate * total / nSub;
+            for (let s = 0; s < nSub; s++) {
+                for (let i = 0; i < atoms.length; i++) atoms[i].computePhononTransfer(targetTemp, r, hStart, hEnd);
+                for (let i = 0; i < atoms.length; i++) atoms[i].commitEnergy();
+            }
+            // 環境冷卻同樣按時間倍率加速，穩態溫度分布不受倍率影響
+            const envEff = 1 - Math.pow(1 - envFactor, timeScale);
+            for (let i = 0; i < atoms.length; i++) atoms[i].applyEnvCooling(envEff, hStart, hEnd);
+        }
+
+        // ===== 電荷中性 / 塞貝克效應 =====
+        // 未勾選：依電子在水平方向的分布算出 1D 電場（高斯定律），把電子推回均勻分布
+        // 勾選：關閉回復電場，熱電子擴散到冷端，呈現電荷分離（塞貝克效應示意，比例被放大）
+        const CHARGE_BINS = 20;
+        const FIELD_STRENGTH = 60;
+        function applyChargeField(electrons) {
+            const N = electrons.length;
+            if (N < CHARGE_BINS) return;
+            const e0 = electrons[0];
+            const x0 = e0.minX, span = e0.maxX - e0.minX;
+            const counts = new Array(CHARGE_BINS).fill(0);
+            const binOf = new Int16Array(N);
+            for (let i = 0; i < N; i++) {
+                const b = Math.max(0, Math.min(CHARGE_BINS - 1, Math.floor((electrons[i].x - x0) / span * CHARGE_BINS)));
+                binOf[i] = b;
+                counts[b]++;
+            }
+            const nBar = N / CHARGE_BINS;
+            // 每個區間中心左側的「多餘電子數」：多餘的電子在左邊 → 把電子往右推
+            const qLeft = new Array(CHARGE_BINS);
+            let acc = 0;
+            for (let b = 0; b < CHARGE_BINS; b++) {
+                const ex = counts[b] - nBar;
+                qLeft[b] = acc + ex * 0.5;
+                acc += ex;
+            }
+            for (let i = 0; i < N; i++) {
+                electrons[i].vx += FIELD_STRENGTH * qLeft[binOf[i]] / N;
+            }
+        }
+
+        function latticeEndTemps(atoms) {
+            if (atoms.length === 0) return { hot: AMBIENT_TEMP, cold: AMBIENT_TEMP };
+            const bins = 15, sum = new Array(bins).fill(0), cnt = new Array(bins).fill(0);
+            const x0 = canvas.width * 0.025, span = canvas.width * 0.95;
+            for (let i = 0; i < atoms.length; i++) {
+                const b = Math.max(0, Math.min(bins - 1, Math.floor((atoms[i].baseX - x0) / span * bins)));
+                sum[b] += atoms[i].energy; cnt[b]++;
+            }
+            let hot = -Infinity, cold = Infinity;
+            for (let b = 0; b < bins; b++) {
+                if (!cnt[b]) continue;
+                const t = sum[b] / cnt[b];
+                hot = Math.max(hot, t); cold = Math.min(cold, t);
+            }
+            return { hot, cold };
+        }
+
+        // 畫面上：電荷分離的 ± 符號與熱電電位差估算值
+        const seebeckImbalance = { 1: 0, 2: 0 };
+        function drawSeebeckInfo(matNum, electrons, atoms) {
+            if (!document.getElementById('seebeckMode').checked) return;
+            const reg = getRegion(matNum);
+            const th = theme();
+            const key = document.getElementById(`material${matNum}`).value;
+            const preset = materialPresets[key];
+            const { hot, cold } = latticeEndTemps(atoms);
+            const dT = hot - cold;
+
+            let text;
+            if (!preset) text = '塞貝克：自訂材質無資料';
+            else if (preset.elecRatio === 0) text = '塞貝克：絕緣體，無自由電子';
+            else if (preset.seebeck === null) text = `塞貝克：ΔT = ${dT.toFixed(0)} K（${preset.name} 係數資料不足）`;
+            else {
+                const dV = preset.seebeck * dT; // μV，冷端相對熱端
+                const vStr = Math.abs(dV) >= 1000 ? `${(dV / 1000).toFixed(2)} mV` : `${dV.toFixed(0)} μV`;
+                text = `塞貝克 ΔV(冷端−熱端) ≈ S·ΔT = ${preset.seebeck > 0 ? '+' : ''}${preset.seebeck} μV/K × ${dT.toFixed(0)} K = ${dV > 0 ? '+' : ''}${vStr}`;
+            }
+            ctx.save();
+            ctx.font = 'bold 11px "Microsoft JhengHei", sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillStyle = th.offText;
+            ctx.fillText(text, canvas.width * 0.55, reg.panelTop - 4);
+
+            // 模擬中的電荷分離：電子不足的一端標 +，過多的一端標 −
+            if (electrons.length > 0) {
+                const midX = (reg.minX + reg.maxX) / 2;
+                let left = 0;
+                for (let i = 0; i < electrons.length; i++) if (electrons[i].x < midX) left++;
+                const raw = (left - electrons.length / 2) / (electrons.length / 2); // >0：左邊電子較多
+                // 時間平滑，並以統計雜訊為門檻，避免電子少時符號亂跳
+                seebeckImbalance[matNum] = seebeckImbalance[matNum] * 0.95 + raw * 0.05;
+                const imbalance = seebeckImbalance[matNum];
+                const step = Math.max(0.04, 2 / Math.sqrt(electrons.length));
+                const mag = Math.min(3, Math.floor(Math.abs(imbalance) / step));
+                if (mag > 0) {
+                    const leftSign = imbalance > 0 ? '−' : '+';
+                    const rightSign = imbalance > 0 ? '+' : '−';
+                    const cy = (reg.panelTop + reg.panelBottom) / 2;
+                    ctx.font = 'bold 18px Arial, sans-serif';
+                    const colorOf = sg => sg === '+' ? '#dc2626' : '#2563eb';
+                    for (let k = 0; k < mag; k++) {
+                        const dy = (k - (mag - 1) / 2) * 20;
+                        ctx.fillStyle = colorOf(leftSign);
+                        ctx.fillText(leftSign, reg.panelLeft + 12, cy + dy + 6);
+                        ctx.fillStyle = colorOf(rightSign);
+                        ctx.fillText(rightSign, reg.panelRight - 12, cy + dy + 6);
+                    }
+                }
+            }
+            ctx.restore();
+        }
+
+        function stepPhysics() {
+            const temp1 = parseFloat(document.getElementById('temperature1').value);
+            const temp2 = parseFloat(document.getElementById('temperature2').value);
+            const kp1 = parseFloat(document.getElementById('phononCond1').value);
+            const kp2 = parseFloat(document.getElementById('phononCond2').value);
+            const env1 = parseFloat(document.getElementById('envFactor1').value);
+            const env2 = parseFloat(document.getElementById('envFactor2').value);
+
+            const hStart1 = heatZone1.startRatio * canvas.width;
+            const hEnd1 = heatZone1.endRatio * canvas.width;
+            const hStart2 = heatZone2.startRatio * canvas.width;
+            const hEnd2 = heatZone2.endRatio * canvas.width;
+
+            const maxAmp = canvas.width / 230;
+            const baseCollisionR = Math.max(4.5, canvas.width / 160);
+
+            diffuseLattice(lattice1, latticeDiffScale1, referenceTransferRate(getTotalK(1)), temp1, env1, hStart1, hEnd1);
+            diffuseLattice(lattice2, latticeDiffScale2, referenceTransferRate(getTotalK(2)), temp2, env2, hStart2, hEnd2);
+
+            const SUB_STEPS = 2;
+            const neutral = !document.getElementById('seebeckMode').checked;
+            for (let s = 0; s < SUB_STEPS; s++) {
+                if (neutral) {
+                    applyChargeField(electrons1);
+                    applyChargeField(electrons2);
+                }
+                for (let i = 0; i < electrons1.length; i++) {
+                    electrons1[i].stepSubFrame(atomGrid1, temp1, hStart1, hEnd1, baseCollisionR);
+                }
+                for (let i = 0; i < electrons2.length; i++) {
+                    electrons2[i].stepSubFrame(atomGrid2, temp2, hStart2, hEnd2, baseCollisionR);
+                }
+            }
+
+            for (let i = 0; i < lattice1.length; i++) {
+                lattice1[i].vibrate(maxAmp, kp1);
+            }
+            for (let i = 0; i < lattice2.length; i++) {
+                lattice2[i].vibrate(maxAmp, kp2);
+            }
+        }
+
+        function renderFrame() {
+            ctx.fillStyle = theme().bg;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            const temp1 = parseFloat(document.getElementById('temperature1').value);
+            const temp2 = parseFloat(document.getElementById('temperature2').value);
+            const kp1 = parseFloat(document.getElementById('phononCond1').value);
+            const kp2 = parseFloat(document.getElementById('phononCond2').value);
+
+            drawMaterialPanel(1, `物質 A：${materialName(1)}`);
+            drawMaterialPanel(2, `物質 B：${materialName(2)}`);
+            drawHeatingZone(heatZone1, 1, temp1, '');
+            drawHeatingZone(heatZone2, 2, temp2, '');
+
+            const particleRadius = Math.max(2.3, canvas.width / 310);
+            drawMaterialSystem(lattice1, electrons1, kp1, particleRadius);
+            drawMaterialSystem(lattice2, electrons2, kp2, particleRadius);
+            drawSeebeckInfo(1, electrons1, lattice1);
+            drawSeebeckInfo(2, electrons2, lattice2);
+
+            drawTemperatureProfiles();
+        }
+
+        function animate() {
+            if (!isRunning) return;
+            stepPhysics();
+            renderFrame();
+            requestAnimationFrame(animate);
+        }
+
+        function toggleSimulation() {
+            isRunning = !isRunning;
+            document.getElementById('controlBtn').textContent = isRunning ? '暫停模擬' : '開始模擬';
+            if (isRunning) animate();
+        }
+
+        function resetSimulation() {
+            isRunning = false;
+            document.getElementById('controlBtn').textContent = '開始模擬';
+            isHeating = true;
+            document.getElementById('heatingBtn').textContent = '移除溫控（觀察熱消散）';
+            document.getElementById('temperature1').disabled = false;
+            document.getElementById('temperature2').disabled = false;
+
+            heatZone1 = { startRatio: 0.02, endRatio: 0.22 };
+            heatZone2 = { startRatio: 0.02, endRatio: 0.22 };
+            [1, 2].forEach(n => {
+                document.getElementById(`temperature${n}`).value = AMBIENT_TEMP;
+                document.getElementById(`tempValue${n}`).textContent = AMBIENT_TEMP;
+            });
+
+            buildMaterialSystem(1);
+            buildMaterialSystem(2);
+            renderFrame();
+        }
+
+        function toggleTempSync() {
+            isTempSyncing = !isTempSyncing;
+            const btn = document.getElementById('syncBtn');
+            btn.textContent = isTempSyncing ? '溫控與熱源同步：開啟' : '溫控與熱源同步：關閉';
+            btn.className = isTempSyncing ? 'active-sync' : 'secondary';
+
+            if (isTempSyncing) {
+                const t1 = document.getElementById('temperature1').value;
+                document.getElementById('temperature2').value = t1;
+                document.getElementById('tempValue2').textContent = t1;
+                heatZone2.startRatio = heatZone1.startRatio;
+                heatZone2.endRatio = heatZone1.endRatio;
+                if (!isRunning) renderFrame();
+            }
+        }
+
+        function toggleHeating() {
+            isHeating = !isHeating;
+            document.getElementById('heatingBtn').textContent = isHeating ? '移除溫控（觀察熱消散）' : '開始溫控';
+            document.getElementById('temperature1').disabled = !isHeating;
+            document.getElementById('temperature2').disabled = !isHeating;
+            if (!isRunning) renderFrame();
+        }
+
+        function getCanvasCoords(clientX, clientY) {
+            const rect = canvas.getBoundingClientRect();
+            return {
+                x: (clientX - rect.left) * (canvas.width / rect.width),
+                y: (clientY - rect.top) * (canvas.height / rect.height)
+            };
+        }
+
+        function handlePointerDown(clientX, clientY) {
+            const { x, y } = getCanvasCoords(clientX, clientY);
+            const xRatio = x / canvas.width;
+            if (y < canvas.height / 2) {
+                if (xRatio >= heatZone1.startRatio && xRatio <= heatZone1.endRatio) {
+                    isDragging = true;
+                    draggedMaterial = 1;
+                    dragStartXRatio = xRatio;
+                    dragInitialStart = heatZone1.startRatio;
+                    dragInitialEnd = heatZone1.endRatio;
+                }
+            } else {
+                if (xRatio >= heatZone2.startRatio && xRatio <= heatZone2.endRatio) {
+                    isDragging = true;
+                    draggedMaterial = 2;
+                    dragStartXRatio = xRatio;
+                    dragInitialStart = heatZone2.startRatio;
+                    dragInitialEnd = heatZone2.endRatio;
+                }
+            }
+        }
+
+        function handlePointerMove(clientX, clientY) {
+            const { x, y } = getCanvasCoords(clientX, clientY);
+
+            let closest = null;
+            let minDist = Infinity;
+            const detectR = Math.max(12, canvas.width / 65);
+            const allAtoms = y < canvas.height / 2 ? lattice1 : lattice2;
+
+            for (let i = 0; i < allAtoms.length; i++) {
+                const p = allAtoms[i];
+                const d = Math.hypot(p.x - x, p.y - y);
+                if (d < minDist && d < detectR) {
+                    minDist = d;
+                    closest = p;
+                }
+            }
+
+            const dispA = document.getElementById('currentTempA');
+            const dispB = document.getElementById('currentTempB');
+            if (closest) {
+                if (closest.matNum === 1) {
+                    dispA.textContent = Math.round(closest.energy);
+                    dispB.textContent = '-';
+                } else {
+                    dispB.textContent = Math.round(closest.energy);
+                    dispA.textContent = '-';
+                }
+            } else {
+                dispA.textContent = '-';
+                dispB.textContent = '-';
+            }
+
+            if (isDragging) {
+                const dxRatio = (x / canvas.width) - dragStartXRatio;
+                const widthRatio = dragInitialEnd - dragInitialStart;
+                let newStart = Math.max(0.01, Math.min(0.99 - widthRatio, dragInitialStart + dxRatio));
+                let newEnd = newStart + widthRatio;
+
+                if (draggedMaterial === 1) {
+                    heatZone1.startRatio = newStart;
+                    heatZone1.endRatio = newEnd;
+                    if (isTempSyncing) {
+                        heatZone2.startRatio = newStart;
+                        heatZone2.endRatio = newEnd;
+                    }
+                } else {
+                    heatZone2.startRatio = newStart;
+                    heatZone2.endRatio = newEnd;
+                    if (isTempSyncing) {
+                        heatZone1.startRatio = newStart;
+                        heatZone1.endRatio = newEnd;
+                    }
+                }
+                if (!isRunning) renderFrame();
+            }
+        }
+
+        canvas.addEventListener('mousedown', e => handlePointerDown(e.clientX, e.clientY));
+        canvas.addEventListener('mousemove', e => handlePointerMove(e.clientX, e.clientY));
+        window.addEventListener('mouseup', () => { isDragging = false; draggedMaterial = null; });
+
+        canvas.addEventListener('touchstart', e => {
+            if (e.touches.length > 0) {
+                e.preventDefault();
+                handlePointerDown(e.touches[0].clientX, e.touches[0].clientY);
+            }
+        }, { passive: false });
+
+        canvas.addEventListener('touchmove', e => {
+            if (e.touches.length > 0) {
+                e.preventDefault();
+                handlePointerMove(e.touches[0].clientX, e.touches[0].clientY);
+            }
+        }, { passive: false });
+
+        window.addEventListener('touchend', () => { isDragging = false; draggedMaterial = null; });
+
+        [1, 2].forEach(num => {
+            const other = num === 1 ? 2 : 1;
+
+            document.getElementById(`temperature${num}`).addEventListener('input', function() {
+                document.getElementById(`tempValue${num}`).textContent = this.value;
+                if (isTempSyncing) {
+                    document.getElementById(`temperature${other}`).value = this.value;
+                    document.getElementById(`tempValue${other}`).textContent = this.value;
+                }
+                if (!isRunning) renderFrame();
+            });
+
+            document.getElementById(`phononCond${num}`).addEventListener('input', function() {
+                document.getElementById(`phononVal${num}`).textContent = this.value;
+                document.getElementById(`material${num}`).value = 'custom';
+                document.getElementById(`structureBadge${num}`).textContent = '晶格: 自訂';
+                updateTotalKDisplay(num);
+                if (!isRunning) renderFrame();
+            });
+
+            document.getElementById(`elecRatio${num}`).addEventListener('input', function() {
+                document.getElementById(`elecVal${num}`).textContent = parseFloat(this.value).toFixed(2);
+                document.getElementById(`material${num}`).value = 'custom';
+                document.getElementById(`structureBadge${num}`).textContent = '晶格: 自訂';
+                rebuildElectrons(num);
+                updateTotalKDisplay(num);
+                if (!isRunning) renderFrame();
+            });
+
+            document.getElementById(`envFactor${num}`).addEventListener('input', function() {
+                document.getElementById(`envFactorValue${num}`).textContent = this.value;
+            });
+        });
+
+        document.getElementById('timeScale').addEventListener('input', function() {
+            document.getElementById('timeScaleVal').textContent = this.value;
+        });
+
+        window.addEventListener('load', () => {
+            const canFs = document.fullscreenEnabled || document.webkitFullscreenEnabled;
+            if (!canFs) document.getElementById('fsBtn').style.display = 'none';
+            applyMaterialPreset(1);
+            applyMaterialPreset(2);
+            renderFrame();
+        });
+    </script>
+</body>
+</html>
