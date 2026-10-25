@@ -7,7 +7,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>位值加減法學習系統</title>
+    <title>借位加減法練習</title>
     <style>
         :root {
             --bg: #F3EFE6; --surface: #FFFFFF; --surface-2: #F8F6F1; --border: #E3DDD0;
@@ -169,6 +169,15 @@
         .wrong-item button, .mini-btn { min-height: 40px; margin-left: 4px; padding: 0 14px; border: none; border-radius: 8px; font-weight: 700; color: #fff; }
         .btn-redo { background: var(--hun-ink); }
         .btn-delete, .mini-btn { background: var(--bad); }
+        .fb-sec { margin-bottom: 14px; }
+        .fb-h { font-weight: 800; color: var(--muted); margin-bottom: 6px; }
+        .fb-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 10px; margin-bottom: 6px; font-size: 1.08rem; }
+        .fb-row.ok { background: #E3F5EC; color: #146C43; }
+        .fb-row.bad { background: #FDE8E6; color: #B8352D; }
+        .fb-ans { font-family: "Courier New", monospace; font-size: 1.3rem; letter-spacing: 2px; }
+        .fb-tip { background: #FFF6D6; border-radius: 10px; padding: 10px 14px; margin: 4px 0 8px; font-weight: 700; }
+        .fb-note { color: var(--muted); font-size: .9rem; margin: 0 0 10px; }
+        .fb-close { width: 100%; min-height: 48px; border: none; border-radius: 10px; background: var(--hun-ink); color: #fff; font-weight: 800; font-size: 1.05rem; }
 
         /* 直式平板 / 手機 */
         @media (orientation: portrait), (max-width: 820px) {
@@ -212,7 +221,7 @@
 <body>
 
     <div id="top-nav">
-        <div class="nav-title">📐 位值加減法學習系統</div>
+        <div class="nav-title">借位加減法練習</div>
         <div class="nav-buttons">
             <button class="nav-btn active-mode" id="nav-practice">練習模式</button>
             <button class="nav-btn" id="nav-challenge">闖關模式</button>
@@ -512,6 +521,7 @@
             const btn = e.target.closest('[data-action]');
             if (!btn) return;
             const { action, idx, key } = btn.dataset;
+            if (action === 'close') { closeModal(); return; }
             if (action === 'clear') {
                 if (confirm('確定要清空此分類的所有紀錄嗎？')) { DB.save(key, []); showRecordsModal(); }
             } else if (action === 'redo') {
@@ -792,8 +802,8 @@
             if (over.length) {
                 const names = over.map(p => PLACE_NAME[p]).join('、');
                 toast(state.mathMode === 'add'
-                    ? `⚠️ ${names}超過 9 個正在閃爍！\n請圈 10 個拖到左邊一格完成「進位」。`
-                    : `⚠️ ${names}超過 9 個，\n別忘了請小人把要減掉的球搬走喔！`, 'warn', 3200);
+                    ? `⚠️【${names}】有 10 個以上的球，要「進位」喔！\n選 10 個，拖到左邊一格換成 1 個大球。`
+                    : `⚠️【${names}】有 10 個以上的球，\n別忘了請小人把要減掉的球搬走喔！`, 'warn', 3600);
                 return;
             }
 
@@ -836,13 +846,38 @@
                     if (stat) stat.wrong++;
                     DB.addWrong({ num1: state.num1, num2: state.num2, mode: state.mathMode, level: state.levelId });
                 }
-                const note = state.sysMode !== 'review_wrong' ? '\n（本題已加入錯題本）' : '';
-                if (userAns === target) toast('🤔 數字算對了，但畫面上球的數量不對喔！\n請操作小人或進退位讓球跟答案一致。' + note, 'bad', 3200);
-                else if (ballsOk) toast('🧐 球的數量正確，但算式裡的數字填錯囉！' + note, 'bad', 3200);
-                else toast('❌ 答案和球的數量都不太對，再檢查一次！' + note, 'bad', 3200);
+                showCheckResult(userAns, target, exp);
             }
         }
         $('btn-submit').addEventListener('click', submitAnswer);
+
+        // 答錯時：分成「各區的球」與「整體答案」兩部分回饋
+        function showCheckResult(userAns, target, exp) {
+            const zones = PLACES.filter(p => state.enabledZones.includes(p) || exp[p] > 0 || state.balls[p].length > 0);
+            const badZones = zones.filter(p => state.balls[p].length !== exp[p]);
+            const ansOk = userAns === target;
+            const row = (label, ok, okText, badText) =>
+                `<div class="fb-row ${ok ? 'ok' : 'bad'}"><span>${label}</span><b>${ok ? okText : badText}</b></div>`;
+
+            let tip;
+            if (ansOk && badZones.length) tip = '答案算對了！再把畫面上的球擺成跟答案一樣。';
+            else if (!ansOk && !badZones.length) tip = '球都擺對了！數數看每一區有幾個，再對照你寫的答案。';
+            else tip = '先把每一區的球擺好，再數數看答案是多少。';
+
+            const typed = PLACES.filter(p => $('in-' + p)).map(p => state.userAnswer[p] || '□').join('');
+            const html = `
+                <div class="fb-sec"><div class="fb-h">① 各區的球</div>
+                    ${zones.map(p => row(`${PLACE_NAME[p]}的球`, !badZones.includes(p), '✅ 正確', '❌ 再檢查')).join('')}
+                </div>
+                <div class="fb-sec"><div class="fb-h">② 整體答案</div>
+                    ${row(`你的答案：<b class="fb-ans">${typed}</b>`, ansOk, '✅ 正確', '❌ 不正確')}
+                </div>
+                <p class="fb-tip">💡 ${tip}</p>
+                ${state.sysMode !== 'review_wrong' ? '<p class="fb-note">（本題已加入錯題本）</p>' : ''}
+                <button class="fb-close" data-action="close">繼續修正</button>`;
+            state.zoneError = { zones: badZones, until: Date.now() + 5000 };
+            showModal('📝 檢查結果', html);
+        }
 
         // ---------- 9. 球與小人 ----------
         function drawBallShape(x, y, type, r, opts = {}) {
@@ -1021,8 +1056,6 @@
         // ---------- 11. 觸控 / 滑鼠互動 ----------
         const zoneAt = px => px < ZONES.ten ? 'hun' : (px < ZONES.one ? 'ten' : 'one');
         const inRect = (x, y, r) => x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
-        const group10Rect = t => ({ x: ZONES[t] + 65, y: 372, w: 170, h: 48 });
-        const canGroup = t => t !== 'hun' && !state.animating && state.balls[t].filter(b => !b.busy && !b.isTargeted).length >= 10;
 
         function canvasPoint(e) {
             const rect = canvas.getBoundingClientRect();
@@ -1039,20 +1072,13 @@
             return best;
         }
 
-        function selectTen(t) {
-            PLACES.forEach(p => state.balls[p].forEach(b => { b.selected = false; }));
-            state.balls[t].filter(b => !b.busy && !b.isTargeted).slice(0, 10).forEach(b => { b.selected = true; });
-            setWorkZone(t);
-            toast(`已圈好 10 個${PLACE_UNIT[t]}，拖到左邊【${PLACE_NAME[t === 'one' ? 'ten' : 'hun']}】就能進位！`, 'info');
-        }
-
+        // 只檢查「能不能換」，不透露選了幾個
         function dropAction(t, dz, n) {
             if (t === dz) return null;
-            if (t === 'hun' && dz === 'ten') return n === 1 ? { ok: true, kind: 'decompose', text: '放開：1 個百 → 10 個十' } : { ok: false, text: '一次只能拆開 1 個百' };
-            if (t === 'ten' && dz === 'one') return n === 1 ? { ok: true, kind: 'decompose', text: '放開：1 個十 → 10 個一' } : { ok: false, text: '一次只能拆開 1 個十' };
-            if (t === 'one' && dz === 'ten') return n === 10 ? { ok: true, kind: 'merge', text: '放開：10 個一 → 1 個十' } : { ok: false, text: `要剛好 10 個一才能進位（現在 ${n} 個）` };
-            if (t === 'ten' && dz === 'hun') return n === 10 ? { ok: true, kind: 'merge', text: '放開：10 個十 → 1 個百' } : { ok: false, text: `要剛好 10 個十才能進位（現在 ${n} 個）` };
-            return { ok: false, text: '只能拖到隔壁的位數喔' };
+            const i = PLACES.indexOf(t), left = PLACES[i - 1], right = PLACES[i + 1];
+            if (dz === right) return n === 1 ? { ok: true, kind: 'decompose' } : { ok: false, text: `一次只能把 1 個${PLACE_UNIT[t]}拆開喔！` };
+            if (dz === left) return n === 10 ? { ok: true, kind: 'merge' } : { ok: false, text: `沒有換成功！\n要剛好 10 個${PLACE_UNIT[t]}才能換成 1 個${PLACE_UNIT[left]}，數數看你選了幾個？` };
+            return { ok: false, text: '只能拖到隔壁的位數喔！' };
         }
 
         let dragInfo = null;
@@ -1062,11 +1088,6 @@
             if (!e.isPrimary || dragInfo || state.animating || state.locked) return;
             e.preventDefault();
             const { px, py } = canvasPoint(e);
-
-            for (const t of ['ten', 'one']) {
-                if (canGroup(t) && inRect(px, py, group10Rect(t))) { selectTen(t); return; }
-            }
-
             const hit = findBallAt(px, py);
             if (hit) {
                 const t = hit.type;
@@ -1075,12 +1096,12 @@
                 hit.selected = true;
                 state.balls[t].forEach(b => { if (b.selected) { b.dragStartX = b.x; b.dragStartY = b.y; b.targetX = b.targetY = null; } });
                 setWorkZone(t);
-                try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
             } else {
+                // 空白處：點一下＝選工作區；拖曳＝框選多顆球
                 PLACES.forEach(p => state.balls[p].forEach(b => { b.selected = false; }));
-                const z = zoneAt(px);
-                if (state.enabledZones.includes(z)) { setWorkZone(z); highlightDigit(z); }
+                dragInfo = { lasso: true, zone: zoneAt(px), sx: px, sy: py, moved: false, pointerId: e.pointerId };
             }
+            try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
         });
 
         canvas.addEventListener('pointermove', e => {
@@ -1090,15 +1111,34 @@
             const dx = px - dragInfo.sx, dy = py - dragInfo.sy;
             if (!dragInfo.moved && Math.hypot(dx, dy) > 8) dragInfo.moved = true;
             if (!dragInfo.moved) return;
-            const sel = state.balls[dragInfo.type].filter(b => b.selected);
-            sel.forEach(b => { b.x = b.dragStartX + dx; b.y = b.dragStartY + dy; });
-            const dz = zoneAt(px), act = dropAction(dragInfo.type, dz, sel.length);
-            state.dragHint = act ? { zone: dz, ok: act.ok, text: act.text } : null;
+
+            if (dragInfo.lasso) {
+                const z = dragInfo.zone, zx0 = ZONES[z] + 8, zx1 = ZONES[z] + 292;
+                const x0 = Math.max(zx0, Math.min(dragInfo.sx, px)), x1 = Math.min(zx1, Math.max(dragInfo.sx, px));
+                const rect = { x: x0, y: Math.min(dragInfo.sy, py), w: Math.max(0, x1 - x0), h: Math.abs(dy) };
+                state.lasso = rect;
+                state.balls[z].forEach(b => { b.selected = !b.busy && !b.isTargeted && inRect(b.x, b.y, rect); });
+                return;
+            }
+
+            state.balls[dragInfo.type].filter(b => b.selected).forEach(b => { b.x = b.dragStartX + dx; b.y = b.dragStartY + dy; });
+            const dz = zoneAt(px);
+            state.dragHint = dz !== dragInfo.type ? { zone: dz } : null; // 只標示要放到哪一區，不提示對錯
         });
 
         function endDrag(e, cancelled) {
             if (!dragInfo || e.pointerId !== dragInfo.pointerId) return;
             const { px, py } = canvasPoint(e);
+
+            if (dragInfo.lasso) {
+                const z = dragInfo.zone;
+                if (state.enabledZones.includes(z)) { setWorkZone(z); if (!dragInfo.moved) highlightDigit(z); }
+                state.lasso = null;
+                dragInfo = null;
+                try { canvas.releasePointerCapture(e.pointerId); } catch (_) {}
+                return;
+            }
+
             const t = dragInfo.type;
             if (!dragInfo.moved) {
                 if (dragInfo.orig) dragInfo.target.selected = false; // 再點一次＝取消選取
@@ -1108,7 +1148,7 @@
                 const act = cancelled ? null : dropAction(t, dz, sel.length);
                 if (act && act.ok) {
                     if (act.kind === 'decompose') decompose(sel[0], dz); else merge(sel, t, dz, px, py);
-                } else if (act) toast(act.text, 'warn');
+                } else if (act) toast(act.text, 'warn', 3000);
                 PLACES.forEach(p => state.balls[p].forEach(b => { b.selected = false; }));
             }
             state.dragHint = null;
@@ -1129,7 +1169,7 @@
             state.balls = { hun: [], ten: [], one: [] };
             state.characters = [];
             state.userAnswer = { hun: '', ten: '', one: '' };
-            state.dragHint = null; dragInfo = null;
+            state.dragHint = null; state.lasso = null; state.zoneError = null; dragInfo = null;
             resetRegroup();
 
             const n1 = String(state.num1).padStart(3, '0');
@@ -1177,6 +1217,7 @@
         function draw() {
             ctx.clearRect(0, 0, W, H);
             ctx.fillStyle = '#FFFFFF'; ctx.fillRect(0, 0, W, H);
+            const errZones = (state.zoneError && Date.now() < state.zoneError.until) ? state.zoneError.zones : [];
 
             PLACES.forEach(t => {
                 const enabled = state.enabledZones.includes(t), sel = state.workZone === t;
@@ -1184,12 +1225,11 @@
                 ctx.fillStyle = tint(t, sel ? 0.13 : (enabled ? 0.05 : 0.02)); ctx.fill();
                 if (sel) { ctx.lineWidth = 3; ctx.strokeStyle = tint(t, 0.75); ctx.stroke(); }
 
-                const count = state.balls[t].length;
-                const over = state.mathMode === 'add' && count > 9;
+                // 只顯示位名，不顯示球數，讓學生自己數
                 ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
                 ctx.font = `800 26px ${FONT}`;
-                ctx.fillStyle = (over && state.flashState) ? '#E0483E' : (enabled ? C[t].ink : '#B8BEC9');
-                ctx.fillText(`${PLACE_NAME[t]}  ${count}`, ZONES[t] + 150, 50);
+                ctx.fillStyle = enabled ? C[t].ink : '#B8BEC9';
+                ctx.fillText(PLACE_NAME[t], ZONES[t] + 150, 50);
                 ctx.font = `600 15px ${FONT}`; ctx.fillStyle = '#6B7280';
                 ctx.fillText(`1 個 = ${PLACE_VALUE[t]}`, ZONES[t] + 150, 74);
 
@@ -1198,31 +1238,27 @@
                     ctx.fillText('▼ 小人工作區 ▼', ZONES[t] + 150, H - 22);
                 }
 
-                if (canGroup(t)) {
-                    const r = group10Rect(t);
-                    ctx.beginPath(); ctx.roundRect(r.x, r.y, r.w, r.h, 24);
-                    ctx.fillStyle = '#fff'; ctx.fill();
-                    ctx.lineWidth = 2.5; ctx.strokeStyle = C[t].ink; ctx.stroke();
-                    ctx.font = `800 18px ${FONT}`; ctx.fillStyle = C[t].ink; ctx.textBaseline = 'middle';
-                    ctx.fillText('⭕ 一次圈 10 個', r.x + r.w / 2, r.y + r.h / 2 + 1);
+                if (errZones.includes(t)) { // 送出答案後，標出球不對的區域
+                    ctx.save(); ctx.lineWidth = 5; ctx.strokeStyle = state.flashState ? '#E0483E' : 'rgba(224,72,62,.45)';
+                    ctx.beginPath(); ctx.roundRect(ZONES[t] + 8, 10, 284, H - 20, 18); ctx.stroke(); ctx.restore();
+                    ctx.font = `800 17px ${FONT}`; ctx.fillStyle = '#E0483E';
+                    ctx.fillText('❌ 這一區再檢查', ZONES[t] + 150, H - 50);
                 }
             });
 
             if (state.dragHint) {
-                const z = state.dragHint.zone, col = state.dragHint.ok ? '#1F9D63' : '#E0483E';
-                ctx.save(); ctx.setLineDash([12, 8]); ctx.lineWidth = 4; ctx.strokeStyle = col;
+                const z = state.dragHint.zone;
+                ctx.save(); ctx.setLineDash([12, 8]); ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(31,42,68,.45)';
                 ctx.beginPath(); ctx.roundRect(ZONES[z] + 8, 10, 284, H - 20, 18); ctx.stroke(); ctx.restore();
-                ctx.font = `800 17px ${FONT}`;
-                const tw = Math.min(270, ctx.measureText(state.dragHint.text).width + 28);
-                ctx.beginPath(); ctx.roundRect(ZONES[z] + 150 - tw / 2, 432, tw, 40, 20); ctx.fillStyle = col; ctx.fill();
-                ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-                ctx.fillText(state.dragHint.text, ZONES[z] + 150, 453, 250);
+            }
+            if (state.lasso) {
+                const r = state.lasso;
+                ctx.save(); ctx.setLineDash([8, 6]); ctx.lineWidth = 2.5; ctx.strokeStyle = '#1F2A44';
+                ctx.fillStyle = 'rgba(255,212,59,.18)';
+                ctx.beginPath(); ctx.roundRect(r.x, r.y, r.w, r.h, 10); ctx.fill(); ctx.stroke(); ctx.restore();
             }
 
-            PLACES.forEach(t => {
-                const over = state.mathMode === 'add' && state.balls[t].length > 9;
-                state.balls[t].forEach(b => { if (!b.selected) { b.update(); b.draw(over && state.flashState); } });
-            });
+            PLACES.forEach(t => state.balls[t].forEach(b => { if (!b.selected) { b.update(); b.draw(false); } }));
             PLACES.forEach(t => state.balls[t].forEach(b => { if (b.selected) b.draw(false); })); // 選取的球畫在最上層
 
             state.characters.forEach(c => { c.update(); c.draw(); });
