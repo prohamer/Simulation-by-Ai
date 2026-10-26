@@ -13,6 +13,7 @@
         color-scheme: light;
     }
     * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
     html, body { height: 100%; }
     body {
         margin: 0; font-family: "Segoe UI", "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", system-ui, sans-serif;
@@ -66,13 +67,20 @@
     .check-row { display: flex; align-items: center; gap: 10px; min-height: 42px; padding: 0 10px; margin-bottom: 8px; border-radius: 10px; background: var(--surface-2); border: 1.5px solid var(--border); font-weight: 700; font-size: .95rem; cursor: pointer; }
     .check-row input { width: 22px; height: 22px; margin: 0; accent-color: var(--hun-ink); flex-shrink: 0; }
     .check-row small { color: var(--muted); font-weight: 600; font-size: .8rem; }
-    .rec-del { min-height: 34px; padding: 0 10px; border: none; border-radius: 8px; background: #FDE8E6; color: #B8352D; font-weight: 700; }
+    .rec-del { white-space: nowrap; min-height: 34px; padding: 0 10px; border: none; border-radius: 8px; background: #FDE8E6; color: #B8352D; font-weight: 700; }
     .row-btns { display: flex; gap: 6px; }
     .ctrl-btn { flex: 1; min-height: 46px; border-radius: 10px; border: none; color: #fff; font-weight: 700; font-size: .95rem; }
     .ctrl-btn:active { transform: scale(.97); }
     #btn-restart { background: #6B7A99; }
     #btn-redo-q { background: #D9822B; }
     #btn-finish-practice { background: var(--ok); }
+    #btn-save-challenge { background: var(--tho-ink); }
+    .rec-note { display: block; margin-top: 2px; color: #6A38A8; font-size: .8rem; font-weight: 700; }
+    .resume-box { background: var(--surface-2); border-radius: 10px; padding: 12px 14px; margin-bottom: 12px; line-height: 1.7; }
+    .resume-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+    .resume-btns button { flex: 1 1 180px; min-height: 50px; border: none; border-radius: 10px; font-weight: 800; font-size: 1.02rem; color: #fff; }
+    .btn-resume { background: var(--ok); }
+    .btn-restart-ch { background: #6B7A99; }
 
     /* 直式算式 */
     #equation-container { font-size: 1.95rem; font-weight: 800; font-family: "Courier New", Courier, monospace; display: flex; flex-direction: column; align-items: flex-end; padding: 4px 18px 4px 40px; font-variant-numeric: tabular-nums; }
@@ -201,7 +209,7 @@
         #settings-card select { flex: 1 1 200px; width: auto; margin: 0; }
         #settings-card .check-row { flex: 1 1 100%; margin: 0; }
         #settings-card .row-btns { flex: 1 1 240px; }
-        #btn-finish-practice { flex: 1 1 150px; width: auto !important; margin-top: 0 !important; }
+        #btn-finish-practice, #btn-save-challenge { flex: 1 1 150px; width: auto !important; margin-top: 0 !important; }
         #eq-card { grid-area: eq; }
         #play-area { grid-area: play; min-height: auto; }
         #right-dock { min-height: auto; grid-area: dock; width: auto; }
@@ -212,7 +220,7 @@
         #settings-card { gap: 6px; }
         #settings-card select { flex-basis: 100%; }
         #settings-card .row-btns { flex: 2 1 0; min-width: 0; }
-        #btn-finish-practice { flex: 1 1 0; min-width: 0; }
+        #btn-finish-practice, #btn-save-challenge { flex: 1 1 0; min-width: 0; }
         #settings-card .ctrl-btn { font-size: .85rem; padding: 0 4px; white-space: nowrap; }
         #action-card.guided .action-grid { grid-template-columns: 1fr 1fr; }
         #action-card.guided .action-btn.done { grid-column: span 2; }
@@ -281,6 +289,7 @@
                 <button id="btn-restart" class="ctrl-btn">⏭️ 換一題</button>
             </div>
             <button id="btn-finish-practice" class="ctrl-btn" style="width:100%; margin-top:6px;">📊 結算本次練習</button>
+            <button id="btn-save-challenge" class="ctrl-btn" style="width:100%; margin-top:6px; display:none;">💾 暫存關卡</button>
         </div>
 
         <div class="card" id="eq-card">
@@ -414,7 +423,7 @@
         guide: { steps: [], idx: 0, phase: 'done' }, frames: [], multiplied: [],
         flashState: false, animating: false, animToken: 0, flowToken: 0, locked: false,
         lasso: null, dragHint: null, zoneError: null,
-        sessionStats: {}, startTime: 0, challengeIndex: 0, challengeLvlCorrect: 0
+        sessionStats: {}, challengeIndex: 0, challengeLvlCorrect: 0, resumes: 0, lastFrom: null
     };
     ALL.forEach(p => { state.balls[p] = []; });
     let dragInfo = null;
@@ -472,17 +481,91 @@
     }
 
     // ---------- 4. 模式切換 ----------
+    // 計時：只算網頁開著的時間；切到別的分頁或關閉時暫停
+    const clock = { base: 0, seg: Date.now(), running: true };
+    function clockReset(base = 0) { clock.base = base; clock.seg = Date.now(); clock.running = !document.hidden; }
+    const elapsed = () => clock.base + (clock.running ? Date.now() - clock.seg : 0);
+    function clockPause() { if (clock.running) { clock.base += Date.now() - clock.seg; clock.running = false; } }
+    function clockResume() { if (!clock.running) { clock.seg = Date.now(); clock.running = true; } }
+
     function resetSessionStats() {
         state.sessionStats = {};
         LEVELS.forEach(l => { state.sessionStats[l] = { correct: 0, wrong: 0 }; });
-        state.startTime = Date.now();
+        state.resumes = 0; state.lastFrom = null;
+        clockReset();
+    }
+    const totals = st => LEVELS.reduce((t, l) => { const v = (st || {})[l] || {}; t.c += v.correct || 0; t.w += v.wrong || 0; return t; }, { c: 0, w: 0 });
+    const hasAnswers = st => { const t = totals(st); return t.c + t.w > 0; };
+    const nowStr = () => new Date().toLocaleString('zh-TW', { hour12: false });
+    const SAVE = { ch: 'mul_challenge_save', pr: 'mul_practice_pending' };
+    function loadObj(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { return memStore[k] || null; } }
+    function saveObj(k, v) { memStore[k] = v; try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+    function dropObj(k) { delete memStore[k]; try { localStorage.removeItem(k); } catch (e) {} }
+
+    // 練習：每次作答都暫存；沒按結算就離開，下次打開時自動存成「未結算」紀錄
+    function savePractice() {
+        if (state.sysMode !== 'practice') return;
+        if (hasAnswers(state.sessionStats)) saveObj(SAVE.pr, { stats: state.sessionStats, time: elapsed(), date: nowStr() });
+        else dropObj(SAVE.pr);
+    }
+    function flushPractice(note) {
+        const pd = loadObj(SAVE.pr);
+        dropObj(SAVE.pr);
+        if (!pd || !hasAnswers(pd.stats)) return false;
+        const t = totals(pd.stats);
+        DB.addRecord('practice', { date: pd.date, time: pd.time, totalC: t.c, totalW: t.w, details: pd.stats, note });
+        return true;
+    }
+    // 闖關：隨時暫存進度，下次可以接著玩
+    function saveChallenge(force = false) {
+        if (state.sysMode !== 'challenge') return;
+        if (state.challengeIndex >= LEVELS.length) { dropObj(SAVE.ch); return; }
+        if (!force && state.challengeIndex === 0 && !hasAnswers(state.sessionStats)) return;
+        saveObj(SAVE.ch, { levelIdx: state.challengeIndex, lvlCorrect: state.challengeLvlCorrect, stats: state.sessionStats,
+            time: elapsed(), resumes: state.resumes, lastFrom: state.lastFrom, date: nowStr() });
+    }
+    function abandonChallenge(sv) {
+        dropObj(SAVE.ch);
+        if (!sv || (!hasAnswers(sv.stats) && !sv.levelIdx)) return;
+        const t = totals(sv.stats);
+        DB.addRecord('challenge', { date: sv.date, time: sv.time, totalC: t.c, totalW: t.w, details: sv.stats,
+            note: `闖關中斷（停在第 ${sv.levelIdx + 1} 關，答對 ${sv.lvlCorrect}/${PER_LEVEL}）` });
+    }
+    function persist() { savePractice(); saveChallenge(); }
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) { clockPause(); persist(); } else clockResume();
+    });
+    window.addEventListener('pagehide', () => { clockPause(); persist(); });
+    setInterval(() => { if (!document.hidden) persist(); }, 20000);
+
+    function askResume(sv) {
+        const html = `
+            <div class="resume-box">
+                上次闖到 <b>第 ${sv.levelIdx + 1} 關</b>（${LEVEL_NAMES[LEVELS[sv.levelIdx]]}），這一關答對 <b>${sv.lvlCorrect}/${PER_LEVEL}</b> 題。<br>
+                已經用了 <b>${formatTime(sv.time || 0)}</b>，暫存於 ${sv.date}。
+            </div>
+            <div class="resume-btns">
+                <button class="btn-resume" data-action="resume">▶ 接著上次繼續</button>
+                <button class="btn-restart-ch" data-action="restart-ch">↺ 從第 1 關重新開始</button>
+            </div>
+            <p class="fb-note" style="margin-top:10px;">重新開始的話，上次的進度會存成一筆「闖關中斷」紀錄。</p>`;
+        showModal('🏆 要接著上次的闖關嗎？', html);
+    }
+    function enterChallenge() {
+        if (state.sysMode === 'challenge') return;
+        const sv = loadObj(SAVE.ch);
+        if (sv) askResume(sv); else switchSysMode('challenge');
     }
     function setNavActive(mode) {
         document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active-mode'));
         const el = mode && $('nav-' + mode);
         if (el) el.classList.add('active-mode');
     }
-    function switchSysMode(newMode) {
+    function switchSysMode(newMode, opt = {}) {
+        if (!opt.skipSave) {
+            if (state.sysMode === 'practice') { savePractice(); if (flushPractice('未按結算（切換模式）')) toast('📝 剛才的練習已自動存進歷史紀錄', 'info'); }
+            if (state.sysMode === 'challenge') { saveChallenge(); if (loadObj(SAVE.ch)) toast('💾 闖關進度已暫存，下次可以接著玩', 'info'); }
+        }
         state.sysMode = newMode;
         state.flowToken++; state.locked = false;
         setNavActive(newMode);
@@ -493,6 +576,7 @@
             $('level-select').disabled = false;
             $('challenge-progress').style.display = 'none';
             $('btn-finish-practice').style.display = '';
+            $('btn-save-challenge').style.display = 'none';
             $('check-row').hidden = false;
             state.levelId = $('level-select').value;
         } else {
@@ -500,9 +584,17 @@
             $('level-select').disabled = true;
             $('challenge-progress').style.display = '';
             $('btn-finish-practice').style.display = 'none';
+            $('btn-save-challenge').style.display = '';
             $('check-row').hidden = true;
             state.challengeIndex = 0; state.challengeLvlCorrect = 0;
-            state.levelId = LEVELS[0];
+            const sv = opt.resume;
+            if (sv) {
+                state.challengeIndex = sv.levelIdx; state.challengeLvlCorrect = sv.lvlCorrect;
+                LEVELS.forEach(l => { if (sv.stats && sv.stats[l]) state.sessionStats[l] = sv.stats[l]; });
+                state.resumes = (sv.resumes || 0) + 1; state.lastFrom = sv.levelIdx;
+                clockReset(sv.time || 0);
+            }
+            state.levelId = LEVELS[state.challengeIndex];
             updateChallengeUI();
         }
         initGame();
@@ -514,6 +606,8 @@
     function startReview(idx) {
         const q = DB.load(KEYS.wrong)[idx];
         if (!q) return;
+        if (state.sysMode === 'practice') { savePractice(); flushPractice('未按結算（進入錯題重作）'); }
+        if (state.sysMode === 'challenge') saveChallenge();
         state.sysMode = 'review_wrong';
         state.flowToken++; state.locked = false;
         state.a = q.a; state.b = q.b; state.levelId = q.level;
@@ -523,6 +617,7 @@
         $('level-select').disabled = true;
         $('challenge-progress').style.display = 'none';
         $('btn-finish-practice').style.display = 'none';
+        $('btn-save-challenge').style.display = 'none';
         $('btn-restart').style.display = 'none';
         $('check-row').hidden = false;
         closeModal();
@@ -560,6 +655,12 @@
         } else if (action === 'delrec') {
             const r = DB.load(key); r.splice(parseInt(idx, 10), 1);
             DB.save(key, r); showRecordsModal();
+        } else if (action === 'resume') {
+            const sv = loadObj(SAVE.ch); closeModal();
+            if (sv) { switchSysMode('challenge', { resume: sv }); toast(`▶ 從第 ${sv.levelIdx + 1} 關接著闖！`, 'ok'); }
+        } else if (action === 'restart-ch') {
+            abandonChallenge(loadObj(SAVE.ch)); closeModal();
+            switchSysMode('challenge'); toast('↺ 從第 1 關重新開始！', 'info');
         } else if (action === 'redo') startReview(parseInt(idx, 10));
         else if (action === 'del') {
             const w = DB.load(KEYS.wrong); w.splice(parseInt(idx, 10), 1);
@@ -577,20 +678,25 @@
             }
         });
         if (!force && totalC + totalW === 0) { toast('📭 這次還沒有作答紀錄喔！', 'info'); return; }
-        const timeSpent = Date.now() - state.startTime;
-        const date = new Date().toLocaleString('zh-TW', { hour12: false });
+        const timeSpent = elapsed();
+        const date = nowStr();
+        const wasChallenge = state.sysMode === 'challenge';
+        const note = wasChallenge && state.resumes ? `中斷後接續 ${state.resumes} 次，最後一次從第 ${state.lastFrom + 1} 關接續` : '';
         const html = `
             <p>📅 完成時間：<b>${date}</b></p>
-            <p>⏱️ 總耗時：<b>${formatTime(timeSpent)}</b></p>
+            <p>⏱️ 總耗時：<b>${formatTime(timeSpent)}</b>${note ? '（多次作答時間累加）' : ''}</p>
+            ${note ? `<p>🔁 ${note}</p>` : ''}
             <p>📊 總計：✅ 答對 <b class="c-ok">${totalC}</b> 題 ／ ❌ 答錯 <b class="c-bad">${totalW}</b> 次</p>
             <div class="table-wrap"><table>
                 <tr><th>關卡題型</th><th>答對</th><th>答錯</th></tr>
                 ${rows || '<tr><td colspan="3">本次尚無作答紀錄</td></tr>'}
             </table></div>`;
-        const wasChallenge = state.sysMode === 'challenge';
-        DB.addRecord(state.sysMode, { date, time: timeSpent, totalC, totalW, details: JSON.parse(JSON.stringify(state.sessionStats)) });
+        const rec = { date, time: timeSpent, totalC, totalW, details: JSON.parse(JSON.stringify(state.sessionStats)) };
+        if (note) rec.note = note;
+        DB.addRecord(state.sysMode, rec);
+        if (wasChallenge) { dropObj(SAVE.ch); switchSysMode('practice', { skipSave: true }); }
+        else { dropObj(SAVE.pr); resetSessionStats(); }
         showModal(wasChallenge ? '🏆 闖關完成結算' : '📊 本次練習結果', html);
-        if (wasChallenge) switchSysMode('practice'); else resetSessionStats();
     }
 
     function showRecordsModal() {
@@ -603,7 +709,7 @@
                 const detail = Object.entries(r.details || {})
                     .filter(([, v]) => v.correct || v.wrong)
                     .map(([k, v]) => `${LEVEL_NAMES[k] || k}(${v.correct}/${v.wrong})`).join('、');
-                return `<tr><td>${r.date}</td><td>${formatTime(r.time || 0)}</td>
+                return `<tr><td>${r.date}${r.note ? `<span class="rec-note">${r.note}</span>` : ''}</td><td>${formatTime(r.time || 0)}</td>
                     <td><span class="c-ok">${r.totalC}</span> / <span class="c-bad">${r.totalW}</span></td>
                     <td style="font-size:.85rem;text-align:left;">${detail || '無'}</td>
                     <td><button class="rec-del" data-action="delrec" data-key="${key}" data-idx="${i}">刪除</button></td></tr>`;
@@ -934,12 +1040,14 @@
                 toast(msg, 'ok');
                 state.levelId = LEVELS[state.challengeIndex];
                 updateChallengeUI();
+                persist();
                 nextAfter(() => initGame());
             } else if (state.sysMode === 'review_wrong') {
                 DB.removeWrong({ a: state.a, b: state.b });
                 toast('🎉 訂正成功！此題已從錯題本移除。', 'ok');
-                nextAfter(() => { switchSysMode('practice'); showWrongsModal(); });
+                nextAfter(() => { switchSysMode('practice', { skipSave: true }); showWrongsModal(); });
             } else {
+                persist();
                 toast('🎉 答對了！前往下一題！', 'ok');
                 nextAfter(() => initGame());
             }
@@ -950,6 +1058,7 @@
             }
             showCheckResult(userAns, target, exp, boxes);
         }
+        persist();
     }
     $('btn-submit').addEventListener('click', submitAnswer);
 
@@ -1319,8 +1428,12 @@
     });
     $('level-select').addEventListener('change', () => initGame(false));
     $('btn-finish-practice').addEventListener('click', () => showSummaryAndSave(false));
-    $('nav-practice').addEventListener('click', () => switchSysMode('practice'));
-    $('nav-challenge').addEventListener('click', () => switchSysMode('challenge'));
+    $('btn-save-challenge').addEventListener('click', () => {
+        saveChallenge(true);
+        toast(`💾 已暫存：第 ${state.challengeIndex + 1} 關（答對 ${state.challengeLvlCorrect}/${PER_LEVEL}）\n可以關掉網頁，下次按「闖關模式」接著玩。`, 'ok', 3200);
+    });
+    $('nav-practice').addEventListener('click', () => { if (state.sysMode !== 'practice') switchSysMode('practice'); });
+    $('nav-challenge').addEventListener('click', enterChallenge);
     $('nav-records').addEventListener('click', showRecordsModal);
     $('nav-wrongs').addEventListener('click', showWrongsModal);
 
@@ -1356,11 +1469,13 @@
                     <li>每一區都可以放，順序自己決定，也不會自動框起來。</li>
                     <li>點一下球可以選起來；在空白處拖出一個框，可以一次選很多顆。選 10 顆拖到左邊一格，就換成 1 顆大球；選 20 顆就換成 2 顆，選 30 顆換成 3 顆，依此類推。</li>
                     <li>共 5 關，每關答對 5 題就前進下一關。</li>
+                    <li>做到一半可以按「💾 暫存關卡」；就算直接關掉網頁，進度也會自動暫存。下次按「闖關模式」可以選擇接著玩，耗時會累加。</li>
                 </ul>
 
                 <h3>輸入與送出</h3>
                 <ul>
                     <li>用小鍵盤輸入答案，會從個位開始自動往左跳；點答案格可以改填別的位數。</li>
+                    <li>練習模式沒按「結算」就關掉網頁，下次打開時會自動存成一筆「未結算」紀錄。</li>
                     <li>送出後會檢查兩件事：<b>① 各區的球對不對</b>、<b>② 答案對不對</b>。兩個都對才過關，答錯的題目會放進錯題本。</li>
                     <li>按住小鍵盤的標題列可以拖到任何地方；按 📌 停回右邊，按 － 收起來。</li>
                 </ul>
@@ -1606,8 +1721,12 @@
     document.addEventListener('webkitfullscreenchange', () => { updateFsBtn(); setTimeout(resizeCanvas, 100); });
 
     resizeCanvas();
-    switchSysMode('practice');
+    const recovered = flushPractice('未按結算（網頁關閉）');
+    switchSysMode('practice', { skipSave: true });
     requestAnimationFrame(draw);
+    const pendingCh = loadObj(SAVE.ch);
+    if (pendingCh) askResume(pendingCh);
+    else if (recovered) toast('📝 上次沒有結算的練習，已自動存進歷史紀錄', 'info', 3000);
 })();
 </script>
 
