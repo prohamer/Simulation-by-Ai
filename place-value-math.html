@@ -79,6 +79,17 @@
         #btn-restart { background: #6B7A99; }
         #btn-redo-q { background: #D9822B; }
         #btn-finish-practice { background: var(--ok); }
+        #btn-save-challenge { background: #7C4DCC; }
+        .end-btn { width: 100%; margin-top: 6px; }
+        .resume-box { background: #F1EBFB; border-radius: 12px; padding: 12px 16px; margin-bottom: 12px; font-size: 1.05rem; }
+        .resume-box p { margin: 4px 0; }
+        .resume-meta { color: var(--muted); font-size: .92rem; }
+        .resume-btn { width: 100%; min-height: 52px; border: none; border-radius: 12px; font-weight: 800; font-size: 1.08rem; margin-bottom: 8px; color: #fff; }
+        .resume-btn.go { background: #7C4DCC; }
+        .resume-btn.fresh { background: #fff; color: #5B3A9E; border: 2px solid #7C4DCC; }
+        .rec-note { margin-top: 4px; font-size: .8rem; font-weight: 700; color: var(--ok); }
+        .rec-note.warn { color: #B86A00; }
+        tr.rec-pending td { background: #F6F1FD; }
 
         /* 直式算式 */
         #equation-container { font-size: 2.1rem; font-weight: 800; font-family: "Courier New", Courier, monospace; display: flex; flex-direction: column; align-items: flex-end; padding: 4px 22px 4px 40px; }
@@ -206,7 +217,7 @@
             #settings-card .card-title { flex: 1 1 100%; margin-bottom: 0; }
             #settings-card select { flex: 1 1 200px; width: auto; margin: 0; }
             #settings-card .row-btns { flex: 1 1 240px; }
-            #btn-finish-practice { flex: 1 1 150px; width: auto !important; margin-top: 0 !important; }
+            #settings-card .end-btn { flex: 1 1 150px; width: auto; margin-top: 0; }
             #eq-card { grid-area: eq; }
             #play-area { grid-area: play; min-height: auto; }
             #side-panel, #right-dock { min-height: auto; }
@@ -220,7 +231,7 @@
             #settings-card { gap: 6px; }
             #settings-card select { flex-basis: 100%; }
             #settings-card .row-btns { flex: 2 1 0; min-width: 0; }
-            #btn-finish-practice { flex: 1 1 0; min-width: 0; }
+            #settings-card .end-btn { flex: 1 1 0; min-width: 0; }
             #settings-card .ctrl-btn { font-size: .85rem; padding: 0 4px; white-space: nowrap; }
         }
         /* 橫放手機（高度很矮） */
@@ -292,7 +303,8 @@
                     <button id="btn-redo-q" class="ctrl-btn">🔄 本題重來</button>
                     <button id="btn-restart" class="ctrl-btn">⏭️ 換一題</button>
                 </div>
-                <button id="btn-finish-practice" class="ctrl-btn" style="width:100%; margin-top:6px;">📊 結算本次練習</button>
+                <button id="btn-finish-practice" class="ctrl-btn end-btn">📊 結算本次練習</button>
+                <button id="btn-save-challenge" class="ctrl-btn end-btn" style="display:none;">💾 暫存關卡</button>
             </div>
 
             <!-- 2. 直式算式 -->
@@ -456,7 +468,9 @@
             locked: false,
             dragHint: null,
             sessionStats: {},
-            startTime: 0,
+            startDate: 0,
+            resumeCount: 0,
+            lastResumeLevel: 0,
             challengeIndex: 0,
             challengeLvlCorrect: 0
         };
@@ -477,11 +491,76 @@
             toastTimer = setTimeout(() => { el.className = 'toast-' + type; }, ms);
         }
 
-        // ---------- 4. 模式切換 ----------
+        // ---------- 4. 計時、暫存與模式切換 ----------
+        // 計時只算「網頁開著、畫面在前景」的時間
+        const timer = { acc: 0, since: null };
+        function timerStart(acc = 0) { timer.acc = acc; timer.since = document.hidden ? null : Date.now(); }
+        function timerElapsed() { return timer.acc + (timer.since ? Date.now() - timer.since : 0); }
+        function timerPause() { if (timer.since) { timer.acc += Date.now() - timer.since; timer.since = null; } }
+        function timerResume() { if (!timer.since && !document.hidden) timer.since = Date.now(); }
+
+        const PENDING_P = 'math_pending_practice', PENDING_C = 'math_pending_challenge';
+        const loadObj = k => { try { const v = JSON.parse(localStorage.getItem(k) || 'null'); return v && typeof v === 'object' ? v : null; } catch (e) { return memStore[k] || null; } };
+        const saveObj = (k, v) => { memStore[k] = v; try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} };
+        const removeKey = k => { delete memStore[k]; try { localStorage.removeItem(k); } catch (e) {} };
+        const nowStr = (t = Date.now()) => new Date(t).toLocaleString('zh-TW', { hour12: false });
+        const clone = o => JSON.parse(JSON.stringify(o));
+
+        function totals(stats) {
+            let c = 0, w = 0;
+            Object.values(stats || {}).forEach(v => { c += v.correct || 0; w += v.wrong || 0; });
+            return { c, w };
+        }
+        const hasAnswers = stats => { const t = totals(stats); return t.c + t.w > 0; };
+
         function resetSessionStats() {
             state.sessionStats = {};
             CHALLENGE_LEVELS.forEach(l => { state.sessionStats[l] = { correct: 0, wrong: 0 }; });
-            state.startTime = Date.now();
+            state.startDate = Date.now();
+            state.resumeCount = 0; state.lastResumeLevel = 0;
+            timerStart(0);
+        }
+
+        function addRecordFrom(mode, stats, time, note, when) {
+            const t = totals(stats);
+            DB.addRecord(mode, { date: nowStr(when), time, totalC: t.c, totalW: t.w, details: clone(stats), note: note || '' });
+        }
+
+        // 闖關的「中斷後接續」註記
+        function resumeNote(n, lvl) { return n ? `中斷後接續 ${n} 次，最後一次從第 ${lvl} 關接續` : ''; }
+        const joinNotes = (...a) => a.filter(Boolean).join('；');
+
+        function challengeSnapshot() {
+            return {
+                stats: clone(state.sessionStats), time: timerElapsed(),
+                index: state.challengeIndex, lvlCorrect: state.challengeLvlCorrect,
+                resumeCount: state.resumeCount, lastResumeLevel: state.lastResumeLevel,
+                startDate: state.startDate, savedAt: Date.now()
+            };
+        }
+
+        // 自動暫存：作答後、切到別的分頁、關閉網頁、每 20 秒
+        function persist() {
+            if (state.sysMode === 'practice') {
+                if (hasAnswers(state.sessionStats)) saveObj(PENDING_P, { stats: clone(state.sessionStats), time: timerElapsed(), startDate: state.startDate, savedAt: Date.now() });
+                else removeKey(PENDING_P);
+            } else if (state.sysMode === 'challenge') {
+                if (hasAnswers(state.sessionStats) || state.challengeIndex > 0 || state.resumeCount > 0) saveObj(PENDING_C, challengeSnapshot());
+            }
+        }
+
+        // 離開目前模式時的處理
+        function leaveCurrentMode(reason) {
+            if (state.sysMode === 'practice') {
+                if (hasAnswers(state.sessionStats)) {
+                    addRecordFrom('practice', state.sessionStats, timerElapsed(), `未按結算（${reason}）`);
+                    toast('📝 剛才的練習已自動存成一筆紀錄', 'info');
+                }
+                removeKey(PENDING_P);
+            } else if (state.sysMode === 'challenge') {
+                persist();
+                if (loadObj(PENDING_C)) toast(`💾 闖關進度已暫存（第 ${state.challengeIndex + 1} 關）\n下次按「闖關模式」可以接著玩`, 'info', 3000);
+            }
         }
 
         function setNavActive(mode) {
@@ -490,30 +569,78 @@
             if (el) el.classList.add('active-mode');
         }
 
-        function switchSysMode(newMode) {
-            state.sysMode = newMode;
+        function applyModeUI(mode) {
+            state.sysMode = mode;
             state.flowToken++; state.locked = false;
-            setNavActive(newMode);
-            resetSessionStats();
+            setNavActive(mode);
             $('btn-restart').style.display = '';
+            const ch = mode === 'challenge';
+            $('mode-title-display').textContent = ch ? '1. 闖關進度' : '1. 練習設定';
+            $('level-select').disabled = ch;
+            $('challenge-progress').style.display = ch ? '' : 'none';
+            $('btn-finish-practice').style.display = ch ? 'none' : '';
+            $('btn-save-challenge').style.display = ch ? '' : 'none';
+        }
 
-            if (newMode === 'practice') {
-                $('mode-title-display').textContent = '1. 練習設定';
-                $('level-select').disabled = false;
-                $('challenge-progress').style.display = 'none';
-                $('btn-finish-practice').style.display = '';
-                state.levelId = $('level-select').value;
+        function startPractice() {
+            if (state.sysMode === 'practice') return; // 已在練習模式，不要清掉成績
+            leaveCurrentMode('切換到練習模式');
+            applyModeUI('practice');
+            resetSessionStats();
+            state.levelId = $('level-select').value;
+            initGame();
+        }
+
+        // 按「闖關模式」：有暫存就先詢問
+        function requestChallenge() {
+            if (state.sysMode === 'challenge') persist();
+            const saved = loadObj(PENDING_C);
+            if (saved) showResumePrompt(saved);
+            else startChallenge(null);
+        }
+
+        function showResumePrompt(s) {
+            const lvl = s.index + 1, name = LEVEL_NAMES[CHALLENGE_LEVELS[s.index]] || '';
+            const t = totals(s.stats);
+            showModal('🏁 要接著上次的闖關嗎？', `
+                <div class="resume-box">
+                    <p>上次停在 <b>第 ${lvl} 關（${name}）</b>，這一關答對 <b>${s.lvlCorrect}/6</b> 題。</p>
+                    <p class="resume-meta">⏱️ 已用時間 ${formatTime(s.time || 0)}　✅ ${t.c}　❌ ${t.w}<br>💾 暫存於 ${nowStr(s.savedAt)}</p>
+                </div>
+                <button class="resume-btn go" data-action="resume">▶️ 接著上次的第 ${lvl} 關繼續</button>
+                <button class="resume-btn fresh" data-action="fresh">🔁 從第 1 關重新開始</button>
+                <p class="fb-note">重新開始的話，上次的進度會存成一筆「闖關中斷」紀錄。</p>`);
+        }
+
+        function startChallenge(resume) {
+            const saved = loadObj(PENDING_C);
+            if (state.sysMode !== 'challenge') leaveCurrentMode('切換到闖關模式');
+            if (!resume && saved) {
+                addRecordFrom('challenge', saved.stats, saved.time || 0,
+                    joinNotes(`闖關中斷（停在第 ${saved.index + 1} 關，答對 ${saved.lvlCorrect}/6）`, resumeNote(saved.resumeCount, saved.lastResumeLevel)),
+                    saved.savedAt);
+                removeKey(PENDING_C);
+            }
+            applyModeUI('challenge');
+            if (resume) {
+                state.sessionStats = clone(resume.stats);
+                CHALLENGE_LEVELS.forEach(l => { if (!state.sessionStats[l]) state.sessionStats[l] = { correct: 0, wrong: 0 }; });
+                state.challengeIndex = Math.min(resume.index, CHALLENGE_LEVELS.length - 1);
+                state.challengeLvlCorrect = resume.lvlCorrect || 0;
+                state.startDate = resume.startDate || Date.now();
+                state.resumeCount = (resume.resumeCount || 0) + 1;
+                state.lastResumeLevel = state.challengeIndex + 1;
+                timerStart(resume.time || 0);
+                toast(`▶️ 從第 ${state.challengeIndex + 1} 關繼續！`, 'ok');
             } else {
-                $('mode-title-display').textContent = '1. 闖關進度';
-                $('level-select').disabled = true;
-                $('challenge-progress').style.display = '';
-                $('btn-finish-practice').style.display = 'none';
+                resetSessionStats();
                 state.challengeIndex = 0;
                 state.challengeLvlCorrect = 0;
-                state.levelId = CHALLENGE_LEVELS[0];
-                updateChallengeUI();
             }
+            state.levelId = CHALLENGE_LEVELS[state.challengeIndex];
+            updateChallengeUI();
             initGame();
+            persist();
         }
 
         function updateChallengeUI() {
@@ -524,18 +651,25 @@
         function startReview(idx) {
             const q = DB.load('math_wrongs')[idx];
             if (!q) return;
-            state.sysMode = 'review_wrong';
-            state.flowToken++; state.locked = false;
-            state.mathMode = q.mode; state.num1 = q.num1; state.num2 = q.num2; state.levelId = q.level;
+            leaveCurrentMode('進入錯題重作');
+            applyModeUI('review_wrong');
             setNavActive(null);
+            state.mathMode = q.mode; state.num1 = q.num1; state.num2 = q.num2; state.levelId = q.level;
             $('mode-title-display').textContent = '📓 錯題重作中';
             if (q.level) $('level-select').value = q.level;
             $('level-select').disabled = true;
-            $('challenge-progress').style.display = 'none';
             $('btn-finish-practice').style.display = 'none';
             $('btn-restart').style.display = 'none';
             closeModal();
             initGame(true);
+        }
+
+        // 從錯題重作回到練習（不再存練習紀錄）
+        function backToPractice() {
+            applyModeUI('practice');
+            resetSessionStats();
+            state.levelId = $('level-select').value;
+            initGame();
         }
 
         const formatTime = ms => { const s = Math.floor(ms / 1000); return `${Math.floor(s / 60)}分 ${s % 60}秒`; };
@@ -556,6 +690,8 @@
             if (!btn) return;
             const { action, idx, key } = btn.dataset;
             if (action === 'close') { closeModal(); return; }
+            if (action === 'resume') { const sv = loadObj(PENDING_C); closeModal(); startChallenge(sv); return; }
+            if (action === 'fresh') { closeModal(); startChallenge(null); return; }
             if (action === 'clear') {
                 if (confirm('確定要清空此分類的所有紀錄嗎？')) { DB.save(key, []); showRecordsModal(); }
             } else if (action === 'redo') {
@@ -567,50 +703,67 @@
         });
 
         function showSummaryAndSave(force = false) {
-            let totalC = 0, totalW = 0, rows = '';
+            let rows = '';
+            const { c: totalC, w: totalW } = totals(state.sessionStats);
             CHALLENGE_LEVELS.forEach(l => {
                 const s = state.sessionStats[l];
-                if (s.correct || s.wrong) {
-                    totalC += s.correct; totalW += s.wrong;
-                    rows += `<tr><td>${LEVEL_NAMES[l]}</td><td class="c-ok">${s.correct}</td><td class="c-bad">${s.wrong}</td></tr>`;
-                }
+                if (s && (s.correct || s.wrong)) rows += `<tr><td>${LEVEL_NAMES[l]}</td><td class="c-ok">${s.correct}</td><td class="c-bad">${s.wrong}</td></tr>`;
             });
             if (!force && totalC + totalW === 0) { toast('📭 這次還沒有作答紀錄喔！', 'info'); return; }
 
-            const timeSpent = Date.now() - state.startTime;
-            const date = new Date().toLocaleString('zh-TW', { hour12: false });
+            const wasChallenge = state.sysMode === 'challenge';
+            const timeSpent = timerElapsed();
+            const note = wasChallenge ? joinNotes('全部過關', resumeNote(state.resumeCount, state.lastResumeLevel)) : '';
             const html = `
-                <p>📅 完成時間：<b>${date}</b></p>
-                <p>⏱️ 總耗時：<b>${formatTime(timeSpent)}</b></p>
+                <p>📅 完成時間：<b>${nowStr()}</b></p>
+                <p>⏱️ 總耗時：<b>${formatTime(timeSpent)}</b>（只計算正在做題的時間）</p>
                 <p>📊 總計：✅ 答對 <b class="c-ok">${totalC}</b> 題 ／ ❌ 答錯 <b class="c-bad">${totalW}</b> 題</p>
+                ${note ? `<p>📝 ${note}</p>` : ''}
                 <div class="table-wrap"><table>
                     <tr><th>關卡題型</th><th>答對</th><th>答錯</th></tr>
                     ${rows || '<tr><td colspan="3">本次尚無作答紀錄</td></tr>'}
                 </table></div>`;
-            const wasChallenge = state.sysMode === 'challenge';
-            DB.addRecord(state.sysMode, { date, time: timeSpent, totalC, totalW, details: JSON.parse(JSON.stringify(state.sessionStats)) });
-            showModal(wasChallenge ? '🏆 闖關完成結算' : '📊 本次練習結果', html);
-            if (wasChallenge) switchSysMode('practice'); else resetSessionStats();
+            addRecordFrom(wasChallenge ? 'challenge' : 'practice', state.sessionStats, timeSpent, note);
+            if (wasChallenge) {
+                removeKey(PENDING_C);
+                backToPractice();
+                showModal('🏆 闖關完成結算', html);
+            } else {
+                removeKey(PENDING_P);
+                showModal('📊 本次練習結果', html);
+                resetSessionStats();
+            }
         }
 
         function showRecordsModal() {
-            const build = (data, title, key) => {
+            if (state.sysMode === 'challenge') persist();
+            const pend = loadObj(PENDING_C);
+            const recRow = (r, extraCls = '') => {
+                const detail = Object.entries(r.details || {})
+                    .filter(([, v]) => v.correct || v.wrong)
+                    .map(([k, v]) => `${LEVEL_NAMES[k] || k}(${v.correct}/${v.wrong})`).join('、');
+                const tag = r.note ? `<div class="rec-note ${/中斷|未按|暫存/.test(r.note) ? 'warn' : ''}">${r.note}</div>` : '';
+                return `<tr class="${extraCls}"><td>${r.date}${tag}</td><td>${formatTime(r.time || 0)}</td>
+                    <td><span class="c-ok">${r.totalC}</span> / <span class="c-bad">${r.totalW}</span></td>
+                    <td style="font-size:.85rem;text-align:left;">${detail || '無'}</td></tr>`;
+            };
+            const build = (data, title, key, pendingRow) => {
                 let head = `<div style="display:flex;justify-content:space-between;align-items:center;margin-top:14px;gap:8px;">
                     <h3 style="margin:0;">${title}（${data.length}/40）</h3>
                     ${data.length ? `<button class="mini-btn" data-action="clear" data-key="${key}">清空紀錄</button>` : ''}</div>`;
-                if (!data.length) return head + '<p style="color:#6B7280;">尚無歷史紀錄</p>';
-                const rows = data.map(r => {
-                    const detail = Object.entries(r.details || {})
-                        .filter(([, v]) => v.correct || v.wrong)
-                        .map(([k, v]) => `${LEVEL_NAMES[k] || k}(${v.correct}/${v.wrong})`).join('、');
-                    return `<tr><td>${r.date}</td><td>${formatTime(r.time || 0)}</td>
-                        <td><span class="c-ok">${r.totalC}</span> / <span class="c-bad">${r.totalW}</span></td>
-                        <td style="font-size:.85rem;text-align:left;">${detail || '無'}</td></tr>`;
-                }).join('');
-                return head + `<div class="table-wrap"><table style="margin-top:8px;"><tr><th>完成時間</th><th>總耗時</th><th>對/錯</th><th>各關明細(對/錯)</th></tr>${rows}</table></div>`;
+                if (!data.length && !pendingRow) return head + '<p style="color:#6B7280;">尚無歷史紀錄</p>';
+                return head + `<div class="table-wrap"><table style="margin-top:8px;"><tr><th>時間</th><th>總耗時</th><th>對/錯</th><th>各關明細(對/錯)</th></tr>${pendingRow || ''}${data.map(r => recRow(r)).join('')}</table></div>`;
             };
+            let pendingRow = '';
+            if (pend) {
+                const t = totals(pend.stats);
+                pendingRow = recRow({
+                    date: nowStr(pend.savedAt), time: pend.time, totalC: t.c, totalW: t.w, details: pend.stats,
+                    note: joinNotes(`⏸ 闖關暫存中（第 ${pend.index + 1} 關，答對 ${pend.lvlCorrect}/6）`, resumeNote(pend.resumeCount, pend.lastResumeLevel))
+                }, 'rec-pending');
+            }
             showModal('📜 歷史紀錄（上限 40 筆）',
-                build(DB.load('math_records_challenge'), '🏆 闖關模式', 'math_records_challenge') +
+                build(DB.load('math_records_challenge'), '🏆 闖關模式', 'math_records_challenge', pendingRow) +
                 build(DB.load('math_records_practice'), '📝 練習模式', 'math_records_practice'));
         }
 
@@ -866,19 +1019,22 @@
                     toast(msg, 'ok');
                     state.levelId = CHALLENGE_LEVELS[state.challengeIndex];
                     updateChallengeUI();
+                    persist();
                     nextAfter(() => initGame());
                 } else if (state.sysMode === 'review_wrong') {
                     DB.removeWrong({ num1: state.num1, num2: state.num2, mode: state.mathMode });
                     toast('🎉 訂正成功！此題已從錯題本移除。', 'ok');
-                    nextAfter(() => { switchSysMode('practice'); showWrongsModal(); });
+                    nextAfter(() => { backToPractice(); showWrongsModal(); });
                 } else {
                     toast('🎉 答對了！前往下一題！', 'ok');
+                    persist();
                     nextAfter(() => initGame());
                 }
             } else {
                 if (state.sysMode !== 'review_wrong') {
                     if (stat) stat.wrong++;
                     DB.addWrong({ num1: state.num1, num2: state.num2, mode: state.mathMode, level: state.levelId });
+                    persist();
                 }
                 showCheckResult(userAns, target, exp);
             }
@@ -1226,8 +1382,14 @@
         });
         $('level-select').addEventListener('change', () => initGame(false));
         $('btn-finish-practice').addEventListener('click', () => showSummaryAndSave(false));
-        $('nav-practice').addEventListener('click', () => switchSysMode('practice'));
-        $('nav-challenge').addEventListener('click', () => switchSysMode('challenge'));
+        $('nav-practice').addEventListener('click', startPractice);
+        $('nav-challenge').addEventListener('click', requestChallenge);
+        $('btn-save-challenge').addEventListener('click', () => {
+            state.resumeCount = state.resumeCount || 0;
+            saveObj(PENDING_C, challengeSnapshot());
+            toast(`💾 已暫存：第 ${state.challengeIndex + 1} 關，答對 ${state.challengeLvlCorrect}/6
+已用時間 ${formatTime(timerElapsed())}`, 'ok', 2800);
+        });
         $('nav-records').addEventListener('click', showRecordsModal);
         $('nav-wrongs').addEventListener('click', showWrongsModal);
 
@@ -1275,7 +1437,9 @@
                     <ul>
                         <li>🔄 <b>本題重來</b>：同一題從頭再做一次。⏭️ <b>換一題</b>：出新題目。</li>
                         <li>⛶ <b>全螢幕</b>：畫面變大，比較好操作。</li>
-                        <li><b>闖關模式</b>：9 個關卡，每關答對 6 題就前進下一關。</li>
+                        <li><b>闖關模式</b>：9 個關卡，每關答對 6 題就前進下一關。進度會自動暫存，也可以按 💾 <b>暫存關卡</b>；下次打開可以選擇接著玩或重新開始。</li>
+                        <li><b>練習模式</b>：做完按 📊 結算。忘了按也沒關係，下次打開時會自動存成一筆紀錄。</li>
+                        <li><b>耗時</b>只計算網頁開著、正在做題的時間，切到別的分頁會暫停。</li>
                     </ul>
                 </section>
 
@@ -1495,8 +1659,31 @@
         document.addEventListener('fullscreenchange', () => { updateFsBtn(); setTimeout(resizeCanvas, 100); });
         document.addEventListener('webkitfullscreenchange', () => { updateFsBtn(); setTimeout(resizeCanvas, 100); });
 
+        // ---------- 17. 自動暫存與啟動 ----------
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) { timerPause(); persist(); } else timerResume();
+        });
+        window.addEventListener('pagehide', () => { timerPause(); persist(); });
+        window.addEventListener('pageshow', () => timerResume());
+        setInterval(persist, 20000);
+
         resizeCanvas();
-        switchSysMode('practice');
+        (function boot() {
+            // 上次練習沒按結算就關掉 → 存成一筆紀錄
+            const p = loadObj(PENDING_P);
+            if (p && hasAnswers(p.stats)) addRecordFrom('practice', p.stats, p.time || 0, '未按結算（網頁關閉）', p.savedAt);
+            removeKey(PENDING_P);
+
+            state.sysMode = 'none';
+            applyModeUI('practice');
+            resetSessionStats();
+            state.levelId = $('level-select').value;
+            initGame();
+
+            // 有闖關暫存 → 詢問是否續玩
+            const c = loadObj(PENDING_C);
+            if (c) showResumePrompt(c);
+        })();
         requestAnimationFrame(draw);
     })();
     </script>
