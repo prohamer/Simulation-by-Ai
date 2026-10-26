@@ -67,6 +67,8 @@
     .check-row { display: flex; align-items: center; gap: 10px; min-height: 42px; padding: 0 10px; margin-bottom: 8px; border-radius: 10px; background: var(--surface-2); border: 1.5px solid var(--border); font-weight: 700; font-size: .95rem; cursor: pointer; }
     .check-row input { width: 22px; height: 22px; margin: 0; accent-color: var(--hun-ink); flex-shrink: 0; }
     .check-row small { color: var(--muted); font-weight: 600; font-size: .8rem; }
+    .rec-btns { display: flex; flex-direction: column; gap: 4px; }
+    .rec-resume { white-space: nowrap; min-height: 34px; padding: 0 10px; border: none; border-radius: 8px; background: #E3F5EC; color: #146C43; font-weight: 800; }
     .rec-del { white-space: nowrap; min-height: 34px; padding: 0 10px; border: none; border-radius: 8px; background: #FDE8E6; color: #B8352D; font-weight: 700; }
     .row-btns { display: flex; gap: 6px; }
     .ctrl-btn { flex: 1; min-height: 46px; border-radius: 10px; border: none; color: #fff; font-weight: 700; font-size: .95rem; }
@@ -529,7 +531,48 @@
         if (!sv || (!hasAnswers(sv.stats) && !sv.levelIdx)) return;
         const t = totals(sv.stats);
         DB.addRecord('challenge', { date: sv.date, time: sv.time, totalC: t.c, totalW: t.w, details: sv.stats,
-            note: `闖關中斷（停在第 ${sv.levelIdx + 1} 關，答對 ${sv.lvlCorrect}/${PER_LEVEL}）` });
+            note: `闖關中斷（停在第 ${sv.levelIdx + 1} 關，答對 ${sv.lvlCorrect}/${PER_LEVEL}）`,
+            resumable: true, levelIdx: sv.levelIdx, lvlCorrect: sv.lvlCorrect, resumes: sv.resumes || 0, lastFrom: sv.lastFrom });
+    }
+    // 目前是否有闖關進度（進行中或已暫存）
+    function currentProgress() {
+        if (state.sysMode === 'challenge') {
+            return (state.challengeIndex > 0 || hasAnswers(state.sessionStats))
+                ? { levelIdx: state.challengeIndex, lvlCorrect: state.challengeLvlCorrect, time: elapsed(), live: true } : null;
+        }
+        const sv = loadObj(SAVE.ch);
+        return sv ? { levelIdx: sv.levelIdx, lvlCorrect: sv.lvlCorrect, time: sv.time, live: false } : null;
+    }
+    let pendingRec = null;
+    function askResumeRecord(rec) {
+        pendingRec = rec;
+        const cur = currentProgress();
+        if (!cur) { doResumeRecord('none'); return; }
+        const html = `
+            <div class="resume-box">
+                ${cur.live ? '現在正在進行' : '還有一個暫存中的'}闖關：<b>第 ${cur.levelIdx + 1} 關</b>，這一關答對 <b>${cur.lvlCorrect}/${PER_LEVEL}</b> 題，已用 <b>${formatTime(cur.time || 0)}</b>。<br>
+                要接續的紀錄：<b>第 ${rec.levelIdx + 1} 關</b>，答對 <b>${rec.lvlCorrect}/${PER_LEVEL}</b> 題（${rec.date}）。
+            </div>
+            <p style="margin:0 0 10px;font-weight:700;">切換之前，要保存目前的進度嗎？</p>
+            <div class="resume-btns">
+                <button class="btn-resume" data-action="rr-save">💾 先存成紀錄，再切換</button>
+                <button class="btn-restart-ch" data-action="rr-discard">不保存，直接切換</button>
+            </div>
+            <p class="fb-note" style="margin-top:10px;">存成紀錄的進度，之後也可以從歷史紀錄按「▶ 接續」接回來。</p>
+            <button class="close-btn" style="float:none;width:100%;" data-action="rr-cancel">取消</button>`;
+        showModal('⚠️ 目前還有闖關進度', html);
+    }
+    function doResumeRecord(mode) {
+        const rec = pendingRec; pendingRec = null;
+        if (!rec) return;
+        if (mode === 'save') { if (state.sysMode === 'challenge') saveChallenge(true); abandonChallenge(loadObj(SAVE.ch)); }
+        else dropObj(SAVE.ch);
+        DB.save(KEYS.rc, DB.load(KEYS.rc).filter(r => !(r.date === rec.date && r.note === rec.note && r.time === rec.time)));
+        closeModal();
+        switchSysMode('challenge', { noChallengeSave: true, resume: {
+            levelIdx: rec.levelIdx, lvlCorrect: rec.lvlCorrect, stats: rec.details, time: rec.time, resumes: rec.resumes || 0, lastFrom: rec.lastFrom } });
+        saveChallenge(true);
+        toast(`▶ 從第 ${rec.levelIdx + 1} 關接著闖！${mode === 'save' ? '\n剛才的進度已存進歷史紀錄。' : ''}`, 'ok', 2800);
     }
     function persist() { savePractice(); saveChallenge(); }
     document.addEventListener('visibilitychange', () => {
@@ -564,7 +607,7 @@
     function switchSysMode(newMode, opt = {}) {
         if (!opt.skipSave) {
             if (state.sysMode === 'practice') { savePractice(); if (flushPractice('未按結算（切換模式）')) toast('📝 剛才的練習已自動存進歷史紀錄', 'info'); }
-            if (state.sysMode === 'challenge') { saveChallenge(); if (loadObj(SAVE.ch)) toast('💾 闖關進度已暫存，下次可以接著玩', 'info'); }
+            if (state.sysMode === 'challenge' && !opt.noChallengeSave) { saveChallenge(); if (loadObj(SAVE.ch)) toast('💾 闖關進度已暫存，下次可以接著玩', 'info'); }
         }
         state.sysMode = newMode;
         state.flowToken++; state.locked = false;
@@ -655,7 +698,13 @@
         } else if (action === 'delrec') {
             const r = DB.load(key); r.splice(parseInt(idx, 10), 1);
             DB.save(key, r); showRecordsModal();
-        } else if (action === 'resume') {
+        } else if (action === 'resumerec') {
+            const rec = DB.load(KEYS.rc)[parseInt(idx, 10)];
+            if (rec) askResumeRecord(rec);
+        } else if (action === 'rr-save') doResumeRecord('save');
+        else if (action === 'rr-discard') doResumeRecord('discard');
+        else if (action === 'rr-cancel') { pendingRec = null; showRecordsModal(); }
+        else if (action === 'resume') {
             const sv = loadObj(SAVE.ch); closeModal();
             if (sv) { switchSysMode('challenge', { resume: sv }); toast(`▶ 從第 ${sv.levelIdx + 1} 關接著闖！`, 'ok'); }
         } else if (action === 'restart-ch') {
@@ -712,7 +761,7 @@
                 return `<tr><td>${r.date}${r.note ? `<span class="rec-note">${r.note}</span>` : ''}</td><td>${formatTime(r.time || 0)}</td>
                     <td><span class="c-ok">${r.totalC}</span> / <span class="c-bad">${r.totalW}</span></td>
                     <td style="font-size:.85rem;text-align:left;">${detail || '無'}</td>
-                    <td><button class="rec-del" data-action="delrec" data-key="${key}" data-idx="${i}">刪除</button></td></tr>`;
+                    <td><div class="rec-btns">${r.resumable && key === KEYS.rc ? `<button class="rec-resume" data-action="resumerec" data-idx="${i}">▶ 接續</button>` : ''}<button class="rec-del" data-action="delrec" data-key="${key}" data-idx="${i}">刪除</button></div></td></tr>`;
             }).join('');
             return head + `<div class="table-wrap"><table style="margin-top:8px;"><tr><th>完成時間</th><th>總耗時</th><th>對/錯</th><th>各關明細(對/錯)</th><th></th></tr>${rows}</table></div>`;
         };
@@ -1469,7 +1518,7 @@
                     <li>每一區都可以放，順序自己決定，也不會自動框起來。</li>
                     <li>點一下球可以選起來；在空白處拖出一個框，可以一次選很多顆。選 10 顆拖到左邊一格，就換成 1 顆大球；選 20 顆就換成 2 顆，選 30 顆換成 3 顆，依此類推。</li>
                     <li>共 5 關，每關答對 5 題就前進下一關。</li>
-                    <li>做到一半可以按「💾 暫存關卡」；就算直接關掉網頁，進度也會自動暫存。下次按「闖關模式」可以選擇接著玩，耗時會累加。</li>
+                    <li>做到一半可以按「💾 暫存關卡」；就算直接關掉網頁，進度也會自動暫存。下次按「闖關模式」可以選擇接著玩，耗時會累加。選擇重新開始時，舊進度會存成「闖關中斷」紀錄，之後可以在歷史紀錄按「▶ 接續」接回來。</li>
                 </ul>
 
                 <h3>輸入與送出</h3>
