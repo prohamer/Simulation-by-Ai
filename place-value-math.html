@@ -7,7 +7,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>位值加減法學習系統</title>
+    <title>Pomi加減法學習系統</title>
     <style>
         :root {
             --bg: #F3EFE6; --surface: #FFFFFF; --surface-2: #F8F6F1; --border: #E3DDD0;
@@ -90,6 +90,16 @@
         .rec-note { margin-top: 4px; font-size: .8rem; font-weight: 700; color: var(--ok); }
         .rec-note.warn { color: #B86A00; }
         tr.rec-pending td { background: #F6F1FD; }
+        .rec-ops { width: 78px; }
+        .rec-btn { display: block; width: 100%; min-height: 38px; margin: 3px 0; border: none; border-radius: 8px; font-weight: 800; font-size: .9rem; color: #fff; white-space: nowrap; }
+        .rec-btn.go { background: var(--ok); }
+        .rec-btn.del { background: var(--bad); }
+        .rec-pend-tag { font-size: .8rem; font-weight: 800; color: #7C4DCC; }
+        .sw-item { background: var(--surface-2); border-radius: 12px; padding: 10px 14px; }
+        .sw-lbl { font-size: .85rem; font-weight: 800; color: var(--muted); margin-bottom: 2px; }
+        .sw-arrow { text-align: center; font-weight: 800; color: var(--muted); margin: 6px 0; }
+        .sw-item + .resume-btn, .sw-item ~ .resume-btn:first-of-type { margin-top: 14px; }
+        .resume-btn.cancel { background: var(--surface-2); color: var(--text); border: 1.5px solid var(--border); }
 
         /* 直式算式 */
         #equation-container { font-size: 2.1rem; font-weight: 800; font-family: "Courier New", Courier, monospace; display: flex; flex-direction: column; align-items: flex-end; padding: 4px 22px 4px 40px; }
@@ -264,7 +274,7 @@
 
     <div id="top-nav">
         <div class="nav-left">
-            <div class="nav-title">📐 位值加減法學習系統</div>
+            <div class="nav-title">波蜜加減法學習系統</div>
             <button class="help-btn" id="nav-help" aria-label="使用說明" title="使用說明">?</button>
         </div>
         <div class="nav-buttons">
@@ -545,7 +555,8 @@
                 if (hasAnswers(state.sessionStats)) saveObj(PENDING_P, { stats: clone(state.sessionStats), time: timerElapsed(), startDate: state.startDate, savedAt: Date.now() });
                 else removeKey(PENDING_P);
             } else if (state.sysMode === 'challenge') {
-                if (hasAnswers(state.sessionStats) || state.challengeIndex > 0 || state.resumeCount > 0) saveObj(PENDING_C, challengeSnapshot());
+                const snap = challengeSnapshot();
+                if (hasProgress(snap)) saveObj(PENDING_C, snap);
             }
         }
 
@@ -616,9 +627,7 @@
             const saved = loadObj(PENDING_C);
             if (state.sysMode !== 'challenge') leaveCurrentMode('切換到闖關模式');
             if (!resume && saved) {
-                addRecordFrom('challenge', saved.stats, saved.time || 0,
-                    joinNotes(`闖關中斷（停在第 ${saved.index + 1} 關，答對 ${saved.lvlCorrect}/6）`, resumeNote(saved.resumeCount, saved.lastResumeLevel)),
-                    saved.savedAt);
+                if (hasProgress(saved)) addInterruptRecord(saved);
                 removeKey(PENDING_C);
             }
             applyModeUI('challenge');
@@ -692,6 +701,16 @@
             if (action === 'close') { closeModal(); return; }
             if (action === 'resume') { const sv = loadObj(PENDING_C); closeModal(); startChallenge(sv); return; }
             if (action === 'fresh') { closeModal(); startChallenge(null); return; }
+            if (action === 'rec-resume') { requestRecordResume(parseInt(idx, 10)); return; }
+            if (action === 'rec-del') {
+                if (confirm('確定要刪除這筆紀錄嗎？')) { const r = DB.load(key); r.splice(parseInt(idx, 10), 1); DB.save(key, r); showRecordsModal(); }
+                return;
+            }
+            if (action === 'sw-save' || action === 'sw-discard') {
+                if (pendingResumeIdx !== null) doRecordResume(pendingResumeIdx, action === 'sw-save' ? 'save' : 'discard');
+                pendingResumeIdx = null; return;
+            }
+            if (action === 'sw-cancel') { pendingResumeIdx = null; showRecordsModal(); return; }
             if (action === 'clear') {
                 if (confirm('確定要清空此分類的所有紀錄嗎？')) { DB.save(key, []); showRecordsModal(); }
             } else if (action === 'redo') {
@@ -738,21 +757,27 @@
         function showRecordsModal() {
             if (state.sysMode === 'challenge') persist();
             const pend = loadObj(PENDING_C);
-            const recRow = (r, extraCls = '') => {
+            const recRow = (r, key, idx, extraCls = '') => {
                 const detail = Object.entries(r.details || {})
                     .filter(([, v]) => v.correct || v.wrong)
                     .map(([k, v]) => `${LEVEL_NAMES[k] || k}(${v.correct}/${v.wrong})`).join('、');
                 const tag = r.note ? `<div class="rec-note ${/中斷|未按|暫存/.test(r.note) ? 'warn' : ''}">${r.note}</div>` : '';
+                let ops = '';
+                if (idx !== null) {
+                    ops = (r.resume ? `<button class="rec-btn go" data-action="rec-resume" data-idx="${idx}">▶ 接續</button>` : '') +
+                          `<button class="rec-btn del" data-action="rec-del" data-key="${key}" data-idx="${idx}">刪除</button>`;
+                } else ops = '<span class="rec-pend-tag">暫存中</span>';
                 return `<tr class="${extraCls}"><td>${r.date}${tag}</td><td>${formatTime(r.time || 0)}</td>
                     <td><span class="c-ok">${r.totalC}</span> / <span class="c-bad">${r.totalW}</span></td>
-                    <td style="font-size:.85rem;text-align:left;">${detail || '無'}</td></tr>`;
+                    <td style="font-size:.85rem;text-align:left;">${detail || '無'}</td>
+                    <td class="rec-ops">${ops}</td></tr>`;
             };
             const build = (data, title, key, pendingRow) => {
                 let head = `<div style="display:flex;justify-content:space-between;align-items:center;margin-top:14px;gap:8px;">
                     <h3 style="margin:0;">${title}（${data.length}/40）</h3>
                     ${data.length ? `<button class="mini-btn" data-action="clear" data-key="${key}">清空紀錄</button>` : ''}</div>`;
                 if (!data.length && !pendingRow) return head + '<p style="color:#6B7280;">尚無歷史紀錄</p>';
-                return head + `<div class="table-wrap"><table style="margin-top:8px;"><tr><th>時間</th><th>總耗時</th><th>對/錯</th><th>各關明細(對/錯)</th></tr>${pendingRow || ''}${data.map(r => recRow(r)).join('')}</table></div>`;
+                return head + `<div class="table-wrap"><table style="margin-top:8px;"><tr><th>時間</th><th>總耗時</th><th>對/錯</th><th>各關明細(對/錯)</th><th></th></tr>${pendingRow || ''}${data.map((r, i) => recRow(r, key, i)).join('')}</table></div>`;
             };
             let pendingRow = '';
             if (pend) {
@@ -760,11 +785,77 @@
                 pendingRow = recRow({
                     date: nowStr(pend.savedAt), time: pend.time, totalC: t.c, totalW: t.w, details: pend.stats,
                     note: joinNotes(`⏸ 闖關暫存中（第 ${pend.index + 1} 關，答對 ${pend.lvlCorrect}/6）`, resumeNote(pend.resumeCount, pend.lastResumeLevel))
-                }, 'rec-pending');
+                }, 'math_records_challenge', null, 'rec-pending');
             }
             showModal('📜 歷史紀錄（上限 40 筆）',
                 build(DB.load('math_records_challenge'), '🏆 闖關模式', 'math_records_challenge', pendingRow) +
                 build(DB.load('math_records_practice'), '📝 練習模式', 'math_records_practice'));
+        }
+
+        // ---------- 從「闖關中斷」紀錄接續 ----------
+        const REC_C = 'math_records_challenge';
+        const hasProgress = s => !!s && (hasAnswers(s.stats) || s.index > 0 || s.lvlCorrect > 0);
+
+        // 目前的闖關進度：正在玩的優先，其次是暫存
+        function currentChallengeProgress() {
+            if (state.sysMode === 'challenge') {
+                const snap = challengeSnapshot();
+                if (hasProgress(snap)) return snap;
+            }
+            const saved = loadObj(PENDING_C);
+            return hasProgress(saved) ? saved : null;
+        }
+
+        function interruptNote(s) {
+            return joinNotes(`闖關中斷（停在第 ${s.index + 1} 關，答對 ${s.lvlCorrect}/6）`, resumeNote(s.resumeCount, s.lastResumeLevel));
+        }
+        function addInterruptRecord(s) {
+            const t = totals(s.stats);
+            DB.addRecord('challenge', {
+                date: nowStr(s.savedAt || Date.now()), time: s.time || 0, totalC: t.c, totalW: t.w,
+                details: clone(s.stats), note: interruptNote(s),
+                resume: { index: s.index, lvlCorrect: s.lvlCorrect, resumeCount: s.resumeCount || 0, lastResumeLevel: s.lastResumeLevel || 0, startDate: s.startDate || Date.now() }
+            });
+        }
+
+        const progressLine = (s, lbl) => {
+            const t = totals(s.stats);
+            return `<div class="sw-item"><div class="sw-lbl">${lbl}</div>
+                <div><b>第 ${s.index + 1} 關（${LEVEL_NAMES[CHALLENGE_LEVELS[s.index]] || ''}）</b>，這一關答對 <b>${s.lvlCorrect}/6</b></div>
+                <div class="resume-meta">⏱️ ${formatTime(s.time || 0)}　✅ ${t.c}　❌ ${t.w}</div></div>`;
+        };
+
+        let pendingResumeIdx = null;
+        function requestRecordResume(idx) {
+            const rec = DB.load(REC_C)[idx];
+            if (!rec || !rec.resume) return;
+            const cur = currentChallengeProgress();
+            if (!cur) { doRecordResume(idx, 'discard'); return; } // 沒有進度：直接切換
+            pendingResumeIdx = idx;
+            const target = { ...rec.resume, stats: rec.details, time: rec.time };
+            showModal('⚠️ 目前還有闖關進度', `
+                ${progressLine(cur, '目前進度')}
+                <div class="sw-arrow">⬇ 要切換成</div>
+                ${progressLine(target, '要接續的紀錄')}
+                <button class="resume-btn go" data-action="sw-save">💾 先存成紀錄，再切換</button>
+                <button class="resume-btn fresh" data-action="sw-discard">不保存，直接切換</button>
+                <button class="resume-btn cancel" data-action="sw-cancel">取消</button>
+                <p class="fb-note">「先存成紀錄」會把目前進度變成一筆「闖關中斷」紀錄，之後也能再接回來。</p>`);
+        }
+
+        function doRecordResume(idx, how) {
+            const recs = DB.load(REC_C);
+            const rec = recs[idx];
+            if (!rec || !rec.resume) { showRecordsModal(); return; }
+            recs.splice(idx, 1); DB.save(REC_C, recs);             // 那筆紀錄從清單移除
+            if (how === 'save') {
+                const cur = currentChallengeProgress();
+                if (cur) addInterruptRecord({ ...cur, savedAt: Date.now() });
+            }
+            removeKey(PENDING_C);
+            if (state.sysMode === 'challenge') state.sysMode = 'none'; // 目前的闖關已處理，不要再自動暫存
+            closeModal();
+            startChallenge({ ...rec.resume, stats: rec.details, time: rec.time || 0 });
         }
 
         function showWrongsModal() {
@@ -1385,8 +1476,9 @@
         $('nav-practice').addEventListener('click', startPractice);
         $('nav-challenge').addEventListener('click', requestChallenge);
         $('btn-save-challenge').addEventListener('click', () => {
-            state.resumeCount = state.resumeCount || 0;
-            saveObj(PENDING_C, challengeSnapshot());
+            const snap = challengeSnapshot();
+            if (!hasProgress(snap)) { toast('還沒有闖關進度，先答幾題再暫存吧！', 'info'); return; }
+            saveObj(PENDING_C, snap);
             toast(`💾 已暫存：第 ${state.challengeIndex + 1} 關，答對 ${state.challengeLvlCorrect}/6
 已用時間 ${formatTime(timerElapsed())}`, 'ok', 2800);
         });
@@ -1437,7 +1529,7 @@
                     <ul>
                         <li>🔄 <b>本題重來</b>：同一題從頭再做一次。⏭️ <b>換一題</b>：出新題目。</li>
                         <li>⛶ <b>全螢幕</b>：畫面變大，比較好操作。</li>
-                        <li><b>闖關模式</b>：9 個關卡，每關答對 6 題就前進下一關。進度會自動暫存，也可以按 💾 <b>暫存關卡</b>；下次打開可以選擇接著玩或重新開始。</li>
+                        <li><b>闖關模式</b>：9 個關卡，每關答對 6 題就前進下一關。進度會自動暫存，也可以按 💾 <b>暫存關卡</b>；下次打開可以選擇接著玩或重新開始。在「歷史紀錄」裡，每筆「闖關中斷」紀錄都可以按 ▶ <b>接續</b> 接回那個進度。</li>
                         <li><b>練習模式</b>：做完按 📊 結算。忘了按也沒關係，下次打開時會自動存成一筆紀錄。</li>
                         <li><b>耗時</b>只計算網頁開著、正在做題的時間，切到別的分頁會暫停。</li>
                     </ul>
