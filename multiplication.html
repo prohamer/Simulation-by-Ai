@@ -1,0 +1,1614 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>位值乘法學習系統</title>
+<meta name="theme-color" content="#1F2A44">
+<style>
+    /* 沿用加減法版的配色與版面（刻意維持單一淺色教室主題）；新增千位紫色、引導步驟列 */
+    :root {
+        --bg: #F3EFE6; --surface: #FFFFFF; --surface-2: #F8F6F1; --border: #E3DDD0;
+        --text: #1F2A44; --muted: #6B7280;
+        --nav: #1F2A44; --nav-btn: #33405E; --accent: #F2B705; --accent-text: #3D2E00;
+        --tho-ink: #6A38A8; --hun-ink: #2A5BC0; --ten-ink: #B86A00; --one-ink: #0E7A5A;
+        --ok: #1F9D63; --bad: #E0483E; --warn: #F2B705; --focus: #D9480F;
+        --radius: 14px; --cell: 34px; --zc: #0E7A5A;
+        color-scheme: light;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+        margin: 0; font-family: "Segoe UI", "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", system-ui, sans-serif;
+        background: var(--bg); color: var(--text);
+        user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent;
+        display: flex; flex-direction: column; overflow: hidden;
+    }
+    button, select { font-family: inherit; touch-action: manipulation; }
+    button { cursor: pointer; }
+    button:focus-visible, select:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+    #top-nav {
+        background: var(--nav); color: #fff; display: flex; gap: 10px; align-items: center; justify-content: space-between;
+        padding: 8px calc(16px + env(safe-area-inset-right, 0px)) 8px calc(16px + env(safe-area-inset-left, 0px));
+        box-shadow: 0 2px 6px rgba(0,0,0,.18); z-index: 10; flex-wrap: wrap;
+    }
+    .nav-left { display: flex; align-items: center; gap: 10px; }
+    .help-btn { width: 36px; height: 36px; flex-shrink: 0; border-radius: 50%; border: 2px solid rgba(255,255,255,.6); background: transparent; color: #fff; font-size: 1.15rem; font-weight: 900; line-height: 1; }
+    .help-btn:active { transform: scale(.92); }
+    @media (hover: hover) { .help-btn:hover { background: rgba(255,255,255,.15); } }
+    .nav-title { font-size: 1.15rem; font-weight: 800; letter-spacing: .5px; white-space: nowrap; }
+    .nav-buttons { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; touch-action: pan-x; }
+    .nav-buttons::-webkit-scrollbar { display: none; }
+    .nav-btn { background: var(--nav-btn); color: #fff; border: none; min-height: 42px; padding: 0 14px; border-radius: 10px; font-weight: 700; font-size: .95rem; white-space: nowrap; transition: background .15s; }
+    @media (hover: hover) { .nav-btn:hover { background: #45537A; } }
+    .nav-btn:active { transform: scale(.96); }
+    .nav-btn.active-mode { background: var(--accent); color: var(--accent-text); }
+    .nav-btn.nav-fs { background: transparent; border: 1.5px solid rgba(255,255,255,.35); }
+
+    #main-container {
+        display: flex; flex: 1; min-height: 0; gap: 12px;
+        padding: 12px calc(12px + env(safe-area-inset-right, 0px)) 12px calc(12px + env(safe-area-inset-left, 0px));
+    }
+    #play-area { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 10px; }
+    #canvas-wrapper {
+        flex: 1; min-width: 0; min-height: 0; background: var(--surface); border-radius: var(--radius);
+        box-shadow: 0 4px 14px rgba(31,42,68,.08); display: flex; align-items: center; justify-content: center; overflow: hidden;
+    }
+    canvas { display: block; touch-action: none; }
+
+    #side-panel {
+        width: 300px; flex-shrink: 0; display: flex; flex-direction: column; gap: 10px;
+        overflow-y: auto; touch-action: pan-y; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; padding-right: 2px;
+    }
+    .card { background: var(--surface); border-radius: var(--radius); padding: 12px; box-shadow: 0 2px 8px rgba(31,42,68,.06); }
+    .card-title { font-size: 1rem; font-weight: 800; color: var(--text); margin-bottom: 8px; padding-bottom: 6px; border-bottom: 2px solid var(--surface-2); display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+    .hint { font-size: .85rem; color: var(--muted); margin: 2px 0 6px; }
+
+    select { width: 100%; min-height: 46px; padding: 8px 10px; font-size: 1rem; border-radius: 10px; border: 1.5px solid var(--border); background: var(--surface-2); color: var(--text); margin-bottom: 8px; }
+    select:disabled { opacity: .7; }
+    .check-row { display: flex; align-items: center; gap: 10px; min-height: 42px; padding: 0 10px; margin-bottom: 8px; border-radius: 10px; background: var(--surface-2); border: 1.5px solid var(--border); font-weight: 700; font-size: .95rem; cursor: pointer; }
+    .check-row input { width: 22px; height: 22px; margin: 0; accent-color: var(--hun-ink); flex-shrink: 0; }
+    .check-row small { color: var(--muted); font-weight: 600; font-size: .8rem; }
+    .rec-del { min-height: 34px; padding: 0 10px; border: none; border-radius: 8px; background: #FDE8E6; color: #B8352D; font-weight: 700; }
+    .row-btns { display: flex; gap: 6px; }
+    .ctrl-btn { flex: 1; min-height: 46px; border-radius: 10px; border: none; color: #fff; font-weight: 700; font-size: .95rem; }
+    .ctrl-btn:active { transform: scale(.97); }
+    #btn-restart { background: #6B7A99; }
+    #btn-redo-q { background: #D9822B; }
+    #btn-finish-practice { background: var(--ok); }
+
+    /* 直式算式 */
+    #equation-container { font-size: 1.95rem; font-weight: 800; font-family: "Courier New", Courier, monospace; display: flex; flex-direction: column; align-items: flex-end; padding: 4px 18px 4px 40px; font-variant-numeric: tabular-nums; }
+    .eq-row { display: flex; justify-content: flex-end; align-items: center; min-height: 44px; gap: 8px; position: relative; transition: opacity .2s; }
+    .operator { position: absolute; left: -34px; color: var(--muted); font-size: 1.9rem; }
+    .eq-line { width: 100%; height: 4px; background: var(--text); margin: 4px 0 6px; border-radius: 2px; }
+    .digit { width: var(--cell); text-align: center; transition: transform .25s, color .25s; display: inline-block; }
+    .digit.focus { color: var(--focus); transform: scale(1.18); }
+    .carry-row { display: flex; justify-content: flex-end; width: 100%; gap: 8px; height: 22px; font-size: 1.05rem; }
+    .carry-mark { width: var(--cell); text-align: center; color: var(--hun-ink); font-family: "Segoe UI", sans-serif; font-weight: 800; }
+    .input-box { width: var(--cell); height: 44px; border: 2px solid var(--border); border-radius: 8px; display: flex; justify-content: center; align-items: center; background: var(--surface-2); color: var(--hun-ink); font-size: 1.7rem; }
+    .input-box.active { border-color: var(--hun-ink); background: #EEF3FD; box-shadow: 0 0 0 3px rgba(42,91,192,.25); }
+    .input-spacer { width: var(--cell); }
+    .faint-zero { width: var(--cell); text-align: center; color: #CDC5B3; }
+    .ans-row.future { opacity: .3; }
+    .ans-row.done .input-box { border-color: #9ED3B8; background: #E3F5EC; color: #146C43; }
+
+    /* 呼叫小人 */
+    #action-card { flex-shrink: 0; padding: 10px 12px; }
+    .step-banner { display: flex; gap: 8px; align-items: flex-start; font-size: .95rem; font-weight: 700; color: var(--text); background: var(--surface-2); border-radius: 10px; padding: 8px 12px; margin-bottom: 8px; line-height: 1.45; }
+    .step-pill { flex-shrink: 0; background: var(--zc); color: #fff; border-radius: 999px; padding: 1px 10px; font-size: .85rem; margin-top: 1px; }
+    .action-bar { display: flex; gap: 14px; flex-wrap: wrap; align-items: flex-end; }
+    .action-group { flex: 1 1 260px; min-width: 0; }
+    .action-bar .hint { margin: 0 0 5px; }
+    .zone-tabs { display: grid; grid-template-columns: repeat(var(--n, 3), 1fr); gap: 6px; }
+    .zone-tab { min-height: 48px; border-radius: 10px; border: 2px solid var(--tab); background: #fff; color: var(--tab); font-weight: 800; font-size: 1rem; display: flex; align-items: center; justify-content: center; gap: 6px; transition: background .15s, color .15s, opacity .15s; }
+    .zone-tab .dot { width: 12px; height: 12px; border-radius: 50%; background: var(--dot); box-shadow: 0 0 0 2px #fff; }
+    .zone-tab.active { background: var(--tab); color: #fff; box-shadow: 0 3px 0 rgba(0,0,0,.18); }
+    .zone-tab.locked { opacity: .4; }
+    .action-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    #action-card.guided .action-grid { grid-template-columns: 1fr 1fr 1.1fr; }
+    .action-btn { position: relative; min-height: 54px; border-radius: 12px; font-weight: 800; font-size: .98rem; white-space: nowrap; display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.25; border: 2.5px solid var(--zc); transition: transform .1s, opacity .15s; padding: 0 6px; }
+    .action-btn small { font-size: .76rem; font-weight: 700; opacity: .9; white-space: normal; }
+    .action-btn:active { transform: scale(.95); }
+    .action-btn:disabled { opacity: .35; cursor: not-allowed; transform: none; }
+    .action-btn.add { background: var(--zc); color: #fff; }
+    .action-btn.sub { background: #fff; color: var(--zc); }
+    .action-btn.done { background: var(--nav); border-color: var(--nav); color: #fff; }
+    .count-badge { position: absolute; top: -9px; right: -7px; min-width: 28px; height: 28px; padding: 0 6px; border-radius: 14px; background: var(--accent); color: var(--accent-text); font-size: 1rem; font-weight: 900; display: flex; align-items: center; justify-content: center; border: 2px solid #fff; box-shadow: 0 2px 4px rgba(0,0,0,.18); font-variant-numeric: tabular-nums; }
+
+    /* 右側停靠區 + 小鍵盤 */
+    #right-dock { width: 240px; flex-shrink: 0; display: flex; flex-direction: column; min-height: 0; }
+    #main-container.dock-empty #right-dock { display: none; }
+    #keypad {
+        position: fixed; left: 0; top: 0; width: 240px; z-index: 50;
+        background: rgba(255,255,255,.55); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+        border: 1.5px solid rgba(31,42,68,.18); border-radius: 16px; box-shadow: 0 10px 28px rgba(31,42,68,.22);
+        opacity: .82; transition: opacity .15s, box-shadow .15s; visibility: hidden;
+    }
+    #keypad.ready { visibility: visible; }
+    #keypad.docked { position: static; width: 100%; transform: none !important; opacity: 1; background: var(--surface); -webkit-backdrop-filter: none; backdrop-filter: none; border-color: transparent; box-shadow: 0 2px 8px rgba(31,42,68,.06); }
+    #keypad.docked #keypad-dock { display: none; }
+    #keypad.docked .key-btn:not(.key-submit) { background: var(--surface-2); }
+    #keypad.docked .key-action { background: #FDE8E6; }
+    #keypad.dragging { opacity: .95; box-shadow: 0 16px 36px rgba(31,42,68,.32); }
+    #keypad-handle { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 6px 6px 12px; font-weight: 800; font-size: .95rem; color: var(--text); cursor: grab; touch-action: none; border-radius: 14px 14px 0 0; background: rgba(31,42,68,.08); }
+    #keypad.dragging #keypad-handle { cursor: grabbing; }
+    .kp-tools { display: flex; gap: 4px; }
+    .kp-icon { width: 38px; height: 34px; border: none; border-radius: 8px; background: rgba(31,42,68,.12); color: var(--text); font-size: 1.1rem; font-weight: 800; }
+    #keypad-body { padding: 8px; }
+    #keypad.collapsed #keypad-body { display: none; }
+    #keypad.collapsed #keypad-handle { border-radius: 14px; }
+    .keyboard { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+    #keypad .key-btn { background: rgba(255,255,255,.7); }
+    #keypad .key-action { background: rgba(253,232,230,.85); }
+    #keypad .key-submit { background: var(--hun-ink); }
+    .key-btn { min-height: 50px; background: var(--surface-2); border: 1.5px solid var(--border); border-radius: 10px; font-size: 1.35rem; font-weight: 800; color: var(--text); }
+    .key-btn:active { background: #E9E4D8; transform: scale(.96); }
+    .key-zero { grid-column: span 2; }
+    .key-action { background: #FDE8E6; border-color: #F6C2BD; color: #B8352D; font-size: 1.05rem; }
+    .key-submit { background: var(--hun-ink); border-color: var(--hun-ink); color: #fff; grid-column: span 3; font-size: 1.15rem; }
+    .key-submit:active { background: #234C9F; }
+
+    #toast { position: fixed; left: 50%; top: calc(70px + env(safe-area-inset-top, 0px)); transform: translate(-50%, -16px); opacity: 0; pointer-events: none; z-index: 200; padding: 12px 18px; border-radius: 12px; font-weight: 700; font-size: 1.02rem; max-width: min(92vw, 520px); text-align: center; white-space: pre-line; box-shadow: 0 8px 22px rgba(0,0,0,.2); transition: opacity .2s, transform .2s; }
+    #toast.show { opacity: 1; transform: translate(-50%, 0); }
+    .toast-ok { background: var(--ok); color: #fff; }
+    .toast-bad { background: var(--bad); color: #fff; }
+    .toast-warn { background: var(--warn); color: var(--accent-text); }
+    .toast-info { background: var(--nav); color: #fff; }
+
+    .modal-overlay { position: fixed; inset: 0; background: rgba(15,20,35,.55); display: none; justify-content: center; align-items: center; z-index: 100; padding: 16px; }
+    .modal-content { background: #fff; padding: 20px; border-radius: 14px; width: 100%; max-width: 680px; max-height: 84vh; overflow-y: auto; touch-action: pan-y; -webkit-overflow-scrolling: touch; box-shadow: 0 10px 30px rgba(0,0,0,.25); }
+    .modal-header { font-size: 1.3rem; font-weight: 800; margin-bottom: 14px; padding-bottom: 10px; border-bottom: 2px solid var(--surface-2); }
+    .close-btn { background: var(--surface-2); border: 1.5px solid var(--border); min-height: 42px; padding: 0 16px; border-radius: 10px; float: right; font-weight: 700; color: var(--text); }
+    .table-wrap { overflow-x: auto; touch-action: pan-x pan-y; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: .95rem; }
+    th, td { border: 1px solid var(--border); padding: 8px; text-align: center; }
+    th { background: var(--surface-2); }
+    .c-ok { color: var(--ok); font-weight: 800; } .c-bad { color: var(--bad); font-weight: 800; }
+    .wrong-item { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 10px 4px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+    .wrong-item button, .mini-btn { min-height: 40px; margin-left: 4px; padding: 0 14px; border: none; border-radius: 8px; font-weight: 700; color: #fff; }
+    .btn-redo { background: var(--hun-ink); }
+    .btn-delete, .mini-btn { background: var(--bad); }
+    .help h3 { font-size: 1.05rem; margin: 16px 0 6px; color: var(--text); }
+    .help ul, .help ol { margin: 0; padding-left: 22px; line-height: 1.7; }
+    .help li { margin-bottom: 2px; }
+    .help-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 6px; position: sticky; top: -20px; background: #fff; padding: 4px 0; z-index: 1; }
+    .help-tab { min-height: 44px; border-radius: 10px; border: 2px solid var(--border); background: var(--surface-2); font-weight: 800; font-size: .95rem; color: var(--text); }
+    .help-tab.active { background: var(--nav); border-color: var(--nav); color: #fff; }
+    .help-key { background: #EEF3FD; border-radius: 10px; padding: 10px 14px; font-weight: 700; margin: 10px 0; }
+    .help-eg { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; }
+    .help-eg ol { flex: 1 1 260px; }
+    .help-eq { font-family: "Courier New", monospace; font-size: 1.7rem; font-weight: 800; line-height: 1.2; text-align: right; background: var(--surface-2); border-radius: 10px; padding: 8px 18px; white-space: pre; }
+    .help-eq .carry { font-size: 1rem; color: var(--hun-ink); }
+    .help-eq .line { display: inline-block; border-top: 3px solid var(--text); padding-top: 2px; }
+    .help-eq .ans { color: var(--hun-ink); }
+    .help-eq .faint { color: #CDC5B3; }
+    .help-tip { background: #FFF6D6; border-radius: 10px; padding: 8px 14px; margin: 10px 0 0; font-weight: 600; }
+    .fb-sec { margin-bottom: 14px; }
+    .fb-h { font-weight: 800; color: var(--muted); margin-bottom: 6px; }
+    .fb-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 10px; margin-bottom: 6px; font-size: 1.08rem; }
+    .fb-row.ok { background: #E3F5EC; color: #146C43; }
+    .fb-row.bad { background: #FDE8E6; color: #B8352D; }
+    .fb-ans { font-family: "Courier New", monospace; font-size: 1.3rem; letter-spacing: 2px; }
+    .fb-tip { background: #FFF6D6; border-radius: 10px; padding: 10px 14px; margin: 4px 0 8px; font-weight: 700; }
+    .fb-note { color: var(--muted); font-size: .9rem; margin: 0 0 10px; }
+    .fb-close { width: 100%; min-height: 48px; border: none; border-radius: 10px; background: var(--hun-ink); color: #fff; font-weight: 800; font-size: 1.05rem; }
+
+    /* 直式平板 / 手機 */
+    @media (orientation: portrait), (max-width: 820px) {
+        #main-container { display: grid; grid-template-columns: minmax(0, 1fr) 250px; grid-template-areas: "set set" "play play" "eq dock"; align-content: start; overflow-y: auto; touch-action: pan-y; }
+        #main-container.dock-empty { grid-template-columns: minmax(0, 1fr); grid-template-areas: "set" "play" "eq"; }
+        #side-panel { display: contents; }
+        #settings-card { grid-area: set; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+        #settings-card .card-title { flex: 1 1 100%; margin-bottom: 0; }
+        #settings-card select { flex: 1 1 200px; width: auto; margin: 0; }
+        #settings-card .check-row { flex: 1 1 100%; margin: 0; }
+        #settings-card .row-btns { flex: 1 1 240px; }
+        #btn-finish-practice { flex: 1 1 150px; width: auto !important; margin-top: 0 !important; }
+        #eq-card { grid-area: eq; }
+        #play-area { grid-area: play; min-height: auto; }
+        #right-dock { min-height: auto; grid-area: dock; width: auto; }
+        #canvas-wrapper { flex: 0 0 auto; width: 100%; max-width: 100%; aspect-ratio: 3 / 2; max-height: 50vh; }
+    }
+    @media (orientation: portrait) and (max-width: 560px) {
+        #main-container, #main-container.dock-empty { grid-template-columns: minmax(0, 1fr); grid-template-areas: "set" "play" "eq" "dock"; }
+        #settings-card { gap: 6px; }
+        #settings-card select { flex-basis: 100%; }
+        #settings-card .row-btns { flex: 2 1 0; min-width: 0; }
+        #btn-finish-practice { flex: 1 1 0; min-width: 0; }
+        #settings-card .ctrl-btn { font-size: .85rem; padding: 0 4px; white-space: nowrap; }
+        #action-card.guided .action-grid { grid-template-columns: 1fr 1fr; }
+        #action-card.guided .action-btn.done { grid-column: span 2; }
+    }
+    @media (orientation: landscape) and (max-height: 520px) {
+        #top-nav { padding-top: 4px; padding-bottom: 4px; }
+        .nav-title { display: none; }
+        .help-btn { width: 32px; height: 32px; }
+        .nav-btn { min-height: 36px; }
+        #main-container { padding-top: 8px; gap: 8px; }
+        #side-panel { width: 230px; }
+        #right-dock { width: 190px; }
+        #side-panel .card { padding: 8px 10px; }
+        #keypad-body { padding: 6px; }
+        .keyboard { gap: 4px; }
+        #equation-container { font-size: 1.6rem; }
+        .key-btn { min-height: 40px; }
+        #keypad:not(.docked) { width: 200px; }
+        .action-bar .hint { display: none; }
+        .action-bar { flex-wrap: nowrap; gap: 8px; }
+        .action-group { flex: 1 1 0; }
+        #action-card { padding: 6px 8px; }
+        .step-banner { font-size: .8rem; padding: 4px 8px; margin-bottom: 4px; }
+        #play-area { gap: 8px; }
+        .action-btn { min-height: 44px; font-size: .85rem; white-space: nowrap; }
+        .action-btn small { display: none; }
+        .zone-tab { min-height: 42px; }
+    }
+    @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div id="top-nav">
+    <div class="nav-left">
+        <div class="nav-title">✖️ 位值乘法學習系統</div>
+        <button class="help-btn" id="nav-help" aria-label="使用說明" title="使用說明">?</button>
+    </div>
+    <div class="nav-buttons">
+        <button class="nav-btn active-mode" id="nav-practice">練習模式</button>
+        <button class="nav-btn" id="nav-challenge">闖關模式</button>
+        <button class="nav-btn" id="nav-records">歷史紀錄</button>
+        <button class="nav-btn" id="nav-wrongs">錯題本</button>
+        <button class="nav-btn nav-fs" id="nav-fullscreen" title="全螢幕">⛶ 全螢幕</button>
+    </div>
+</div>
+
+<div id="main-container">
+    <div id="side-panel">
+        <div class="card" id="settings-card">
+            <div class="card-title">
+                <span id="mode-title-display">1. 練習設定</span>
+                <span id="challenge-progress" style="color:#D9480F; display:none;"></span>
+            </div>
+            <select id="level-select" aria-label="題型">
+                <option value="m11">一位數 × 一位數</option>
+                <option value="m21a">二位數 × 一位數（一次進位）</option>
+                <option value="m21b">二位數 × 一位數（連續進位）</option>
+                <option value="m31">三位數 × 一位數</option>
+                <option value="m22">二位數 × 二位數</option>
+            </select>
+            <label class="check-row" id="check-row" for="chk-groups">
+                <input type="checkbox" id="chk-groups" checked>
+                <span>乘完了要檢查份數 <small>（取消勾選：只引導，送出時才檢查）</small></span>
+            </label>
+            <div class="row-btns">
+                <button id="btn-redo-q" class="ctrl-btn">🔄 本題重來</button>
+                <button id="btn-restart" class="ctrl-btn">⏭️ 換一題</button>
+            </div>
+            <button id="btn-finish-practice" class="ctrl-btn" style="width:100%; margin-top:6px;">📊 結算本次練習</button>
+        </div>
+
+        <div class="card" id="eq-card">
+            <div class="card-title" id="eq-title">2. 直式計算</div>
+            <div id="equation-container"></div>
+        </div>
+    </div>
+
+    <div id="play-area">
+        <div id="canvas-wrapper">
+            <canvas id="gameCanvas" width="900" height="600"></canvas>
+        </div>
+
+        <div class="card" id="action-card">
+            <div id="step-banner" class="step-banner"></div>
+            <div class="action-bar">
+                <div class="action-group">
+                    <div class="hint">① 工作區</div>
+                    <div id="zone-tabs" class="zone-tabs"></div>
+                </div>
+                <div class="action-group">
+                    <div class="hint">② 呼叫小人</div>
+                    <div class="action-grid">
+                        <button id="btn-char-add" class="action-btn add"></button>
+                        <button id="btn-char-sub" class="action-btn sub"></button>
+                        <button id="btn-step-done" class="action-btn done"></button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="right-dock">
+        <div id="keypad">
+            <div id="keypad-handle">
+                <span>⠿ 輸入答案</span>
+                <span class="kp-tools">
+                    <button id="keypad-dock" class="kp-icon" title="停靠回右側">📌</button>
+                    <button id="keypad-toggle" class="kp-icon" title="收合 / 展開">－</button>
+                </span>
+            </div>
+            <div id="keypad-body">
+                <div class="keyboard">
+                    <button class="key-btn" data-key="1">1</button><button class="key-btn" data-key="2">2</button><button class="key-btn" data-key="3">3</button>
+                    <button class="key-btn" data-key="4">4</button><button class="key-btn" data-key="5">5</button><button class="key-btn" data-key="6">6</button>
+                    <button class="key-btn" data-key="7">7</button><button class="key-btn" data-key="8">8</button><button class="key-btn" data-key="9">9</button>
+                    <button class="key-btn key-action" data-key="clear">清除</button><button class="key-btn key-zero" data-key="0">0</button>
+                    <button id="btn-submit" class="key-btn key-submit">✅ 確認送出</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="toast"></div>
+
+<div class="modal-overlay" id="modal-container">
+    <div class="modal-content">
+        <button class="close-btn" id="modal-close">關閉</button>
+        <div class="modal-header" id="modal-title"></div>
+        <div id="modal-body"></div>
+    </div>
+</div>
+
+<script>
+(() => {
+    'use strict';
+
+    if (!CanvasRenderingContext2D.prototype.roundRect) {
+        CanvasRenderingContext2D.prototype.roundRect = function (x, y, w, h, r) {
+            r = Math.min(typeof r === 'number' ? r : 0, w / 2, h / 2);
+            this.moveTo(x + r, y);
+            this.arcTo(x + w, y, x + w, y + h, r); this.arcTo(x + w, y + h, x, y + h, r);
+            this.arcTo(x, y + h, x, y, r); this.arcTo(x, y, x + w, y, r);
+            this.closePath(); return this;
+        };
+    }
+
+    // ---------- 1. 本地儲存（與加減法版分開） ----------
+    const memStore = {};
+    const KEYS = { rc: 'mul_records_challenge', rp: 'mul_records_practice', wrong: 'mul_wrongs', kp: 'mul_keypad_v1' };
+    const DB = {
+        maxRecords: 40,
+        load(key) {
+            try { const v = JSON.parse(localStorage.getItem(key) || '[]'); return Array.isArray(v) ? v : []; }
+            catch (e) { return memStore[key] ? memStore[key].slice() : []; }
+        },
+        save(key, data) {
+            memStore[key] = data;
+            try { localStorage.setItem(key, JSON.stringify(data)); } catch (e) {}
+        },
+        addRecord(mode, stats) {
+            const key = mode === 'challenge' ? KEYS.rc : KEYS.rp;
+            const r = DB.load(key); r.unshift(stats); DB.save(key, r.slice(0, DB.maxRecords));
+        },
+        sameQ: (x, y) => x.a === y.a && x.b === y.b,
+        addWrong(q) {
+            const w = DB.load(KEYS.wrong);
+            if (!w.some(x => DB.sameQ(x, q))) { w.unshift(q); DB.save(KEYS.wrong, w.slice(0, DB.maxRecords)); }
+        },
+        removeWrong(q) { DB.save(KEYS.wrong, DB.load(KEYS.wrong).filter(x => !DB.sameQ(x, q))); }
+    };
+
+    // ---------- 2. 常數與狀態 ----------
+    const W = 900, H = 600, TOP = 104, BOTTOM = 462;
+    const FONT = '"Segoe UI","PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif';
+    const ALL = ['tho', 'hun', 'ten', 'one'];
+    const IDX = { one: 0, ten: 1, hun: 2, tho: 3 };
+    const BY_IDX = ['one', 'ten', 'hun', 'tho'];
+    const NAME = { tho: '千位', hun: '百位', ten: '十位', one: '個位' };
+    const UNIT = { tho: '千', hun: '百', ten: '十', one: '一' };
+    const VAL = { tho: 1000, hun: 100, ten: 10, one: 1 };
+    const C = {
+        tho: { color: '#8C55C9', ink: '#6A38A8', rgb: [140, 85, 201], r: 15 },
+        hun: { color: '#3B6FD8', ink: '#2A5BC0', rgb: [59, 111, 216], r: 15 },
+        ten: { color: '#E8901A', ink: '#B86A00', rgb: [232, 144, 26], r: 15 },
+        one: { color: '#159A72', ink: '#0E7A5A', rgb: [21, 154, 114], r: 15 }
+    };
+    const tint = (t, a) => `rgba(${C[t].rgb.join(',')},${a})`;
+    const digitAt = (n, p) => Math.floor(n / VAL[p]) % 10;
+
+    const LEVELS = ['m11', 'm21a', 'm21b', 'm31', 'm22'];
+    const LEVEL_NAMES = { m11: '一位×一位', m21a: '二位×一位(一次進位)', m21b: '二位×一位(連續進位)', m31: '三位×一位', m22: '二位×二位' };
+    const PER_LEVEL = 5;
+
+    const state = {
+        sysMode: 'practice', levelId: 'm11', a: 7, b: 8,
+        plan: [], stageIdx: 0, zones: ['hun', 'ten', 'one'],
+        balls: {}, geo: {}, characters: [], groupCount: {}, regroup: {},
+        inputs: [], activeInput: 'one', workZone: 'one',
+        guide: { steps: [], idx: 0, phase: 'done' }, frames: [], multiplied: [],
+        flashState: false, animating: false, animToken: 0, flowToken: 0, locked: false,
+        lasso: null, dragHint: null, zoneError: null,
+        sessionStats: {}, startTime: 0, challengeIndex: 0, challengeLvlCorrect: 0
+    };
+    ALL.forEach(p => { state.balls[p] = []; });
+    let dragInfo = null;
+    const $ = id => document.getElementById(id);
+    const CHECK_KEY = 'mul_check_groups';
+    state.checkGroups = (() => { try { return localStorage.getItem(CHECK_KEY) !== '0'; } catch (e) { return true; } })();
+    $('chk-groups').checked = state.checkGroups;
+    $('chk-groups').addEventListener('change', e => {
+        state.checkGroups = e.target.checked;
+        try { localStorage.setItem(CHECK_KEY, state.checkGroups ? '1' : '0'); } catch (err) {}
+        if (state.sysMode !== 'challenge') initGame(true);
+        toast((state.checkGroups ? '✅ 檢查份數：先進位，再乘下一位' : '📢 不檢查：乘完就到下一位，可以先乘完再進位') + '\n本題重新開始。', 'info', 2800);
+    });
+
+    const canvas = $('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    setInterval(() => { state.flashState = !state.flashState; }, 400);
+
+    const isGuided = () => state.sysMode !== 'challenge';
+    const curStage = () => state.plan[state.stageIdx];
+    const curStep = () => {
+        const g = state.guide;
+        return isGuided() && g.idx < g.steps.length ? g.steps[g.idx] : null;
+    };
+    const zoneW = () => W / state.zones.length;
+    const zoneX = p => state.zones.indexOf(p) * zoneW();
+    const zoneAt = px => state.zones[Math.max(0, Math.min(state.zones.length - 1, Math.floor(px / zoneW())))];
+    const leftOf = p => state.zones[state.zones.indexOf(p) - 1];
+    const rightOf = p => state.zones[state.zones.indexOf(p) + 1];
+    const multPlaceName = st => st.shift ? '十位' : '個位';
+
+    // 這一位「一份」有幾顆：被乘數對應位的數字（第二列整體往左移一位）
+    function groupSize(p) {
+        const st = curStage();
+        if (!st || st.kind !== 'mul') return 0;
+        const i = IDX[p] - st.shift;
+        if (i < 0 || i > 3) return 0;
+        const q = BY_IDX[i];
+        return state.a >= VAL[q] ? digitAt(state.a, q) : 0;
+    }
+
+    function later(fn, ms) {
+        const tok = state.flowToken;
+        setTimeout(() => { if (tok === state.flowToken) fn(); }, ms);
+    }
+
+    // ---------- 3. 提示訊息 ----------
+    let toastTimer = null;
+    function toast(msg, type = 'info', ms = 2200) {
+        const el = $('toast');
+        el.textContent = msg;
+        el.className = 'show toast-' + type;
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => { el.className = 'toast-' + type; }, ms);
+    }
+
+    // ---------- 4. 模式切換 ----------
+    function resetSessionStats() {
+        state.sessionStats = {};
+        LEVELS.forEach(l => { state.sessionStats[l] = { correct: 0, wrong: 0 }; });
+        state.startTime = Date.now();
+    }
+    function setNavActive(mode) {
+        document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active-mode'));
+        const el = mode && $('nav-' + mode);
+        if (el) el.classList.add('active-mode');
+    }
+    function switchSysMode(newMode) {
+        state.sysMode = newMode;
+        state.flowToken++; state.locked = false;
+        setNavActive(newMode);
+        resetSessionStats();
+        $('btn-restart').style.display = '';
+        if (newMode === 'practice') {
+            $('mode-title-display').textContent = '1. 練習設定（引導）';
+            $('level-select').disabled = false;
+            $('challenge-progress').style.display = 'none';
+            $('btn-finish-practice').style.display = '';
+            $('check-row').hidden = false;
+            state.levelId = $('level-select').value;
+        } else {
+            $('mode-title-display').textContent = '1. 闖關進度';
+            $('level-select').disabled = true;
+            $('challenge-progress').style.display = '';
+            $('btn-finish-practice').style.display = 'none';
+            $('check-row').hidden = true;
+            state.challengeIndex = 0; state.challengeLvlCorrect = 0;
+            state.levelId = LEVELS[0];
+            updateChallengeUI();
+        }
+        initGame();
+    }
+    function updateChallengeUI() {
+        $('level-select').value = state.levelId;
+        $('challenge-progress').textContent = `關卡 ${state.challengeIndex + 1}/${LEVELS.length}（答對 ${state.challengeLvlCorrect}/${PER_LEVEL}）`;
+    }
+    function startReview(idx) {
+        const q = DB.load(KEYS.wrong)[idx];
+        if (!q) return;
+        state.sysMode = 'review_wrong';
+        state.flowToken++; state.locked = false;
+        state.a = q.a; state.b = q.b; state.levelId = q.level;
+        setNavActive(null);
+        $('mode-title-display').textContent = '📓 錯題重作中';
+        if (q.level) $('level-select').value = q.level;
+        $('level-select').disabled = true;
+        $('challenge-progress').style.display = 'none';
+        $('btn-finish-practice').style.display = 'none';
+        $('btn-restart').style.display = 'none';
+        $('check-row').hidden = false;
+        closeModal();
+        initGame(true);
+    }
+    const formatTime = ms => { const s = Math.floor(ms / 1000); return `${Math.floor(s / 60)}分 ${s % 60}秒`; };
+
+    // ---------- 5. Modal ----------
+    function showModal(title, html) {
+        $('modal-title').textContent = title;
+        $('modal-body').innerHTML = html;
+        $('modal-container').style.display = 'flex';
+    }
+    function closeModal() { $('modal-container').style.display = 'none'; }
+    const modalOpen = () => $('modal-container').style.display === 'flex';
+    $('modal-close').addEventListener('click', closeModal);
+    $('modal-container').addEventListener('click', e => { if (e.target.id === 'modal-container') closeModal(); });
+    $('modal-body').addEventListener('click', e => {
+        const tab = e.target.closest('.help-tab');
+        if (tab) {
+            document.querySelectorAll('.help-tab').forEach(t => t.classList.toggle('active', t === tab));
+            document.querySelectorAll('.help-page').forEach(pg => { pg.hidden = pg.dataset.page !== tab.dataset.help; });
+            return;
+        }
+        const btn = e.target.closest('[data-action]');
+        if (!btn) return;
+        const { action, idx, key } = btn.dataset;
+        if (action === 'close') { closeModal(); return; }
+        if (action === 'clear') {
+            if (btn.dataset.armed) { DB.save(key, []); showRecordsModal(); }
+            else {
+                btn.dataset.armed = '1'; btn.textContent = '再按一次確認清空';
+                setTimeout(() => { if (btn.isConnected) { delete btn.dataset.armed; btn.textContent = '清空紀錄'; } }, 3000);
+            }
+        } else if (action === 'delrec') {
+            const r = DB.load(key); r.splice(parseInt(idx, 10), 1);
+            DB.save(key, r); showRecordsModal();
+        } else if (action === 'redo') startReview(parseInt(idx, 10));
+        else if (action === 'del') {
+            const w = DB.load(KEYS.wrong); w.splice(parseInt(idx, 10), 1);
+            DB.save(KEYS.wrong, w); showWrongsModal();
+        }
+    });
+
+    function showSummaryAndSave(force = false) {
+        let totalC = 0, totalW = 0, rows = '';
+        LEVELS.forEach(l => {
+            const s = state.sessionStats[l];
+            if (s.correct || s.wrong) {
+                totalC += s.correct; totalW += s.wrong;
+                rows += `<tr><td>${LEVEL_NAMES[l]}</td><td class="c-ok">${s.correct}</td><td class="c-bad">${s.wrong}</td></tr>`;
+            }
+        });
+        if (!force && totalC + totalW === 0) { toast('📭 這次還沒有作答紀錄喔！', 'info'); return; }
+        const timeSpent = Date.now() - state.startTime;
+        const date = new Date().toLocaleString('zh-TW', { hour12: false });
+        const html = `
+            <p>📅 完成時間：<b>${date}</b></p>
+            <p>⏱️ 總耗時：<b>${formatTime(timeSpent)}</b></p>
+            <p>📊 總計：✅ 答對 <b class="c-ok">${totalC}</b> 題 ／ ❌ 答錯 <b class="c-bad">${totalW}</b> 次</p>
+            <div class="table-wrap"><table>
+                <tr><th>關卡題型</th><th>答對</th><th>答錯</th></tr>
+                ${rows || '<tr><td colspan="3">本次尚無作答紀錄</td></tr>'}
+            </table></div>`;
+        const wasChallenge = state.sysMode === 'challenge';
+        DB.addRecord(state.sysMode, { date, time: timeSpent, totalC, totalW, details: JSON.parse(JSON.stringify(state.sessionStats)) });
+        showModal(wasChallenge ? '🏆 闖關完成結算' : '📊 本次練習結果', html);
+        if (wasChallenge) switchSysMode('practice'); else resetSessionStats();
+    }
+
+    function showRecordsModal() {
+        const build = (data, title, key) => {
+            const head = `<div style="display:flex;justify-content:space-between;align-items:center;margin-top:14px;gap:8px;">
+                <h3 style="margin:0;">${title}（${data.length}/40）</h3>
+                ${data.length ? `<button class="mini-btn" data-action="clear" data-key="${key}">清空紀錄</button>` : ''}</div>`;
+            if (!data.length) return head + '<p style="color:#6B7280;">尚無歷史紀錄</p>';
+            const rows = data.map((r, i) => {
+                const detail = Object.entries(r.details || {})
+                    .filter(([, v]) => v.correct || v.wrong)
+                    .map(([k, v]) => `${LEVEL_NAMES[k] || k}(${v.correct}/${v.wrong})`).join('、');
+                return `<tr><td>${r.date}</td><td>${formatTime(r.time || 0)}</td>
+                    <td><span class="c-ok">${r.totalC}</span> / <span class="c-bad">${r.totalW}</span></td>
+                    <td style="font-size:.85rem;text-align:left;">${detail || '無'}</td>
+                    <td><button class="rec-del" data-action="delrec" data-key="${key}" data-idx="${i}">刪除</button></td></tr>`;
+            }).join('');
+            return head + `<div class="table-wrap"><table style="margin-top:8px;"><tr><th>完成時間</th><th>總耗時</th><th>對/錯</th><th>各關明細(對/錯)</th><th></th></tr>${rows}</table></div>`;
+        };
+        showModal('📜 歷史紀錄（上限 40 筆）',
+            build(DB.load(KEYS.rc), '🏆 闖關模式', KEYS.rc) + build(DB.load(KEYS.rp), '📝 練習模式', KEYS.rp));
+    }
+
+    function showWrongsModal() {
+        const wrongs = DB.load(KEYS.wrong);
+        if (!wrongs.length) { showModal('📓 錯題本', '<p>太棒了！目前沒有任何錯題紀錄。</p>'); return; }
+        const rows = wrongs.map((q, i) => `
+            <div class="wrong-item">
+                <span>【${LEVEL_NAMES[q.level] || '練習題'}】 <b style="font-size:1.1rem">${q.a} × ${q.b}</b></span>
+                <div><button class="btn-redo" data-action="redo" data-idx="${i}">挑戰重作</button><button class="btn-delete" data-action="del" data-idx="${i}">刪除</button></div>
+            </div>`).join('');
+        showModal(`📓 錯題本（${wrongs.length}/40）`, rows);
+    }
+
+    // ---------- 6. 出題（一定有進位；被乘數各位不為 0） ----------
+    const rand = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
+    function generate(level) {
+        let a, b, ok = false;
+        while (!ok) {
+            if (level === 'm11') { a = rand(2, 9); b = rand(2, 9); ok = a * b >= 10; }
+            else if (level === 'm21a' || level === 'm21b') {
+                const t = rand(1, 9), o = rand(2, 9); b = rand(2, 9); a = t * 10 + o;
+                const second = t * b + Math.floor(o * b / 10) >= 10;
+                ok = o * b >= 10 && (level === 'm21b' ? second : !second);
+            } else if (level === 'm31') {
+                const o = rand(2, 9); a = rand(1, 9) * 100 + rand(1, 9) * 10 + o; b = rand(2, 9); ok = o * b >= 10;
+            } else {
+                const o = rand(2, 9), b1 = rand(2, 9);
+                a = rand(1, 9) * 10 + o; b = rand(1, 9) * 10 + b1; ok = o * b1 >= 10;
+            }
+        }
+        state.a = a; state.b = b;
+    }
+
+    // 一位數乘數：一個階段；二位數乘數：第一列、第二列、相加
+    function buildPlan() {
+        const a = state.a, b = state.b;
+        if (b < 10) state.plan = [{ kind: 'mul', mult: b, shift: 0, target: a * b, label: `${a} × ${b}` }];
+        else {
+            const b1 = b % 10, b10 = Math.floor(b / 10);
+            state.plan = [
+                { kind: 'mul', mult: b1, shift: 0, target: a * b1, label: `第一列：${a} × ${b1}` },
+                { kind: 'mul', mult: b10, shift: 1, target: a * b10 * 10, label: `第二列：${a} × ${b10} 個十` },
+                { kind: 'add', target: a * b, label: '相加：兩列合起來' }
+            ];
+        }
+        state.zones = a * b >= 1000 ? ALL.slice() : ALL.slice(1);
+    }
+
+    // ---------- 7. 直式算式 ----------
+    function buildEquation() {
+        const eq = $('equation-container'); eq.innerHTML = '';
+        const Z = state.zones;
+        const row = (cls, id) => { const r = document.createElement('div'); r.className = 'eq-row' + (cls ? ' ' + cls : ''); if (id) r.id = id; eq.appendChild(r); return r; };
+        const cell = (r, cls, text, id) => { const s = document.createElement('span'); s.className = cls; if (text != null) s.textContent = text; if (id) s.id = id; r.appendChild(s); return s; };
+        const line = () => { const d = document.createElement('div'); d.className = 'eq-line'; eq.appendChild(d); };
+        const show = (n, p) => (n >= VAL[p] || p === 'one') ? String(digitAt(n, p)) : '';
+
+        const cr = document.createElement('div'); cr.className = 'carry-row'; eq.appendChild(cr);
+        Z.forEach(p => cell(cr, 'carry-mark', '', 'carry-' + p));
+        const ra = row(''); Z.forEach(p => cell(ra, 'digit', show(state.a, p), 'eq-a-' + p));
+        const rb = row(''); cell(rb, 'operator', '×'); Z.forEach(p => cell(rb, 'digit', show(state.b, p), 'eq-b-' + p));
+        line();
+        state.plan.forEach((st, s) => {
+            if (s === 2) line();
+            const r = row('ans-row', 'ans-' + s);
+            Z.forEach(p => {
+                if (st.shift === 1 && p === 'one') { cell(r, 'faint-zero', '0'); return; }
+                if (st.target >= VAL[p]) {
+                    const box = document.createElement('div');
+                    box.className = 'input-box'; box.id = `in-${s}-${p}`;
+                    box.addEventListener('click', () => { if (s === state.stageIdx && !state.locked) setActiveInput(p); });
+                    r.appendChild(box);
+                } else cell(r, 'input-spacer');
+            });
+        });
+    }
+
+    function refreshEquation() {
+        state.plan.forEach((st, s) => {
+            const r = $('ans-' + s); if (!r) return;
+            r.classList.toggle('current', s === state.stageIdx);
+            r.classList.toggle('done', s < state.stageIdx);
+            r.classList.toggle('future', s > state.stageIdx);
+            state.zones.forEach(p => {
+                const el = $(`in-${s}-${p}`);
+                if (el) { el.textContent = state.inputs[s][p] || ''; el.classList.toggle('active', s === state.stageIdx && p === state.activeInput); }
+            });
+        });
+        document.querySelectorAll('.digit.focus').forEach(el => el.classList.remove('focus'));
+        const st = curStage();
+        if (st && st.kind === 'mul') {
+            const bEl = $('eq-b-' + (st.shift ? 'ten' : 'one')); if (bEl) bEl.classList.add('focus');
+            const step = curStep();
+            if (step && step.kind === 'mul') { const aEl = $('eq-a-' + BY_IDX[IDX[step.zone] - st.shift]); if (aEl) aEl.classList.add('focus'); }
+        }
+        $('eq-title').textContent = state.plan.length > 1 ? `2. 直式｜${st.label}` : '2. 直式計算';
+    }
+
+    function updateCarryMarks() {
+        state.zones.forEach(p => {
+            const el = $('carry-' + p); if (!el) return;
+            const n = state.regroup[p] || 0;
+            el.textContent = n ? String(n) : '';
+        });
+    }
+
+    const boxesOf = s => state.zones.filter(p => $(`in-${s}-${p}`));
+    function setActiveInput(p) { state.activeInput = p; refreshEquation(); }
+    function inputDigit(v) {
+        if (state.locked) return;
+        const s = state.stageIdx, Z = state.zones;
+        state.inputs[s][state.activeInput] = v;
+        for (let j = Z.indexOf(state.activeInput) - 1; j >= 0; j--) { if ($(`in-${s}-${Z[j]}`)) { state.activeInput = Z[j]; break; } }
+        refreshEquation();
+    }
+    function clearDigit() { state.inputs[state.stageIdx][state.activeInput] = ''; refreshEquation(); }
+    function moveInput(dir) {
+        const boxes = boxesOf(state.stageIdx), i = boxes.indexOf(state.activeInput);
+        const n = boxes[Math.max(0, Math.min(boxes.length - 1, i + dir))];
+        if (n) setActiveInput(n);
+    }
+    document.querySelectorAll('.key-btn[data-key]').forEach(btn => {
+        btn.addEventListener('click', () => { const k = btn.dataset.key; if (k === 'clear') clearDigit(); else inputDigit(k); });
+    });
+    document.addEventListener('keydown', e => {
+        if (modalOpen()) { if (e.key === 'Escape') closeModal(); return; }
+        if (e.target.tagName === 'SELECT') return;
+        if (/^[0-9]$/.test(e.key)) inputDigit(e.key);
+        else if (e.key === 'Backspace' || e.key === 'Delete') { e.preventDefault(); clearDigit(); }
+        else if (e.key === 'Enter') { e.preventDefault(); submitAnswer(); }
+        else if (e.key === 'ArrowLeft') moveInput(-1);
+        else if (e.key === 'ArrowRight') moveInput(1);
+    });
+
+    // ---------- 8. 工作區、按鈕、引導步驟 ----------
+    const addBtn = $('btn-char-add'), subBtn = $('btn-char-sub'), doneBtn = $('btn-step-done');
+
+    function buildZoneTabs() {
+        const tabs = $('zone-tabs');
+        tabs.innerHTML = '';
+        tabs.style.setProperty('--n', state.zones.length);
+        state.zones.forEach(p => {
+            const b = document.createElement('button');
+            b.className = 'zone-tab'; b.dataset.zone = p;
+            b.style.setProperty('--tab', C[p].ink);
+            b.style.setProperty('--dot', C[p].color);
+            b.innerHTML = `<span class="dot"></span>${NAME[p]}`;
+            b.addEventListener('click', () => selectZone(p, true));
+            tabs.appendChild(b);
+        });
+    }
+
+    function selectZone(p, fromTab) {
+        if (isGuided()) {
+            const step = curStep();
+            if (step && step.zone !== p && fromTab) toast(`照順序來：先完成【${NAME[step.zone]}】喔！`, 'info', 1600);
+            return;
+        }
+        state.workZone = p;
+        refreshActionUI();
+    }
+
+    function bannerHTML() {
+        const st = curStage(), step = curStep(), pill = t => `<span class="step-pill">${t}</span>`;
+        if (!isGuided()) {
+            return pill('闖關') + `<span>${state.plan.length > 1 ? st.label + '。' : ''}${st.kind === 'add'
+                ? '兩列的球已經放好，框選 10 顆（或 20、30 顆……）拖到左邊進位。'
+                : '自己選工作區放入幾份；框選 10 顆（或 20、30 顆……）拖到左邊一格進位。'}</span>`;
+        }
+        if (!step) return pill('完成') + `<span>每一區都整理好了！數數看各區有幾顆球，寫下${state.plan.length > 1 ? '這一列的' : ''}答案，按「確認送出」。</span>`;
+        const z = step.zone, n = state.guide.idx + 1;
+        if (state.guide.phase === 'place') {
+            const pre = (st.shift && state.guide.idx === 0) ? `乘數十位的 ${st.mult} 代表 ${st.mult} 個十，所以從【十位】開始放，個位補 0。` : '';
+            const opt = state.frames.length ? '右邊框起來的球，可以現在進位，也可以全部乘完再進位。' : '';
+            return pill(`第 ${n} 步`) + `<span>${pre}【${NAME[z]}】一份是 ${groupSize(z)} 個${UNIT[z]}。乘數的${multPlaceName(st)}是幾，就放幾份，放好按「乘完了」。${opt}</span>`;
+        }
+        const L = leftOf(z);
+        if (!L) return pill(`第 ${n} 步`) + '<span>這一位不用進位。</span>';
+        return pill(`第 ${n} 步`) + `<span>${st.kind === 'add' ? `【${NAME[z]}】兩列合起來，` : step.kind === 'carry' ? `每一位都乘完了，現在從個位開始進位。【${NAME[z]}】` : ''}把框起來的一排（10 個${UNIT[z]}）拖到左邊的【${NAME[L]}】，換成 1 個${UNIT[L]}。</span>`;
+    }
+
+    function refreshActionUI() {
+        const card = $('action-card'), g = isGuided(), st = curStage(), step = curStep(), z = state.workZone;
+        card.classList.toggle('guided', g);
+        card.style.setProperty('--zc', C[z].ink);
+        const k = groupSize(z);
+        const canPlace = st.kind === 'mul' && k > 0 && (!g || (step && step.zone === z && state.guide.phase === 'place'));
+        addBtn.disabled = !canPlace; subBtn.disabled = !canPlace;
+        const badge = g && st.kind === 'mul' && step && state.guide.phase === 'place' ? `<span class="count-badge" aria-label="已放份數">${state.groupCount[z] || 0}</span>` : '';
+        addBtn.innerHTML = k > 0
+            ? `➕ 放入 1 份<small>一份 ${k} 個${UNIT[z]}</small>${badge}`
+            : `➕ 放入 1 份<small>${st.kind === 'add' ? '這一步只要進位' : '這一位不用放'}</small>`;
+        subBtn.innerHTML = `➖ 搬走 1 份<small>從【${NAME[z]}】</small>`;
+        doneBtn.hidden = !g;
+        doneBtn.disabled = !(g && step && step.kind === 'mul' && state.guide.phase === 'place');
+        doneBtn.innerHTML = `✔ 乘完了<small>${NAME[step ? step.zone : z]}・${state.checkGroups ? '檢查份數' : '直接框起'}</small>`;
+        document.querySelectorAll('.zone-tab').forEach(b => {
+            b.classList.toggle('active', b.dataset.zone === z);
+            b.classList.toggle('locked', g && (!step || b.dataset.zone !== step.zone));
+        });
+        $('step-banner').innerHTML = bannerHTML();
+    }
+
+    function refreshAll() { refreshEquation(); refreshActionUI(); updateCarryMarks(); }
+
+    function buildSteps() {
+        const st = curStage(), steps = [];
+        if (st.kind === 'mul') {
+            const len = String(state.a).length;
+            for (let i = 0; i < len; i++) {
+                if (digitAt(state.a, BY_IDX[i]) > 0) steps.push({ zone: BY_IDX[i + st.shift], kind: 'mul' });
+            }
+            // 不檢查模式：乘完不必先進位；全部乘完後，再從個位開始一位一位進位
+            if (!state.checkGroups) [...state.zones].reverse().forEach(z => steps.push({ zone: z, kind: 'carry' }));
+        } else [...state.zones].reverse().forEach(z => steps.push({ zone: z, kind: 'add' }));
+        state.guide = { steps, idx: 0, phase: 'place' };
+    }
+
+    function activateStep() {
+        const step = curStep();
+        if (!step) { state.guide.phase = 'done'; state.frames = []; refreshAll(); return; }
+        state.workZone = step.zone;
+        state.guide.phase = step.kind === 'mul' ? 'place' : 'carry';
+        arrangeBalls(true);
+        refreshAll();
+        if (state.guide.phase === 'carry' && state.balls[step.zone].length < 10) later(advanceStep, 300);
+    }
+
+    function advanceStep() {
+        state.guide.idx++;
+        if (!curStep()) {
+            state.guide.phase = 'done'; state.frames = []; refreshAll();
+            toast('👍 每一區都整理好了！\n數數看各區有幾顆球，寫下答案再送出。', 'ok', 2800);
+            return;
+        }
+        activateStep();
+    }
+
+    function stepDone() {
+        if (state.locked) return;
+        const step = curStep();
+        if (!step || state.guide.phase !== 'place') return;
+        const z = step.zone;
+        if (state.characters.some(c => c.zone === z && c.state !== 'walking_out')) { toast('⏳ 等小人把球放好喔！', 'warn'); return; }
+        const st = curStage(), n = state.groupCount[z] || 0;
+        if (!n) { toast(`先按「放入 1 份」，把球放進【${NAME[z]}】喔！`, 'warn'); return; }
+        if (state.checkGroups && n !== st.mult) {
+            toast(`🤔 一份是 ${groupSize(z)} 個${UNIT[z]}。\n乘數的${multPlaceName(st)}是幾，就要放幾份。數數看你放了幾份？`, 'warn', 3600);
+            return;
+        }
+        if (!state.checkGroups) {
+            if (!state.multiplied.includes(z)) state.multiplied.push(z);
+            const more = state.balls[z].length >= 10;
+            toast(`👍 ${NAME[z]}乘完了！${more ? '\n滿 10 的已經框起來：可以現在進位，也可以全部乘完再進位。' : ''}`, 'ok', more ? 3000 : 1500);
+            advanceStep();
+            return;
+        }
+        state.guide.phase = 'carry';
+        arrangeBalls(true);
+        refreshAll();
+        if (state.balls[z].length >= 10) toast(`✨ 滿 10 個${UNIT[z]}的已經框起來了！\n把框拖到左邊的【${NAME[leftOf(z)]}】。`, 'info', 3000);
+        else { toast(`👍 ${NAME[z]}乘完了，不用進位！`, 'ok', 1600); later(advanceStep, 600); }
+    }
+
+    function afterMerge(from) {
+        const step = curStep();
+        if (step && state.guide.phase === 'carry' && step.zone === from && state.balls[from].length < 10) later(advanceStep, 500);
+        refreshActionUI();
+    }
+
+    addBtn.addEventListener('click', () => triggerAdd(state.workZone));
+    subBtn.addEventListener('click', () => triggerSub(state.workZone));
+    doneBtn.addEventListener('click', stepDone);
+
+    // ---------- 9. 判定答案 ----------
+    function nextAfter(fn, delay = 900) {
+        state.locked = true;
+        const tok = state.flowToken;
+        setTimeout(() => { if (tok !== state.flowToken) return; state.locked = false; fn(); }, delay);
+    }
+
+    function submitAnswer() {
+        if (state.locked) return;
+        if (state.animating || state.characters.some(c => c.state !== 'walking_out')) { toast('⏳ 小人還在搬、或球還在變化，等一下再送出喔！', 'warn'); return; }
+        const s = state.stageIdx, st = curStage(), Z = state.zones, inp = state.inputs[s];
+        const boxes = boxesOf(s);
+        if (!boxes.some(p => inp[p])) { toast('✏️ 請先輸入答案喔！', 'warn'); return; }
+
+        const over = Z.filter(p => state.balls[p].length > 9);
+        if (over.length) {
+            toast(`⚠️【${over.map(p => NAME[p]).join('、')}】有 10 個以上的球，要「進位」喔！\n${isGuided() ? '照著上方的步驟，一位一位完成。' : '框選 10 個，拖到左邊一格換成 1 個大球。'}`, 'warn', 3600);
+            return;
+        }
+
+        const target = st.target;
+        const userAns = boxes.reduce((t, p) => t + parseInt(inp[p] || '0', 10) * VAL[p], 0);
+        const exp = {}; Z.forEach(p => { exp[p] = digitAt(target, p); });
+        const ballsOk = Z.every(p => state.balls[p].length === exp[p]);
+        const stat = state.sessionStats[state.levelId];
+
+        if (userAns === target && ballsOk) {
+            if (s < state.plan.length - 1) {
+                toast(s === 0 ? `✅ 第一列對了！\n接著算 ${state.a} × ${state.plan[1].mult} 個十。` : '✅ 第二列也對了！\n最後把兩列加起來。', 'ok', 2600);
+                nextAfter(() => startStage(s + 1), 1100);
+                return;
+            }
+            if (state.sysMode !== 'review_wrong' && stat) stat.correct++;
+            if (state.sysMode === 'challenge') {
+                state.challengeLvlCorrect++;
+                let msg = '🎉 答對了！繼續挑戰！';
+                if (state.challengeLvlCorrect >= PER_LEVEL) {
+                    state.challengeIndex++; state.challengeLvlCorrect = 0;
+                    if (state.challengeIndex >= LEVELS.length) {
+                        toast('🏆 恭喜！你已經全破所有關卡了！', 'ok', 3000);
+                        nextAfter(() => showSummaryAndSave(true));
+                        return;
+                    }
+                    msg = `🎉 過關！下一關：${LEVEL_NAMES[LEVELS[state.challengeIndex]]}`;
+                }
+                toast(msg, 'ok');
+                state.levelId = LEVELS[state.challengeIndex];
+                updateChallengeUI();
+                nextAfter(() => initGame());
+            } else if (state.sysMode === 'review_wrong') {
+                DB.removeWrong({ a: state.a, b: state.b });
+                toast('🎉 訂正成功！此題已從錯題本移除。', 'ok');
+                nextAfter(() => { switchSysMode('practice'); showWrongsModal(); });
+            } else {
+                toast('🎉 答對了！前往下一題！', 'ok');
+                nextAfter(() => initGame());
+            }
+        } else {
+            if (state.sysMode !== 'review_wrong') {
+                if (stat) stat.wrong++;
+                DB.addWrong({ a: state.a, b: state.b, level: state.levelId });
+            }
+            showCheckResult(userAns, target, exp, boxes);
+        }
+    }
+    $('btn-submit').addEventListener('click', submitAnswer);
+
+    function showCheckResult(userAns, target, exp, boxes) {
+        const st = curStage(), Z = state.zones, inp = state.inputs[state.stageIdx];
+        const zones = Z.filter(p => exp[p] > 0 || state.balls[p].length > 0 || boxes.includes(p));
+        const bad = zones.filter(p => state.balls[p].length !== exp[p]);
+        const ansOk = userAns === target;
+        const row = (label, ok, okText, badText) => `<div class="fb-row ${ok ? 'ok' : 'bad'}"><span>${label}</span><b>${ok ? okText : badText}</b></div>`;
+        let tip;
+        if (ansOk && bad.length) tip = '答案算對了！再把畫面上的球擺成跟答案一樣。';
+        else if (!ansOk && !bad.length) tip = '球都擺對了！數數看每一區有幾個，再對照你寫的答案。';
+        else tip = '先把每一區的球擺好，再數數看答案是多少。';
+        const typed = Z.map(p => boxes.includes(p) ? (inp[p] || '□') : (st.shift === 1 && p === 'one' ? '0' : '')).join('');
+        const html = `
+            <div class="fb-sec"><div class="fb-h">① 各區的球</div>
+                ${zones.map(p => row(`${NAME[p]}的球`, !bad.includes(p), '✅ 正確', '❌ 再檢查')).join('')}
+            </div>
+            <div class="fb-sec"><div class="fb-h">② ${state.plan.length > 1 && state.stageIdx < 2 ? '這一列的答案' : '整體答案'}</div>
+                ${row(`你的答案：<b class="fb-ans">${typed}</b>`, ansOk, '✅ 正確', '❌ 不正確')}
+            </div>
+            <p class="fb-tip">💡 ${tip}</p>
+            ${state.sysMode !== 'review_wrong' ? '<p class="fb-note">（本題已加入錯題本）</p>' : ''}
+            <button class="fb-close" data-action="close">繼續修正</button>`;
+        state.zoneError = { zones: bad, until: Date.now() + 5000 };
+        showModal('📝 檢查結果', html);
+    }
+
+    // ---------- 10. 球的排列（每排 10 顆，依份交替墊底色） ----------
+    function computeGeo(p, n) {
+        const sx = (zoneW() - 16) / 10;
+        const rows = Math.max(1, Math.ceil(n / 10));
+        const sy = Math.min(sx * 1.3, (BOTTOM - TOP) / rows);
+        return { x0: zoneX(p) + 8, sx, sy, r: Math.max(5, Math.min(C[p].r, sx * 0.41, sy * 0.4)) };
+    }
+    function cellPos(p, i) {
+        const g = state.geo[p] || computeGeo(p, i + 1);
+        return { x: g.x0 + g.sx * (i % 10 + 0.5), y: TOP + g.sy * (Math.floor(i / 10) + 0.5) };
+    }
+
+    class Ball {
+        constructor(x, y, type, group = 0, carried = false) {
+            this.x = x; this.y = y; this.type = type; this.group = group; this.carried = carried;
+            this.selected = false; this.isTargeted = false; this.busy = false; this.dragging = false;
+            this.targetX = null; this.targetY = null; this.onReachTarget = null;
+        }
+        update() {
+            if (this.targetX === null) return;
+            const dx = this.targetX - this.x, dy = this.targetY - this.y;
+            this.x += dx * 0.14; this.y += dy * 0.14;
+            if (Math.abs(dx) < 1.2 && Math.abs(dy) < 1.2) {
+                this.x = this.targetX; this.y = this.targetY; this.targetX = this.targetY = null;
+                if (this.onReachTarget) { const cb = this.onReachTarget; this.onReachTarget = null; cb(this); }
+            }
+        }
+    }
+
+    function arrangeBalls(animate = false) {
+        state.zones.forEach(p => {
+            const arr = state.balls[p];
+            arr.sort((x, y) => (x.carried ? 0 : x.group + 1) - (y.carried ? 0 : y.group + 1)); // 進位來的球排最前面，其餘依份排列
+            state.geo[p] = computeGeo(p, arr.length);
+            arr.forEach((b, i) => {
+                if (b.dragging || b.onReachTarget) return;
+                const pos = cellPos(p, i);
+                if (animate) { b.targetX = pos.x; b.targetY = pos.y; }
+                else { b.x = pos.x; b.y = pos.y; b.targetX = b.targetY = null; }
+            });
+        });
+        computeFrames();
+    }
+
+    // 引導模式：乘完後，把每一整排 10 顆框起來
+    function computeFrames() {
+        state.frames = [];
+        const step = curStep();
+        if (!step) return;
+        const zones = new Set(state.multiplied); // 不檢查模式：乘完的位隨時可以進位
+        if (state.guide.phase === 'carry') zones.add(step.zone);
+        zones.forEach(z => {
+            const arr = state.balls[z], g = state.geo[z]; let first = true;
+            for (let r = 0; r * 10 + 10 <= arr.length; r++) {
+                const row = arr.slice(r * 10, r * 10 + 10);
+                if (row.some(b => b.busy)) continue;
+                state.frames.push({ zone: z, balls: row, first, x: g.x0 - 2, y: TOP + g.sy * r + 1, w: g.sx * 10 + 4, h: g.sy - 2, dx: 0, dy: 0 });
+                first = false;
+            }
+        });
+    }
+
+    // ---------- 11. 小人：一次端一份 ----------
+    class Character {
+        constructor(mode, zone, k, group, targets) {
+            this.mode = mode; this.zone = zone; this.k = k; this.group = group; this.targets = targets || [];
+            this.x = W + 40; this.y = 500 + (IDX[zone] % 2) * 26;
+            this.state = 'walking_in'; this.speed = 5; this.stepCount = 0; this.t = 0;
+            this.hasLoad = mode === 'add';
+        }
+        update() {
+            this.stepCount += 0.22;
+            if (this.state === 'walking_in') {
+                let tx, ty;
+                if (this.mode === 'sub') {
+                    const alive = this.targets.filter(b => state.balls[this.zone].includes(b));
+                    if (!alive.length) { this.state = 'walking_out'; return; }
+                    tx = alive[0].x; ty = alive[0].y + 30;
+                } else {
+                    const pos = cellPos(this.zone, state.balls[this.zone].length); tx = pos.x; ty = pos.y + 30;
+                }
+                const dx = tx - this.x, dy = ty - this.y, dist = Math.hypot(dx, dy);
+                if (dist <= this.speed) this.state = 'acting';
+                else { this.x += dx / dist * this.speed; this.y += dy / dist * this.speed; }
+            } else if (this.state === 'acting') {
+                if (++this.t > 14) {
+                    const z = this.zone;
+                    if (this.mode === 'sub') {
+                        state.balls[z] = state.balls[z].filter(b => !this.targets.includes(b));
+                        this.hasLoad = true;
+                    } else {
+                        for (let j = 0; j < this.k; j++) state.balls[z].push(new Ball(this.x + (j - (this.k - 1) / 2) * 7, this.y - 34, z, this.group));
+                        this.hasLoad = false;
+                    }
+                    arrangeBalls(true);
+                    this.state = 'walking_out';
+                }
+            } else { this.x += this.speed * 1.2; this.y += this.speed * 0.12; }
+        }
+        draw() {
+            const bounce = Math.abs(Math.sin(this.stepCount)) * 4, leg = Math.sin(this.stepCount) * 5, dy = this.y - bounce;
+            ctx.fillStyle = '#3F4A5E';
+            ctx.beginPath(); ctx.roundRect(this.x - 8 + leg, dy + 10, 6, 12, 3); ctx.fill();
+            ctx.beginPath(); ctx.roundRect(this.x + 2 - leg, dy + 10, 6, 12, 3); ctx.fill();
+            ctx.fillStyle = C[this.zone].color;
+            ctx.beginPath(); ctx.roundRect(this.x - 12, dy - 20, 24, 32, 12); ctx.fill();
+            ctx.lineWidth = 2; ctx.strokeStyle = '#fff'; ctx.stroke();
+            const eo = this.state === 'walking_in' ? -3 : (this.state === 'walking_out' ? 3 : 0);
+            ctx.fillStyle = '#1A202C';
+            ctx.beginPath(); ctx.arc(this.x - 4 + eo, dy - 6, 2.5, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(this.x + 4 + eo, dy - 6, 2.5, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = 'rgba(255,120,120,.6)';
+            ctx.beginPath(); ctx.arc(this.x - 8 + eo, dy - 1, 3, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(this.x + 8 + eo, dy - 1, 3, 0, Math.PI * 2); ctx.fill();
+            if (this.hasLoad) { // 頭上端著一盤（一份）
+                const n = this.k, tw = n * 9 + 8, tx = this.x - tw / 2, ty = dy - 40;
+                ctx.beginPath(); ctx.roundRect(tx, ty, tw, 14, 6);
+                ctx.fillStyle = '#fff'; ctx.fill(); ctx.lineWidth = 1.5; ctx.strokeStyle = C[this.zone].ink; ctx.stroke();
+                ctx.fillStyle = C[this.zone].color;
+                for (let j = 0; j < n; j++) { ctx.beginPath(); ctx.arc(tx + 8.5 + j * 9, ty + 7, 3.5, 0, Math.PI * 2); ctx.fill(); }
+            }
+        }
+    }
+
+    function triggerAdd(p) {
+        if (state.locked) return;
+        const st = curStage(), k = groupSize(p);
+        if (st.kind !== 'mul' || k === 0) { toast(`【${NAME[p]}】這一步不用放球喔！`, 'info'); return; }
+        if (isGuided()) { const step = curStep(); if (!step || step.zone !== p || state.guide.phase !== 'place') return; }
+        if ((state.groupCount[p] || 0) >= 9) { toast('一位最多放 9 份喔！', 'warn'); return; }
+        const g = (state.groupCount[p] || 0) + 1;
+        state.groupCount[p] = g;
+        state.characters.push(new Character('add', p, k, g));
+        refreshActionUI();
+    }
+
+    function triggerSub(p) {
+        if (state.locked) return;
+        const st = curStage(), k = groupSize(p);
+        if (st.kind !== 'mul' || k === 0) return;
+        if (isGuided()) { const step = curStep(); if (!step || step.zone !== p || state.guide.phase !== 'place') return; }
+        const g = state.groupCount[p] || 0;
+        if (!g) { toast(`【${NAME[p]}】還沒有放任何一份喔！`, 'warn'); return; }
+        if (state.characters.some(c => c.zone === p && c.mode === 'add' && c.state !== 'walking_out')) { toast('⏳ 等小人把球放好再搬走喔！', 'warn'); return; }
+        const targets = state.balls[p].filter(b => b.group === g && !b.carried && !b.busy && !b.isTargeted);
+        if (targets.length !== k) { toast('這一份已經有球拿去進位了，\n不能整份搬走喔！可以按「本題重來」。', 'warn', 3000); return; }
+        targets.forEach(b => { b.isTargeted = true; b.selected = false; });
+        state.groupCount[p] = g - 1;
+        state.characters.push(new Character('sub', p, k, g, targets));
+        refreshActionUI();
+    }
+
+    // ---------- 12. 進位（合併 10 顆） ----------
+    function startAnim() { state.animating = true; return ++state.animToken; }
+    function endAnim(tok) { setTimeout(() => { if (tok === state.animToken) state.animating = false; }, 400); }
+
+    function merge(arr, from, to, dx, dy) {
+        const tok = startAnim(), x0 = zoneX(to), zw = zoneW();
+        dx = Math.max(x0 + 30, Math.min(x0 + zw - 30, dx));
+        dy = Math.max(TOP + 10, Math.min(BOTTOM - 10, dy));
+        let reached = 0;
+        arr.forEach(b => {
+            b.busy = true; b.selected = false; b.dragging = false; b.targetX = dx; b.targetY = dy;
+            b.onReachTarget = () => {
+                if (tok !== state.animToken) return;
+                if (++reached === arr.length) {
+                    state.balls[from] = state.balls[from].filter(x => !arr.includes(x));
+                    const k = Math.floor(arr.length / 10); // 每 10 顆換 1 顆
+                    for (let j = 0; j < k; j++) state.balls[to].push(new Ball(dx + (j - (k - 1) / 2) * 14, dy, to, 0, true));
+                    state.regroup[to] = (state.regroup[to] || 0) + k;
+                    arrangeBalls(true); updateCarryMarks(); endAnim(tok);
+                    afterMerge(from);
+                }
+            };
+        });
+        computeFrames();
+    }
+
+    // ---------- 13. 觸控 / 滑鼠 ----------
+    const inRect = (x, y, r) => x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
+    function canvasPoint(e) {
+        const rect = canvas.getBoundingClientRect();
+        return { px: (e.clientX - rect.left) * W / rect.width, py: (e.clientY - rect.top) * H / rect.height };
+    }
+    function findBallAt(px, py) {
+        let best = null, bestD = Infinity;
+        state.zones.forEach(t => {
+            const r = (state.geo[t] || { r: 10 }).r;
+            state.balls[t].forEach(b => {
+                if (b.busy || b.isTargeted) return;
+                const d = Math.hypot(px - b.x, py - b.y);
+                if (d <= r + 10 && d < bestD) { bestD = d; best = b; }
+            });
+        });
+        return best;
+    }
+    function dropAction(t, dz, n) {
+        if (t === dz) return null;
+        const L = leftOf(t);
+        if (dz === rightOf(t)) return { ok: false, text: '乘法不用把球拆開喔！\n滿 10 個才往左邊進位。' };
+        if (dz === L) return n > 0 && n % 10 === 0 ? { ok: true } : { ok: false, text: `沒有換成功！\n每 10 個${UNIT[t]}換 1 個${UNIT[L]}，要選 10 個、20 個、30 個……\n數數看你選了幾個？` };
+        return { ok: false, text: '只能拖到左邊隔壁的位數喔！' };
+    }
+    const clearSel = () => state.zones.forEach(p => state.balls[p].forEach(b => { b.selected = false; b.dragging = false; }));
+
+    canvas.addEventListener('contextmenu', e => e.preventDefault());
+    canvas.addEventListener('pointerdown', e => {
+        if (!e.isPrimary || dragInfo || state.animating || state.locked) return;
+        e.preventDefault();
+        const { px, py } = canvasPoint(e);
+        if (isGuided()) {
+            const f = state.frames.find(f => px >= f.x - 6 && px <= f.x + f.w + 6 && py >= f.y - 8 && py <= f.y + f.h + 8);
+            if (!f) return;
+            dragInfo = { frame: f, sx: px, sy: py, moved: false, pointerId: e.pointerId };
+            f.balls.forEach(b => { b.dragging = true; b.dsx = b.x; b.dsy = b.y; b.targetX = b.targetY = null; });
+        } else {
+            const hit = findBallAt(px, py);
+            if (hit) {
+                const t = hit.type;
+                state.zones.forEach(p => { if (p !== t) state.balls[p].forEach(b => { b.selected = false; }); });
+                dragInfo = { type: t, sx: px, sy: py, moved: false, target: hit, orig: hit.selected, pointerId: e.pointerId };
+                hit.selected = true;
+                state.balls[t].forEach(b => { if (b.selected) { b.dsx = b.x; b.dsy = b.y; } });
+                selectZone(t, false);
+            } else {
+                clearSel();
+                dragInfo = { lasso: true, zone: zoneAt(px), sx: px, sy: py, moved: false, pointerId: e.pointerId };
+            }
+        }
+        try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
+    });
+
+    canvas.addEventListener('pointermove', e => {
+        if (!dragInfo || e.pointerId !== dragInfo.pointerId) return;
+        e.preventDefault();
+        const { px, py } = canvasPoint(e);
+        const dx = px - dragInfo.sx, dy = py - dragInfo.sy;
+        if (!dragInfo.moved && Math.hypot(dx, dy) > 8) dragInfo.moved = true;
+        if (!dragInfo.moved) return;
+        if (dragInfo.frame) {
+            const f = dragInfo.frame; f.dx = dx; f.dy = dy;
+            f.balls.forEach(b => { b.x = b.dsx + dx; b.y = b.dsy + dy; });
+            const dz = zoneAt(px);
+            state.dragHint = dz !== f.zone ? { zone: dz } : null;
+            return;
+        }
+        if (dragInfo.lasso) {
+            const z = dragInfo.zone, zx0 = zoneX(z) + 6, zx1 = zoneX(z) + zoneW() - 6;
+            const x0 = Math.max(zx0, Math.min(dragInfo.sx, px)), x1 = Math.min(zx1, Math.max(dragInfo.sx, px));
+            const rect = { x: x0, y: Math.min(dragInfo.sy, py), w: Math.max(0, x1 - x0), h: Math.abs(dy) };
+            state.lasso = rect;
+            state.balls[z].forEach(b => { b.selected = !b.busy && !b.isTargeted && inRect(b.x, b.y, rect); });
+            return;
+        }
+        state.balls[dragInfo.type].filter(b => b.selected).forEach(b => { b.dragging = true; b.targetX = b.targetY = null; b.x = b.dsx + dx; b.y = b.dsy + dy; });
+        const dz = zoneAt(px);
+        state.dragHint = dz !== dragInfo.type ? { zone: dz } : null;
+    });
+
+    function endDrag(e, cancelled) {
+        if (!dragInfo || e.pointerId !== dragInfo.pointerId) return;
+        const { px, py } = canvasPoint(e);
+        const info = dragInfo; dragInfo = null;
+        state.dragHint = null;
+        try { canvas.releasePointerCapture(e.pointerId); } catch (_) {}
+
+        if (info.frame) {
+            const f = info.frame, L = leftOf(f.zone), dz = zoneAt(px);
+            f.balls.forEach(b => { b.dragging = false; }); f.dx = f.dy = 0;
+            if (info.moved && !cancelled && dz === L) merge(f.balls, f.zone, L, px, py);
+            else { if (info.moved && dz !== f.zone) toast(`要拖到左邊的【${NAME[L]}】喔！`, 'warn'); arrangeBalls(true); }
+            return;
+        }
+        if (info.lasso) {
+            if (!info.moved) selectZone(info.zone, false);
+            state.lasso = null;
+            return;
+        }
+        const t = info.type;
+        if (!info.moved) { if (info.orig) info.target.selected = false; }
+        else {
+            const sel = state.balls[t].filter(b => b.selected);
+            const act = cancelled ? null : dropAction(t, zoneAt(px), sel.length);
+            if (act && act.ok) merge(sel, t, zoneAt(px), px, py);
+            else if (act) toast(act.text, 'warn', 3000);
+            clearSel();
+        }
+        arrangeBalls(true);
+    }
+    canvas.addEventListener('pointerup', e => endDrag(e, false));
+    canvas.addEventListener('pointercancel', e => endDrag(e, true));
+
+    // ---------- 14. 初始化 ----------
+    function startStage(s) {
+        state.flowToken++;
+        state.stageIdx = s;
+        state.animToken++; state.animating = false;
+        ALL.forEach(p => { state.balls[p] = []; });
+        state.groupCount = {}; state.regroup = {}; state.characters = []; state.frames = []; state.multiplied = [];
+        state.lasso = null; state.dragHint = null; state.zoneError = null; dragInfo = null;
+        const st = curStage();
+        if (st.kind === 'add') { // 第一列的球淺底、第二列的球深底
+            const p1 = state.plan[0].target, p2 = state.plan[1].target;
+            state.zones.forEach(p => {
+                for (let k = 0; k < digitAt(p1, p); k++) state.balls[p].push(new Ball(0, 0, p, 1));
+                for (let k = 0; k < digitAt(p2, p); k++) state.balls[p].push(new Ball(0, 0, p, 2));
+            });
+        }
+        const boxes = boxesOf(s);
+        state.activeInput = boxes.length ? boxes[boxes.length - 1] : 'one';
+        buildSteps();
+        arrangeBalls(false);
+        if (isGuided()) activateStep();
+        else {
+            state.guide.phase = 'done';
+            const first = [...state.zones].reverse().find(p => groupSize(p) > 0);
+            state.workZone = first || 'one';
+            refreshAll();
+        }
+    }
+
+    function initGame(skipGen = false) {
+        if (!skipGen) {
+            if (state.sysMode === 'practice') state.levelId = $('level-select').value;
+            generate(state.levelId);
+        }
+        buildPlan();
+        state.inputs = state.plan.map(() => ({}));
+        buildZoneTabs();
+        buildEquation();
+        startStage(0);
+    }
+
+    $('btn-restart').addEventListener('click', () => { if (!state.locked) initGame(state.sysMode === 'review_wrong'); });
+    $('btn-redo-q').addEventListener('click', () => {
+        if (state.locked) return;
+        initGame(true);
+        toast('🔄 本題重新開始！', 'info', 1200);
+    });
+    $('level-select').addEventListener('change', () => initGame(false));
+    $('btn-finish-practice').addEventListener('click', () => showSummaryAndSave(false));
+    $('nav-practice').addEventListener('click', () => switchSysMode('practice'));
+    $('nav-challenge').addEventListener('click', () => switchSysMode('challenge'));
+    $('nav-records').addEventListener('click', showRecordsModal);
+    $('nav-wrongs').addEventListener('click', showWrongsModal);
+
+    // ---------- 15. 使用說明 ----------
+    function showHelpModal() {
+        const html = `
+        <div class="help">
+            <div class="help-tabs">
+                <button class="help-tab active" data-help="use">📖 使用說明</button>
+                <button class="help-tab" data-help="one">✖️ 一位數乘法</button>
+                <button class="help-tab" data-help="two">✖️ 二位數乘法</button>
+            </div>
+
+            <section class="help-page" data-page="use">
+                <h3>先看懂算式</h3>
+                <ul>
+                    <li>23 × 4 讀作「23 乘以 4」：<b>被乘數 23 是一份的量</b>，<b>乘數 4 是有幾份</b>，也就是 4 個 23。</li>
+                    <li>畫面分成千位、百位、十位、個位。球上寫著它的值，畫面上方會寫「一份 ○ 個」。</li>
+                    <li>球每排擺 10 顆。同一份的球墊著同樣的底色，兩種底色交替，看得出放了幾份。</li>
+                    <li>虛線外框、寫著「進」的球，是從右邊進位過來的。</li>
+                </ul>
+
+                <h3>練習模式（照步驟來）</h3>
+                <ol>
+                    <li><b>從個位開始</b>，其他位先鎖住。按「➕ 放入 1 份」，小人會端一份球進來，按鈕角上的數字是你按了幾次。</li>
+                    <li>放好後按「✔ 乘完了」。份數對了，滿 10 顆的那一排會自動框起來。（設定裡取消勾選「檢查份數」時，按下就直接進到下一位：滿 10 的可以馬上進位，也可以每一位都乘完後，再從個位開始一位一位進位；送出答案時才檢查。）</li>
+                    <li>把框拖到<b>左邊一格</b>，10 顆就換成 1 顆大球，直式上方會出現進位的數字。</li>
+                    <li>接著做十位、百位……全部完成後，數數看每一區的球，寫下答案送出。</li>
+                </ol>
+
+                <h3>闖關模式（自己來）</h3>
+                <ul>
+                    <li>每一區都可以放，順序自己決定，也不會自動框起來。</li>
+                    <li>點一下球可以選起來；在空白處拖出一個框，可以一次選很多顆。選 10 顆拖到左邊一格，就換成 1 顆大球；選 20 顆就換成 2 顆，選 30 顆換成 3 顆，依此類推。</li>
+                    <li>共 5 關，每關答對 5 題就前進下一關。</li>
+                </ul>
+
+                <h3>輸入與送出</h3>
+                <ul>
+                    <li>用小鍵盤輸入答案，會從個位開始自動往左跳；點答案格可以改填別的位數。</li>
+                    <li>送出後會檢查兩件事：<b>① 各區的球對不對</b>、<b>② 答案對不對</b>。兩個都對才過關，答錯的題目會放進錯題本。</li>
+                    <li>按住小鍵盤的標題列可以拖到任何地方；按 📌 停回右邊，按 － 收起來。</li>
+                </ul>
+            </section>
+
+            <section class="help-page" data-page="one" hidden>
+                <p class="help-key">🔑 從<b>個位</b>開始乘，滿 10 個就換成 1 個十，送到左邊，再加進下一位。</p>
+                <div class="help-eg">
+                    <div class="help-eq"><span class="carry"> 1 </span><br> 23<br>× 4<br><span class="line"> <span class="ans">92</span></span></div>
+                    <ol>
+                        <li><b>先乘個位</b>：一份 3 個一，放 4 份。3 × 4 = 12，個位有 12 個。</li>
+                        <li><b>滿 10 就進位</b>：把 10 個一拖到十位，換成 1 個十。個位剩 2 個，寫 <b>2</b>；十位上方記一個小 <b>1</b>。</li>
+                        <li><b>再乘十位</b>：一份 2 個十，放 4 份。2 × 4 = 8，再加進位的 1，等於 9，寫 <b>9</b>。</li>
+                        <li><b>答案</b>：92。數數畫面上的球：9 個十、2 個一，跟答案一樣。</li>
+                    </ol>
+                </div>
+                <p class="help-tip">💡 最常忘記的地方：乘完之後，要<b>再加上進位的數</b>！</p>
+                <p class="help-tip">💡 三位數也一樣：個位 → 十位 → 百位，一位一位往左乘。</p>
+            </section>
+
+            <section class="help-page" data-page="two" hidden>
+                <p class="help-key">🔑 23 × 14，就是 14 份 23。把 14 份拆成 <b>4 份</b>和 <b>10 份</b>，分兩列算，最後加起來。</p>
+                <div class="help-eg">
+                    <div class="help-eq">  23<br>× 14<br><span class="line">  <span class="ans">92</span></span><br> <span class="ans">23</span><span class="faint">0</span><br><span class="line"> <span class="ans">322</span></span></div>
+                    <ol>
+                        <li><b>第一列 23 × 4</b>：跟一位數乘法一樣，從個位開始乘、進位，得到 <b>92</b>。</li>
+                        <li><b>第二列 23 × 1 個十</b>：乘數十位的 1 代表 1 個十。乘以 10，每一位都往左移一格，所以球直接放到十位和百位，寫成 <b>23</b>，往左空一格。</li>
+                        <li><b>相加</b>：把兩列的球合起來，滿 10 一樣進位。92 + 230 = <b>322</b>。</li>
+                    </ol>
+                </div>
+                <p class="help-tip">💡 第二列個位那個淡淡的 0 可以不寫，但要記得：<b>第二列是從十位開始寫</b>。</p>
+            </section>
+        </div>`;
+        showModal('❓ 使用說明', html);
+    }
+    $('nav-help').addEventListener('click', showHelpModal);
+
+    // ---------- 16. 畫布尺寸 ----------
+    function resizeCanvas() {
+        const wrap = $('canvas-wrapper');
+        const rw = wrap.clientWidth, rh = wrap.clientHeight;
+        if (!rw || !rh) return;
+        const scale = Math.min(rw / W, rh / H);
+        const cw = Math.floor(W * scale), ch = Math.floor(H * scale);
+        canvas.style.width = cw + 'px'; canvas.style.height = ch + 'px';
+        const dpr = Math.min(window.devicePixelRatio || 1, 3);
+        canvas.width = Math.round(cw * dpr); canvas.height = Math.round(ch * dpr);
+        ctx.setTransform(canvas.width / W, 0, 0, canvas.height / H, 0, 0);
+    }
+    if ('ResizeObserver' in window) new ResizeObserver(resizeCanvas).observe($('canvas-wrapper'));
+    window.addEventListener('resize', resizeCanvas);
+    window.addEventListener('orientationchange', () => setTimeout(resizeCanvas, 200));
+
+    // ---------- 17. 繪圖 ----------
+    function drawCell(b) {
+        const g = state.geo[b.type]; if (!g) return;
+        const w = g.sx - 2, h = g.sy - 4;
+        ctx.beginPath(); ctx.roundRect(b.x - w / 2, b.y - h / 2, w, h, Math.min(5, w / 4));
+        if (b.carried) {
+            ctx.fillStyle = '#FFFFFF'; ctx.fill();
+            ctx.save(); ctx.setLineDash([3, 3]); ctx.lineWidth = 1.5; ctx.strokeStyle = C[b.type].ink; ctx.stroke(); ctx.restore();
+        } else { ctx.fillStyle = tint(b.type, b.group % 2 === 1 ? 0.10 : 0.42); ctx.fill(); }
+    }
+
+    function drawBall(b) {
+        const r = (state.geo[b.type] || { r: 10 }).r, x = b.x, y = b.y, t = b.type;
+        if (b.selected) {
+            ctx.beginPath(); ctx.arc(x, y, r + 6, 0, Math.PI * 2); ctx.fillStyle = 'rgba(31,42,68,.85)'; ctx.fill();
+            ctx.beginPath(); ctx.arc(x, y, r + 4, 0, Math.PI * 2); ctx.fillStyle = '#FFD43B'; ctx.fill();
+        }
+        ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.fillStyle = C[t].color; ctx.fill();
+        ctx.lineWidth = 1.5; ctx.strokeStyle = '#fff'; ctx.stroke();
+        ctx.beginPath(); ctx.arc(x - r * 0.35, y - r * 0.38, r * 0.2, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(255,255,255,.45)'; ctx.fill();
+        let label = null, fs = 0;
+        if (b.carried) {
+            ctx.save(); ctx.setLineDash([3, 2]); ctx.lineWidth = 1.6; ctx.strokeStyle = C[t].ink;
+            ctx.beginPath(); ctx.arc(x, y, r + 2.6, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
+            label = '進'; fs = r * 1.1;
+        } else {
+            label = String(VAL[t]); fs = r * [1.05, 0.85, 0.62, 0.5][label.length - 1];
+        }
+        if (fs >= 7.5) {
+            ctx.font = `800 ${Math.round(fs)}px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.lineWidth = 2.5; ctx.strokeStyle = 'rgba(0,0,0,.28)'; ctx.strokeText(label, x, y + 1);
+            ctx.fillStyle = '#fff'; ctx.fillText(label, x, y + 1);
+        }
+    }
+
+    function draw() {
+        ctx.clearRect(0, 0, W, H);
+        ctx.fillStyle = '#FFFFFF'; ctx.fillRect(0, 0, W, H);
+        const errZones = (state.zoneError && Date.now() < state.zoneError.until) ? state.zoneError.zones : [];
+        const zw = zoneW(), step = curStep(), g = isGuided();
+
+        state.zones.forEach(p => {
+            const x = zoneX(p), sel = state.workZone === p, cx = x + zw / 2;
+            ctx.beginPath(); ctx.roundRect(x + 6, 8, zw - 12, H - 16, 16);
+            ctx.fillStyle = tint(p, sel ? 0.12 : 0.04); ctx.fill();
+            if (sel && (!g || step)) { ctx.lineWidth = 3; ctx.strokeStyle = tint(p, 0.75); ctx.stroke(); }
+            ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+            ctx.font = `800 24px ${FONT}`; ctx.fillStyle = C[p].ink;
+            ctx.fillText(NAME[p], cx, 38);
+            ctx.font = `600 14px ${FONT}`; ctx.fillStyle = '#6B7280';
+            ctx.fillText(`1 個 = ${VAL[p]}`, cx, 57);
+            const k = groupSize(p);
+            if (k > 0) { ctx.font = `700 14px ${FONT}`; ctx.fillStyle = tint(p, 0.9); ctx.fillText(`一份 ${k} 個${UNIT[p]}`, cx, 78); }
+            if (sel && (!g || step)) { ctx.font = `800 15px ${FONT}`; ctx.fillStyle = C[p].ink; ctx.fillText('▼ 小人工作區 ▼', cx, H - 18); }
+            if (errZones.includes(p)) {
+                ctx.save(); ctx.lineWidth = 5; ctx.strokeStyle = state.flashState ? '#E0483E' : 'rgba(224,72,62,.45)';
+                ctx.beginPath(); ctx.roundRect(x + 6, 8, zw - 12, H - 16, 16); ctx.stroke(); ctx.restore();
+                ctx.font = `800 16px ${FONT}`; ctx.fillStyle = '#E0483E';
+                ctx.fillText('❌ 這一區再檢查', cx, H - 44);
+            }
+        });
+
+        // 底色 → 球（拖曳中的畫在最上層）
+        state.zones.forEach(p => state.balls[p].forEach(b => { b.update(); drawCell(b); }));
+        state.zones.forEach(p => state.balls[p].forEach(b => { if (!b.dragging && !b.selected) drawBall(b); }));
+
+        // 引導模式：鎖住的區淡化（進位時左邊那格不淡化）
+        if (g && step) {
+            state.zones.forEach(p => {
+                const open = p === step.zone || (state.guide.phase === 'carry' && p === leftOf(step.zone))
+                    || state.frames.some(f => f.zone === p || leftOf(f.zone) === p);
+                if (open) return;
+                ctx.beginPath(); ctx.roundRect(zoneX(p) + 6, 8, zw - 12, H - 16, 16);
+                ctx.fillStyle = 'rgba(255,255,255,.5)'; ctx.fill();
+            });
+        }
+
+        state.frames.forEach(f => {
+            const x = f.x + f.dx, y = f.y + f.dy;
+            ctx.save();
+            ctx.beginPath(); ctx.roundRect(x, y, f.w, f.h, 8);
+            ctx.fillStyle = 'rgba(242,183,5,.10)'; ctx.fill();
+            ctx.lineWidth = 3; ctx.strokeStyle = state.flashState ? '#F2B705' : '#C98F00'; ctx.stroke();
+            if (!f.first && !f.dx && !f.dy) { ctx.restore(); return; } // 每一區只在第一個框（或拖曳中的框）標示
+            const tw = 40, tx = x + f.w - tw - 4, ty = y - 10;
+            ctx.beginPath(); ctx.roundRect(tx, ty, tw, 18, 9); ctx.fillStyle = '#F2B705'; ctx.fill();
+            ctx.font = `800 12px ${FONT}`; ctx.fillStyle = '#3D2E00'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.fillText('◀ 拖我', tx + tw / 2, ty + 9.5);
+            ctx.restore();
+        });
+        state.zones.forEach(p => state.balls[p].forEach(b => { if (b.dragging || b.selected) drawBall(b); }));
+
+        if (state.dragHint) {
+            const z = state.dragHint.zone;
+            ctx.save(); ctx.setLineDash([12, 8]); ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(31,42,68,.45)';
+            ctx.beginPath(); ctx.roundRect(zoneX(z) + 6, 8, zw - 12, H - 16, 16); ctx.stroke(); ctx.restore();
+        }
+        if (state.lasso) {
+            const r = state.lasso;
+            ctx.save(); ctx.setLineDash([8, 6]); ctx.lineWidth = 2.5; ctx.strokeStyle = '#1F2A44';
+            ctx.fillStyle = 'rgba(255,212,59,.18)';
+            ctx.beginPath(); ctx.roundRect(r.x, r.y, r.w, r.h, 10); ctx.fill(); ctx.stroke(); ctx.restore();
+        }
+
+        state.characters.forEach(c => { c.update(); c.draw(); });
+        state.characters = state.characters.filter(c => c.x < W + 120);
+        requestAnimationFrame(draw);
+    }
+
+    // ---------- 18. 小鍵盤（停靠 / 浮動） ----------
+    const keypad = $('keypad'), kpHandle = $('keypad-handle'), kpToggle = $('keypad-toggle'), kpDockBtn = $('keypad-dock');
+    const dock = $('right-dock'), mainBox = $('main-container');
+    let kpPos = { x: 0, y: 0 }, kpDrag = null;
+    const isDocked = () => keypad.classList.contains('docked');
+    function saveKp() { try { localStorage.setItem(KEYS.kp, JSON.stringify({ docked: isDocked(), x: kpPos.x, y: kpPos.y, collapsed: keypad.classList.contains('collapsed') })); } catch (e) {} }
+    function loadKp() { try { return JSON.parse(localStorage.getItem(KEYS.kp) || 'null'); } catch (e) { return null; } }
+    function placeKeypad(x, y) {
+        const w = keypad.offsetWidth, h = keypad.offsetHeight;
+        const maxX = Math.max(4, window.innerWidth - w - 4), maxY = Math.max(4, window.innerHeight - h - 4);
+        kpPos = { x: Math.min(Math.max(4, x), maxX), y: Math.min(Math.max(4, y), maxY) };
+        keypad.style.transform = `translate(${kpPos.x}px, ${kpPos.y}px)`;
+    }
+    function dockKeypad() {
+        if (keypad.parentElement !== dock) dock.appendChild(keypad);
+        keypad.classList.add('docked'); keypad.style.transform = '';
+        mainBox.classList.remove('dock-empty');
+    }
+    function undockKeypad(x, y) {
+        if (keypad.parentElement !== document.body) document.body.appendChild(keypad);
+        keypad.classList.remove('docked');
+        mainBox.classList.add('dock-empty');
+        placeKeypad(x, y);
+    }
+    kpHandle.addEventListener('pointerdown', e => {
+        if (!e.isPrimary || e.target.closest('.kp-icon')) return;
+        e.preventDefault();
+        const r = keypad.getBoundingClientRect();
+        kpDrag = { id: e.pointerId, dx: e.clientX - r.left, dy: e.clientY - r.top, sx: e.clientX, sy: e.clientY, started: false };
+        try { kpHandle.setPointerCapture(e.pointerId); } catch (_) {}
+    });
+    kpHandle.addEventListener('pointermove', e => {
+        if (!kpDrag || e.pointerId !== kpDrag.id) return;
+        if (!kpDrag.started) {
+            if (Math.hypot(e.clientX - kpDrag.sx, e.clientY - kpDrag.sy) < 6) return;
+            kpDrag.started = true;
+            keypad.classList.add('dragging');
+            if (isDocked()) { undockKeypad(e.clientX - kpDrag.dx, e.clientY - kpDrag.dy); try { kpHandle.setPointerCapture(e.pointerId); } catch (_) {} }
+        }
+        placeKeypad(e.clientX - kpDrag.dx, e.clientY - kpDrag.dy);
+    });
+    const endKpDrag = e => {
+        if (!kpDrag || e.pointerId !== kpDrag.id) return;
+        const started = kpDrag.started;
+        kpDrag = null; keypad.classList.remove('dragging');
+        try { kpHandle.releasePointerCapture(e.pointerId); } catch (_) {}
+        if (started) saveKp();
+    };
+    kpHandle.addEventListener('pointerup', endKpDrag);
+    kpHandle.addEventListener('pointercancel', endKpDrag);
+    kpToggle.addEventListener('click', () => {
+        const c = keypad.classList.toggle('collapsed');
+        kpToggle.textContent = c ? '＋' : '－';
+        if (!isDocked()) placeKeypad(kpPos.x, kpPos.y);
+        saveKp();
+    });
+    kpDockBtn.addEventListener('click', () => { dockKeypad(); saveKp(); });
+    window.addEventListener('resize', () => { if (!isDocked()) placeKeypad(kpPos.x, kpPos.y); });
+    (function initKeypad() {
+        const saved = loadKp();
+        if (saved && saved.collapsed) { keypad.classList.add('collapsed'); kpToggle.textContent = '＋'; }
+        if (saved && saved.docked === false) undockKeypad(saved.x, saved.y); else dockKeypad();
+        keypad.classList.add('ready');
+    })();
+
+    // ---------- 19. 全螢幕 ----------
+    const fsBtn = $('nav-fullscreen');
+    const fsElement = () => document.fullscreenElement || document.webkitFullscreenElement;
+    const fsSupported = !!(document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen);
+    function updateFsBtn() { fsBtn.textContent = fsElement() ? '🗗 離開全螢幕' : '⛶ 全螢幕'; }
+    fsBtn.addEventListener('click', async () => {
+        if (!fsSupported) { toast('這台裝置的瀏覽器不支援全螢幕。', 'info', 3000); return; }
+        try {
+            if (fsElement()) await (document.exitFullscreen ? document.exitFullscreen() : document.webkitExitFullscreen());
+            else { const el = document.documentElement; await (el.requestFullscreen ? el.requestFullscreen({ navigationUI: 'hide' }) : el.webkitRequestFullscreen()); }
+        } catch (err) { toast('這裡無法切換全螢幕，可以用瀏覽器本身的全螢幕功能。', 'warn', 3000); }
+    });
+    document.addEventListener('fullscreenchange', () => { updateFsBtn(); setTimeout(resizeCanvas, 100); });
+    document.addEventListener('webkitfullscreenchange', () => { updateFsBtn(); setTimeout(resizeCanvas, 100); });
+
+    resizeCanvas();
+    switchSysMode('practice');
+    requestAnimationFrame(draw);
+})();
+</script>
+
+</body></html>
