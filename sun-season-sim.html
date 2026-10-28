@@ -4,6 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="太陽與季節">
 <title>太陽視運動與季節模擬器</title>
 <!--
   太陽視運動與季節模擬器（第一階段）
@@ -69,6 +72,14 @@ button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px s
 #stage { grid-area: stage; position: relative; overflow: hidden; min-height: 0; min-width: 0; }
 #drawbar { grid-area: draw; }
 body.sb-closed #sidebar { display: none; }
+/* 觸控裝置全螢幕：上緣 22px 為安全區（系統的下滑退出手勢從這裡開始），模擬畫面往下移 */
+body.fs-touch #app { top: 22px; }
+body.fs-touch::before { content: "最上緣往下滑會退出全螢幕"; position: fixed; left: 0; right: 0; top: 0; height: 22px; z-index: 50;
+  display: flex; align-items: center; justify-content: center; font-size: 11px; color: var(--text-2); background: var(--chrome); border-bottom: 1px solid var(--line); }
+/* 觸控時避免長按選取文字、跳出放大鏡或選單 */
+#app { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+#app input, #app select, #textEntry input, .libitem input { -webkit-user-select: text; user-select: text; }
+button, select, .btn { touch-action: manipulation; }
 
 /* ---------- 共用按鈕 ---------- */
 .btn {
@@ -2401,9 +2412,8 @@ function rebuildPane(p) {
 function rebuildAllViews() { for (const p of panes) if (p.view) { p.view.saveCam(); rebuildPane(p); } invalidate(); }
 /** 依版面計算各視窗位置 */
 function layoutPanes() {
-  const W = stageW, H = stageH, g = 6, narrow = W < 1100; // iPad 等較小螢幕最多 2 格
-  let lay = state.layout;
-  if (narrow && (lay === '3' || lay === '4')) lay = '2';
+  const W = stageW, H = stageH, g = 6;
+  const lay = state.layout;   // 版面由使用者決定（iPad、手機也可用 1 大 2 小或 4 格）
   const n = { '1': 1, '2': 2, '3': 3, '4': 4 }[lay];
   const R = [];
   if (lay === '1') R.push([0, 0, W, H]);
@@ -2580,16 +2590,31 @@ function setTheme(k, userChange) {
   if (userChange) state.opts.grid = k !== 'plain'; // 簡潔地圖預設只留陸地與海洋
   rebuildAllViews();
 }
+const isTouch = matchMedia('(pointer: coarse)').matches;
+const isStandalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
 function toggleFull() {
   const el = document.documentElement, d = document;
   const inFs = d.fullscreenElement || d.webkitFullscreenElement;
   if (inFs) { (d.exitFullscreen || d.webkitExitFullscreen).call(d); return; }
+  if (isStandalone()) { toast('已經是全螢幕的主畫面 App 模式'); return; }
   const req = el.requestFullscreen || el.webkitRequestFullscreen;
+  const iosTip = '要穩定的全螢幕，請在 Safari 按「分享」→「加入主畫面」，再從主畫面圖示開啟';
   if (req) {
-    try { const r = req.call(el); if (r && r.catch) r.catch(() => toast('這個頁面不允許全螢幕，請改用「放大」按鈕，或另開新視窗使用')); }
-    catch (e) { toast('這個頁面不允許全螢幕，請改用「放大」按鈕'); }
-  } else toast('這個瀏覽器不支援全螢幕，請改用視窗的「放大」按鈕');
+    try {
+      const r = req.call(el);
+      if (r && r.catch) r.catch(() => toast('這個頁面不允許全螢幕，請改用「放大」或收起設定欄', 3500));
+      if (isTouch) setTimeout(() => toast('提示：在畫面最上緣往下滑會退出全螢幕（系統手勢）', 3500), 600);
+    } catch (e) { toast('這個頁面不允許全螢幕，請改用「放大」或收起設定欄', 3500); }
+  } else toast(/iP(hone|ad|od)/.test(navigator.userAgent) || isTouch ? iosTip : '這個瀏覽器不支援全螢幕，請改用「放大」或收起設定欄', 5000);
 }
+/** 全螢幕狀態改變：觸控裝置在上緣留一條不可操作的安全區，避免拖曳時誤觸系統的「下滑退出」手勢 */
+function onFsChange() {
+  const fs = !!(document.fullscreenElement || document.webkitFullscreenElement);
+  document.body.classList.toggle('fs-touch', fs && isTouch);
+  $('fullBtn').textContent = fs ? '離開全螢幕' : '全螢幕';
+}
+document.addEventListener('fullscreenchange', onFsChange);
+document.addEventListener('webkitfullscreenchange', onFsChange);
 function syncTopbar() {
   const loc = state.loc, t = state.utc, p = localParts(t, loc);
   $('dateInp').value = `${p.y}-${pad2(p.m + 1)}-${pad2(p.d)}`;
@@ -3184,6 +3209,7 @@ const HELP_HTML = `
   <li><b>換地點</b>：左側地點選單；每個視窗也可以另選地點，做不同地點並陳比較。天球視窗的經緯度滑桿可快速調整。</li>
   <li><b>轉動畫面</b>：在視窗中拖曳；雙指或滑鼠滾輪縮放。按「放大」讓單一視窗佔滿畫面。</li>
   <li><b>平移畫面</b>：雙指同時拖移；滑鼠用右鍵、中鍵或按住 Shift 拖曳。視窗右上角「重設」恢復初始方位、角度、縮放與平移。</li>
+  <li><b>iPad 全螢幕</b>：Safari 的全螢幕在畫面最上緣往下滑就會退出（系統手勢）。上課建議在 Safari 按「分享」→「加入主畫面」，從主畫面圖示開啟，就是沒有網址列的全螢幕 App 模式，不會誤退出。</li>
   <li><b>設定欄</b>：左側設定欄右上角「«」可收起，讓模擬區佔滿畫面；左上角「»」再展開。</li>
 </ul>
 <h3>視角</h3>
