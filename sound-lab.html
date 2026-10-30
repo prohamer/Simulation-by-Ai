@@ -386,7 +386,7 @@ const FILE = {
 const YTS = {
   loaded:()=>Y.ready&&Y.dur>0, time:ytNow, dur:()=>Y.dur, paused:()=>!(Y.state===1||Y.state===3),
   play:()=>Y.player&&Y.player.playVideo(), pause:()=>Y.player&&Y.player.pauseVideo(),
-  seek:t=>{ if(!Y.player) return; Y.player.seekTo(t,true); Y.est={vt:t,at:performance.now(),rep:null}; lastVT=null; },
+  seek:t=>{ if(!Y.player) return; Y.player.seekTo(t,true); Y.est={vt:t,at:performance.now(),rep:null}; lastVT=null; envT=null; },
   getSel:()=>Y.sel, setSel:v=>{ Y.sel=v; }
 };
 const src = () => mode==='file' ? FILE : YTS;
@@ -559,6 +559,8 @@ function renderWave(){
   if(ampZ>1.01){ const lim=1/ampZ, lab=v=>(v<0.01?v.toFixed(3):v.toFixed(2));
     c.font='10.5px '+css('--font-mono'); c.fillStyle=css('--ruler');
     c.fillText('+'+lab(lim),4,top+11); c.fillText('−'+lab(lim),4,top+ht-3); c.fillText('振幅 ×'+(+ampZ.toFixed(1)),4,mid-4); }
+  if(mode==='yt' && Y.env && Y.env.any && v.viewDur<=minView()*1.6){ c.font='12px '+css('--font-body'); c.fillStyle=css('--muted');
+    c.fillText('已放大到紀錄器的極限（每格 '+(Y.env.step*1000)+' 毫秒）。要看單一週期的波形，請用「取出 A–B 段落」。',16,h-10); }
   if(mode==='yt' && !(Y.env&&Y.env.any)){ c.fillStyle=css('--muted'); c.font='13px '+css('--font-body');
     c.fillText(capSrc?'播放 YouTube 後，聽過的部分會畫在這裡':'按上方「開啟 YouTube 波形紀錄器」後播放，聽過的部分會畫在這裡',16,RULER+40); }
   drawOverlay();
@@ -872,7 +874,7 @@ async function startCapture(kind){
     capKind='mic'; capSrc=actx.createMediaStreamSource(new MediaStream(at)); connectScope();
     at[0].addEventListener('ended',stopCapture);
     capMsg('麥克風收音中：請讓 YouTube 從喇叭播放（不要戴耳機），音量開大一點，環境保持安靜。收到的是室內的聲音，波形會比分頁擷取粗糙一些，但看頻率、音高沒有問題。只畫圖；取出段落時才會暫存。');
-    updateScopeSrc(); renderWave(); return;
+    updateScopeSrc(); renderWave(); startTapFeed(); return;
   }
   if(!canTabCapture()){ capMsg('這台裝置的瀏覽器（iPad、手機）不支援擷取分頁聲音，請改按「用麥克風收音」。',true); return; }
   try{
@@ -892,7 +894,7 @@ async function startCapture(kind){
   capKind='tab'; capSrc=actx.createMediaStreamSource(new MediaStream(at)); connectScope();
   at[0].addEventListener('ended',stopCapture);
   capMsg('紀錄中：播放 YouTube 時，聽過的部分會畫進波形區，可以縮放、點選、選取段落。只畫圖，不保存聲音。');
-  updateScopeSrc(); renderWave();
+  updateScopeSrc(); renderWave(); startTapFeed();
 }
 /* ---- 取出 A–B 段落（暫存於記憶體，不提供存檔） ---- */
 const GRAB_MAX=30, GRAB_PAD=0.15;
@@ -922,7 +924,35 @@ async function ensureTap(){
   const sink=actx.createGain(); sink.gain.value=0; tapNode.connect(sink).connect(actx.destination);
 }
 function setTap(on){ tapOn=on; if(tapNode&&tapNode.port) tapNode.port.postMessage(on?'on':'off'); }
+/* 連續紀錄：每一塊音訊依序接在上一塊後面，不靠畫面更新，因此不會漏段 */
+let envT=null, tapLive=false;
+function envFromChunk(chunk){
+  const E=Y.env; if(!E || Y.state!==1){ envT=null; return; }
+  const sr=actx.sampleRate, n=chunk.length, span=n/sr*Y.rate;
+  const lat=(capKind==='mic'?0.08:0.04)*Y.rate;
+  const ideal=ytNow()-span-lat;
+  let len=span;
+  if(envT===null || Math.abs(envT-ideal)>0.3) envT=Math.max(0,ideal);
+  else len=span+Math.max(-0.3*span,Math.min(0.3*span,(ideal-envT)*0.05));
+  const st=E.step, last=E.mn.length-1, k=len/n;
+  let b=Math.floor(envT/st), lo=1, hi=-1;
+  for(let i=0;i<n;i++){
+    const bi=Math.floor((envT+i*k)/st);
+    if(bi!==b){ putEnv(E,b,lo,hi,last); b=bi; lo=1; hi=-1; }
+    const v=chunk[i]; if(v<lo)lo=v; if(v>hi)hi=v;
+  }
+  putEnv(E,b,lo,hi,last);
+  envT+=len; E.any=true;
+}
+function putEnv(E,b,lo,hi,last){ if(b<0||b>last||hi<lo) return; if(E.has[b]){ if(lo<E.mn[b])E.mn[b]=lo; if(hi>E.mx[b])E.mx[b]=hi; } else { E.mn[b]=lo; E.mx[b]=hi; E.has[b]=1; } }
+async function startTapFeed(){
+  try{ await ensureTap(); }catch(e){ tapLive=false; return; }
+  if(!capSrc) return;
+  try{ capSrc.disconnect(tapNode); }catch(_){}
+  capSrc.connect(tapNode); if(!tapOn) setTap(true); tapLive=true; envT=null;
+}
 function onTapData(chunk){
+  if(mode==='yt' && capSrc) envFromChunk(chunk);
   if(!grab) return;
   const vt=ytNow();
   if(!grab.started){ if(Y.state===1 && vt>=grab.a-GRAB_PAD) grab.started=true; else return; }
@@ -936,18 +966,15 @@ async function grabSegment(){
   if(!sel){ toast('請先在波形上拖曳選取要取出的一段'); return; }
   if(sel.b-sel.a>GRAB_MAX){ toast('一次最長 '+GRAB_MAX+' 秒，請把選取範圍縮短'); return; }
   if(sel.b-sel.a<0.2){ toast('選取範圍太短'); return; }
-  try{ await ensureTap(); }catch(e){ capMsg('這個瀏覽器無法暫存聲音：'+(e&&e.message||e),true); return; }
-  try{ capSrc.disconnect(tapNode); }catch(_){}
-  capSrc.connect(tapNode);
+  if(!tapLive) await startTapFeed();
+  if(!tapLive){ capMsg('這個瀏覽器無法暫存聲音。',true); return; }
   grab={a:sel.a, b:sel.b, chunks:[], n:0, started:false, prevRate:Y.rate};
-  setTap(true);
   try{ Y.player.setPlaybackRate(1); Y.rate=1; }catch(_){}
   $('grabBtn').disabled=true; $('grabBtn').textContent='取出中…（原速播放 '+(sel.b-sel.a).toFixed(1)+' 秒）';
   YTS.seek(Math.max(0,sel.a-0.6)); Y.player.playVideo();
 }
 function endGrab(ok, why){
-  const g=grab; if(!g) return; grab=null; setTap(false);
-  try{ capSrc&&capSrc.disconnect(tapNode); }catch(_){}
+  const g=grab; if(!g) return; grab=null;
   try{ Y.player.pauseVideo(); Y.player.setPlaybackRate(g.prevRate); Y.rate=g.prevRate; }catch(_){}
   $('grabBtn').disabled=false; $('grabBtn').textContent='取出 A–B 段落到音檔模式';
   if(!ok || g.n < actx.sampleRate*0.1){ if(why) toast(why); else if(ok) toast('沒有收到聲音，請確認分享時有勾選分頁音訊'); return; }
@@ -970,6 +997,7 @@ $('tempClear').onclick=()=>{ clearTemp(); toast('已清除暫存片段'); };
 
 function stopCapture(){
   if(grab) endGrab(false,'波形紀錄器已關閉，取消取出段落');
+  if(tapOn) setTap(false); tapLive=false; envT=null;
   if(capStream) capStream.getTracks().forEach(t=>t.stop());
   try{ capSrc&&capSrc.disconnect(); }catch(_){}
   capStream=null; capSrc=null; capKind=null; lastVT=null; capMsg(''); updateScopeSrc(); renderWave();
@@ -1039,7 +1067,7 @@ function scopeLoop(now){
   const ytActive = mode==='yt' && !!capSrc;
   const active = !!(scopeAn && (fileActive||ytActive));
   if(active) scopeAn.getFloatTimeDomainData(td);
-  if(ytActive) recordEnvelope(now);
+  if(ytActive && !tapLive) recordEnvelope(now);
   if(active || scopeWas!==active || scopeDirty){ drawScope(active); scopeDirty=false; }
   if(active && now-lastPitchT>120){ lastPitchT=now; const f=detectPitch(actx.sampleRate);
     $('pitchHz').textContent = f ? f.toFixed(1) : '—'; $('pitchNote').textContent = f ? '約 '+nearestNote(f) : '訊號太小或不是單一音高'; }
