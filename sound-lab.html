@@ -219,6 +219,7 @@ label.chk.off{opacity:.5;cursor:default}
     <div class="modbody">
       <div class="caprow" id="capRow" hidden>
         <button id="capBtn" type="button">● 開啟 YouTube 波形紀錄器</button>
+        <button id="capMicBtn" type="button">● 改用麥克風收音</button>
         <button id="capClear" type="button">清除波形紀錄</button>
         <button id="grabBtn" type="button" class="primary">取出 A–B 段落到音檔模式</button>
         <span class="hint">波形紀錄只畫圖。「取出段落」會把選取的一段（最長 30 秒）以原速播放一次並暫存在記憶體，供音檔模式反覆播放與調整；不提供存檔，換影片或關閉頁面就清除。</span>
@@ -849,14 +850,31 @@ function connectScope(){
 function updateScopeSrc(){
   $('scopeSrc').textContent = mode==='file' ? '來源：音檔播放器（播放時即時顯示）'
     : capSrc ? '來源：這個分頁的聲音（YouTube）' : '來源：YouTube — 請先在「波形」區開啟波形紀錄器';
+  if(mode==='yt' && capSrc) $('scopeSrc').textContent = capKind==='mic' ? '來源：麥克風收音（喇叭播放的 YouTube）' : '來源：這個分頁的聲音（YouTube）';
+  const tabOk=canTabCapture();
+  $('capBtn').hidden = !tabOk || (capSrc && capKind==='mic');
+  $('capMicBtn').hidden = capSrc && capKind==='tab';
   $('capBtn').textContent = capSrc ? '■ 關閉波形紀錄器' : '● 開啟 YouTube 波形紀錄器';
-  $('capBtn').classList.toggle('on',!!capSrc);
+  $('capMicBtn').textContent = capSrc ? '■ 關閉麥克風收音' : (tabOk ? '● 改用麥克風收音' : '● 用麥克風收音（開啟波形紀錄器）');
+  $('capBtn').classList.toggle('on',!!capSrc); $('capMicBtn').classList.toggle('on',!!capSrc);
 }
+function canTabCapture(){ return !!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia) && !/iPad|iPhone|iPod|Android/i.test(navigator.userAgent) && !(navigator.platform==='MacIntel' && navigator.maxTouchPoints>1); }
+let capKind=null;
 function capMsg(t,err){ capMsgText=t||''; const m=$('capMsg'); m.textContent=capMsgText; m.className='msg'+(err?' err':''); m.hidden=!capMsgText||mode!=='yt'; }
-async function startCapture(){
+async function startCapture(kind){
   capMsg('');
-  if(!navigator.mediaDevices||!navigator.mediaDevices.getDisplayMedia){ capMsg('這個瀏覽器不支援擷取分頁聲音，請用電腦版 Chrome 或 Edge。',true); return; }
   ensureCtx();
+  if(kind==='mic'){
+    if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){ capMsg('這個瀏覽器無法使用麥克風。',true); return; }
+    try{ capStream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}}); }
+    catch(err){ capMsg('無法使用麥克風。請確認已允許這個網站使用麥克風（iPad：設定 → Safari → 麥克風；Android：網址列左側的鎖頭圖示 → 權限）。在 Claude 的預覽頁中也無法使用。',true); return; }
+    const at=capStream.getAudioTracks();
+    capKind='mic'; capSrc=actx.createMediaStreamSource(new MediaStream(at)); connectScope();
+    at[0].addEventListener('ended',stopCapture);
+    capMsg('麥克風收音中：請讓 YouTube 從喇叭播放（不要戴耳機），音量開大一點，環境保持安靜。收到的是室內的聲音，波形會比分頁擷取粗糙一些，但看頻率、音高沒有問題。只畫圖；取出段落時才會暫存。');
+    updateScopeSrc(); renderWave(); return;
+  }
+  if(!canTabCapture()){ capMsg('這台裝置的瀏覽器（iPad、手機）不支援擷取分頁聲音，請改按「用麥克風收音」。',true); return; }
   try{
     capStream=await navigator.mediaDevices.getDisplayMedia({
       video:{frameRate:1,width:320,height:180},
@@ -871,7 +889,7 @@ async function startCapture(){
   const at=capStream.getAudioTracks();
   if(!at.length){ capStream.getTracks().forEach(t=>t.stop()); capStream=null;
     capMsg('沒有收到聲音。請再按一次，在分享視窗選「這個分頁」，並勾選「同時分享分頁音訊」。',true); return; }
-  capSrc=actx.createMediaStreamSource(new MediaStream(at)); connectScope();
+  capKind='tab'; capSrc=actx.createMediaStreamSource(new MediaStream(at)); connectScope();
   at[0].addEventListener('ended',stopCapture);
   capMsg('紀錄中：播放 YouTube 時，聽過的部分會畫進波形區，可以縮放、點選、選取段落。只畫圖，不保存聲音。');
   updateScopeSrc(); renderWave();
@@ -954,9 +972,10 @@ function stopCapture(){
   if(grab) endGrab(false,'波形紀錄器已關閉，取消取出段落');
   if(capStream) capStream.getTracks().forEach(t=>t.stop());
   try{ capSrc&&capSrc.disconnect(); }catch(_){}
-  capStream=null; capSrc=null; lastVT=null; capMsg(''); updateScopeSrc(); renderWave();
+  capStream=null; capSrc=null; capKind=null; lastVT=null; capMsg(''); updateScopeSrc(); renderWave();
 }
-$('capBtn').onclick=()=> capSrc ? stopCapture() : startCapture();
+$('capBtn').onclick=()=> capSrc ? stopCapture() : startCapture('tab');
+$('capMicBtn').onclick=()=> capSrc ? stopCapture() : startCapture('mic');
 $('capClear').onclick=()=>{ if(Y.dur) Y.env=newEnv(Y.dur); renderOverview(); renderWave(); updateName(); };
 
 function newEnv(d){ const step = d<=1200 ? 0.001 : d<=3600 ? 0.005 : 0.02; const n=Math.ceil(d/step)+1;
