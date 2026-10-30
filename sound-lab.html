@@ -430,14 +430,16 @@ const FILE = {
   pause:()=>{ const t=FILE.time(); filePlaying=false; fileT=t; player.pause(); player2.pause(); onPlayState(false); },
   seek:t=>{ fileT=t; for(const x of fileEls()){ x.el.currentTime=Math.min(t,x.tr.dur);
       if(filePlaying){ if(x.on && t<x.tr.dur-0.005){ if(x.el.paused) x.el.play().catch(()=>{}); } else x.el.pause(); } } },
-  getSel:()=>S.sel, setSel:v=>{ S.sel=v; }
+  getSel:()=>S.sel, setSel:v=>{ S.sel=v; PEND.file={a:null,b:null}; }
 };
 const YTS = {
   loaded:()=>Y.ready&&Y.dur>0, time:ytNow, dur:()=>Y.dur, paused:()=>!(Y.state===1||Y.state===3),
   play:()=>Y.player&&Y.player.playVideo(), pause:()=>Y.player&&Y.player.pauseVideo(),
   seek:t=>{ if(!Y.player) return; Y.player.seekTo(t,true); Y.est={vt:t,at:performance.now(),rep:null}; lastVT=null; envT=null; },
-  getSel:()=>Y.sel, setSel:v=>{ Y.sel=v; }
+  getSel:()=>Y.sel, setSel:v=>{ Y.sel=v; PEND.yt={a:null,b:null}; }
 };
+const PEND={file:{a:null,b:null}, yt:{a:null,b:null}};
+const pend=()=>PEND[mode==='file'?'file':'yt'];
 const src = () => mode==='file' ? FILE : YTS;
 const V = () => mode==='file' ? S : Y;
 const curTime = () => src().time();
@@ -479,7 +481,7 @@ async function loadBlob(blob, name, meta){
       if(!syncZoom){ T2.viewStart=0; T2.viewDur=T2.dur; }
       el.pause(); if(objUrl2) URL.revokeObjectURL(objUrl2); objUrl2=URL.createObjectURL(blob); el.src=objUrl2;
     } else {
-      S.temp = !!(meta&&meta.temp); S.sel=null; S.viewStart=0; S.viewDur=fileDur(); fileT=0;
+      S.temp = !!(meta&&meta.temp); S.sel=null; PEND.file={a:null,b:null}; S.viewStart=0; S.viewDur=fileDur(); fileT=0;
       el.pause(); if (objUrl) URL.revokeObjectURL(objUrl); objUrl = URL.createObjectURL(blob); el.src = objUrl;
     }
     applyRate(); applyVol();
@@ -660,6 +662,9 @@ function overlayLane(L,t,sel){
     c.fillStyle=acc; c.fillRect(Math.round(a)-1,RULER,2,r.height-RULER); c.fillRect(Math.round(b)-1,RULER,2,r.height-RULER);
     c.font='bold 11px '+css('--font-mono'); c.fillRect(a-1,RULER,14,14); c.fillRect(b-13,RULER,14,14);
     c.fillStyle=css('--panel'); c.fillText('A',a+2,RULER+11); c.fillText('B',b-10,RULER+11); }
+  else { const P=pend(); c.font='bold 11px '+css('--font-mono');
+    if(P.a!=null){ const a=X(P.a); c.fillStyle=acc; c.fillRect(Math.round(a)-1,RULER,2,r.height-RULER); c.fillRect(a-1,RULER,14,14); c.fillStyle=css('--panel'); c.fillText('A',a+2,RULER+11); }
+    if(P.b!=null){ const b=X(P.b); c.fillStyle=acc; c.fillRect(Math.round(b)-1,RULER,2,r.height-RULER); c.fillRect(b-13,RULER,14,14); c.fillStyle=css('--panel'); c.fillText('B',b-10,RULER+11); } }
   const px=X(t); c.fillStyle=css('--ink'); c.fillRect(Math.round(px)-1,0,2,r.height);
   c.beginPath(); c.moveTo(px-6,0); c.lineTo(px+6,0); c.lineTo(px,8); c.closePath(); c.fill();
 }
@@ -852,8 +857,8 @@ window.addEventListener('message',e=>{
 
 /* ---------- selection panel ---------- */
 function updateSelUI(){ const sel=src().getSel();
-  for(const [id,k] of [['aT','a'],['bT','b']]){ const el=$(id); if(document.activeElement!==el){ el.value=sel?fmt(sel[k]):''; el.classList.remove('bad'); } }
-  $('lenT').textContent=sel?(sel.b-sel.a).toFixed(3)+' 秒':'—'; }
+  for(const [id,k] of [['aT','a'],['bT','b']]){ const el=$(id); if(document.activeElement!==el){ const P=pend(); el.value=sel?fmt(sel[k]):(P[k]!=null?fmt(P[k]):''); el.classList.remove('bad'); } }
+  const P=pend(); $('lenT').textContent=sel?(sel.b-sel.a).toFixed(3)+' 秒':(P.a!=null&&P.b==null?'— 尚未設定 B':P.b!=null&&P.a==null?'— 尚未設定 A':'—'); }
 /* 手動輸入 A／B：接受「1.5」「0:01.5」「1:02.300」「1:02:03」 */
 function parseTime(str){
   str=(str||'').trim().replace(/：/g,':').replace(/[，,]/g,'.').replace(/\s*(秒|s)$/i,'');
@@ -861,19 +866,27 @@ function parseTime(str){
   if(!/^\d+(\.\d*)?$|^\d+:\d{1,2}(\.\d*)?$|^\d+:\d{1,2}:\d{1,2}(\.\d*)?$/.test(str)) return NaN;
   return str.split(':').reduce((acc,part)=>acc*60+parseFloat(part),0);
 }
+function setMark(which,t){
+  const s=src(), sel=s.getSel(), P=pend();
+  const other = sel ? sel[which==='a'?'b':'a'] : P[which==='a'?'b':'a'];
+  if(other==null){ P[which]=t; updateSelUI(); drawOverlay(); return true; }
+  const a = which==='a' ? t : other, b = which==='b' ? t : other;
+  if(b-a < 0.005){
+    if(which==='b'){ toast('B 必須在 A（'+fmt(a)+'）之後'); return false; }
+    s.setSel(null); P.a=t; P.b=null; toast('A 已移到原本的 B 之後，B 已清除，請重新設定 B'); updateSelUI(); drawOverlay(); return true;
+  }
+  s.setSel({a,b}); updateSelUI(); drawOverlay();
+  const v=V(); if(!inView(a)||!inView(b)){ if(b-a < v.viewDur*0.9) setView(a-(v.viewDur-(b-a))/2, v.viewDur); else { const pad=(b-a)*0.05; setView(a-pad,b-a+pad*2); } }
+  return true;
+}
 function commitAB(which){
   const s=src(), el=$(which==='a'?'aT':'bT');
   if(!s.loaded()){ el.value=''; return; }
-  const t=parseTime(el.value), d=s.dur(), sel=s.getSel();
-  if(t===null){ if(sel){ updateSelUI(); } return; }
+  const t=parseTime(el.value), d=s.dur();
+  if(t===null){ updateSelUI(); return; }
   if(isNaN(t) || t<0 || t>d+1e-6){ el.classList.add('bad'); toast(isNaN(t)?'時間格式看不懂，請輸入像 1.5 或 0:01.5':'時間要在 0 到 '+fmt(d)+' 之間'); return; }
   el.classList.remove('bad');
-  let a = which==='a' ? t : (sel ? sel.a : Math.max(0,t-2));
-  let b = which==='b' ? t : (sel ? sel.b : Math.min(d,t+2));
-  if(b-a < 0.005){ if(which==='a'){ b=Math.min(d,a+(sel?Math.max(0.5,sel.b-sel.a):2)); if(b-a<0.005){ a=Math.max(0,b-0.5); } } else { a=Math.max(0,b-(sel?Math.max(0.5,sel.b-sel.a):2)); if(b-a<0.005){ b=Math.min(d,a+0.5); } }
-    toast('B 必須在 A 之後，已自動調整另一端'); }
-  s.setSel({a,b}); updateSelUI(); drawOverlay();
-  const v=V(); if(!inView(a)||!inView(b)){ if(b-a < v.viewDur*0.9) setView(a-(v.viewDur-(b-a))/2, v.viewDur); else { const pad=(b-a)*0.05; setView(a-pad,b-a+pad*2); } }
+  if(!setMark(which,t)) el.classList.add('bad');
 }
 for(const [id,k] of [['aT','a'],['bT','b']]){
   const el=$(id);
@@ -881,8 +894,8 @@ for(const [id,k] of [['aT','a'],['bT','b']]){
   el.addEventListener('blur',()=>{ commitAB(k); setTimeout(updateSelUI,0); });
   el.addEventListener('focus',()=>el.select());
 }
-$('setA').onclick=()=>{ const s=src(); if(!s.loaded()) return; const t=curTime(), sel=s.getSel(); s.setSel({a:t,b:sel&&sel.b>t+0.005?sel.b:Math.min(s.dur(),t+2)}); updateSelUI(); drawOverlay(); };
-$('setB').onclick=()=>{ const s=src(); if(!s.loaded()) return; const t=curTime(), sel=s.getSel(); s.setSel({a:sel&&sel.a<t-0.005?sel.a:Math.max(0,t-2),b:t}); updateSelUI(); drawOverlay(); };
+$('setA').onclick=()=>{ if(src().loaded()) setMark('a',curTime()); };
+$('setB').onclick=()=>{ if(src().loaded()) setMark('b',curTime()); };
 $('clearSel').onclick=()=>{ src().setSel(null); updateSelUI(); drawOverlay(); };
 
 /* ---------- keyboard ---------- */
@@ -944,7 +957,7 @@ async function loadYT(e){
   catch(_){ ytMsg('無法載入 YouTube 播放器。在 Claude 的預覽頁中外部影片會被擋下；請下載這個 HTML 檔，放到 https 網站（例如 GitHub Pages、學校網站）上使用。',true); return; }
   if(grab) endGrab(false,'換了影片，已取消取出段落');
   if(S.temp){ clearTemp(); toast('換了影片，已清除先前的暫存片段'); }
-  Y.id=p.id; Y.sel=null; Y.dur=0; Y.title=''; Y.env=null; Y.viewStart=0; Y.viewDur=1; lastVT=null;
+  Y.id=p.id; Y.sel=null; PEND.yt={a:null,b:null}; Y.dur=0; Y.title=''; Y.env=null; Y.viewStart=0; Y.viewDur=1; lastVT=null;
   updateSelUI(); updateName(); renderOverview(); renderWave();
   if(!Y.player){
     Y.player=new YT.Player('ytPlayer',{ videoId:p.id, width:'100%', height:'100%',
