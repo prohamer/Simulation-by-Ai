@@ -88,7 +88,19 @@ select{font:inherit;font-size:14px;padding:4px 6px;border:1px solid var(--line);
 .hint{font-size:12.5px;color:var(--muted)}
 kbd{font-family:var(--font-mono);font-size:11.5px;border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:0 4px;background:var(--wave-bg)}
 .wavewrap{display:grid;grid-template-columns:minmax(0,1fr) 42px;gap:6px}
-.ampcol{display:flex;flex-direction:column;align-items:center;gap:6px;height:220px}
+.ampcol{display:flex;flex-direction:column;align-items:center;gap:6px;min-height:220px;align-self:stretch}
+.lanes{display:flex;flex-direction:column;gap:4px;min-width:0}
+#lane2{display:flex;flex-direction:column;gap:4px}
+.lanehead{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;font-size:13px;min-height:26px}
+.lanehead b{font-size:12.5px;letter-spacing:.06em}
+.lanehead .lname{color:var(--muted);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1 1 120px}
+.lanehead .btn{padding:3px 8px;font-size:13px}
+.lanehead select{padding:2px 4px;font-size:13px;max-width:180px}
+.lanehead label.chk{font-size:13px}
+.trackopts{display:flex;flex-wrap:wrap;align-items:center;gap:4px 14px}
+.trackopts label.chk{font-size:13.5px}
+.mod.two .wavebox{height:165px}
+#waveBox2{border-color:var(--wave-dim)}
 .ampcol .hint{font-size:12px}
 .vrange{writing-mode:vertical-lr;direction:rtl;flex:1;width:28px!important;min-height:0;margin:0}
 #ampReset{padding:3px 4px;font-size:11.5px;font-family:var(--font-mono);width:100%;justify-content:center}
@@ -225,8 +237,27 @@ label.chk.off{opacity:.5;cursor:default}
         <span class="hint">波形紀錄只畫圖。「取出段落」會把選取的一段（最長 30 秒）以原速播放一次並暫存在記憶體，供音檔模式反覆播放與調整；不提供存檔，換影片或關閉頁面就清除。</span>
       </div>
       <div id="capMsg" class="msg" hidden></div>
+      <div class="trackopts" id="trackOpts">
+        <label class="chk"><input type="checkbox" id="twoChk"> 增加第二音軌</label>
+        <label class="chk off" id="syncLbl"><input type="checkbox" id="syncChk" checked disabled> 同步縮放</label>
+        <span class="hint" id="trackHint">開啟後，新錄的聲音會放進音軌 2，方便和原曲對照。</span>
+      </div>
       <div class="wavewrap">
-        <div class="wavebox" id="waveBox"><canvas id="waveCv"></canvas><canvas id="overCv"></canvas></div>
+        <div class="lanes">
+          <div class="lanehead" id="lane1Head" hidden><b>音軌 1</b><span class="lname" id="lane1Name">—</span>
+            <label class="chk"><input type="checkbox" id="play1Chk" checked> 播放</label></div>
+          <div class="wavebox" id="waveBox"><canvas id="waveCv"></canvas><canvas id="overCv"></canvas></div>
+          <div id="lane2" hidden>
+            <div class="lanehead"><b>音軌 2</b><span class="lname" id="lane2Name">尚未載入</span>
+              <label class="chk"><input type="checkbox" id="play2Chk" checked> 播放</label>
+              <label class="btn" for="fileIn2">載入音樂…</label>
+              <input id="fileIn2" type="file" accept="audio/*,video/*" hidden>
+              <select id="presetSel2" aria-label="音軌 2 預設音"></select>
+              <select id="rootSel2" aria-label="音軌 2 起始音"></select>
+            </div>
+            <div class="wavebox" id="waveBox2"><canvas id="waveCv2"></canvas><canvas id="overCv2"></canvas></div>
+          </div>
+        </div>
         <div class="ampcol">
           <label for="ampZoom" class="hint">振幅</label>
           <input id="ampZoom" class="vrange" type="range" min="0" max="100" value="0" aria-label="振幅縮放">
@@ -332,6 +363,7 @@ label.chk.off{opacity:.5;cursor:default}
   </div>
 </div>
 <audio id="player" preload="auto"></audio>
+<audio id="player2" preload="auto"></audio>
 
 <script>
 (() => {
@@ -340,6 +372,9 @@ const player = $('player');
 const S = { data:null, sr:44100, dur:0, peaks:null, viewStart:0, viewDur:1, sel:null, name:'', toneFreq:null };
 const Y = { player:null, ready:false, id:null, dur:0, sel:null, title:'', api:null, state:-1, env:null,
             viewStart:0, viewDur:1, rate:1, est:{vt:0,at:0,rep:null} };
+const T2 = { data:null, sr:44100, dur:0, peaks:null, viewStart:0, viewDur:1, name:'', toneFreq:null };
+const player2 = $('player2');
+let two=false, syncZoom=true, play1=true, play2=true, filePlaying=false, fileT=0, objUrl2=null;
 let mode = 'file', loop = false, booting = true;
 const PEAK = 256;
 let objUrl = null;
@@ -378,10 +413,20 @@ function ytNow(){
   if(rep!==Y.est.rep){ Y.est.rep=rep; const err=rep-est; est = Math.abs(err)>0.35 ? rep : est+err*0.12; }
   est=Math.max(0,Math.min(Y.dur||est,est)); Y.est.vt=est; Y.est.at=now; return est;
 }
+const fileDur=()=>Math.max(S.data?S.dur:0, (two&&T2.data)?T2.dur:0);
+function fileEls(){ return [ {el:player, tr:S, on:play1}, {el:player2, tr:T2, on:two&&play2} ].filter(x=>x.tr.data); }
+function fileRunning(){ return fileEls().some(x=>x.on && !x.el.paused && !x.el.ended); }
 const FILE = {
-  loaded:()=>!!S.data, time:()=>player.currentTime||0, dur:()=>S.dur, paused:()=>player.paused,
-  play:()=>{ hookFile(); return player.play().catch(()=>toast('瀏覽器暫時無法播放，請再按一次')); }, pause:()=>player.pause(),
-  seek:t=>{ player.currentTime=t; }, getSel:()=>S.sel, setSel:v=>{ S.sel=v; }
+  loaded:()=>!!(S.data || (two&&T2.data)), dur:fileDur, paused:()=>!filePlaying,
+  time:()=>{ if(filePlaying){ for(const x of fileEls()) if(x.on && !x.el.paused && !x.el.ended) return x.el.currentTime; } return fileT; },
+  play:()=>{ hookFile(); const t=fileT; let any=false;
+    for(const x of fileEls()){ if(x.on && t < x.tr.dur-0.005){ x.el.currentTime=t; x.el.play().catch(()=>{}); any=true; } }
+    if(!any){ toast(fileEls().some(x=>x.on)?'已經播到結尾':'請先勾選要播放的音軌'); return; }
+    filePlaying=true; onPlayState(true); },
+  pause:()=>{ const t=FILE.time(); filePlaying=false; fileT=t; player.pause(); player2.pause(); onPlayState(false); },
+  seek:t=>{ fileT=t; for(const x of fileEls()){ x.el.currentTime=Math.min(t,x.tr.dur);
+      if(filePlaying){ if(x.on && t<x.tr.dur-0.005){ if(x.el.paused) x.el.play().catch(()=>{}); } else x.el.pause(); } } },
+  getSel:()=>S.sel, setSel:v=>{ S.sel=v; }
 };
 const YTS = {
   loaded:()=>Y.ready&&Y.dur>0, time:ytNow, dur:()=>Y.dur, paused:()=>!(Y.state===1||Y.state===3),
@@ -402,7 +447,7 @@ function setMode(m){
   updatePitchUI(); connectScope(); updateScopeSrc();
   $('playBtn').classList.remove('on');
   updateName(); updateSelUI(); applyRate(); applyVol(); configureRateSlider();
-  syncZoomSlider(); renderOverview(); renderWave();
+  updateTrackUI(); syncZoomSlider(); renderOverview(); renderWave();
 }
 $('tabFile').onclick=()=>setMode('file');
 $('tabYT').onclick=()=>setMode('yt');
@@ -410,45 +455,54 @@ function updateName(){
   const name = mode==='file' ? (S.name||'—') : (Y.title||(Y.id?'YouTube 影片':'—'));
   $('fileName').textContent=name; $('playSub').textContent=name==='—'?'':name; $('durT').textContent=fmt(src().dur());
   $('tempClear').hidden = !S.temp;
+  $('lane1Name').textContent = S.name||'尚未載入'; $('lane2Name').textContent = T2.name||'尚未載入';
   $('waveSub').textContent = mode==='file' ? (S.temp ? '暫存片段：只存在記憶體，不能存檔；換影片或關閉頁面即清除' : '音檔波形') :(Y.env&&Y.env.any ? 'YouTube 波形紀錄（只含已播放過的部分）' : 'YouTube 波形紀錄');
 }
 
 /* ---------- loading files ---------- */
 async function loadBlob(blob, name, meta){
+  const isT2 = meta && meta.track===2, tr = isT2 ? T2 : S, el = isT2 ? player2 : player;
   try{
     const ab = await blob.arrayBuffer();
     const oc = new OfflineAudioContext(1, 1, 44100);
     const buf = await new Promise((res, rej) => { const p = oc.decodeAudioData(ab, res, rej); if (p && p.then) p.then(res, rej); });
     const n = buf.length, ch = buf.numberOfChannels, mono = new Float32Array(n);
     for (let c=0;c<ch;c++){ const d=buf.getChannelData(c); for(let i=0;i<n;i++) mono[i]+=d[i]/ch; }
-    S.data = mono; S.sr = buf.sampleRate; S.dur = buf.duration; S.name = name; S.toneFreq = meta&&meta.toneFreq || null; S.temp = !!(meta&&meta.temp);
-    buildPeaks(); S.sel=null; S.viewStart=0; S.viewDur=S.dur;
-    player.pause(); if (objUrl) URL.revokeObjectURL(objUrl);
-    objUrl = URL.createObjectURL(blob); player.src = objUrl; applyRate(); applyVol();
-    if(mode==='file'){ syncZoomSlider(); updateName(); renderOverview(); renderWave(); updateSelUI(); }
+    if(mode==='file' && filePlaying) FILE.pause();
+    tr.data = mono; tr.sr = buf.sampleRate; tr.dur = buf.duration; tr.name = name; tr.toneFreq = meta&&meta.toneFreq || null;
+    buildPeaks(tr);
+    if(isT2){
+      if(!syncZoom){ T2.viewStart=0; T2.viewDur=T2.dur; }
+      el.pause(); if(objUrl2) URL.revokeObjectURL(objUrl2); objUrl2=URL.createObjectURL(blob); el.src=objUrl2;
+    } else {
+      S.temp = !!(meta&&meta.temp); S.sel=null; S.viewStart=0; S.viewDur=fileDur(); fileT=0;
+      el.pause(); if (objUrl) URL.revokeObjectURL(objUrl); objUrl = URL.createObjectURL(blob); el.src = objUrl;
+    }
+    applyRate(); applyVol();
+    if(mode==='file'){ clampView(S); syncZoomSlider(); updateName(); renderOverview(); renderWave(); updateSelUI(); }
     updatePitchInfo();
   }catch(e){ toast('無法讀取這個檔案，請換 mp3、wav、m4a 或 ogg 試試'); console.error(e); }
 }
-function buildPeaks(){
-  const d=S.data, nb=Math.ceil(d.length/PEAK), mn=new Float32Array(nb), mx=new Float32Array(nb);
+function buildPeaks(tr){
+  const d=tr.data, nb=Math.ceil(d.length/PEAK), mn=new Float32Array(nb), mx=new Float32Array(nb);
   for(let b=0;b<nb;b++){ let lo=1,hi=-1; const e=Math.min(d.length,(b+1)*PEAK); for(let i=b*PEAK;i<e;i++){const v=d[i]; if(v<lo)lo=v; if(v>hi)hi=v;} mn[b]=lo; mx[b]=hi; }
-  S.peaks={mn,mx};
+  tr.peaks={mn,mx};
 }
-function minMax(s0,s1){
-  const d=S.data; s0=Math.max(0,s0); s1=Math.min(d.length,s1);
+function minMax(tr,s0,s1){
+  const d=tr.data; s0=Math.max(0,s0); s1=Math.min(d.length,s1);
   if(s1<=s0) return null;
-  let lo=1,hi=-1;
+  let lo=1,hi=-1; const P=tr.peaks;
   if(s1-s0 > PEAK*4){
     const b0=Math.ceil(s0/PEAK), b1=Math.floor(s1/PEAK);
     for(let i=s0;i<b0*PEAK;i++){const v=d[i];if(v<lo)lo=v;if(v>hi)hi=v;}
-    for(let b=b0;b<b1;b++){ if(S.peaks.mn[b]<lo)lo=S.peaks.mn[b]; if(S.peaks.mx[b]>hi)hi=S.peaks.mx[b]; }
+    for(let b=b0;b<b1;b++){ if(P.mn[b]<lo)lo=P.mn[b]; if(P.mx[b]>hi)hi=P.mx[b]; }
     for(let i=b1*PEAK;i<s1;i++){const v=d[i];if(v<lo)lo=v;if(v>hi)hi=v;}
   } else { for(let i=s0;i<s1;i++){const v=d[i];if(v<lo)lo=v;if(v>hi)hi=v;} }
   return [lo,hi];
 }
-/* time-range min/max for whichever source is shown */
-function rangeMM(t0,t1){
-  if(mode==='file'){ const s0=Math.floor(t0*S.sr), s1=Math.floor(t1*S.sr); return minMax(s0,Math.max(s1,s0+1)); }
+/* time-range min/max: tr = a file track (S / T2), or null for the YouTube recording */
+function rangeMMT(tr,t0,t1){
+  if(tr){ if(!tr.data) return null; const s0=Math.floor(t0*tr.sr), s1=Math.floor(t1*tr.sr); return minMax(tr,s0,Math.max(s1,s0+1)); }
   const E=Y.env; if(!E) return null;
   const n=E.mn.length, b0=Math.max(0,Math.floor(t0/E.step)), b1=Math.min(n,Math.max(b0+1,Math.floor(t1/E.step)));
   let lo=1,hi=-1,has=false;
@@ -515,12 +569,24 @@ async function loadPreset(){
 }
 (()=>{ const sel=$('rootSel'); for(let m=48;m<=71;m++){ const o=document.createElement('option'); o.value=m; o.textContent=noteName(m)+'（'+mtof(m).toFixed(1)+' Hz）'; if(m===60) o.selected=true; sel.append(o); } })();
 $('presetSel').addEventListener('change',loadPreset);
+(()=>{ const ps=$('presetSel2'), rs=$('rootSel2'); const o0=document.createElement('option'); o0.value=''; o0.textContent='預設音…'; ps.append(o0);
+  [...$('presetSel').options].forEach(o=>ps.append(new Option(o.textContent.replace(/（.*?）/,''),o.value)));
+  [...$('rootSel').options].forEach(o=>{ const n=new Option(o.textContent,o.value); n.selected=o.selected; rs.append(n); });
+  const go=async()=>{ const key=ps.value; if(!key) return; const root=+rs.value;
+    const name = key==='tone' ? '單音 '+noteName(root)+'（'+mtof(root).toFixed(1)+' Hz）' : noteName(root)+'→'+noteName(root+24)+' '+PRESETS[key].label;
+    await loadBlob(await makePreset(key,root), name+'（正弦波）', {track:2, toneFreq: key==='tone'?mtof(root):null}); };
+  ps.addEventListener('change',go); rs.addEventListener('change',go); })();
 $('rootSel').addEventListener('change',loadPreset);
 
-/* ---------- canvases ---------- */
-const waveCv=$('waveCv'), overCv=$('overCv'), ovCv=$('ovCv'), waveBox=$('waveBox'), ovBox=$('ovBox');
+/* ---------- canvases (lanes) ---------- */
+const waveBox=$('waveBox'), ovCv=$('ovCv'), ovBox=$('ovBox');
+const L1={box:waveBox, cv:$('waveCv'), ov:$('overCv'), touches:new Map()};
+const L2={box:$('waveBox2'), cv:$('waveCv2'), ov:$('overCv2'), touches:new Map()};
 const RULER=22;
 let ovCache=null;
+const laneOn=L=> L===L1 || (mode==='file' && two);
+const laneTrack=L=> L===L1 ? (mode==='file'?S:null) : T2;
+const laneView=L=> L===L1 ? V() : (syncZoom ? S : T2);
 function sizeCanvas(cv, box){ const r=box.getBoundingClientRect(), dpr=window.devicePixelRatio||1; cv.width=Math.max(1,Math.round(r.width*dpr)); cv.height=Math.max(1,Math.round(r.height*dpr)); const c=cv.getContext('2d'); c.setTransform(dpr,0,0,dpr,0,0); return [r.width,r.height,c]; }
 function niceStep(pxPerSec){ const steps=[0.001,0.002,0.005,0.01,0.02,0.05,0.1,0.2,0.5,1,2,5,10,15,30,60,120,300,600]; for(const s of steps) if(s*pxPerSec>=80) return s; return 600; }
 function tickLabel(t, step){ const m=Math.floor(t/60), s=t-m*60; const dec = step<0.01?3: step<0.1?2: step<1?1:0; return m+':'+(s<10?'0':'')+s.toFixed(dec); }
@@ -533,36 +599,41 @@ function drawRuler(c, w, h, start, dur){
   for(let t=Math.ceil(start/step)*step; t<=start+dur+1e-9; t+=step){ const x=Math.round((t-start)*pps)+.5; c.moveTo(x,RULER-7); c.lineTo(x,RULER); c.moveTo(x,RULER); c.lineTo(x,h); c.fillText(tickLabel(t,step), x+3, 13); }
   c.globalAlpha=.35; c.stroke(); c.globalAlpha=1;
 }
-function viewReady(){ return mode==='file' ? !!S.data : Y.dur>0; }
-function renderWave(){
-  if(!isOpen('wave')) return;
-  const [w,h,c]=sizeCanvas(waveCv,waveBox), v=V();
+function viewReady(){ return mode==='file' ? FILE.loaded() : Y.dur>0; }
+function renderLane(L){
+  const [w,h,c]=sizeCanvas(L.cv,L.box), v=laneView(L), tr=laneTrack(L);
   c.fillStyle=css('--wave-bg'); c.fillRect(0,0,w,h);
-  if(!viewReady()){ drawRuler(c,w,h,0,10); c.fillStyle=css('--muted'); c.font='14px '+css('--font-body');
-    c.fillText(mode==='file'?'載入音檔後會在這裡顯示波形':'載入 YouTube 影片後，開啟波形紀錄器並播放，波形會畫在這裡',16,RULER+40); drawOverlay(); return; }
+  const msg=(t)=>{ c.fillStyle=css('--muted'); c.font='13.5px '+css('--font-body'); c.fillText(t,16,RULER+36); };
+  if(!viewReady()){ drawRuler(c,w,h,0,10); if(L===L1) msg(mode==='file'?'載入音檔後會在這裡顯示波形':'載入 YouTube 影片後，開啟波形紀錄器並播放，波形會畫在這裡'); return; }
   drawRuler(c,w,h,v.viewStart,v.viewDur);
+  if(tr && !tr.data){ msg(L===L1?'音軌 1 還沒有載入聲音（用上方「音源」載入）':'音軌 2 還沒有載入聲音：用上方按鈕載入，或直接錄音'); return; }
   const top=RULER+6, ht=h-top-6, mid=top+ht/2, amp=ht/2*ampZ, pps=w/v.viewDur, clampY=y=>Math.max(top,Math.min(top+ht,y));
   c.strokeStyle=css('--wave-dim'); c.beginPath(); c.moveTo(0,mid+.5); c.lineTo(w,mid+.5); c.stroke();
   c.fillStyle=css('--wave'); c.strokeStyle=css('--wave');
-  const spp = mode==='file' ? v.viewDur*S.sr/w : Infinity;
+  const spp = tr ? v.viewDur*tr.sr/w : Infinity;
   if(spp<2){
-    c.beginPath(); const s0=Math.floor(S.viewStart*S.sr), s1=Math.ceil((S.viewStart+S.viewDur)*S.sr);
-    for(let i=s0;i<=s1&&i<S.data.length;i++){ const x=(i/S.sr-S.viewStart)*pps, y=clampY(mid-S.data[i]*amp); i===s0?c.moveTo(x,y):c.lineTo(x,y); }
+    const d=tr.data, sr=tr.sr; c.beginPath(); const s0=Math.max(0,Math.floor(v.viewStart*sr)), s1=Math.ceil((v.viewStart+v.viewDur)*sr);
+    for(let i=s0;i<=s1&&i<d.length;i++){ const x=(i/sr-v.viewStart)*pps, y=clampY(mid-d[i]*amp); i===s0?c.moveTo(x,y):c.lineTo(x,y); }
     c.lineWidth=1.5; c.stroke(); c.lineWidth=1;
-    if(spp<0.25){ for(let i=s0;i<=s1&&i<S.data.length;i++){ const x=(i/S.sr-S.viewStart)*pps, y=clampY(mid-S.data[i]*amp); c.fillRect(x-2,y-2,4,4);} }
+    if(spp<0.25){ for(let i=s0;i<=s1&&i<d.length;i++){ const x=(i/sr-v.viewStart)*pps, y=clampY(mid-d[i]*amp); c.fillRect(x-2,y-2,4,4);} }
   } else {
     for(let px=0;px<w;px++){
-      const mm=rangeMM(v.viewStart+px/pps, v.viewStart+(px+1)/pps); if(!mm) continue;
+      const mm=rangeMMT(tr, v.viewStart+px/pps, v.viewStart+(px+1)/pps); if(!mm) continue;
       const y0=clampY(mid-mm[1]*amp), y1=clampY(mid-mm[0]*amp); c.fillRect(px,y0,1,Math.max(1,y1-y0));
     }
   }
   if(ampZ>1.01){ const lim=1/ampZ, lab=v=>(v<0.01?v.toFixed(3):v.toFixed(2));
     c.font='10.5px '+css('--font-mono'); c.fillStyle=css('--ruler');
     c.fillText('+'+lab(lim),4,top+11); c.fillText('−'+lab(lim),4,top+ht-3); c.fillText('振幅 ×'+(+ampZ.toFixed(1)),4,mid-4); }
-  if(mode==='yt' && Y.env && Y.env.any && v.viewDur<=minView()*1.6){ c.font='12px '+css('--font-body'); c.fillStyle=css('--muted');
-    c.fillText('已放大到紀錄器的極限（每格 '+(Y.env.step*1000)+' 毫秒）。要看單一週期的波形，請用「取出 A–B 段落」。',16,h-10); }
-  if(mode==='yt' && !(Y.env&&Y.env.any)){ c.fillStyle=css('--muted'); c.font='13px '+css('--font-body');
-    c.fillText(capSrc?'播放 YouTube 後，聽過的部分會畫在這裡':'按上方「開啟 YouTube 波形紀錄器」後播放，聽過的部分會畫在這裡',16,RULER+40); }
+  if(L===L1 && mode==='yt'){
+    if(Y.env && Y.env.any && v.viewDur<=minView()*1.6){ c.font='12px '+css('--font-body'); c.fillStyle=css('--muted');
+      c.fillText('已放大到紀錄器的極限（每格 '+(Y.env.step*1000)+' 毫秒）。要看單一週期的波形，請用「取出 A–B 段落」。',16,h-10); }
+    if(!(Y.env&&Y.env.any)) msg(capSrc?'播放 YouTube 後，聽過的部分會畫在這裡':'按上方「開啟 YouTube 波形紀錄器」後播放，聽過的部分會畫在這裡');
+  }
+}
+function renderWave(){
+  if(!isOpen('wave')) return;
+  renderLane(L1); if(laneOn(L2)) renderLane(L2);
   drawOverlay();
 }
 function renderOverview(){
@@ -571,101 +642,129 @@ function renderOverview(){
   const off=document.createElement('canvas'); off.width=ovCv.width; off.height=ovCv.height;
   const o=off.getContext('2d'); const dpr=window.devicePixelRatio||1; o.setTransform(dpr,0,0,dpr,0,0);
   o.fillStyle=css('--wave-bg'); o.fillRect(0,0,w,h);
-  if(viewReady()){ const d=src().dur(), mid=h/2, amp=h/2-3; o.fillStyle=css('--wave-dim');
-    for(let px=0;px<w;px++){ const mm=rangeMM(px/w*d,(px+1)/w*d); if(!mm) continue; const y0=mid-mm[1]*amp,y1=mid-mm[0]*amp; o.fillRect(px,y0,1,Math.max(1,y1-y0)); } }
+  if(viewReady()){ const d=src().dur(), tr = mode==='file' ? (S.data?S:T2) : null, mid=h/2, amp=h/2-3; o.fillStyle=css('--wave-dim');
+    for(let px=0;px<w;px++){ const mm=rangeMMT(tr,px/w*d,(px+1)/w*d); if(!mm) continue; const y0=mid-mm[1]*amp,y1=mid-mm[0]*amp; o.fillRect(px,y0,1,Math.max(1,y1-y0)); } }
   ovCache=off; drawOverlay();
 }
-function drawOverlay(){
-  const t=curTime(); $('curT').textContent=fmt(t);
-  if(!isOpen('wave')) return;
-  const dpr=window.devicePixelRatio||1, r=waveBox.getBoundingClientRect();
-  if(overCv.width!==Math.round(r.width*dpr)||overCv.height!==Math.round(r.height*dpr)){ overCv.width=Math.round(r.width*dpr); overCv.height=Math.round(r.height*dpr); }
-  const c=overCv.getContext('2d'); c.setTransform(dpr,0,0,dpr,0,0); c.clearRect(0,0,r.width,r.height);
-  const ob=ovBox.getBoundingClientRect(), oc=ovCv.getContext('2d');
-  oc.setTransform(1,0,0,1,0,0); if(ovCache&&ovCache.width===ovCv.width&&ovCache.height===ovCv.height) oc.drawImage(ovCache,0,0); oc.setTransform(dpr,0,0,dpr,0,0);
+function overlayLane(L,t,sel){
+  const dpr=window.devicePixelRatio||1, r=L.box.getBoundingClientRect(), cv=L.ov;
+  if(cv.width!==Math.round(r.width*dpr)||cv.height!==Math.round(r.height*dpr)){ cv.width=Math.round(r.width*dpr); cv.height=Math.round(r.height*dpr); }
+  const c=cv.getContext('2d'); c.setTransform(dpr,0,0,dpr,0,0); c.clearRect(0,0,r.width,r.height);
   if(!viewReady()) return;
-  const v=V(), sel=src().getSel(), pps=r.width/v.viewDur, X=tt=>(tt-v.viewStart)*pps, acc=css('--accent');
+  const v=laneView(L), pps=r.width/v.viewDur, X=tt=>(tt-v.viewStart)*pps, acc=css('--accent');
   if(sel){ const a=X(sel.a), b=X(sel.b); c.fillStyle=css('--sel'); c.fillRect(a,RULER,b-a,r.height-RULER);
     c.fillStyle=acc; c.fillRect(Math.round(a)-1,RULER,2,r.height-RULER); c.fillRect(Math.round(b)-1,RULER,2,r.height-RULER);
     c.font='bold 11px '+css('--font-mono'); c.fillRect(a-1,RULER,14,14); c.fillRect(b-13,RULER,14,14);
     c.fillStyle=css('--panel'); c.fillText('A',a+2,RULER+11); c.fillText('B',b-10,RULER+11); }
   const px=X(t); c.fillStyle=css('--ink'); c.fillRect(Math.round(px)-1,0,2,r.height);
   c.beginPath(); c.moveTo(px-6,0); c.lineTo(px+6,0); c.lineTo(px,8); c.closePath(); c.fill();
-  const d=src().dur(), k=ob.width/d;
+}
+function drawOverlay(){
+  const t=curTime(); $('curT').textContent=fmt(t);
+  if(!isOpen('wave')) return;
+  const sel=src().getSel();
+  overlayLane(L1,t,sel); if(laneOn(L2)) overlayLane(L2,t,sel);
+  const dpr=window.devicePixelRatio||1, ob=ovBox.getBoundingClientRect(), oc=ovCv.getContext('2d');
+  oc.setTransform(1,0,0,1,0,0); if(ovCache&&ovCache.width===ovCv.width&&ovCache.height===ovCv.height) oc.drawImage(ovCache,0,0); oc.setTransform(dpr,0,0,dpr,0,0);
+  if(!viewReady()) return;
+  const v=V(), d=src().dur(), k=ob.width/d;
   if(sel){ oc.fillStyle=css('--sel'); oc.fillRect(sel.a*k,0,(sel.b-sel.a)*k,ob.height); }
   oc.strokeStyle=css('--wave'); oc.lineWidth=1.5;
   oc.strokeRect(v.viewStart*k+.75,.75,Math.max(3,v.viewDur*k)-1.5,ob.height-1.5);
+  if(laneOn(L2) && !syncZoom){ oc.setLineDash([4,3]); oc.strokeStyle=css('--accent'); oc.strokeRect(T2.viewStart*k+.75,2.75,Math.max(3,T2.viewDur*k)-1.5,ob.height-5.5); oc.setLineDash([]); }
   oc.fillStyle=css('--ink'); oc.fillRect(t*k-1,0,2,ob.height);
 }
 
 /* ---------- view / zoom ---------- */
 const minView=()=> mode==='file' ? 0.02 : (Y.env? Y.env.step*100 : 0.1);
-function clampView(){ const v=V(), d=src().dur(); v.viewDur=Math.min(d,Math.max(minView(),v.viewDur)); v.viewStart=Math.max(0,Math.min(d-v.viewDur,v.viewStart)); }
+function clampView(v){ v=v||V(); const d=src().dur(); if(!d) return; v.viewDur=Math.min(d,Math.max(minView(),v.viewDur)); v.viewStart=Math.max(0,Math.min(d-v.viewDur,v.viewStart)); }
 function syncZoomSlider(){ const d=src().dur(); if(!d){ $('zoom').value=0; return; } const v=Math.log(V().viewDur/d)/Math.log(minView()/d)*100; $('zoom').value=Math.max(0,Math.min(100,v||0)); }
-function setView(start,dur){ const v=V(); v.viewStart=start; v.viewDur=dur; clampView(); syncZoomSlider(); renderWave(); }
-const inView=t=>{ const v=V(); return t>=v.viewStart&&t<=v.viewStart+v.viewDur; };
-function zoomAround(factor, centerT){ if(!viewReady()) return; const v=V(), d=src().dur(); const nd=Math.min(d,Math.max(minView(),v.viewDur*factor)); const rel=(centerT-v.viewStart)/v.viewDur; setView(centerT-rel*nd, nd); }
+function setView(start,dur,L){ const v=laneView(L||L1); v.viewStart=start; v.viewDur=dur; clampView(v); syncZoomSlider(); renderWave(); }
+const inViewOf=(v,t)=> t>=v.viewStart&&t<=v.viewStart+v.viewDur;
+const inView=t=>inViewOf(V(),t);
+function zoomAround(factor, centerT, L){ if(!viewReady()) return; const v=laneView(L||L1), d=src().dur(); const nd=Math.min(d,Math.max(minView(),v.viewDur*factor)); const rel=(centerT-v.viewStart)/v.viewDur; setView(centerT-rel*nd, nd, L); }
 const zoomCenter=()=>{ const t=curTime(), v=V(); return inView(t)?t:v.viewStart+v.viewDur/2; };
-$('zoom').addEventListener('input',e=>{ if(!viewReady()) return; const v=V(), d=src().dur(); const nd=d*Math.pow(minView()/d,+e.target.value/100); const center=zoomCenter(); const rel=(center-v.viewStart)/v.viewDur; v.viewStart=center-rel*nd; v.viewDur=nd; clampView(); renderWave(); });
+$('zoom').addEventListener('input',e=>{ if(!viewReady()) return; const v=V(), d=src().dur(); const nd=d*Math.pow(minView()/d,+e.target.value/100); const center=zoomCenter(); const rel=(center-v.viewStart)/v.viewDur; v.viewStart=center-rel*nd; v.viewDur=nd; clampView(v); renderWave(); });
 $('zoomIn').onclick=()=>zoomAround(0.5, zoomCenter());
 $('zoomOut').onclick=()=>zoomAround(2, zoomCenter());
-$('zoomAll').onclick=()=>viewReady()&&setView(0,src().dur());
-$('zoomSel').onclick=()=>{ const sel=src().getSel(); if(!sel){toast('請先在波形上拖曳選取一段');return;} const pad=(sel.b-sel.a)*0.05; setView(sel.a-pad,sel.b-sel.a+pad*2); };
-waveBox.addEventListener('wheel',e=>{ if(!viewReady()) return;
-  e.preventDefault();
-  const v=V(), r=waveBox.getBoundingClientRect(), t=v.viewStart+(e.clientX-r.left)/r.width*v.viewDur;
-  const unit = e.deltaMode===1 ? 16 : e.deltaMode===2 ? r.height : 1;
-  const dx=e.deltaX*unit, dy=e.deltaY*unit;
-  if(e.altKey){ setAmp(ampZ*Math.exp(-dy*0.003)); return; }
-  if(e.shiftKey || Math.abs(dx)>Math.abs(dy)){ const d=(e.shiftKey&&!dx?dy:dx)/r.width*v.viewDur; setView(v.viewStart+d,v.viewDur); return; }
-  zoomAround(Math.exp(dy*((e.ctrlKey||e.metaKey)?0.012:0.0025)),t);
-},{passive:false});
+$('zoomAll').onclick=()=>{ if(!viewReady()) return; setView(0,src().dur()); if(laneOn(L2)&&!syncZoom) setView(0,src().dur(),L2); };
+$('zoomSel').onclick=()=>{ const sel=src().getSel(); if(!sel){toast('請先在波形上拖曳選取一段');return;} const pad=(sel.b-sel.a)*0.05; setView(sel.a-pad,sel.b-sel.a+pad*2); if(laneOn(L2)&&!syncZoom) setView(sel.a-pad,sel.b-sel.a+pad*2,L2); };
 /* amplitude zoom */
 let ampZ=1; const AMP_MAX=32;
 function setAmp(z){ ampZ=Math.max(1,Math.min(AMP_MAX,z)); $('ampZoom').value=Math.round(Math.log(ampZ)/Math.log(AMP_MAX)*100); $('ampVal').textContent='×'+(ampZ<10?ampZ.toFixed(1):Math.round(ampZ)); renderWave(); }
 $('ampZoom').addEventListener('input',e=>setAmp(Math.pow(AMP_MAX,+e.target.value/100)));
 $('ampReset').onclick=()=>setAmp(1);
-/* touch pinch / two-finger pan */
-const touches=new Map(); let pinch=null;
-function pinchState(){ const pts=[...touches.values()], r=waveBox.getBoundingClientRect(); return { d:Math.max(24,Math.abs(pts[0].x-pts[1].x)), m:(pts[0].x+pts[1].x)/2-r.left, w:r.width }; }
-function startPinch(){ const st=pinchState(), v=V(); pinch={d0:st.d, tm:v.viewStart+st.m/st.w*v.viewDur, dur0:v.viewDur}; drag=null; }
-function movePinch(){ const st=pinchState(), nd=pinch.dur0*pinch.d0/st.d; setView(pinch.tm-st.m/st.w*Math.min(src().dur(),Math.max(minView(),nd)), nd); }
 
-/* ---------- click-to-seek + drag-to-select ---------- */
+/* ---------- wheel, pinch, click-to-seek, drag-to-select (per lane) ---------- */
 let drag=null;
-function tAt(clientX){ const r=waveBox.getBoundingClientRect(), v=V(); return Math.max(0,Math.min(src().dur(), v.viewStart+(clientX-r.left)/r.width*v.viewDur)); }
-function xOf(t){ const r=waveBox.getBoundingClientRect(), v=V(); return (t-v.viewStart)/v.viewDur*r.width; }
-waveBox.addEventListener('pointerdown',e=>{ if(!viewReady()) return;
-  if(e.pointerType==='touch'){ touches.set(e.pointerId,{x:e.clientX}); if(touches.size===2){ waveBox.setPointerCapture(e.pointerId); startPinch(); updateSelUI(); return; } if(touches.size>2) return; }
-  if(!src().loaded()) return; waveBox.setPointerCapture(e.pointerId);
-  const x=e.clientX-waveBox.getBoundingClientRect().left, sel=src().getSel();
-  if(sel){ if(Math.abs(x-xOf(sel.a))<8){ drag={mode:'a'}; return; } if(Math.abs(x-xOf(sel.b))<8){ drag={mode:'b'}; return; } }
-  drag={mode:'new', x0:e.clientX, t0:tAt(e.clientX), moved:false};
-});
-waveBox.addEventListener('pointermove',e=>{
-  if(!viewReady()) return;
-  if(touches.has(e.pointerId)){ touches.get(e.pointerId).x=e.clientX; if(pinch&&touches.size===2){ movePinch(); return; } }
-  if(pinch) return;
-  const sel=src().getSel();
-  if(!drag){ const x=e.clientX-waveBox.getBoundingClientRect().left; waveBox.style.cursor= sel&&(Math.abs(x-xOf(sel.a))<8||Math.abs(x-xOf(sel.b))<8)?'ew-resize':'text'; return; }
-  const t=tAt(e.clientX);
-  if(drag.mode==='a') sel.a=Math.min(t,sel.b-0.005);
-  else if(drag.mode==='b') sel.b=Math.max(t,sel.a+0.005);
-  else { if(Math.abs(e.clientX-drag.x0)>3) drag.moved=true; if(drag.moved) src().setSel({a:Math.min(drag.t0,t),b:Math.max(drag.t0,t)}); }
-  updateSelUI(); drawOverlay();
-});
-const touchEnd=e=>{ touches.delete(e.pointerId); if(touches.size<2) pinch=null; };
-waveBox.addEventListener('pointerup',e=>{ const wasTouch=touches.has(e.pointerId); touchEnd(e); if(wasTouch&&pinch===null&&!drag) return; if(!drag) return; if(drag.mode==='new'&&!drag.moved) seek(drag.t0); drag=null; updateSelUI(); });
-waveBox.addEventListener('pointercancel',e=>{ touchEnd(e); drag=null; });
+function attachLane(L){
+  const box=L.box;
+  const tAt=x=>{ const r=box.getBoundingClientRect(), v=laneView(L); return Math.max(0,Math.min(src().dur(), v.viewStart+(x-r.left)/r.width*v.viewDur)); };
+  const xOf=t=>{ const r=box.getBoundingClientRect(), v=laneView(L); return (t-v.viewStart)/v.viewDur*r.width; };
+  box.addEventListener('wheel',e=>{ if(!viewReady()) return;
+    e.preventDefault();
+    const v=laneView(L), r=box.getBoundingClientRect(), t=v.viewStart+(e.clientX-r.left)/r.width*v.viewDur;
+    const unit = e.deltaMode===1 ? 16 : e.deltaMode===2 ? r.height : 1;
+    const dx=e.deltaX*unit, dy=e.deltaY*unit;
+    if(e.altKey){ setAmp(ampZ*Math.exp(-dy*0.003)); return; }
+    if(e.shiftKey || Math.abs(dx)>Math.abs(dy)){ const d=(e.shiftKey&&!dx?dy:dx)/r.width*v.viewDur; setView(v.viewStart+d,v.viewDur,L); return; }
+    zoomAround(Math.exp(dy*((e.ctrlKey||e.metaKey)?0.012:0.0025)),t,L);
+  },{passive:false});
+  const T=L.touches; let pinch=null;
+  const pst=()=>{ const pts=[...T.values()], r=box.getBoundingClientRect(); return { d:Math.max(24,Math.abs(pts[0].x-pts[1].x)), m:(pts[0].x+pts[1].x)/2-r.left, w:r.width }; };
+  box.addEventListener('pointerdown',e=>{ if(!viewReady()) return;
+    if(e.pointerType==='touch'){ T.set(e.pointerId,{x:e.clientX}); if(T.size===2){ box.setPointerCapture(e.pointerId); const st=pst(), v=laneView(L); pinch={d0:st.d, tm:v.viewStart+st.m/st.w*v.viewDur, dur0:v.viewDur}; drag=null; return; } if(T.size>2) return; }
+    if(!src().loaded()) return; box.setPointerCapture(e.pointerId);
+    const x=e.clientX-box.getBoundingClientRect().left, sel=src().getSel();
+    if(sel){ if(Math.abs(x-xOf(sel.a))<8){ drag={L,mode:'a'}; return; } if(Math.abs(x-xOf(sel.b))<8){ drag={L,mode:'b'}; return; } }
+    drag={L, mode:'new', x0:e.clientX, t0:tAt(e.clientX), moved:false};
+  });
+  box.addEventListener('pointermove',e=>{
+    if(!viewReady()) return;
+    if(T.has(e.pointerId)){ T.get(e.pointerId).x=e.clientX; if(pinch&&T.size===2){ const st=pst(), nd=pinch.dur0*pinch.d0/st.d; setView(pinch.tm-st.m/st.w*Math.min(src().dur(),Math.max(minView(),nd)), nd, L); return; } }
+    if(pinch) return;
+    const sel=src().getSel();
+    if(!drag || drag.L!==L){ if(!drag){ const x=e.clientX-box.getBoundingClientRect().left; box.style.cursor= sel&&(Math.abs(x-xOf(sel.a))<8||Math.abs(x-xOf(sel.b))<8)?'ew-resize':'text'; } return; }
+    const t=tAt(e.clientX);
+    if(drag.mode==='a') sel.a=Math.min(t,sel.b-0.005);
+    else if(drag.mode==='b') sel.b=Math.max(t,sel.a+0.005);
+    else { if(Math.abs(e.clientX-drag.x0)>3) drag.moved=true; if(drag.moved) src().setSel({a:Math.min(drag.t0,t),b:Math.max(drag.t0,t)}); }
+    updateSelUI(); drawOverlay();
+  });
+  const tEnd=e=>{ T.delete(e.pointerId); if(T.size<2) pinch=null; };
+  box.addEventListener('pointerup',e=>{ const wasTouch=T.has(e.pointerId); tEnd(e); if(!drag||drag.L!==L){ return; } if(wasTouch&&pinch) return;
+    if(drag.mode==='new'&&!drag.moved) seek(drag.t0); drag=null; updateSelUI(); });
+  box.addEventListener('pointercancel',e=>{ tEnd(e); drag=null; });
+}
+attachLane(L1); attachLane(L2);
 let ovDrag=false;
 function ovMove(e){ const r=ovBox.getBoundingClientRect(), v=V(); const t=(e.clientX-r.left)/r.width*src().dur(); setView(t-v.viewDur/2,v.viewDur); }
 ovBox.addEventListener('pointerdown',e=>{ if(!viewReady()) return; ovDrag=true; ovBox.setPointerCapture(e.pointerId); ovMove(e); });
 ovBox.addEventListener('pointermove',e=>{ if(ovDrag) ovMove(e); });
 ovBox.addEventListener('pointerup',()=>ovDrag=false);
 
+/* ---------- track options ---------- */
+function updateTrackUI(){
+  const fm = mode==='file';
+  $('trackOpts').hidden=!fm;
+  $('lane2').hidden=!(fm&&two); $('lane1Head').hidden=!(fm&&two);
+  document.querySelector('.mod[data-mod="wave"]').classList.toggle('two', fm&&two);
+  $('syncChk').disabled=!two; $('syncLbl').classList.toggle('off',!two);
+  renderTakes();
+}
+$('twoChk').addEventListener('change',e=>{ two=e.target.checked; if(!two){ player2.pause(); } else if(filePlaying && play2 && T2.data){ player2.currentTime=FILE.time(); player2.play().catch(()=>{}); }
+  if(mode==='file'){ clampView(S); } updateTrackUI(); updateName(); syncZoomSlider(); renderOverview(); renderWave(); });
+$('syncChk').addEventListener('change',e=>{ syncZoom=e.target.checked; if(!syncZoom){ T2.viewStart=S.viewStart; T2.viewDur=S.viewDur; } renderWave(); });
+function trackPlayToggle(el,tr,on){ if(!filePlaying) return; if(on && tr.data && FILE.time()<tr.dur-0.005){ el.currentTime=FILE.time(); el.play().catch(()=>{}); } else el.pause(); }
+$('play1Chk').addEventListener('change',e=>{ play1=e.target.checked; trackPlayToggle(player,S,play1); });
+$('play2Chk').addEventListener('change',e=>{ play2=e.target.checked; trackPlayToggle(player2,T2,two&&play2); });
+$('fileIn2').addEventListener('change',e=>{ const f=e.target.files[0]; if(f) loadBlob(f,f.name,{track:2}); e.target.value=''; });
+
 /* ---------- transport ---------- */
 function seek(t){ const s=src(); if(!s.loaded()) return; t=Math.max(0,Math.min(s.dur(),t)); s.seek(t);
-  if(!inView(t)) setView(t-V().viewDur*0.1,V().viewDur); drawOverlay(); }
+  if(!inView(t)) setView(t-V().viewDur*0.1,V().viewDur);
+  if(laneOn(L2)&&!syncZoom&&!inViewOf(T2,t)) setView(t-T2.viewDur*0.1,T2.viewDur,L2);
+  drawOverlay(); }
 function play(){ const s=src(); if(!s.loaded()) return; const sel=s.getSel(), t=s.time();
   if(sel){ if(t<sel.a||t>=sel.b-0.05) s.seek(sel.a); } else if(t>=s.dur()-0.05) s.seek(0);
   s.play(); }
@@ -678,17 +777,20 @@ $('back').onclick=()=>seek(curTime()-2);
 $('fwd').onclick=()=>seek(curTime()+2);
 $('loopBtn').onclick=()=>{ loop=!loop; $('loopBtn').classList.toggle('on',loop); $('loopBtn').setAttribute('aria-pressed',loop); if(loop&&!src().getSel()) toast('循環會作用在選取範圍上；沒有選取時就是整首重播'); };
 function onPlayState(playing){ $('playBtn').classList.toggle('on',playing); if(playing) startTick(); else drawOverlay(); }
-player.addEventListener('play',()=>mode==='file'&&onPlayState(true));
-player.addEventListener('pause',()=>mode==='file'&&onPlayState(false));
-player.addEventListener('ended',()=>{ if(mode==='file'&&loop){ player.currentTime=S.sel?S.sel.a:0; player.play(); } });
 let ticking=false, lastOv=0;
 function startTick(){ if(!ticking){ ticking=true; requestAnimationFrame(tick); } }
 function tick(now){
   const s=src();
   if(s.paused()){ ticking=false; drawOverlay(); return; }
+  if(mode==='file'){
+    if(!fileRunning()){ if(loop && !S.sel){ fileT=0; FILE.seek(0); filePlaying=false; FILE.play(); } else { FILE.pause(); fileT=fileDur(); } requestAnimationFrame(tick); return; }
+    const a=fileEls().filter(x=>x.on && !x.el.paused && !x.el.ended);
+    if(a.length===2 && Math.abs(a[1].el.currentTime-a[0].el.currentTime)>0.05) a[1].el.currentTime=a[0].el.currentTime;
+  }
   const t=s.time(), sel=s.getSel(), v=V();
   if(sel && t>=sel.b && !(mode==='yt'&&grab)){ if(loop) s.seek(sel.a); else { s.pause(); s.seek(sel.b); } }
   if(!drag && !ovDrag && viewReady() && (t>v.viewStart+v.viewDur || t<v.viewStart)) setView(t-v.viewDur*0.02,v.viewDur);
+  if(laneOn(L2)&&!syncZoom&&!drag&&!inViewOf(T2,t)) setView(t-T2.viewDur*0.02,T2.viewDur,L2);
   if(mode==='yt' && capSrc){ renderWave(); if(now-lastOv>400){ lastOv=now; renderOverview(); } updateName(); }
   else drawOverlay();
   requestAnimationFrame(tick);
@@ -713,13 +815,13 @@ function applyRate(){
   let r=+$('rate').value;
   if(mode==='file'){ const keep=$('keepPitch').checked;
     player.preservesPitch=keep; player.mozPreservesPitch=keep; player.webkitPreservesPitch=keep;
-    player.playbackRate=r; player.defaultPlaybackRate=r; showRate(r); }
+    for(const el of [player,player2]){ el.preservesPitch=keep; el.mozPreservesPitch=keep; el.webkitPreservesPitch=keep; el.playbackRate=r; el.defaultPlaybackRate=r; } showRate(r); }
   else { if(ytRates.length<=8) r=nearest(ytRates,r); $('rate').value=r; showRate(r);
     if(Y.ready) try{ ytNow(); Y.player.setPlaybackRate(r); Y.rate=r; }catch(_){}
     sendPitch(); }
   updatePitchInfo();
 }
-function applyVol(){ const v=+$('vol').value; player.volume=v; if(Y.ready) try{ Y.player.setVolume(Math.round(v*100)); }catch(_){} }
+function applyVol(){ const v=+$('vol').value; player.volume=v; player2.volume=v; if(Y.ready) try{ Y.player.setVolume(Math.round(v*100)); }catch(_){} }
 $('rate').addEventListener('input',applyRate);
 $('keepPitch').addEventListener('change',applyRate);
 document.querySelectorAll('#ratePresets button').forEach(b=>b.onclick=()=>{ $('rate').value=b.dataset.r; applyRate(); });
@@ -768,7 +870,9 @@ let dropEl=null, dragDepth=0;
 document.addEventListener('dragenter',e=>{ if(![...e.dataTransfer.types].includes('Files')) return; e.preventDefault(); dragDepth++; if(!dropEl){dropEl=document.createElement('div');dropEl.className='drop';dropEl.textContent='放開以載入音檔';document.body.append(dropEl);} });
 document.addEventListener('dragover',e=>e.preventDefault());
 document.addEventListener('dragleave',()=>{ if(--dragDepth<=0&&dropEl){dropEl.remove();dropEl=null;dragDepth=0;} });
-document.addEventListener('drop',e=>{ e.preventDefault(); dragDepth=0; if(dropEl){dropEl.remove();dropEl=null;} const f=e.dataTransfer.files[0]; if(f){ setMode('file'); loadBlob(f,f.name); } });
+document.addEventListener('drop',e=>{ e.preventDefault(); dragDepth=0; if(dropEl){dropEl.remove();dropEl=null;} const f=e.dataTransfer.files[0]; if(!f) return;
+  const toT2 = two && mode==='file' && e.target.closest && e.target.closest('#lane2');
+  setMode('file'); loadBlob(f,f.name, toT2?{track:2}:undefined); });
 
 /* ---------- YouTube ---------- */
 function ytMsg(text,err){ const m=$('ytMsg'); m.textContent=text||''; m.className='msg'+(err?' err':''); m.hidden=!text; }
@@ -833,20 +937,23 @@ function pollMeta(){
 $('ytSrcBar').addEventListener('submit',loadYT);
 
 /* ---------- 示波器 + YouTube 波形紀錄器 ---------- */
-let actx=null, scopeAn=null, mediaSrc=null, capStream=null, capSrc=null, capMsgText='';
+let actx=null, scopeAn=null, mediaSrc=null, mediaSrc2=null, capStream=null, capSrc=null, capMsgText='';
 const td=new Float32Array(8192);
 function ensureCtx(){
   if(!actx){ actx=new (window.AudioContext||window.webkitAudioContext)(); scopeAn=actx.createAnalyser(); scopeAn.fftSize=8192; scopeAn.smoothingTimeConstant=0; }
   if(actx.state==='suspended') actx.resume();
 }
 function hookFile(){
-  try{ ensureCtx(); if(!mediaSrc){ mediaSrc=actx.createMediaElementSource(player); mediaSrc.connect(actx.destination); } connectScope(); }catch(e){ console.warn(e); }
+  try{ ensureCtx(); if(!mediaSrc){ mediaSrc=actx.createMediaElementSource(player); mediaSrc.connect(actx.destination); }
+    if(!mediaSrc2){ mediaSrc2=actx.createMediaElementSource(player2); mediaSrc2.connect(actx.destination); } connectScope(); }catch(e){ console.warn(e); }
 }
 function connectScope(){
   if(!scopeAn) return;
   try{ mediaSrc&&mediaSrc.disconnect(scopeAn); }catch(_){}
+  try{ mediaSrc2&&mediaSrc2.disconnect(scopeAn); }catch(_){}
   try{ capSrc&&capSrc.disconnect(scopeAn); }catch(_){}
   if(mode==='file'&&mediaSrc) mediaSrc.connect(scopeAn);
+  if(mode==='file'&&mediaSrc2) mediaSrc2.connect(scopeAn);
   if(mode==='yt'&&capSrc) capSrc.connect(scopeAn);
 }
 function updateScopeSrc(){
@@ -986,8 +1093,8 @@ function endGrab(ok, why){
 }
 function clearTemp(){
   if(!S.temp) return;
-  if(mode==='file') player.pause();
-  S.data=null; S.peaks=null; S.dur=0; S.name=''; S.sel=null; S.temp=false;
+  if(filePlaying) FILE.pause();
+  S.data=null; S.peaks=null; S.dur=0; S.name=''; S.sel=null; S.temp=false; fileT=0;
   player.removeAttribute('src'); try{ player.load(); }catch(_){}
   if(objUrl){ URL.revokeObjectURL(objUrl); objUrl=null; }
   updateName(); updateSelUI(); renderOverview(); renderWave();
@@ -1063,7 +1170,7 @@ function drawScope(active){
 let scopeWas=null, scopeDirty=true;
 function scopeLoop(now){
   requestAnimationFrame(scopeLoop);
-  const fileActive = mode==='file' && mediaSrc && !player.paused;
+  const fileActive = mode==='file' && mediaSrc && filePlaying;
   const ytActive = mode==='yt' && !!capSrc;
   const active = !!(scopeAn && (fileActive||ytActive));
   if(active) scopeAn.getFloatTimeDomainData(td);
@@ -1098,7 +1205,8 @@ $('recBtn').onclick=async()=>{
     const type=rec.mimeType||mime||'audio/webm'; const blob=new Blob(chunks,{type});
     const take={name:'錄音 '+(++takeN), blob, ext:type.includes('mp4')?'mp4':'webm', dur:(performance.now()-recStart)/1000};
     takes.unshift(take); renderTakes();
-    if(mode==='file') loadBlob(blob, take.name); else toast('錄音完成。按「載入波形」可切到音檔模式看波形'); };
+    if(mode==='file' && two){ loadBlob(blob, take.name, {track:2}); toast('錄音已放進音軌 2，可和音軌 1 對照'); }
+    else if(mode==='file') loadBlob(blob, take.name); else toast('錄音完成。按「載入波形」可切到音檔模式看波形'); };
   recCtx=new (window.AudioContext||window.webkitAudioContext)(); const srcNode=recCtx.createMediaStreamSource(recStream), an=recCtx.createAnalyser(); an.fftSize=1024; srcNode.connect(an);
   const buf=new Float32Array(an.fftSize);
   const meter=()=>{ an.getFloatTimeDomainData(buf); let pk=0; for(const v of buf) pk=Math.max(pk,Math.abs(v));
@@ -1112,9 +1220,10 @@ function renderTakes(){
   takes.forEach((tk,i)=>{ const li=document.createElement('li');
     const nm=document.createElement('span'); nm.className='nm'; nm.textContent=tk.name; const sm=document.createElement('small'); sm.textContent=fmtShort(tk.dur); nm.append(sm);
     const b1=document.createElement('button'); b1.type='button'; b1.textContent='載入波形'; b1.onclick=()=>{ setMode('file'); loadBlob(tk.blob,tk.name); };
+    const b4=document.createElement('button'); b4.type='button'; b4.textContent='載入音軌 2'; b4.hidden=!two; b4.onclick=()=>{ setMode('file'); loadBlob(tk.blob,tk.name,{track:2}); };
     const b2=document.createElement('button'); b2.type='button'; b2.textContent='存檔'; b2.onclick=()=>saveTake(tk);
     const b3=document.createElement('button'); b3.type='button'; b3.textContent='刪除'; b3.onclick=()=>{ if(b3.dataset.armed){ takes.splice(i,1); renderTakes(); } else { b3.dataset.armed=1; b3.textContent='確定刪除？'; setTimeout(()=>{ if(b3.isConnected){ delete b3.dataset.armed; b3.textContent='刪除'; } },3000); } };
-    li.append(nm,b1,b2,b3); ul.append(li); });
+    li.append(nm,b1,b4,b2,b3); ul.append(li); });
 }
 async function saveTake(tk){
   const filename=tk.name.replace(/\s+/g,'_')+'.'+tk.ext;
