@@ -1,0 +1,1215 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>國中自然素養試題編輯器 & SVG 向量圖形工作台</title>
+
+  <!-- Tailwind CSS (v3 Play CDN) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Markdown 解析 -->
+  <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+  <!-- HTML/SVG 消毒 -->
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
+  <!-- KaTeX 數學式 -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <!-- Fabric.js 向量畫布 -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
+  <!-- Word 匯出 -->
+  <script src="https://cdn.jsdelivr.net/npm/html-docx-js@0.3.1/dist/html-docx.js"></script>
+  <!-- 檔案下載 -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+
+  <style>
+    .exam-paper {
+      font-family: "Times New Roman", "Microsoft JhengHei", "PingFang TC", "Noto Sans TC", sans-serif;
+      line-height: 1.75;
+      color: #1a202c;
+    }
+    .exam-paper h1 { font-size: 1.45rem; font-weight: bold; margin-bottom: 0.75rem; border-bottom: 2px solid #2d3748; padding-bottom: 0.25rem; }
+    .exam-paper h2 { font-size: 1.25rem; font-weight: bold; margin-top: 1rem; margin-bottom: 0.5rem; color: #2b6cb0; }
+    .exam-paper h3 { font-size: 1.1rem; font-weight: bold; margin-top: 0.8rem; margin-bottom: 0.4rem; }
+    .exam-paper p { margin-bottom: 0.65rem; }
+    .exam-paper ul { list-style: disc; padding-left: 1.5rem; margin-bottom: 0.65rem; }
+    .exam-paper ol { list-style: decimal; padding-left: 1.5rem; margin-bottom: 0.65rem; }
+    .exam-paper hr { border: 0; border-top: 1px solid #a0aec0; margin: 1.25rem 0; }
+    .exam-paper table { width: 100%; border-collapse: collapse; margin: 0.9rem 0; font-size: 0.95rem; }
+    .exam-paper th, .exam-paper td { border: 1px solid #4a5568; padding: 6px 10px; text-align: center; }
+    .exam-paper th { background-color: #edf2f7; font-weight: bold; }
+    .exam-paper code { background: #edf2f7; padding: 0 4px; border-radius: 3px; font-size: 0.9em; }
+    .exam-paper .katex { font-size: 1.05em; }
+
+    .svg-preview-wrapper {
+      position: relative;
+      width: 100%;
+      margin: 1rem 0;
+      border: 1px dashed #cbd5e0;
+      border-radius: 8px;
+      padding: 8px;
+      background: #fafafa;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+    .svg-preview-wrapper:hover { border-color: #3182ce; box-shadow: 0 4px 12px rgba(49, 130, 206, 0.15); }
+    .svg-content { display: flex; justify-content: center; overflow-x: auto; }
+    .svg-content svg { max-width: 100%; height: auto; }
+    .svg-edit-badge { position: absolute; top: 10px; right: 10px; opacity: 0; transition: opacity 0.2s ease; z-index: 20; }
+    .svg-preview-wrapper:hover .svg-edit-badge, .svg-edit-badge:focus-within { opacity: 1; }
+    @media (hover: none) { .svg-edit-badge { opacity: 1; } }
+
+    .custom-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+    .custom-scroll::-webkit-scrollbar-track { background: #f1f5f9; }
+    .custom-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+    .custom-scroll::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+    .tool-btn.active { background: #dbeafe; color: #1d4ed8; border-color: #93c5fd; font-weight: 600; }
+
+    /* 原始碼視窗收合 */
+    #expand-rail { display: none; }
+    #app-main.source-collapsed #editor-pane { display: none; }
+    #app-main.source-collapsed #expand-rail { display: flex; }
+    #app-main.source-collapsed #preview-pane { width: 100%; }
+    .rail-label { writing-mode: vertical-rl; letter-spacing: 0.15em; }
+    @media (max-width: 767px) { .rail-label { writing-mode: horizontal-tb; letter-spacing: normal; } }
+
+    @media print {
+      @page { size: A4; margin: 18mm; }
+      html, body { background: #fff !important; height: auto !important; overflow: visible !important; }
+      #app-header, #editor-pane, #expand-rail, #preview-toolbar, #toast, #svg-editor-modal, .svg-edit-badge { display: none !important; }
+      #app-main, #preview-pane, #preview-scroll { display: block !important; overflow: visible !important; padding: 0 !important; width: 100% !important; height: auto !important; }
+      #preview-paper { box-shadow: none !important; border: none !important; max-width: none !important; padding: 0 !important; min-height: 0 !important; }
+      .svg-preview-wrapper { border: none !important; background: none !important; padding: 0 !important; box-shadow: none !important; }
+      table, .svg-preview-wrapper { break-inside: avoid; }
+    }
+  </style>
+</head>
+<body class="bg-slate-100 h-screen flex flex-col font-sans overflow-hidden">
+
+  <!-- 頂部功能列 -->
+  <header id="app-header" class="bg-white border-b border-slate-200 px-4 py-2.5 flex flex-wrap gap-2 items-center justify-between shrink-0 shadow-sm z-10">
+    <div class="flex items-center space-x-3">
+      <div class="w-9 h-9 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold text-lg shadow-sm">理</div>
+      <div>
+        <h1 class="text-base font-bold text-slate-800 leading-tight">國中自然素養試題編輯器 & SVG 向量圖形工作台</h1>
+        <p class="text-xs text-slate-500">Markdown ＋ KaTeX 數學式 ＋ 內嵌 SVG 視覺化編輯，可列印 / 匯出 Word</p>
+      </div>
+    </div>
+    <div class="flex flex-wrap items-center gap-2">
+      <button id="btn-load-sample" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium rounded-md border border-slate-300 transition">載入範例</button>
+      <button id="btn-clear" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium rounded-md border border-slate-300 transition">清空</button>
+      <button id="btn-copy-md" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium rounded-md border border-slate-300 transition">複製 Markdown</button>
+      <button id="btn-print" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium rounded-md border border-slate-300 transition">列印 / 存 PDF</button>
+      <button id="btn-export-docx" class="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-md shadow transition">匯出 Word (.docx)</button>
+    </div>
+  </header>
+
+  <!-- 主工作區 -->
+  <main id="app-main" class="flex-1 flex flex-col md:flex-row overflow-hidden">
+    <!-- 左：原始碼 -->
+    <section id="editor-pane" class="h-2/5 md:h-auto md:w-1/2 flex flex-col border-b md:border-b-0 md:border-r border-slate-200 bg-white">
+      <div class="px-4 py-2 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+        <div class="flex items-center space-x-2">
+          <span class="text-xs font-semibold text-slate-600 tracking-wider">Markdown & SVG 原始碼</span>
+          <span id="char-count" class="text-[11px] text-slate-400">0 字元</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <div class="hidden lg:block text-[11px] text-slate-400">數學式用 $…$ 或 $$…$$ ・ 自動暫存於本機</div>
+          <button id="btn-collapse-source" type="button" class="px-2 py-0.5 text-[11px] text-slate-600 bg-white hover:bg-slate-200 border border-slate-300 rounded transition" title="收合原始碼視窗 (Ctrl+\)">
+            <span class="hidden md:inline">◀ 收合</span><span class="md:hidden">▲ 收合</span>
+          </button>
+        </div>
+      </div>
+      <textarea id="markdown-input" spellcheck="false" class="w-full flex-1 p-4 font-mono text-xs sm:text-sm text-slate-800 resize-none outline-none custom-scroll leading-relaxed focus:bg-slate-50/50" placeholder="在此輸入題目 Markdown，可直接貼入 <svg>…</svg> 圖形，數學式以 $…$ 包住…"></textarea>
+    </section>
+
+    <!-- 收合後的展開側欄 -->
+    <button id="expand-rail" type="button" title="展開原始碼視窗 (Ctrl+\)"
+      class="shrink-0 items-center justify-center gap-1.5 bg-white hover:bg-blue-50 text-slate-600 hover:text-blue-700 text-xs font-medium border-b md:border-b-0 md:border-r border-slate-200 py-1.5 md:py-3 md:w-9 md:flex-col transition">
+      <span class="hidden md:inline">▶</span><span class="md:hidden">▼</span>
+      <span class="rail-label">原始碼</span>
+    </button>
+
+    <!-- 右：預覽 -->
+    <section id="preview-pane" class="flex-1 md:w-1/2 flex flex-col bg-slate-100 overflow-hidden">
+      <div id="preview-toolbar" class="px-4 py-2 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+        <span class="text-xs font-semibold text-slate-600 tracking-wider">試卷印刷預覽（模擬 A4）</span>
+        <span class="text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">雙擊圖形或點「編輯此圖」</span>
+      </div>
+      <div id="preview-scroll" class="flex-1 p-4 sm:p-6 overflow-y-auto custom-scroll flex justify-center">
+        <div id="preview-paper" class="w-full max-w-2xl bg-white shadow-md rounded-md p-6 sm:p-10 exam-paper min-h-[842px] border border-slate-200 h-fit"></div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Toast -->
+  <div id="toast" class="fixed bottom-6 right-6 bg-slate-900 text-white text-xs px-4 py-2.5 rounded-lg shadow-lg opacity-0 transition-opacity duration-300 pointer-events-none z-50">
+    <span id="toast-message">操作成功</span>
+  </div>
+
+  <!-- SVG 畫布編輯器 -->
+  <div id="svg-editor-modal" class="fixed inset-0 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center hidden z-40 p-2 sm:p-4">
+    <div class="bg-white rounded-xl shadow-2xl w-full max-w-6xl h-[94vh] flex flex-col overflow-hidden border border-slate-300">
+
+      <div class="bg-slate-800 text-white px-4 py-2.5 flex flex-wrap gap-2 items-center justify-between shrink-0">
+        <div class="flex items-center space-x-3">
+          <span class="bg-blue-500 text-white text-xs px-2 py-0.5 rounded font-bold">SVG 向量畫布</span>
+          <h2 class="text-sm font-semibold">圖形視覺化編輯器</h2>
+        </div>
+        <div class="flex flex-wrap items-center gap-1.5">
+          <button id="btn-editor-undo" class="px-2.5 py-1 bg-slate-700 hover:bg-slate-600 text-xs rounded transition disabled:opacity-40" title="復原 (Ctrl+Z)">↺ 復原</button>
+          <button id="btn-editor-redo" class="px-2.5 py-1 bg-slate-700 hover:bg-slate-600 text-xs rounded transition disabled:opacity-40" title="重做 (Ctrl+Y)">↻ 重做</button>
+          <span class="text-slate-500">|</span>
+          <button id="btn-download-single-svg" class="px-2.5 py-1 bg-slate-700 hover:bg-slate-600 text-xs rounded transition">下載 SVG</button>
+          <button id="btn-download-single-png" class="px-2.5 py-1 bg-slate-700 hover:bg-slate-600 text-xs rounded transition">下載 PNG</button>
+          <span class="text-slate-500">|</span>
+          <button id="btn-apply-svg-back" class="px-3.5 py-1 bg-blue-600 hover:bg-blue-500 text-xs font-semibold rounded shadow transition">✓ 套用並更新回 Markdown</button>
+          <button id="btn-close-editor" class="text-slate-400 hover:text-white text-lg ml-1 px-1.5" title="關閉 (Esc)">✕</button>
+        </div>
+      </div>
+
+      <div class="bg-slate-100 border-b border-slate-200 px-3 py-2 flex flex-wrap items-center justify-between gap-2 shrink-0 text-xs text-slate-700">
+        <div class="flex flex-wrap items-center gap-1">
+          <span class="font-bold text-slate-500 mr-1">工具:</span>
+          <button id="tool-select" class="tool-btn active px-2 py-1 bg-white hover:bg-slate-200 rounded border border-slate-300">選取</button>
+          <button id="tool-text" class="tool-btn px-2 py-1 bg-white hover:bg-slate-200 rounded border border-slate-300">＋文字</button>
+          <button id="tool-line" class="tool-btn px-2 py-1 bg-white hover:bg-slate-200 rounded border border-slate-300">＋直線</button>
+          <button id="tool-arrow" class="tool-btn px-2 py-1 bg-white hover:bg-slate-200 rounded border border-slate-300">＋箭頭</button>
+          <button id="tool-curve" class="tool-btn px-2 py-1 bg-white hover:bg-slate-200 rounded border border-slate-300">＋曲線</button>
+          <button id="tool-rect" class="tool-btn px-2 py-1 bg-white hover:bg-slate-200 rounded border border-slate-300">＋方框</button>
+          <button id="tool-circle" class="tool-btn px-2 py-1 bg-white hover:bg-slate-200 rounded border border-slate-300">＋圓點</button>
+          <button id="tool-freehand" class="tool-btn px-2 py-1 bg-white hover:bg-slate-200 rounded border border-slate-300">✎ 手繪</button>
+        </div>
+        <div id="prop-controls" class="flex flex-wrap items-center gap-x-3 gap-y-1 bg-white px-3 py-1 rounded border border-slate-300">
+          <div class="flex items-center gap-1">
+            <span>文字</span>
+            <input type="text" id="prop-text" class="border border-slate-300 rounded px-1.5 py-0.5 w-28 text-xs disabled:bg-slate-100" placeholder="未選取文字" disabled>
+          </div>
+          <div class="flex items-center gap-1">
+            <span>線條色</span>
+            <input type="color" id="prop-stroke" value="#1a202c" class="w-6 h-6 border-0 p-0 rounded cursor-pointer">
+          </div>
+          <div class="flex items-center gap-1">
+            <span>填色</span>
+            <input type="color" id="prop-fill" value="#ffffff" class="w-6 h-6 border-0 p-0 rounded cursor-pointer">
+            <label class="flex items-center gap-0.5"><input type="checkbox" id="prop-nofill">無</label>
+          </div>
+          <div class="flex items-center gap-1">
+            <span>線寬</span>
+            <input type="number" id="prop-width" min="0" max="20" step="0.5" value="2" class="border border-slate-300 rounded px-1 py-0.5 w-14 text-xs">
+          </div>
+          <div class="flex items-center gap-1">
+            <span>字級</span>
+            <input type="number" id="prop-fontsize" min="6" max="72" value="14" class="border border-slate-300 rounded px-1 py-0.5 w-14 text-xs disabled:bg-slate-100" disabled>
+          </div>
+          <div class="flex items-center gap-1">
+            <span>線型</span>
+            <select id="prop-dash" class="border border-slate-300 rounded px-1 py-0.5 text-xs">
+              <option value="solid">實線</option>
+              <option value="dashed">虛線</option>
+              <option value="dotted">點線</option>
+            </select>
+          </div>
+          <button id="btn-delete-element" class="px-2 py-0.5 bg-red-100 hover:bg-red-200 text-red-700 rounded border border-red-300 font-medium">🗑 刪除</button>
+        </div>
+      </div>
+
+      <div class="flex-1 bg-slate-200/80 p-4 flex overflow-auto custom-scroll">
+        <div class="m-auto bg-white shadow-xl rounded border border-slate-300 overflow-hidden">
+          <canvas id="fabric-canvas"></canvas>
+        </div>
+      </div>
+
+      <div class="bg-slate-50 border-t border-slate-200 px-4 py-1.5 text-[11px] text-slate-500 flex flex-wrap gap-2 justify-between items-center">
+        <div>點選物件可拖曳、旋轉、縮放；<kbd class="px-1 bg-slate-200 rounded">Delete</kbd> 刪除、<kbd class="px-1 bg-slate-200 rounded">Ctrl+Z</kbd> 復原、雙擊文字可直接修改。</div>
+        <div id="canvas-status">畫布尺寸: 650 × 420 px</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 範例題目（以純文字區塊存放，避免 JS 字串跳脫問題） -->
+  <script type="text/plain" id="sample-markdown"># 自然科素養試題範例：彈簧的伸長量
+
+## 【題組閱讀材料】
+
+**閱讀下列短文與實驗數據，回答第 1. 至 3. 題：**
+
+小美想比較兩條不同彈簧的性質。她將彈簧甲、乙分別固定在鐵架上，在下端依序懸掛不同重量的砝碼，待彈簧靜止後，以直尺測量彈簧的總長度，結果如**表(一)**與**圖(一)**所示。實驗過程中，兩條彈簧均未超過彈性限度。
+
+**表(一) 彈簧總長度與懸掛物重的關係**
+
+| 懸掛物重 (gw) | 0 | 20 | 40 | 60 | 80 | 100 |
+| :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| 彈簧甲總長度 (cm) | 10.0 | 11.0 | 12.0 | 13.0 | 14.0 | 15.0 |
+| 彈簧乙總長度 (cm) | 8.0 | 10.0 | 12.0 | 14.0 | 16.0 | 18.0 |
+
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 650 420" width="100%" style="max-width:650px;background-color:#ffffff;">
+  <text x="325" y="24" font-size="16" font-weight="bold" fill="#1a202c" text-anchor="middle" font-family="Microsoft JhengHei, PingFang TC, Noto Sans TC, sans-serif">圖(一) 彈簧總長度與懸掛物重的關係</text>
+  <g stroke="#e2e8f0" stroke-width="1">
+    <line x1="80" y1="330" x2="580" y2="330" />
+    <line x1="80" y1="300" x2="580" y2="300" />
+    <line x1="80" y1="270" x2="580" y2="270" />
+    <line x1="80" y1="240" x2="580" y2="240" />
+    <line x1="80" y1="210" x2="580" y2="210" />
+    <line x1="80" y1="180" x2="580" y2="180" />
+    <line x1="80" y1="150" x2="580" y2="150" />
+    <line x1="80" y1="120" x2="580" y2="120" />
+    <line x1="80" y1="90" x2="580" y2="90" />
+    <line x1="80" y1="60" x2="580" y2="60" />
+    <line x1="180" y1="60" x2="180" y2="360" />
+    <line x1="280" y1="60" x2="280" y2="360" />
+    <line x1="380" y1="60" x2="380" y2="360" />
+    <line x1="480" y1="60" x2="480" y2="360" />
+    <line x1="580" y1="60" x2="580" y2="360" />
+  </g>
+  <line x1="80" y1="360" x2="612" y2="360" stroke="#1a202c" stroke-width="2" />
+  <polygon points="620,360 607,354 607,366" fill="#1a202c" />
+  <line x1="80" y1="360" x2="80" y2="42" stroke="#1a202c" stroke-width="2" />
+  <polygon points="80,34 74,47 86,47" fill="#1a202c" />
+  <g font-size="12" fill="#2d3748" text-anchor="end" font-family="Times New Roman, serif">
+    <text x="70" y="364">0</text>
+    <text x="70" y="334">2</text>
+    <text x="70" y="304">4</text>
+    <text x="70" y="274">6</text>
+    <text x="70" y="244">8</text>
+    <text x="70" y="214">10</text>
+    <text x="70" y="184">12</text>
+    <text x="70" y="154">14</text>
+    <text x="70" y="124">16</text>
+    <text x="70" y="94">18</text>
+    <text x="70" y="64">20</text>
+  </g>
+  <g font-size="12" fill="#2d3748" text-anchor="middle" font-family="Times New Roman, serif">
+    <text x="80" y="380">0</text>
+    <text x="180" y="380">20</text>
+    <text x="280" y="380">40</text>
+    <text x="380" y="380">60</text>
+    <text x="480" y="380">80</text>
+    <text x="580" y="380">100</text>
+  </g>
+  <text x="92" y="44" font-size="13" font-weight="bold" fill="#1a202c" font-family="Microsoft JhengHei, PingFang TC, Noto Sans TC, sans-serif">總長度 L (cm)</text>
+  <text x="620" y="402" font-size="13" font-weight="bold" fill="#1a202c" text-anchor="end" font-family="Microsoft JhengHei, PingFang TC, Noto Sans TC, sans-serif">懸掛物重 F (gw)</text>
+  <line x1="80" y1="210" x2="580" y2="135" stroke="#2b6cb0" stroke-width="2.5" />
+  <line x1="80" y1="240" x2="580" y2="90" stroke="#c53030" stroke-width="2.5" stroke-dasharray="8,4" />
+  <g fill="#2b6cb0">
+    <circle cx="80" cy="210" r="4.5" />
+    <circle cx="180" cy="195" r="4.5" />
+    <circle cx="280" cy="180" r="4.5" />
+    <circle cx="380" cy="165" r="4.5" />
+    <circle cx="480" cy="150" r="4.5" />
+    <circle cx="580" cy="135" r="4.5" />
+  </g>
+  <g fill="#c53030">
+    <rect x="76" y="236" width="8" height="8" />
+    <rect x="176" y="206" width="8" height="8" />
+    <rect x="276" y="176" width="8" height="8" />
+    <rect x="376" y="146" width="8" height="8" />
+    <rect x="476" y="116" width="8" height="8" />
+    <rect x="576" y="86" width="8" height="8" />
+  </g>
+  <g transform="translate(100, 72)" font-size="13" font-family="Microsoft JhengHei, PingFang TC, Noto Sans TC, sans-serif">
+    <rect x="0" y="0" width="150" height="58" fill="#ffffff" stroke="#a0aec0" stroke-width="1" rx="4" />
+    <line x1="12" y1="19" x2="50" y2="19" stroke="#2b6cb0" stroke-width="2.5" />
+    <circle cx="31" cy="19" r="4.5" fill="#2b6cb0" />
+    <text x="60" y="23" fill="#1a202c">彈簧甲</text>
+    <line x1="12" y1="40" x2="50" y2="40" stroke="#c53030" stroke-width="2.5" stroke-dasharray="8,4" />
+    <rect x="27" y="36" width="8" height="8" fill="#c53030" />
+    <text x="60" y="44" fill="#1a202c">彈簧乙</text>
+  </g>
+</svg>
+
+---
+
+### 【試題】
+
+**1.（圖表判讀）**
+依據圖(一)，兩條彈簧懸掛相同物重時，在物重為多少時兩彈簧的總長度相同？
+(A) 0 gw
+(B) 20 gw
+(C) 40 gw
+(D) 60 gw
+
+**2.（彈簧伸長量的應用）**
+將一個重量未知的物體掛在彈簧乙下端，靜止後彈簧乙的總長度為 $15.0\text{ cm}$。此物體的重量為下列何者？
+(A) 70 gw
+(B) 75 gw
+(C) 140 gw
+(D) 150 gw
+
+**3.（科學解釋）**
+關於彈簧甲、乙的敘述，下列何者正確？
+(A) 受相同外力時，彈簧甲的伸長量比彈簧乙大
+(B) 彈簧乙的伸長量 $\Delta x$ 與所受外力 $F$ 成正比
+(C) 兩條彈簧的總長度 $L$ 都與所受外力 $F$ 成正比
+(D) 圖(一)中兩直線的交點，代表此時兩條彈簧的伸長量相同
+
+---
+
+### 【參考答案與解析】
+
+**答案：** 1.(C)　2.(A)　3.(B)
+
+1. 由表(一)，物重 $40\text{ gw}$ 時兩彈簧總長度皆為 $12.0\text{ cm}$，即圖中兩直線的交點。
+2. 彈簧乙原長 $8.0\text{ cm}$，每增加 $20\text{ gw}$ 伸長 $2.0\text{ cm}$。伸長量 $\Delta x = 15.0 - 8.0 = 7.0\text{ cm}$，故物重 $F = 7.0 \times 10 = 70\text{ gw}$。選 (C) 者誤用了彈簧甲的比例；選 (D) 者誤把總長度當成伸長量。
+3. (A) 相同外力下，彈簧乙的伸長量較大；(C) 與外力成正比的是伸長量，而非總長度；(D) 交點代表總長度相同，此時甲伸長 $2.0\text{ cm}$、乙伸長 $4.0\text{ cm}$，伸長量並不相同。
+</script>
+
+  <script>
+  (function () {
+    'use strict';
+
+    // ===================== 基本設定 =====================
+    const SVG_NS = 'http://www.w3.org/2000/svg';
+    const SVG_REGEX = /<svg\b[\s\S]*?<\/svg>/gi;
+    const DRAFT_KEY = 'science-exam-editor-draft-v2';
+    const HANDLE_STYLE = { cornerColor: '#2b6cb0', cornerSize: 8, transparentCorners: false, borderColor: '#2b6cb0' };
+    const EXTRA_PROPS = ['isArrow'];
+    const SAMPLE_MARKDOWN = document.getElementById('sample-markdown').textContent.replace(/^\s*\n/, '');
+
+    if (window.marked) {
+      marked.use({ gfm: true, breaks: true });
+      // CommonMark 的粗體規則遇到中文＋括號（如：如**表(一)**與）會失效，改用寬鬆規則
+      marked.use({
+        extensions: [{
+          name: 'cjkStrong',
+          level: 'inline',
+          start(src) { const i = src.indexOf('**'); return i < 0 ? undefined : i; },
+          tokenizer(src) {
+            const m = /^\*\*(?=\S)([\s\S]*?\S)\*\*(?!\*)/.exec(src);
+            if (m) return { type: 'cjkStrong', raw: m[0], tokens: this.lexer.inlineTokens(m[1]) };
+          },
+          renderer(token) { return '<strong>' + this.parser.parseInline(token.tokens) + '</strong>'; }
+        }]
+      });
+    }
+
+    // DOM
+    const $ = (id) => document.getElementById(id);
+    const markdownInput = $('markdown-input');
+    const previewPaper = $('preview-paper');
+    const charCount = $('char-count');
+    const toast = $('toast');
+    const toastMessage = $('toast-message');
+    const editorModal = $('svg-editor-modal');
+    const propText = $('prop-text');
+    const propStroke = $('prop-stroke');
+    const propFill = $('prop-fill');
+    const propNoFill = $('prop-nofill');
+    const propWidth = $('prop-width');
+    const propFontSize = $('prop-fontsize');
+    const propDash = $('prop-dash');
+    const btnUndo = $('btn-editor-undo');
+    const btnRedo = $('btn-editor-redo');
+
+    // 狀態
+    let currentEditingSvgIndex = -1;
+    let fabricCanvas = null;
+    let canvasW = 650, canvasH = 420;
+    let history = [];
+    let historyIndex = -1;
+    let suppressHistory = false;
+    let toastTimer = null;
+
+    // ===================== 小工具 =====================
+    function showToast(msg, ms) {
+      toastMessage.textContent = msg;
+      toast.style.opacity = '1';
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => { toast.style.opacity = '0'; }, ms || 2500);
+    }
+    function escapeHtml(s) {
+      return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+    function extractSvgs(text) {
+      return Array.from(text.matchAll(SVG_REGEX), (m) => m[0]);
+    }
+    function toHexColor(c) {
+      if (!c || typeof c !== 'string' || c === 'none' || c === 'transparent') return null;
+      try { return '#' + new fabric.Color(c).toHex().toLowerCase(); } catch (e) { return null; }
+    }
+    function saveDraft() {
+      try { localStorage.setItem(DRAFT_KEY, markdownInput.value); } catch (e) { /* 無法存取本機儲存時略過 */ }
+    }
+    function loadDraft() {
+      try { return localStorage.getItem(DRAFT_KEY); } catch (e) { return null; }
+    }
+
+    // ===================== 數學式 =====================
+    // 先把數學式抽成記號，避免 Markdown 吃掉反斜線（例如 \, 或 \text）
+    function protectMath(text, store) {
+      const token = (item) => { store.push(item); return '⟦M' + (store.length - 1) + '⟧'; };
+      text = text.replace(/\\\$/g, () => token({ literal: '$' }));
+      text = text.replace(/\$\$([\s\S]+?)\$\$/g, (_, tex) => token({ tex: tex.trim(), display: true }));
+      text = text.replace(/\$(?!\s)([^$\n]+?)(?<!\s)\$/g, (_, tex) => token({ tex: tex, display: false }));
+      return text;
+    }
+    function renderMathItem(item) {
+      if (!item) return '';
+      if (item.literal) return escapeHtml(item.literal);
+      let inner;
+      if (window.katex) {
+        try {
+          inner = katex.renderToString(item.tex, { displayMode: item.display, throwOnError: false, output: 'html' });
+        } catch (e) { inner = escapeHtml(item.tex); }
+      } else {
+        inner = escapeHtml(item.tex);
+      }
+      return '<span class="math' + (item.display ? ' math-display' : '') + '" data-latex="' + escapeHtml(item.tex) +
+        '" data-display="' + (item.display ? '1' : '0') + '">' + inner + '</span>';
+    }
+
+    // Word 不支援 KaTeX 版面，轉成近似的純文字＋上下標
+    const LATEX_SYMBOLS = {
+      times: '×', div: '÷', cdot: '·', pm: '±', mp: '∓', le: '≤', leq: '≤', ge: '≥', geq: '≥', neq: '≠', ne: '≠',
+      approx: '≈', sim: '∼', propto: '∝', to: '→', rightarrow: '→', leftarrow: '←', Rightarrow: '⇒', Leftrightarrow: '⇔',
+      rightleftharpoons: '⇌', infty: '∞', circ: '°', degree: '°', prime: '′', ldots: '…', cdots: '⋯',
+      alpha: 'α', beta: 'β', gamma: 'γ', delta: 'δ', epsilon: 'ε', varepsilon: 'ε', theta: 'θ', lambda: 'λ', mu: 'μ',
+      nu: 'ν', pi: 'π', rho: 'ρ', sigma: 'σ', tau: 'τ', phi: 'φ', varphi: 'φ', omega: 'ω',
+      Gamma: 'Γ', Delta: 'Δ', Theta: 'Θ', Lambda: 'Λ', Pi: 'Π', Sigma: 'Σ', Phi: 'Φ', Omega: 'Ω',
+      left: '', right: '', displaystyle: '', quad: '  ', qquad: '    '
+    };
+    function latexToWordHtml(tex) {
+      let s = escapeHtml(tex);
+      s = s.replace(/\\[,;:]|\\ /g, ' ').replace(/\\!/g, '').replace(/\\%/g, '%');
+      for (let i = 0; i < 5; i++) {
+        s = s.replace(/\\(?:text|mathrm|textrm|mathbf|mathit|operatorname)\s*\{([^{}]*)\}/g, '$1');
+        s = s.replace(/\\[dt]?frac\s*\{([^{}]*)\}\s*\{([^{}]*)\}/g, (_, a, b) =>
+          (a.length > 1 ? '(' + a + ')' : a) + '/' + (b.length > 1 ? '(' + b + ')' : b));
+        s = s.replace(/\\sqrt\s*\{([^{}]*)\}/g, (_, a) => '√' + (a.length > 1 ? '(' + a + ')' : a));
+        s = s.replace(/_\{([^{}]*)\}/g, '<sub>$1</sub>').replace(/\^\{([^{}]*)\}/g, '<sup>$1</sup>');
+      }
+      s = s.replace(/_(\\?[A-Za-z0-9])/g, '<sub>$1</sub>').replace(/\^(\\?[A-Za-z0-9])/g, '<sup>$1</sup>');
+      s = s.replace(/\\([A-Za-z]+)/g, (_, name) => (name in LATEX_SYMBOLS ? LATEX_SYMBOLS[name] : name));
+      s = s.replace(/[{}]/g, '');
+      return s;
+    }
+
+    // ===================== Markdown 渲染 =====================
+    function renderMarkdown() {
+      const raw = markdownInput.value;
+      charCount.textContent = raw.length + ' 字元';
+
+      if (!raw.trim()) {
+        previewPaper.innerHTML = '<p class="text-slate-400 text-center mt-24">（尚無內容，請在左側輸入題目，或按「載入範例」）</p>';
+        saveDraft();
+        return;
+      }
+
+      // 1. SVG 換成獨立的 HTML 區塊記號（前後空行，避免被併入段落或被 --- 變成標題）
+      const svgs = [];
+      let text = raw.replace(SVG_REGEX, (m) => {
+        svgs.push(m);
+        return '\n\n<div class="svg-ph" data-svg-index="' + (svgs.length - 1) + '"></div>\n\n';
+      });
+
+      // 2. 數學式換成記號
+      const maths = [];
+      text = protectMath(text, maths);
+
+      // 3. Markdown → HTML → 消毒
+      let html = window.marked ? marked.parse(text) : '<pre>' + escapeHtml(text) + '</pre>';
+      html = window.DOMPurify ? DOMPurify.sanitize(html) : escapeHtml(html);
+
+      // 4. 還原數學式（KaTeX 產生的 HTML）
+      html = html.replace(/⟦M(\d+)⟧/g, (_, i) => renderMathItem(maths[+i]));
+      previewPaper.innerHTML = html;
+
+      // 5. 以 DOM 方式插入消毒過的 SVG
+      previewPaper.querySelectorAll('.svg-ph').forEach((ph) => {
+        const idx = parseInt(ph.getAttribute('data-svg-index'), 10);
+        ph.replaceWith(buildSvgWrapper(svgs[idx], idx));
+      });
+
+      saveDraft();
+    }
+
+    function buildSvgWrapper(svgCode, idx) {
+      const wrap = document.createElement('div');
+      wrap.className = 'svg-preview-wrapper';
+      wrap.setAttribute('data-svg-index', idx);
+
+      const badge = document.createElement('div');
+      badge.className = 'svg-edit-badge';
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow-md transition';
+      btn.textContent = '🎨 編輯此圖';
+      btn.addEventListener('click', (e) => { e.stopPropagation(); openSvgEditor(idx); });
+      badge.appendChild(btn);
+
+      const content = document.createElement('div');
+      content.className = 'svg-content';
+      const clean = window.DOMPurify
+        ? DOMPurify.sanitize(svgCode || '', { USE_PROFILES: { svg: true, svgFilters: true } })
+        : '';
+      content.innerHTML = clean;
+      const svgEl = content.querySelector('svg');
+      if (svgEl) {
+        scopeSvgIds(svgEl, 'svg' + idx + '-');
+      } else {
+        content.innerHTML = '<p style="color:#c53030;font-size:0.85rem">⚠ 此 SVG 無法解析，請檢查原始碼</p>';
+      }
+
+      wrap.append(badge, content);
+      wrap.addEventListener('dblclick', () => openSvgEditor(idx));
+      return wrap;
+    }
+
+    // 多張 SVG 若使用相同 id（例如 marker id="arrow"）會互相干擾，預覽時加上前綴
+    function scopeSvgIds(svgEl, prefix) {
+      const map = {};
+      svgEl.querySelectorAll('[id]').forEach((el) => {
+        const newId = prefix + el.id;
+        map[el.id] = newId;
+        el.id = newId;
+      });
+      if (!Object.keys(map).length) return;
+      svgEl.querySelectorAll('*').forEach((el) => {
+        Array.from(el.attributes).forEach((attr) => {
+          let v = attr.value;
+          let changed = false;
+          v = v.replace(/url\(\s*['"]?#([^'")\s]+)['"]?\s*\)/g, (m, id) => {
+            if (map[id]) { changed = true; return 'url(#' + map[id] + ')'; }
+            return m;
+          });
+          if ((attr.name === 'href' || attr.name === 'xlink:href') && v.charAt(0) === '#' && map[v.slice(1)]) {
+            v = '#' + map[v.slice(1)];
+            changed = true;
+          }
+          if (changed) attr.value = v;
+        });
+      });
+    }
+
+    // ===================== SVG 前處理（給 Fabric） =====================
+    function getInheritedAttr(el, name) {
+      let node = el;
+      while (node && node.nodeType === 1) {
+        const v = node.getAttribute(name);
+        if (v) return v;
+        const st = node.style && node.style.getPropertyValue(name);
+        if (st) return st;
+        if (node.tagName.toLowerCase() === 'svg') break;
+        node = node.parentNode;
+      }
+      return null;
+    }
+
+    // Fabric.js 不支援 marker：把 <line> 的箭頭標記展開成實體三角形
+    function expandLineMarkers(svg) {
+      let unsupported = false;
+      const doc = svg.ownerDocument;
+      const markerFill = (id) => {
+        const m = Array.from(svg.querySelectorAll('marker')).find((mk) => mk.id === id);
+        if (!m) return null;
+        const p = m.querySelector('[fill]');
+        const f = p && p.getAttribute('fill');
+        return f && f !== 'none' ? f : null;
+      };
+      svg.querySelectorAll('[marker-end], [marker-start], [marker-mid]').forEach((el) => {
+        const tag = el.tagName.toLowerCase();
+        if (tag !== 'line') { unsupported = true; return; }
+        const x1 = parseFloat(el.getAttribute('x1')) || 0;
+        const y1 = parseFloat(el.getAttribute('y1')) || 0;
+        const x2 = parseFloat(el.getAttribute('x2')) || 0;
+        const y2 = parseFloat(el.getAttribute('y2')) || 0;
+        const stroke = getInheritedAttr(el, 'stroke') || '#000000';
+        const sw = parseFloat(getInheritedAttr(el, 'stroke-width')) || 1;
+        const addHead = (ref, tx, ty, fx, fy) => {
+          if (!ref || ref === 'none') return;
+          const idMatch = ref.match(/#([^)'"\s]+)/);
+          const fill = (idMatch && markerFill(idMatch[1])) || stroke;
+          const ang = Math.atan2(ty - fy, tx - fx);
+          const L = Math.max(9, sw * 5), W = Math.max(4, sw * 2.4);
+          const bx = tx - L * Math.cos(ang), by = ty - L * Math.sin(ang);
+          const p1 = (bx + W * Math.sin(ang)).toFixed(2) + ',' + (by - W * Math.cos(ang)).toFixed(2);
+          const p2 = (bx - W * Math.sin(ang)).toFixed(2) + ',' + (by + W * Math.cos(ang)).toFixed(2);
+          const poly = doc.createElementNS(SVG_NS, 'polygon');
+          poly.setAttribute('points', tx + ',' + ty + ' ' + p1 + ' ' + p2);
+          poly.setAttribute('fill', fill);
+          poly.setAttribute('stroke', 'none');
+          const tf = el.getAttribute('transform');
+          if (tf) poly.setAttribute('transform', tf);
+          el.parentNode.insertBefore(poly, el.nextSibling);
+        };
+        addHead(el.getAttribute('marker-end'), x2, y2, x1, y1);
+        addHead(el.getAttribute('marker-start'), x1, y1, x2, y2);
+        el.removeAttribute('marker-end');
+        el.removeAttribute('marker-start');
+        el.removeAttribute('marker-mid');
+      });
+      return unsupported;
+    }
+
+    function prepareSvgForFabric(code) {
+      const doc = new DOMParser().parseFromString(code, 'text/html');
+      const svg = doc.querySelector('svg');
+      if (!svg) return null;
+
+      let w = 0, h = 0;
+      const vb = (svg.getAttribute('viewBox') || '').trim().split(/[\s,]+/).map(Number);
+      if (vb.length === 4 && vb.every(isFinite) && vb[2] > 0 && vb[3] > 0) {
+        w = vb[2]; h = vb[3];
+      } else {
+        const wa = svg.getAttribute('width') || '', ha = svg.getAttribute('height') || '';
+        w = /%|auto/.test(wa) ? 0 : parseFloat(wa);
+        h = /%|auto/.test(ha) ? 0 : parseFloat(ha);
+        w = w > 0 ? w : 650;
+        h = h > 0 ? h : 420;
+        svg.setAttribute('viewBox', '0 0 ' + w + ' ' + h);
+      }
+      // Fabric 會把 width="100%" 當成 100px 而把圖縮小，因此改成實際像素
+      svg.setAttribute('width', w);
+      svg.setAttribute('height', h);
+      const hadUnsupportedMarkers = expandLineMarkers(svg);
+      return {
+        svg: new XMLSerializer().serializeToString(svg),
+        width: Math.round(w),
+        height: Math.round(h),
+        hadUnsupportedMarkers: hadUnsupportedMarkers
+      };
+    }
+
+    // ===================== Fabric 畫布 =====================
+    function initFabric() {
+      if (fabricCanvas) return;
+      fabricCanvas = new fabric.Canvas('fabric-canvas', {
+        width: 650, height: 420, backgroundColor: '#ffffff', selection: true, preserveObjectStacking: true
+      });
+      fabricCanvas.on('selection:created', updatePropertyControls);
+      fabricCanvas.on('selection:updated', updatePropertyControls);
+      fabricCanvas.on('selection:cleared', resetPropertyControls);
+      fabricCanvas.on('object:modified', saveHistory);
+      fabricCanvas.on('object:added', (e) => {
+        if (e.target) e.target.set(HANDLE_STYLE);
+        if (!suppressHistory) saveHistory();
+      });
+      fabricCanvas.on('text:changed', (e) => {
+        if (fabricCanvas.getActiveObject() === e.target) propText.value = e.target.text;
+      });
+      fabricCanvas.on('text:editing:exited', saveHistory);
+    }
+
+    function openSvgEditor(svgIndex) {
+      if (!window.fabric) { showToast('Fabric.js 載入失敗，請確認網路連線'); return; }
+      const svgCode = extractSvgs(markdownInput.value)[svgIndex];
+      if (!svgCode) { showToast('找不到目標 SVG 區塊'); return; }
+      const prepared = prepareSvgForFabric(svgCode);
+      if (!prepared) { showToast('此 SVG 無法解析'); return; }
+
+      initFabric();
+      currentEditingSvgIndex = svgIndex;
+      canvasW = prepared.width;
+      canvasH = prepared.height;
+      fabricCanvas.setDimensions({ width: canvasW, height: canvasH });
+      $('canvas-status').textContent = '畫布尺寸: ' + canvasW + ' × ' + canvasH + ' px';
+      setActiveToolBtn('tool-select');
+      fabricCanvas.isDrawingMode = false;
+
+      suppressHistory = true;
+      fabricCanvas.clear();
+      fabricCanvas.backgroundColor = '#ffffff';
+      resetPropertyControls();
+      editorModal.classList.remove('hidden');
+
+      fabric.loadSVGFromString(prepared.svg, (objects) => {
+        (objects || []).forEach((obj) => {
+          if (!obj) return;
+          obj.set(Object.assign({ selectable: true, hasControls: true }, HANDLE_STYLE));
+          fabricCanvas.add(obj);
+        });
+        fabricCanvas.requestRenderAll();
+        suppressHistory = false;
+        resetHistory();
+        if (prepared.hadUnsupportedMarkers) {
+          showToast('提示：此圖有曲線使用 marker 箭頭，編輯器無法保留，套用後將消失；建議改用三角形 polygon', 5000);
+        }
+      });
+    }
+
+    function closeEditor() {
+      editorModal.classList.add('hidden');
+      currentEditingSvgIndex = -1;
+    }
+
+    // 匯出畫布為 SVG 字串；responsive=true 時給試卷用（寬度 100%）
+    function exportCanvasSvg(responsive) {
+      fabricCanvas.discardActiveObject();
+      fabricCanvas.requestRenderAll();
+      const raw = fabricCanvas.toSVG({
+        suppressPreamble: true,
+        width: canvasW,
+        height: canvasH,
+        viewBox: { x: 0, y: 0, width: canvasW, height: canvasH }
+      });
+      const doc = new DOMParser().parseFromString(raw, 'text/html');
+      const svg = doc.querySelector('svg');
+      if (!svg) return raw;
+      svg.querySelectorAll('desc').forEach((d) => d.remove());
+      svg.setAttribute('viewBox', '0 0 ' + canvasW + ' ' + canvasH);
+      if (responsive) {
+        svg.setAttribute('width', '100%');
+        svg.removeAttribute('height');
+        svg.setAttribute('style', 'max-width:' + canvasW + 'px;background-color:#ffffff;');
+      } else {
+        svg.setAttribute('width', canvasW);
+        svg.setAttribute('height', canvasH);
+      }
+      const str = new XMLSerializer().serializeToString(svg);
+      return responsive ? str : '<?xml version="1.0" encoding="UTF-8"?>\n' + str;
+    }
+
+    // ===================== 屬性面板 =====================
+    const isTextObj = (o) => !!o && (o.type === 'text' || o.type === 'i-text' || o.type === 'textbox');
+
+    function forEachLeaf(obj, fn) {
+      if (obj.type === 'group') {
+        obj.getObjects().forEach((c) => forEachLeaf(c, fn));
+        obj.dirty = true;
+      } else {
+        fn(obj);
+      }
+    }
+    function applyToSelection(fn) {
+      if (!fabricCanvas) return;
+      const objs = fabricCanvas.getActiveObjects();
+      if (!objs.length) return;
+      objs.forEach((o) => forEachLeaf(o, fn));
+      fabricCanvas.requestRenderAll();
+    }
+
+    function updatePropertyControls() {
+      const objs = fabricCanvas.getActiveObjects();
+      if (!objs.length) return resetPropertyControls();
+      const single = objs.length === 1 ? objs[0] : null;
+
+      if (single && isTextObj(single)) {
+        propText.disabled = false;
+        propText.value = single.text || '';
+        propFontSize.disabled = false;
+        propFontSize.value = Math.round(single.fontSize || 14);
+      } else {
+        propText.disabled = true;
+        propText.value = '';
+        propText.placeholder = objs.length > 1 ? '已選 ' + objs.length + ' 個物件' : '非文字物件';
+        propFontSize.disabled = true;
+      }
+
+      let first = objs[0];
+      if (first.type === 'group' && first.getObjects().length) first = first.getObjects()[0];
+      const strokeHex = toHexColor(first.stroke);
+      const fillHex = toHexColor(first.fill);
+      if (isTextObj(first)) {
+        if (fillHex) propStroke.value = fillHex;
+      } else if (strokeHex) {
+        propStroke.value = strokeHex;
+      }
+      propNoFill.checked = !fillHex;
+      if (fillHex) propFill.value = fillHex;
+      propWidth.value = first.strokeWidth != null ? first.strokeWidth : 1;
+
+      const dash = first.strokeDashArray;
+      if (!dash || !dash.length) propDash.value = 'solid';
+      else if (dash[0] >= 6) propDash.value = 'dashed';
+      else propDash.value = 'dotted';
+
+      $('canvas-status').textContent = '已選取: ' + (single ? single.type : objs.length + ' 個物件') + '　畫布 ' + canvasW + ' × ' + canvasH;
+    }
+
+    function resetPropertyControls() {
+      propText.value = '';
+      propText.placeholder = '未選取文字';
+      propText.disabled = true;
+      propFontSize.disabled = true;
+      $('canvas-status').textContent = '畫布尺寸: ' + canvasW + ' × ' + canvasH + ' px';
+    }
+
+    propText.addEventListener('input', (e) => {
+      const o = fabricCanvas && fabricCanvas.getActiveObject();
+      if (isTextObj(o)) { o.set('text', e.target.value); fabricCanvas.requestRenderAll(); }
+    });
+    propText.addEventListener('change', saveHistory);
+
+    // 「線條色」：文字物件改字色、箭頭同時改線與箭頭、其他物件改線條
+    propStroke.addEventListener('input', (e) => {
+      const c = e.target.value;
+      applyToSelection((o) => {
+        if (isTextObj(o)) o.set('fill', c);
+        else if (o.isArrow) o.set({ stroke: c, fill: c });
+        else if (o.stroke && o.stroke !== 'none') o.set('stroke', c);
+        else o.set('fill', c);
+      });
+      if (fabricCanvas && fabricCanvas.isDrawingMode) fabricCanvas.freeDrawingBrush.color = c;
+    });
+    propStroke.addEventListener('change', saveHistory);
+
+    propFill.addEventListener('input', (e) => {
+      propNoFill.checked = false;
+      const c = e.target.value;
+      applyToSelection((o) => { if (!isTextObj(o)) o.set('fill', c); });
+    });
+    propFill.addEventListener('change', saveHistory);
+
+    propNoFill.addEventListener('change', (e) => {
+      const c = e.target.checked ? '' : propFill.value;
+      applyToSelection((o) => { if (!isTextObj(o) && !o.isArrow) o.set('fill', c); });
+      saveHistory();
+    });
+
+    propWidth.addEventListener('input', (e) => {
+      const v = parseFloat(e.target.value);
+      if (!isFinite(v) || v < 0) return;
+      applyToSelection((o) => { if (!isTextObj(o)) o.set('strokeWidth', v); });
+      if (fabricCanvas && fabricCanvas.isDrawingMode) fabricCanvas.freeDrawingBrush.width = Math.max(1, v);
+    });
+    propWidth.addEventListener('change', saveHistory);
+
+    propFontSize.addEventListener('input', (e) => {
+      const v = parseFloat(e.target.value);
+      const o = fabricCanvas && fabricCanvas.getActiveObject();
+      if (isTextObj(o) && v > 0) { o.set('fontSize', v); fabricCanvas.requestRenderAll(); }
+    });
+    propFontSize.addEventListener('change', saveHistory);
+
+    propDash.addEventListener('change', (e) => {
+      const map = { solid: null, dashed: [8, 4], dotted: [3, 3] };
+      applyToSelection((o) => { if (!isTextObj(o)) o.set('strokeDashArray', map[e.target.value]); });
+      saveHistory();
+    });
+
+    // ===================== 刪除 =====================
+    function deleteActiveObject() {
+      if (!fabricCanvas) return;
+      const active = fabricCanvas.getActiveObject();
+      if (active && active.isEditing) return;
+      const objs = fabricCanvas.getActiveObjects();
+      if (!objs.length) return;
+      fabricCanvas.discardActiveObject();
+      objs.forEach((o) => fabricCanvas.remove(o));
+      fabricCanvas.requestRenderAll();
+      saveHistory();
+      showToast('已刪除 ' + objs.length + ' 個物件');
+    }
+    $('btn-delete-element').addEventListener('click', deleteActiveObject);
+
+    // ===================== 繪圖工具 =====================
+    function addObject(obj) {
+      fabricCanvas.isDrawingMode = false;
+      setActiveToolBtn('tool-select');
+      fabricCanvas.add(obj); // object:added 會自動記錄歷史
+      fabricCanvas.setActiveObject(obj);
+      fabricCanvas.requestRenderAll();
+    }
+    const cx = () => canvasW / 2, cy = () => canvasH / 2;
+
+    $('tool-select').addEventListener('click', () => {
+      if (!fabricCanvas) return;
+      fabricCanvas.isDrawingMode = false;
+      setActiveToolBtn('tool-select');
+    });
+    $('tool-text').addEventListener('click', () => {
+      addObject(new fabric.IText('新文字標籤', {
+        left: cx() - 40, top: cy() - 10, fontSize: 14, fill: '#1a202c',
+        fontFamily: 'Microsoft JhengHei, PingFang TC, Noto Sans TC, sans-serif'
+      }));
+      propText.focus();
+      propText.select();
+    });
+    $('tool-line').addEventListener('click', () => {
+      addObject(new fabric.Line([cx() - 100, cy(), cx() + 100, cy()], { stroke: '#2d3748', strokeWidth: 2 }));
+    });
+    $('tool-arrow').addEventListener('click', () => {
+      // 單一路徑：直線＋封閉三角形，線與箭頭同色、可一起改色
+      const arrow = new fabric.Path('M 0 6 L 110 6 M 120 6 L 106 0 L 106 12 Z', {
+        left: cx() - 60, top: cy() - 6, stroke: '#2b6cb0', fill: '#2b6cb0', strokeWidth: 2, strokeLineJoin: 'miter'
+      });
+      arrow.isArrow = true;
+      addObject(arrow);
+    });
+    $('tool-curve').addEventListener('click', () => {
+      addObject(new fabric.Path('M 0 150 Q 100 0 300 -30', {
+        left: cx() - 150, top: cy() - 90, fill: '', stroke: '#3182ce', strokeWidth: 2.5
+      }));
+    });
+    $('tool-rect').addEventListener('click', () => {
+      addObject(new fabric.Rect({
+        left: cx() - 60, top: cy() - 35, width: 120, height: 70,
+        fill: '#ffffff', stroke: '#4a5568', strokeWidth: 1.5, rx: 4, ry: 4
+      }));
+    });
+    $('tool-circle').addEventListener('click', () => {
+      addObject(new fabric.Circle({
+        left: cx() - 5, top: cy() - 5, radius: 5, fill: '#e53e3e', stroke: '#c53030', strokeWidth: 1
+      }));
+    });
+    $('tool-freehand').addEventListener('click', () => {
+      if (!fabricCanvas) return;
+      fabricCanvas.isDrawingMode = !fabricCanvas.isDrawingMode;
+      if (fabricCanvas.isDrawingMode) {
+        fabricCanvas.discardActiveObject();
+        fabricCanvas.freeDrawingBrush.width = Math.max(1, parseFloat(propWidth.value) || 2);
+        fabricCanvas.freeDrawingBrush.color = propStroke.value;
+        setActiveToolBtn('tool-freehand');
+        showToast('手繪模式：再按一次「手繪」或「選取」結束');
+      } else {
+        setActiveToolBtn('tool-select');
+      }
+    });
+    function setActiveToolBtn(id) {
+      document.querySelectorAll('#tool-select, #tool-freehand').forEach((b) => b.classList.remove('active'));
+      const b = $(id);
+      if (b) b.classList.add('active');
+    }
+
+    // ===================== 復原 / 重做 =====================
+    function snapshot() { return JSON.stringify(fabricCanvas.toJSON(EXTRA_PROPS)); }
+    function updateUndoButtons() {
+      btnUndo.disabled = historyIndex <= 0;
+      btnRedo.disabled = historyIndex >= history.length - 1;
+    }
+    function resetHistory() {
+      history = [snapshot()];
+      historyIndex = 0;
+      updateUndoButtons();
+    }
+    function saveHistory() {
+      if (suppressHistory || !fabricCanvas) return;
+      const snap = snapshot();
+      if (history[historyIndex] === snap) return;
+      history = history.slice(0, historyIndex + 1);
+      history.push(snap);
+      if (history.length > 100) history.shift();
+      historyIndex = history.length - 1;
+      updateUndoButtons();
+    }
+    function restoreHistory(i) {
+      suppressHistory = true;
+      fabricCanvas.discardActiveObject();
+      fabricCanvas.loadFromJSON(history[i], () => {
+        fabricCanvas.getObjects().forEach((o) => o.set(HANDLE_STYLE));
+        fabricCanvas.requestRenderAll();
+        suppressHistory = false;
+        historyIndex = i;
+        updateUndoButtons();
+        resetPropertyControls();
+      });
+    }
+    function undo() { if (historyIndex > 0) restoreHistory(historyIndex - 1); else showToast('已是最初狀態'); }
+    function redo() { if (historyIndex < history.length - 1) restoreHistory(historyIndex + 1); else showToast('已是最新狀態'); }
+    btnUndo.addEventListener('click', undo);
+    btnRedo.addEventListener('click', redo);
+
+    // ===================== 鍵盤快捷鍵 =====================
+    window.addEventListener('keydown', (e) => {
+      if (editorModal.classList.contains('hidden')) return;
+      const tag = document.activeElement && document.activeElement.tagName;
+      const inField = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+      const active = fabricCanvas && fabricCanvas.getActiveObject();
+      if (active && active.isEditing) return; // 正在畫布上編輯文字
+      const mod = e.ctrlKey || e.metaKey;
+      if (e.key === 'Escape') { closeEditor(); return; }
+      if (inField) return;
+      if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); deleteActiveObject(); }
+      else if (mod && e.key.toLowerCase() === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
+      else if (mod && (e.key.toLowerCase() === 'y' || (e.key.toLowerCase() === 'z' && e.shiftKey))) { e.preventDefault(); redo(); }
+    });
+
+    // ===================== 套用 / 下載 =====================
+    $('btn-close-editor').addEventListener('click', closeEditor);
+
+    $('btn-apply-svg-back').addEventListener('click', () => {
+      if (currentEditingSvgIndex < 0 || !fabricCanvas) return;
+      const newSvg = exportCanvasSvg(true);
+      let i = 0;
+      markdownInput.value = markdownInput.value.replace(SVG_REGEX, (m) => (i++ === currentEditingSvgIndex ? newSvg : m));
+      renderMarkdown();
+      closeEditor();
+      showToast('已將編輯後的圖形更新至試卷');
+    });
+
+    $('btn-download-single-svg').addEventListener('click', () => {
+      if (!fabricCanvas) return;
+      const blob = new Blob([exportCanvasSvg(false)], { type: 'image/svg+xml;charset=utf-8' });
+      saveAs(blob, 'exam_figure_' + Date.now() + '.svg');
+      showToast('SVG 檔已下載');
+    });
+
+    $('btn-download-single-png').addEventListener('click', () => {
+      if (!fabricCanvas) return;
+      fabricCanvas.discardActiveObject();
+      fabricCanvas.requestRenderAll();
+      const url = fabricCanvas.toDataURL({ format: 'png', multiplier: 2 });
+      const a = document.createElement('a');
+      a.download = 'exam_figure_' + Date.now() + '.png';
+      a.href = url;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      showToast('高解析 PNG 已下載');
+    });
+
+    // ===================== 頂部按鈕 =====================
+    $('btn-copy-md').addEventListener('click', async () => {
+      const text = markdownInput.value;
+      try {
+        await navigator.clipboard.writeText(text);
+      } catch (e) {
+        markdownInput.select();
+        document.execCommand('copy');
+      }
+      showToast('已將 Markdown 複製至剪貼簿');
+    });
+
+    $('btn-load-sample').addEventListener('click', () => {
+      if (markdownInput.value.trim() && markdownInput.value !== SAMPLE_MARKDOWN &&
+          !confirm('載入範例會覆蓋目前的內容，確定嗎？')) return;
+      markdownInput.value = SAMPLE_MARKDOWN;
+      renderMarkdown();
+      showToast('已載入範例題組');
+    });
+
+    $('btn-clear').addEventListener('click', () => {
+      if (markdownInput.value.trim() && !confirm('確定要清空所有內容嗎？')) return;
+      markdownInput.value = '';
+      renderMarkdown();
+      markdownInput.focus();
+    });
+
+    $('btn-print').addEventListener('click', () => window.print());
+
+    // ===================== 匯出 Word =====================
+    function svgToPng(svgNode, scale) {
+      return new Promise((resolve, reject) => {
+        let w = 0, h = 0;
+        const vbAttr = (svgNode.getAttribute('viewBox') || '').trim().split(/[\s,]+/).map(Number);
+        if (vbAttr.length === 4 && vbAttr[2] > 0 && vbAttr[3] > 0) { w = vbAttr[2]; h = vbAttr[3]; }
+        if (!w || !h) {
+          w = parseFloat(svgNode.getAttribute('width')) || 650;
+          h = parseFloat(svgNode.getAttribute('height')) || 420;
+        }
+        const clone = svgNode.cloneNode(true);
+        clone.setAttribute('xmlns', SVG_NS);
+        clone.setAttribute('width', w);
+        clone.setAttribute('height', h);
+        clone.setAttribute('style', 'background-color:#ffffff');
+        const str = new XMLSerializer().serializeToString(clone);
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          canvas.width = Math.round(w * scale);
+          canvas.height = Math.round(h * scale);
+          const ctx = canvas.getContext('2d');
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          resolve({ dataUrl: canvas.toDataURL('image/png'), width: w, height: h });
+        };
+        img.onerror = reject;
+        img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(str);
+      });
+    }
+
+    $('btn-export-docx').addEventListener('click', async () => {
+      if (typeof htmlDocx === 'undefined') { showToast('Word 匯出元件載入失敗，請確認網路連線'); return; }
+      showToast('正在轉換試卷與圖形…');
+      const clone = previewPaper.cloneNode(true);
+      clone.querySelectorAll('.svg-edit-badge').forEach((b) => b.remove());
+
+      // 數學式 → 純文字近似
+      clone.querySelectorAll('span.math').forEach((span) => {
+        const display = span.getAttribute('data-display') === '1';
+        const el = document.createElement(display ? 'p' : 'span');
+        if (display) el.setAttribute('align', 'center');
+        el.innerHTML = '<i>' + latexToWordHtml(span.getAttribute('data-latex') || '') + '</i>';
+        span.replaceWith(el);
+      });
+
+      // SVG → PNG（以 width/height 屬性限制大小，Word 會忽略 CSS max-width）
+      const MAX_W = 620;
+      const wrappers = Array.from(clone.querySelectorAll('.svg-preview-wrapper'));
+      for (const wrap of wrappers) {
+        const svg = wrap.querySelector('svg');
+        if (!svg) { wrap.remove(); continue; }
+        try {
+          const r = await svgToPng(svg, 2);
+          const dispW = Math.min(MAX_W, Math.round(r.width));
+          const dispH = Math.round(r.height * dispW / r.width);
+          const p = document.createElement('p');
+          p.setAttribute('align', 'center');
+          const img = document.createElement('img');
+          img.src = r.dataUrl;
+          img.setAttribute('width', dispW);
+          img.setAttribute('height', dispH);
+          p.appendChild(img);
+          wrap.replaceWith(p);
+        } catch (err) {
+          console.error('SVG → PNG 轉換失敗', err);
+          wrap.remove();
+        }
+      }
+      clone.querySelectorAll('[class]').forEach((el) => el.removeAttribute('class'));
+
+      const contentHtml =
+        '<!DOCTYPE html><html><head><meta charset="utf-8"><title>國中自然素養試題</title>' +
+        '<style>' +
+        'body{font-family:"Times New Roman","標楷體","Microsoft JhengHei",serif;font-size:12pt;line-height:1.6;}' +
+        'h1{font-size:18pt;text-align:center;font-weight:bold;}' +
+        'h2{font-size:14pt;color:#1e3a8a;}h3{font-size:13pt;}' +
+        'table{width:100%;border-collapse:collapse;margin:12pt 0;}' +
+        'th,td{border:1pt solid #333333;padding:4pt 6pt;text-align:center;}' +
+        'th{background-color:#f1f5f9;font-weight:bold;}p{margin:0 0 6pt 0;}' +
+        '</style></head><body>' + clone.innerHTML + '</body></html>';
+
+      try {
+        const blob = htmlDocx.asBlob(contentHtml, {
+          orientation: 'portrait',
+          margins: { top: 1080, right: 1080, bottom: 1080, left: 1080 }
+        });
+        saveAs(blob, '國中自然素養試題_' + new Date().toISOString().slice(0, 10) + '.docx');
+        showToast('Word 檔已匯出（建議以 Word 桌面版開啟）', 3500);
+      } catch (e) {
+        console.error(e);
+        showToast('匯出 Word 時發生錯誤');
+      }
+    });
+
+    // ===================== 原始碼視窗收合 =====================
+    const appMain = $('app-main');
+    const COLLAPSE_KEY = 'science-exam-editor-source-collapsed';
+    function setSourceCollapsed(collapsed) {
+      appMain.classList.toggle('source-collapsed', collapsed);
+      try { localStorage.setItem(COLLAPSE_KEY, collapsed ? '1' : '0'); } catch (e) { /* 略過 */ }
+      if (!collapsed) markdownInput.focus({ preventScroll: true });
+    }
+    $('btn-collapse-source').addEventListener('click', () => setSourceCollapsed(true));
+    $('expand-rail').addEventListener('click', () => setSourceCollapsed(false));
+    window.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === '\\' && editorModal.classList.contains('hidden')) {
+        e.preventDefault();
+        setSourceCollapsed(!appMain.classList.contains('source-collapsed'));
+      }
+    });
+    try { if (localStorage.getItem(COLLAPSE_KEY) === '1') appMain.classList.add('source-collapsed'); } catch (e) { /* 略過 */ }
+
+    // ===================== 啟動 =====================
+    let debounceTimer;
+    markdownInput.addEventListener('input', () => {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(renderMarkdown, 250);
+    });
+
+    const draft = loadDraft();
+    if (draft !== null && draft.trim()) {
+      markdownInput.value = draft;
+      renderMarkdown();
+      showToast('已還原上次的編輯內容');
+    } else {
+      markdownInput.value = SAMPLE_MARKDOWN;
+      renderMarkdown();
+    }
+
+    // 測試用掛鉤
+    window.__examEditor = { renderMarkdown, openSvgEditor, exportCanvasSvg: (r) => exportCanvasSvg(r), latexToWordHtml, prepareSvgForFabric, get canvas() { return fabricCanvas; } };
+  })();
+  </script>
+</body>
+</html>
