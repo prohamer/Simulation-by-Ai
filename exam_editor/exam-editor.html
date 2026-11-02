@@ -75,6 +75,9 @@
     .help-table { border-collapse: collapse; margin-bottom: 0.4rem; font-size: 0.85rem; }
     .help-table td { border-bottom: 1px solid #f1f5f9; padding: 4px 14px 4px 0; vertical-align: top; }
 
+    /* 拖曳匯入提示 */
+    .drop-active { outline: 3px dashed #3182ce; outline-offset: -6px; background-color: #ebf8ff !important; }
+
     /* 原始碼視窗收合 */
     #expand-rail { display: none; }
     #app-main.source-collapsed #editor-pane { display: none; }
@@ -111,7 +114,10 @@
     </div>
     <div class="flex flex-wrap items-center gap-2">
       <button id="btn-load-sample" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium rounded-md border border-slate-300 transition">載入範例</button>
-      <button id="btn-clear" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium rounded-md border border-slate-300 transition">清空</button>
+      <button id="btn-import-md" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium rounded-md border border-slate-300 transition" title="開啟 .md 檔（也可直接拖曳檔案到原始碼視窗）">匯入 .md</button>
+      <button id="btn-download-md" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium rounded-md border border-slate-300 transition" title="把目前內容存成 .md 檔">下載 .md</button>
+      <input type="file" id="md-file-input" accept=".md,.markdown,.txt,text/markdown,text/plain" class="hidden">
+      <button id="btn-clear"class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium rounded-md border border-slate-300 transition">清空</button>
       <button id="btn-copy-md" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium rounded-md border border-slate-300 transition">複製 Markdown</button>
       <button id="btn-print" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium rounded-md border border-slate-300 transition">列印 / 存 PDF</button>
       <button id="btn-export-docx" class="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-md shadow transition">匯出 Word (.docx)</button>
@@ -176,10 +182,12 @@
         <h3>基本操作</h3>
         <ul>
           <li><b>載入範例</b>：放入示範題組（彈簧的伸長量），可當作格式參考。</li>
+          <li><b>匯入 .md</b>：開啟電腦中的 .md（或 .txt）檔，例如 Claude 產出後下載的試題檔。也可以直接把檔案<b>拖曳</b>到原始碼視窗或預覽區。匯入會覆蓋目前內容，覆蓋前會先詢問。</li>
+          <li><b>下載 .md</b>：把目前內容存成 .md 檔備份，檔名預設為試卷標題（匯入的檔案則沿用原檔名），日後可再匯入繼續編輯。</li>
           <li><b>清空</b>：清除所有內容，從頭開始。</li>
           <li><b>複製 Markdown</b>：把整份原始碼複製到剪貼簿，方便保存或貼回 Claude 修改。</li>
           <li><b>◀ 收合</b>（原始碼視窗右上角）：隱藏原始碼，讓預覽變全寬；點左側「▶ 原始碼」窄欄展開。</li>
-          <li><b>自動暫存</b>：內容會存在這台電腦的瀏覽器中，關掉再開會自動還原。換電腦或清除瀏覽器資料就會消失，重要內容請另外備份。</li>
+          <li><b>自動暫存</b>：內容會存在這台電腦的瀏覽器中，關掉再開會自動還原。換電腦或清除瀏覽器資料就會消失，重要內容請用「下載 .md」另外備份。</li>
         </ul>
 
         <h3>撰寫題目</h3>
@@ -1265,6 +1273,74 @@
         console.error(e);
         showToast('匯出 Word 時發生錯誤');
       }
+    });
+
+    // ===================== 匯入 / 下載 .md =====================
+    const mdFileInput = $('md-file-input');
+    let lastFileName = '';
+
+    function importMarkdownFile(file) {
+      if (!file) return;
+      if (!/\.(md|markdown|txt)$/i.test(file.name) && !/^text\//.test(file.type)) {
+        showToast('請選擇 .md、.markdown 或 .txt 檔');
+        return;
+      }
+      if (file.size > 10 * 1024 * 1024) { showToast('檔案超過 10 MB，無法匯入'); return; }
+      const reader = new FileReader();
+      reader.onload = () => {
+        const text = String(reader.result).replace(/^﻿/, '').replace(/\r\n?/g, '\n');
+        if (markdownInput.value.trim() && markdownInput.value !== text &&
+            !confirm('匯入「' + file.name + '」會覆蓋目前的內容，確定嗎？\n（建議先按「下載 .md」備份）')) return;
+        markdownInput.value = text;
+        lastFileName = file.name.replace(/\.(md|markdown|txt)$/i, '');
+        renderMarkdown();
+        if (appMain.classList.contains('source-collapsed')) setSourceCollapsed(false);
+        markdownInput.scrollTop = 0;
+        const n = extractSvgs(text).length;
+        showToast('已匯入「' + file.name + '」' + (n ? '，含 ' + n + ' 張圖' : ''));
+      };
+      reader.onerror = () => showToast('讀取檔案失敗');
+      reader.readAsText(file, 'utf-8');
+    }
+
+    $('btn-import-md').addEventListener('click', () => mdFileInput.click());
+    mdFileInput.addEventListener('change', () => {
+      importMarkdownFile(mdFileInput.files[0]);
+      mdFileInput.value = ''; // 允許重複匯入同一個檔案
+    });
+
+    // 拖曳檔案到原始碼視窗或預覽區即可匯入
+    ['editor-pane', 'preview-pane'].forEach((id) => {
+      const zone = $(id);
+      zone.addEventListener('dragover', (e) => {
+        if (!e.dataTransfer || !Array.from(e.dataTransfer.types || []).includes('Files')) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+        zone.classList.add('drop-active');
+      });
+      zone.addEventListener('dragleave', (e) => {
+        if (!zone.contains(e.relatedTarget)) zone.classList.remove('drop-active');
+      });
+      zone.addEventListener('drop', (e) => {
+        zone.classList.remove('drop-active');
+        const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+        if (!file) return;
+        e.preventDefault();
+        importMarkdownFile(file);
+      });
+    });
+
+    $('btn-download-md').addEventListener('click', () => {
+      const text = markdownInput.value;
+      if (!text.trim()) { showToast('目前沒有內容可下載'); return; }
+      let name = lastFileName;
+      if (!name) {
+        const h1 = text.match(/^#\s+(.+)$/m);
+        name = h1 ? h1[1].replace(/[\\/:*?"<>|$]/g, '').trim().slice(0, 40) : '';
+      }
+      name = (name || '國中自然素養試題') + '.md';
+      saveAs(new Blob([text], { type: 'text/markdown;charset=utf-8' }), name);
+      showToast('已下載「' + name + '」');
     });
 
     // ===================== 使用說明 =====================
