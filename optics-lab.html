@@ -1,4 +1,4 @@
-<title>光學小站</title>
+<title>光學小站V19</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -352,6 +352,7 @@ body:not([data-scene="mirror"]) .only-mirror{display:none !important}
         <div class="field"><div class="flab"><span>鏡子中心高度</span><output id="ccYOut"></output></div><input type="range" id="ccY" min="0.5" max="1.6" step="0.05" aria-label="鏡子中心高度"></div>
         <p class="note" id="ccInfo"></p>
         <label class="sw"><input type="checkbox" id="cc_img"><span class="track"></span><span>在空間中顯示像</span></label>
+        <p class="note">關閉時像只出現在鏡面裡，就像真的照鏡子；從哪個角度看到什麼，跟觀察者看到的一樣。</p>
         <label class="sw"><input type="checkbox" id="cc_prin"><span class="track"></span><span>三條主要光線</span></label>
         <div class="frow"><span>光源點</span><div class="chips sm" id="ccSrc"><button data-v="feat">特徵點（2 個）</button><button data-v="custom">自訂</button></div></div>
         <div class="btnrow" id="ccSrcTools"><button class="btn small" id="ccSrcBtn">新增／移除光源點</button><button class="btn ghost small" id="ccSrcClear">清除</button></div>
@@ -1584,7 +1585,7 @@ function renderScreen(){
 }
 let ccClose='eye';
 function stencilMode(on){   // 觀察者看到的畫面：像只出現在鏡面範圍裡
-  if(ccDish){const dm=ccDish.material;dm.stencilWrite=on;dm.stencilRef=1;dm.stencilFunc=THREE.AlwaysStencilFunc;dm.stencilZPass=THREE.ReplaceStencilOp;dm.transparent=!on;dm.opacity=on?1:.62;dm.metalness=on?.1:.55;dm.color.set(on?0xc9d3da:0xdde6ec);}
+  if(ccDish){const dm=ccDish.material;dm.stencilWrite=on;dm.stencilRef=1;dm.stencilFunc=THREE.AlwaysStencilFunc;dm.stencilZPass=THREE.ReplaceStencilOp;dm.transparent=!on;dm.opacity=on?1:.62;dm.metalness=on?.1:.55;dm.roughness=on?.7:.16;dm.color.set(on?0xc9d3da:0xdde6ec);}
   Object.values(imgMats).forEach(m=>{m.stencilWrite=on;m.stencilRef=1;m.stencilFunc=on?THREE.EqualStencilFunc:THREE.AlwaysStencilFunc;m.stencilZPass=THREE.KeepStencilOp;m.stencilFail=THREE.KeepStencilOp;});
 }
 function renderConcave(){ if(S.cc.screen) renderScreen(); stencilMode(true); renderEye(); stencilMode(false); }
@@ -2551,7 +2552,7 @@ function summary(s){if(s.scene==='concave'){const c=s.cc||DEF_CC;return `凹面�
   if(s.scene==='mirror')return `平面鏡・${objSummary(s)}・鏡子 ${s.m.w.toFixed(2)}×${s.m.h.toFixed(2)} m${s.m.two?'・兩面鏡 '+s.m.ang+'°':''}${s.m.ghost?'・顯示虛像':''}・${s.night?'夜晚':'白天'}`;
   return `針孔・${objSummary(s)}・深度 ${Math.round(s.d*100)} cm・${SHAPE_NAME[s.shape]}孔 ${fmtMM(s.holeMM)} × ${s.holes.length}・${s.night?'夜晚':'白天'}`;}
 function grabView(w){
-  renderer.render(scene,cam);
+  renderMain();
   const h=Math.round(w*gl.height/gl.width), c=document.createElement('canvas'); c.width=w; c.height=h;
   const x=c.getContext('2d'); x.drawImage(gl,0,0,w,h); x.drawImage(inkCv,0,0,w,h); return c;
 }
@@ -2705,6 +2706,13 @@ function resize(){
 }
 new ResizeObserver(resize).observe(stage);
 
+// 主畫面：凹面鏡關閉「在空間中顯示像」時，像只畫在鏡面範圍裡，看起來就和真的照鏡子一樣
+function renderMain(){
+  const realMirror=S.scene==='concave'&&!S.cc.img;
+  if(realMirror){stencilMode(true);cam.layers.enable(3);}
+  renderer.render(scene,cam);
+  if(realMirror){stencilMode(false);cam.layers.disable(3);}
+}
 let frame=0;
 function loop(now){
   requestAnimationFrame(loop); frame++;
@@ -2716,7 +2724,7 @@ function loop(now){
   });
   if(flick){dirty=true; if(S.night&&frame%5===0) needPin=true;}
   if(needPin){if(S.scene==='mirror')renderEye();else if(S.scene==='concave')renderConcave();else renderPinhole();needPin=false;drawCloseup();}
-  if(dirty){renderer.render(scene,cam);dirty=false;}
+  if(dirty){renderMain();dirty=false;}
 }
 
 /* ---------- 啟動 ---------- */
