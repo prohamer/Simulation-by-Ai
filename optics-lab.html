@@ -60,8 +60,8 @@ svg.i{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke
 .tbtn.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
 
 /* 開關 */
-.sw{display:flex;align-items:center;gap:8px;cursor:pointer;min-height:32px}
-.sw input{position:absolute;opacity:0;pointer-events:none}
+.sw{display:flex;align-items:center;gap:8px;cursor:pointer;min-height:32px;position:relative}
+.sw input{position:absolute;left:0;top:50%;width:1px;height:1px;margin:0;opacity:0;pointer-events:none}   /* 隱藏的勾選框要留在開關旁邊，否則點了之後瀏覽器會捲動整個頁面去找它 */
 .sw .track{width:38px;height:22px;border-radius:11px;background:var(--line);position:relative;flex:none;transition:background .2s}
 .sw .track::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.3);transition:transform .2s}
 .sw input:checked + .track{background:var(--accent)}
@@ -194,9 +194,11 @@ dl.stats dt{color:var(--muted)}
 dl.stats dd{margin:0;text-align:right;font-family:var(--f-mono);font-variant-numeric:tabular-nums;font-weight:700}
 body:not(.adv) .adv-only{display:none !important}
 body:not([data-scene="pinhole"]) .only-pinhole{display:none !important}
-body:not([data-scene="concave"]) .only-concave{display:none !important}
+body:not([data-scene="concave"]):not([data-scene="lens"]) .only-concave{display:none !important}
+body[data-scene="lens"] .not-lens{display:none !important}
 body:not([data-scene="convex"]) .only-convex{display:none !important}
-body:not([data-scene="concave"]):not([data-scene="convex"]) .curved{display:none !important}
+body:not([data-scene="concave"]):not([data-scene="convex"]):not([data-scene="lens"]) .curved{display:none !important}
+body[data-scene="lens"] .not-concave{display:none !important}
 body[data-scene="convex"] .not-concave{display:none !important}
 body[data-scene="concave"] .not-concave{display:none !important}
 body[data-scene="pinhole"] .obs-sec{display:none !important}
@@ -265,7 +267,7 @@ body:not([data-scene="mirror"]) .only-mirror{display:none !important}
         <option value="mirror">光的反射：平面鏡</option>
         <option value="concave">光的反射：凹面鏡</option>
         <option value="convex">光的反射：凸面鏡</option>
-        <option disabled>凸透鏡（製作中）</option>
+        <option value="lens">光的折射：凸透鏡</option>
         <option disabled>凹透鏡（製作中）</option>
       </select>
     </label>
@@ -356,12 +358,12 @@ body:not([data-scene="mirror"]) .only-mirror{display:none !important}
       <section class="psec curved">
         <h3 id="ccTitle">凹面鏡</h3>
         <div class="field"><div class="flab"><span id="ccFLab">焦距 f</span><output id="ccFOut"></output></div><input type="range" id="ccF" min="0.3" max="1.5" step="0.05" aria-label="焦距"></div>
-        <div class="field"><div class="flab"><span>鏡面直徑</span><output id="ccAOut"></output></div><input type="range" id="ccA" min="0.3" max="1.6" step="0.05" aria-label="鏡面直徑"></div>
-        <div class="field"><div class="flab"><span>鏡子中心高度</span><output id="ccYOut"></output></div><input type="range" id="ccY" min="0.5" max="1.6" step="0.05" aria-label="鏡子中心高度"></div>
+        <div class="field"><div class="flab"><span id="ccALab">鏡面直徑</span><output id="ccAOut"></output></div><input type="range" id="ccA" min="0.3" max="1.6" step="0.05" aria-label="鏡面直徑"></div>
+        <div class="field"><div class="flab"><span id="ccYLab">鏡子中心高度</span><output id="ccYOut"></output></div><input type="range" id="ccY" min="0.5" max="1.6" step="0.05" aria-label="鏡子中心高度"></div>
         <div class="frow only-convex"><span>鏡面</span><div class="chips sm" id="cvFlat"><button data-v="0">凸面鏡</button><button data-v="1">換成同樣大小的平面鏡</button></div></div>
         <p class="note" id="ccInfo"></p>
         <label class="sw"><input type="checkbox" id="cc_img"><span class="track"></span><span>在空間中顯示像</span></label>
-        <p class="note">關閉時像只出現在鏡面裡，就像真的照鏡子；從哪個角度看到什麼，跟觀察者看到的一樣。</p>
+        <p class="note" id="ccImgNote">關閉時像只出現在鏡面裡，就像真的照鏡子；從哪個角度看到什麼，跟觀察者看到的一樣。</p>
         <label class="sw"><input type="checkbox" id="cc_prin"><span class="track"></span><span>預設光線（選取物體的 2 個特徵點）</span></label>
         <label class="sw"><input type="checkbox" id="cc_cust"><span class="track"></span><span>自訂光點的光線</span></label>
         <label class="sw"><input type="checkbox" id="cc_tri"><span class="track"></span><span>三條主要光線</span></label>
@@ -371,18 +373,18 @@ body:not([data-scene="mirror"]) .only-mirror{display:none !important}
         <div class="btnrow" id="ccSrcTools"><button class="btn small" id="ccSrcBtn">新增／移除光源點</button><button class="btn ghost small" id="ccSrcClear">清除</button></div>
         <p class="note" id="ccSrcNote"></p>
         <label class="sw"><input type="checkbox" id="cc_par"><span class="track"></span><span>平行光入射（像太陽光）</span></label>
-        <label class="sw only-concave"><input type="checkbox" id="cc_bulb"><span class="track"></span><span>燈泡放在焦點（手電筒）</span></label>
+        <label class="sw only-concave"><input type="checkbox" id="cc_bulb"><span class="track"></span><span id="ccBulbLab">燈泡放在焦點（手電筒）</span></label>
         <label class="sw only-convex"><input type="checkbox" id="cc_fov"><span class="track"></span><span>觀察者的視野範圍</span></label>
         <label class="sw only-concave"><input type="checkbox" id="cc_screen"><span class="track"></span><span>放屏幕</span></label>
         <div class="custom only-concave" id="ccSField">
-          <div class="field"><div class="flab"><span>屏幕到鏡子的距離</span><output id="ccSOut"></output></div><input type="range" id="ccS" min="0.15" max="6" step="0.02" aria-label="屏幕到鏡子的距離"></div>
+          <div class="field"><div class="flab"><span id="ccSLab">屏幕到鏡子的距離</span><output id="ccSOut"></output></div><input type="range" id="ccS" min="0.15" max="6" step="0.02" aria-label="屏幕到鏡子的距離"></div>
           <div class="field"><div class="flab"><span>屏幕高度（中心離地）</span><output id="ccSYOut"></output></div><input type="range" id="ccSY" min="0.05" max="2.5" step="0.01" aria-label="屏幕高度"></div>
           <div class="field"><div class="flab"><span>屏幕左右</span><output id="ccSZOut"></output></div><input type="range" id="ccSZ" min="-3" max="3" step="0.01" aria-label="屏幕左右"></div>
-          <div class="field"><div class="flab"><span>屏幕大小（鏡面直徑的）</span><output id="ccSROut"></output></div><input type="range" id="ccSR" min="0.2" max="1" step="0.05" aria-label="屏幕大小"></div>
-          <label class="sw"><input type="checkbox" id="cc_sAuto"><span class="track"></span><span>自動對準鏡子（垂直於反射光）</span></label>
+          <div class="field"><div class="flab"><span id="ccSRLab">屏幕大小（鏡面直徑的）</span><output id="ccSROut"></output></div><input type="range" id="ccSR" min="0.2" max="1" step="0.05" aria-label="屏幕大小"></div>
+          <label class="sw"><input type="checkbox" id="cc_sAuto"><span class="track"></span><span id="ccAutoLab">自動對準鏡子（垂直於反射光）</span></label>
           <div class="field"><div class="flab"><span>再左右轉</span><output id="ccYawOut"></output></div><input type="range" id="ccYaw" min="-70" max="70" step="1" aria-label="左右轉"></div>
           <div class="field"><div class="flab"><span>再上下轉</span><output id="ccPitchOut"></output></div><input type="range" id="ccPitch" min="-70" max="70" step="1" aria-label="上下轉"></div>
-          <p class="note">屏幕可直接拖曳。屏幕會擋住照向鏡子的光，建議物體放在主軸一側、屏幕放另一側。</p>
+          <p class="note" id="ccScrNote">屏幕可直接拖曳。屏幕會擋住照向鏡子的光，建議物體放在主軸一側、屏幕放另一側。</p>
         </div>
       </section>
 
@@ -478,7 +480,7 @@ body:not([data-scene="mirror"]) .only-mirror{display:none !important}
         <li><b>復原、重做</b>：畫面右上角的箭頭。涵蓋繪圖、手繪光線、打洞補洞、物體的位置和姿勢。</li>
         <li><b>快照</b>：存下設定、視角和筆跡，之後可回到那個畫面，或挑兩張並排比較。快照存在這台裝置的瀏覽器裡。</li>
         <li><b>截圖</b>：學生繳交作業用，iPad 長按圖片即可存到相簿。</li>
-        <li><b>任務卡</b>：網址加上 <code>#card2</code> 開啟針孔成像的任務卡 2，<code>#card1</code> 開啟平面鏡的任務卡 1，<code>#card7</code> 開啟凹面鏡的任務卡 7，<code>#card6</code> 開啟凸面鏡的任務卡 6。</li>
+        <li><b>任務卡</b>：網址加上 <code>#card2</code> 開啟針孔成像的任務卡 2，<code>#card1</code> 開啟平面鏡的任務卡 1，<code>#card7</code> 開啟凹面鏡的任務卡 7，<code>#card6</code> 開啟凸面鏡的任務卡 6，<code>#card8</code> 開啟凸透鏡的任務卡 8。</li>
       </ul>
       <h3>平面鏡場景</h3>
       <ul>
@@ -494,6 +496,7 @@ body:not([data-scene="mirror"]) .only-mirror{display:none !important}
         <li><b>地上的顏色</b>：藍色是 C 以外、橘色是 F 和 C 之間、紅色是 F 以內，F、C 也標在主軸上。</li>
         <li><b>屏幕</b>：打開「放屏幕」後，可直接拖曳到任何位置，也能用滑桿調整距離、高度、左右、大小與角度。預設大小是鏡面直徑的一半，並自動面向鏡子。屏幕會擋住照向鏡子的光，建議物體和屏幕分別放在主軸兩側。屏幕到達像的位置時最清楚；虛像接不到。右下角可切換「屏幕上的像」。</li>
         <li><b>上方的「預設光線」「自訂光點」「進到眼睛」</b>：前兩個決定從哪些點畫光線（「自訂光點」按下去就能點物體新增或移除光點，再按一次退出）；「進到眼睛」可以單獨開啟，畫出光經過鏡面反射後真的進到眼球的路徑（沒有選光點時，用選取物體的特徵點），虛線往回延長到像點。三條主要光線用實線、虛線、點線區分。</li>
+        <li><b>凸透鏡</b>：物體放在左側，實像出現在透鏡另一側，可以用屏幕接到；物體在焦點以內時是放大鏡，從右側的眼球透過透鏡看到正立、放大的虛像。三條主要光線：平行主軸→經過另一側的 F、經過 F→平行主軸、經過透鏡中心→方向不變。</li>
         <li><b>凸面鏡</b>：像永遠是正立、縮小的虛像。可切換成同樣大小的平面鏡，並打開「觀察者的視野範圍」比較兩者看得到的範圍。</li>
         <li><b>平行光、燈泡</b>：平行光反射後會聚在焦點；燈泡放在焦點，反射光變成平行光，就是手電筒的原理。</li>
       </ul>
@@ -551,8 +554,13 @@ const S={
 };
 const DEF_CV={f:-.5,A:.8,y:1.5,img:true,prin:false,cust:false,tri:true,eyeRay:false,par:false,bulb:false,screen:false,s:1.2,sy:1.5,sz:0,sr:.5,sAuto:true,yaw:0,pitch:0,src:'feat',pts:[],flat:false,fov:false};
 S.cv=JSON.parse(JSON.stringify(DEF_CV));   // 凸面鏡（焦距取負值）；flat：換成同樣大小的平面鏡比較
-function isCurved(){return S.scene==='concave'||S.scene==='convex';}
-function CC(){return S.scene==='convex'?S.cv:S.cc;}
+const DEF_LENS={f:.5,A:.6,y:1.0,img:true,prin:false,cust:false,tri:true,eyeRay:false,par:false,bulb:false,screen:false,s:1.0,sy:1.0,sz:0,sr:.6,sAuto:true,yaw:0,pitch:0,pts:[]};
+S.lens=JSON.parse(JSON.stringify(DEF_LENS));   // 凸透鏡：透鏡在 x=0，物體在左側（x<0），實像在右側（x>0）
+function isLens(){return S.scene==='lens';}
+function isCurved(){return S.scene==='concave'||S.scene==='convex'||S.scene==='lens';}
+function CC(){return S.scene==='convex'?S.cv:S.scene==='lens'?S.lens:S.cc;}
+function imgX(q){return isLens()?q:-q;}   // 像的 x：面鏡的實像在鏡前（-q），透鏡的實像在另一側（+q）
+function lensHalf(r){const a=CC().A/2,sag=a*a/(2*Math.abs(fEff()))*.5,e=.008;return fEff()>0?e+sag*(1-(r/a)*(r/a)):e+sag*(r/a)*(r/a);}   // 透鏡半厚度（凸透鏡中間厚）
 function fEff(){const c=CC();return c.flat?-1e5:c.f;}   // 實際計算用的焦距（平面鏡＝焦距無限大）
 const DEF_CC={f:.6,A:.6,y:1.0,img:true,prin:false,cust:false,tri:true,eyeRay:false,par:false,bulb:false,screen:false,s:1.2,sy:1.0,sz:0,sr:.5,sAuto:true,yaw:0,pitch:0,src:'feat',pts:[]};
 const DEF_M={w:.8,h:1.6,b:.2,ghost:false,ext:true,fov:false,two:false,ang:90}, DEF_EYE={x:-2.4,z:.7,y:1.5,att:0};
@@ -1383,12 +1391,13 @@ $('#eyeH').addEventListener('change',()=>{syncUI();commit();});
 const VIEWS={pinhole:[['overview','全景'],['side','側視'],['top','俯視'],['back','屏幕後方'],['eye','物體看箱子']],
   mirror:[['overview','全景'],['side','側視'],['top','俯視'],['observer','觀察者視角'],['behind','鏡子後方']],
   concave:[['overview','全景'],['side','側視'],['top','俯視'],['observer','觀察者視角'],['screen','看屏幕']],
+  lens:[['overview','全景'],['side','側視'],['top','俯視'],['observer','觀察者視角'],['screen','看屏幕']],
   convex:[['overview','全景'],['side','側視'],['top','俯視'],['observer','觀察者視角']]};
 // 3D 文字標籤（F、C、距離、角度）可以整個關掉，解說光路時畫面比較乾淨
 let showLabels=store('optics.labels'); if(showLabels===null) showLabels=true;
 function applyLabels(){scene.traverse(o=>{if(o.userData&&o.userData.label)o.visible=showLabels;});dirty=true;}
 function renderViews(){$('#views').innerHTML=VIEWS[S.scene].map(([k,t])=>`<button data-view="${k}">${t}</button>`).join('')+
-  (isCurved()?`<button data-toggle="prin" class="lbl">預設光線</button><button data-toggle="cust" class="lbl" data-tip="點物體新增光點，再點一次移除">自訂光點</button><button data-toggle="eyeRay" class="lbl" data-tip="畫出從光點經過鏡面、進到眼睛的光">進到眼睛</button>`:'')+
+  (isCurved()?`<button data-toggle="prin" class="lbl">預設光線</button><button data-toggle="cust" class="lbl" data-tip="點物體新增光點，再點一次移除">自訂光點</button><button data-toggle="eyeRay" class="lbl" data-tip="畫出從光點經過${isLens()?'透鏡':'鏡面'}、進到眼睛的光">進到眼睛</button>`:'')+
   `<button data-toggle="labels" class="lbl ${showLabels?'':'off'}" aria-pressed="${showLabels}">${showLabels?'標籤：開':'標籤：關'}</button>`; syncTopToggles();}
 function syncTopToggles(){
   if(!isCurved()) return;
@@ -1412,14 +1421,15 @@ function ccImage(p){const f=fEff();if(Math.abs(p-f)<1e-3)return null;const q=p*f
 function mapPoint(P){
   const p=-P.x; if(p<=.01) return null;
   const r=ccImage(p); if(!r||Math.abs(r.q)>25) return null;
-  const Y=CC().y; return V3(-r.q,Y+r.m*(P.y-Y),r.m*P.z);
+  const Y=CC().y; return V3(imgX(r.q),Y+r.m*(P.y-Y),r.m*P.z);
 }
-function ccSurf(r){const f=fEff();if(CC().flat)return 0;const R=2*Math.abs(f);return (f>0?-1:1)*(R-Math.sqrt(Math.max(0,R*R-r*r)));}   // 半徑 r 處鏡面的 x（凹面鏡邊緣在鏡前，凸面鏡在鏡後）
+function ccSurf(r){const f=fEff();if(CC().flat||isLens())return 0;const R=2*Math.abs(f);return (f>0?-1:1)*(R-Math.sqrt(Math.max(0,R*R-r*r)));}   // 半徑 r 處鏡面的 x（凹面鏡邊緣在鏡前，凸面鏡在鏡後）
 function ccHit(y,z){const r=Math.hypot(y-CC().y,z);return V3(r<=CC().A/2?ccSurf(r):0,y,z);}
 function ccF(){return V3(-fEff(),CC().y,0);} function ccC(){return V3(-2*fEff(),CC().y,0);}
 
 function buildConcave(){
   dirty=true; disposeTree(ccGroup); ccGroup.clear();
+  if(isLens()){buildLens();return;}
   const f=fEff(), flat=!!CC().flat, R=2*Math.abs(f), A=flat?CC().A:Math.min(CC().A,R*1.8), Y=CC().y, th=flat?0:Math.asin(Math.min(.9,A/2/R)), sag=flat?0:R-Math.sqrt(R*R-(A/2)*(A/2)), cvx=f<0;
   let g;
   if(flat){g=new THREE.CircleGeometry(A/2,56);g.rotateY(-Math.PI/2);}
@@ -1445,11 +1455,39 @@ function buildConcave(){
   setLayer(marks,1); if(flat) marks.visible=false;
   ccScreen=null; buildScreen();
 }
+/* ---------- 透鏡：旋轉體玻璃，兩側各有 F、2F ---------- */
+let lensMat=null;
+function lensGlass(m){m.color.set(0xbfe3f2);m.transparent=true;m.opacity=.38;m.metalness=0;m.roughness=.05;m.depthWrite=false;m.needsUpdate=true;}
+function buildLens(){
+  const f=fEff(), A=CC().A, a=A/2, Y=CC().y, pts=[];
+  for(let i=0;i<=16;i++){const r=a*i/16;pts.push(new THREE.Vector2(r,lensHalf(r)));}
+  for(let i=16;i>=0;i--){const r=a*i/16;pts.push(new THREE.Vector2(r,-lensHalf(r)));}
+  const g=new THREE.LatheGeometry(pts,56); g.rotateZ(-Math.PI/2);   // 旋轉軸轉成主軸（x 軸）
+  lensMat=new THREE.MeshStandardMaterial({side:THREE.DoubleSide}); lensGlass(lensMat);
+  ccDish=new THREE.Mesh(g,lensMat); ccDish.position.set(0,Y,0); ccDish.renderOrder=2; ccGroup.add(ccDish);
+  const rim=new THREE.Mesh(new THREE.TorusGeometry(a,.012,8,56).rotateY(Math.PI/2),M('#6b7a86')); rim.position.set(0,Y,0); ccGroup.add(rim);
+  const postH=Y-a; if(postH>.02) mk(new THREE.CylinderGeometry(.02,.025,postH,8),M('#6b7a86'),0,postH/2,0,ccGroup);
+  mk(new THREE.BoxGeometry(.3,.03,.4),M('#55606a'),0,.015,0,ccGroup);
+  ccBulb=new THREE.Mesh(new THREE.SphereGeometry(.04,14,10),new THREE.MeshBasicMaterial({color:0xfff2b0})); ccBulb.position.copy(ccF()); ccBulb.visible=CC().bulb; ccGroup.add(ccBulb);
+  ccLight.position.copy(ccF()); ccLight.intensity=CC().bulb?(S.night?1.6:.6):0;
+  setLayer(ccGroup,0);
+  const marks=new THREE.Group(); ccGroup.add(marks);
+  const band=(x0,x1,col)=>{const m=new THREE.Mesh(new THREE.PlaneGeometry(Math.abs(x1-x0),.9).rotateX(-Math.PI/2),new THREE.MeshBasicMaterial({color:col,transparent:true,opacity:.28,depthWrite:false}));m.position.set((x0+x1)/2,.006,0);marks.add(m);};
+  if(f>0){band(-8,-2*f,'#7aa7e0'); band(-2*f,-f,'#f2b04a'); band(-f,0,'#e2453c');}
+  const ax=new THREE.Mesh(new THREE.CylinderGeometry(.004,.004,13,6).rotateZ(Math.PI/2),new THREE.MeshBasicMaterial({color:0x1c2a35,transparent:true,opacity:.5})); ax.position.set(-1.5,Y,0); marks.add(ax);
+  [['F',-f],['2F',-2*f],['F',f],['2F',2*f]].forEach(([t,x])=>{
+    const d=new THREE.Mesh(new THREE.SphereGeometry(.022,12,8),new THREE.MeshBasicMaterial({color:0xe2453c})); d.position.set(x,Y,0); marks.add(d);
+    const pole=new THREE.Mesh(new THREE.CylinderGeometry(.004,.004,Y,4),new THREE.MeshBasicMaterial({color:0xe2453c,transparent:true,opacity:.6})); pole.position.set(x,Y/2,0); marks.add(pole);
+    const lb=textSprite(t); lb.position.set(x,Y+.16,0); lb.scale.multiplyScalar(.9); marks.add(lb);
+  });
+  setLayer(marks,1);
+  ccScreen=null; buildScreen();
+}
 /* ---------- 屏幕：可自由拖曳、可轉角度；預設大小是鏡面直徑的一半，並自動面向鏡子 ---------- */
-function scrW(){return Math.max(.08,CC().A*(CC().sr||.5));}
+function scrW(){return isLens()?Math.max(.08,CC().sr||.6):Math.max(.08,CC().A*(CC().sr||.5));}   // 透鏡：屏幕大小直接用公尺，不跟著透鏡直徑變（否則換透鏡時，屏幕特寫裡的像看起來會變大變小）
 function scrFrame(){   // 屏幕中心 C、朝向鏡子的法線 n、屏幕平面上的右方 vr 與上方 vu
-  const c=CC(), C=V3(-c.s,c.sy==null?c.y:c.sy,c.sz||0);
-  const n=c.sAuto?V3(0,c.y,0).sub(C).normalize():V3(1,0,0);
+  const c=CC(), C=V3(isLens()?c.s:-c.s,c.sy==null?c.y:c.sy,c.sz||0);
+  const n=c.sAuto?V3(0,c.y,0).sub(C).normalize():V3(isLens()?-1:1,0,0);
   n.applyAxisAngle(V3(0,1,0),THREE.MathUtils.degToRad(c.yaw||0));
   const side=V3(0,1,0).cross(n); if(side.lengthSq()>1e-8){side.normalize();n.applyAxisAngle(side,THREE.MathUtils.degToRad(c.pitch||0));}
   let vu=V3(0,1,0).sub(n.clone().multiplyScalar(n.y)); if(vu.lengthSq()<1e-8) vu=V3(1,0,0); vu.normalize();
@@ -1530,17 +1568,18 @@ function ccSources(){   // 預設光線（特徵點）與自訂光點可以同�
 }
 // 三條主要光線：平行光、朝向 F 的光、朝向 C 的光。理想面鏡上，從 P 出發的光反射後都通過像點（實像）或從像點發散（虛像）
 function ccPrincipal(P){
-  const f=fEff(), F=ccF(), C=ccC(), p=-P.x, im=ccImage(p), I=mapPoint(P), real=!!I&&im&&im.q>0, out=[];
+  const L=isLens(), f=fEff(), F=ccF(), C=L?V3(0,CC().y,0):ccC(), p=-P.x, im=ccImage(p), I=mapPoint(P), real=!!I&&im&&im.q>0, out=[];
   const dirs=[V3(1,0,0)];
   if(!CC().flat){
     dirs.push((f>0&&p<f?P.clone().sub(F):F.clone().sub(P)).normalize());
-    dirs.push((f>0&&p<2*f?P.clone().sub(C):C.clone().sub(P)).normalize());
+    dirs.push((!L&&f>0&&p<2*f?P.clone().sub(C):C.clone().sub(P)).normalize());   // 透鏡：第三條光通過光心，方向不變
   }
   dirs.forEach((d,i)=>{
     if(d.x<=1e-3) return;   // i：0 平行主軸、1 經過（朝向）F、2 經過（朝向）C
     const Mp=P.clone().addScaledVector(d,-P.x/d.x), M=ccHit(Mp.y,Mp.z);
     let rd;
     if(I) rd=(real?I.clone().sub(M):M.clone().sub(I)).normalize();
+    else if(L) rd=i===0?V3(f,CC().y,0).sub(M).normalize():i===1?V3(1,0,0):d.clone();   // 透鏡：物體在焦點上，折射光互相平行
     else rd=i===0?F.clone().sub(M).normalize():i===1?V3(-1,0,0):d.clone().negate();   // 物體在焦點上：反射光互相平行
     out.push({M,rd,kind:i});
   });
@@ -1549,12 +1588,15 @@ function ccPrincipal(P){
 // 三種線條樣式：實線、線段虛線、圓點虛線
 function dotted(a,b,col,rad,op=1){const L=a.distanceTo(b),n=Math.max(1,Math.floor(L/.06));for(let i=0;i<=n;i++)dot(a.clone().lerp(b,i/n),col,rad*1.5,op);}
 function styled(a,b,col,rad,kind,op=1){if(kind===1)dashed(a,b,col,rad,op);else if(kind===2)dotted(a,b,col,rad,op);else beam(a,b,col,rad,op);}
+// 出射光要畫到多遠：面鏡往左（x<0），透鏡往右（x>0）
+function rayFar(P,pr){if(isLens())return Math.max(pr.I&&pr.real?pr.I.x:0,2*Math.abs(fEff()),eyePos().x,CC().screen?CC().s:0,.8)+.6;return -(Math.max(-P.x,pr.I&&pr.real?-pr.I.x:0,Math.max(0,2*fEff()))+.6);}
+function rayOut(rd){return isLens()?rd.x>1e-6:rd.x<0;}
 function ccRaysFor(P,col,rad){
-  const pr=ccPrincipal(P), far=-(Math.max(-P.x,pr.I&&pr.real?-pr.I.x:0,Math.max(0,2*fEff()))+.6);
+  const pr=ccPrincipal(P), far=rayFar(P,pr);
   pr.rays.forEach(({M,rd,kind})=>{
     const hs=screenHit(P,M); if(hs){styled(P,hs,col,rad,kind);dot(hs,col,.012);return;}   // 入射光被屏幕擋住
     styled(P,M,col,rad,kind); if(Math.hypot(M.y-CC().y,M.z)>CC().A/2) dashed(V3(0,CC().y,M.z),V3(0,M.y,M.z),'#8a96a3',.003,.7);   // 碰到鏡面以外：畫出鏡面延伸線
-    if(rd.x<0){const t=(far-M.x)/rd.x;let end=M.clone().addScaledVector(rd,t>0?t:2);const hs2=screenHit(M,end);if(hs2)end=hs2;styled(M,end,col,rad,kind);if(hs2)dot(hs2,col,.014);}
+    if(rayOut(rd)){const t=(far-M.x)/rd.x;let end=M.clone().addScaledVector(rd,t>0?t:2);const hs2=screenHit(M,end);if(hs2)end=hs2;styled(M,end,col,rad,kind);if(hs2)dot(hs2,col,.014);}
     if(pr.I&&!pr.real) styled(M,pr.I,col,rad*.6,kind,.45);   // 虛像：反射光往回延長（較淡），交在鏡後
   });
   if(pr.I) dot(pr.I,col,.022,pr.real?1:.7);
@@ -1595,7 +1637,11 @@ function updateRaysConcave(){
   const en=$('#eyeNote'); if(en) en.textContent=!CC().eyeRay?'':!srcs.length?'場景中沒有可追蹤的點。':miss.length?`從目前眼睛的位置看不到其中 ${miss.length} 個點的像，移動眼球試試看。`:'每一點的光都進到眼睛了。';
   if(CC().cust||tool==='src') customPts().forEach(sv=>{dot(sv.p,sv.col,.026);dot(sv.p,'#ffffff',.012);});   // 自訂光點的位置記號
   if(CC().par){   // 平行光入射：反射後會聚在焦點
-    for(let i=0;i<9;i++){const h=(-1+i/4)*A*.92, M=V3(ccSurf(Math.abs(h)),Y+h,0), F=ccF(), d=(f>0?F.clone().sub(M):M.clone().sub(F)).normalize();
+    if(isLens()) for(let i=0;i<9;i++){const h=(-1+i/4)*A*.92, M=V3(0,Y+h,0), Fp=V3(f,Y,0), d=(f>0?Fp.clone().sub(M):M.clone().sub(Fp)).normalize();   // 透鏡：平行光折射後會聚到另一側的焦點
+      if(f<0) dashed(M,Fp,'#f2a81d',.004,.7);
+      const S0=V3(-6,Y+h,0); let e=M.clone().addScaledVector(d,(2*Math.abs(f)+1)/Math.abs(d.x)); const b2=screenHit(M,e); if(b2) e=b2;
+      beam(S0,M,'#f2a81d',.006); beam(M,e,'#f2a81d',.006);}
+    else for(let i=0;i<9;i++){const h=(-1+i/4)*A*.92, M=V3(ccSurf(Math.abs(h)),Y+h,0), F=ccF(), d=(f>0?F.clone().sub(M):M.clone().sub(F)).normalize();
       if(f<0&&!CC().flat) dashed(M,F,'#f2a81d',.004,.7);   // 凸面鏡：反射光好像從鏡後的焦點發出
       const S0=V3(-6,Y+h,0), b1=screenHit(S0,M); if(b1){beam(S0,b1,'#f2a81d',.006);continue;}
       let e=M.clone().addScaledVector(d,(2*f+.8)/Math.abs(d.x)); const b2=screenHit(M,e); if(b2) e=b2;
@@ -1603,15 +1649,16 @@ function updateRaysConcave(){
   }
   if(CC().bulb){   // 燈泡在焦點：反射後變成平行光
     for(let i=0;i<9;i++){const h=(-1+i/4)*A*.92, M=V3(ccSurf(Math.abs(h)),Y+h,0), b1=screenHit(ccF(),M);if(b1){beam(ccF(),b1,'#ffd23f',.006);continue;}
-      let e=V3(-6,Y+h,0); const b2=screenHit(M,e); if(b2) e=b2; beam(ccF(),M,'#ffd23f',.006); beam(M,e,'#ffd23f',.006);}
+      let e=V3(isLens()?6:-6,Y+h,0); const b2=screenHit(M,e); if(b2) e=b2; beam(ccF(),M,'#ffd23f',.006); beam(M,e,'#ffd23f',.006);}
   }
   handRays.forEach(hr=>{
     if(!hr.target||hr.target.type!=='cc') return;
     const a=handStart(hr); if(!a) return; const col=rayColor(hr.color), M=V3(...hr.target.p);
     const blk=occlude(a,M); if(blk){beam(a,blk,col,.012);dot(a,col,.024);return;}
     const I=mapPoint(a), real=I&&-a.x>f;
-    const d=I?(real?I.clone().sub(M):M.clone().sub(I)).normalize():V3(-1,0,0);
+    const d=I?(real?I.clone().sub(M):M.clone().sub(I)).normalize():V3(isLens()?1:-1,0,0);
     beam(a,M,col,.012); dot(a,col,.024); beam(M,M.clone().addScaledVector(d,3),col,.012);
+    if(isLens()){if(I&&!real) dashed(M,I,col,.006,.8); return;}   // 透鏡：折射光一律朝向像點（或從虛像點發散）
     const C=ccC(), nrm0=CC().flat?V3(-1,0,0):(fEff()>0?C.clone().sub(M):M.clone().sub(C)).normalize(); dashed(M,M.clone().add(nrm0.clone().multiplyScalar(.6)),'#ffffff',.005);   // 法線（凹面鏡指向 C，凸面鏡從 C 往外）
     if(I&&!real) dashed(M,I,col,.006,.8);
     if(S.adv){const nrm=nrm0,din=a.clone().sub(M).normalize(),ang=THREE.MathUtils.radToDeg(Math.acos(clamp(din.dot(nrm),-1,1))).toFixed(0);
@@ -1655,9 +1702,9 @@ function renderScreen(){
     sImg.data.set(sbuf); srawCtx.putImageData(sImg,0,0);
     sflipCtx.setTransform(1,0,0,-1,0,NS); sflipCtx.clearRect(0,0,NS,NS); sflipCtx.drawImage(sraw,0,0); sflipCtx.setTransform(1,0,0,1,0,0);
     // 離焦模糊：沿著從鏡子頂點到像的方向，比較像和屏幕的距離
-    const P0=objCenter(o), Ic=mapPoint(P0)||V3(-im.q,CC().y,0), u=Ic.clone().sub(V), LI=u.length(); u.divideScalar(LI);
+    const P0=objCenter(o), Ic=mapPoint(P0)||V3(imgX(im.q),CC().y,0), u=Ic.clone().sub(V), LI=u.length(); u.divideScalar(LI);
     const un=u.dot(F.n), tS=Math.abs(un)>1e-6?F.C.clone().sub(V).dot(F.n)/un:LI;
-    const rpx=(CC().A/2)*Math.abs(LI-tS)/LI/W*NS, ker=kernelPts('circle',rpx), fa=(1-screenBlock(objLight(o)))/ker.length;
+    const rpx=(CC().A/2)*Math.abs(LI-tS)/LI/W*NS, ker=kernelPts('circle',rpx), fa=(1-screenBlock(objLight(o)))/ker.length*(isLens()?clamp(Math.pow(CC().A/.6,2),.12,2.2):1);   // 透鏡越大，收集的光越多，像越亮（像的大小不變）
     c.globalCompositeOperation='lighter';
     ker.forEach(([kx,ky])=>{c.globalAlpha=fa;c.drawImage(sflip,kx,ky);});
     c.globalAlpha=1; c.globalCompositeOperation='source-over';
@@ -1669,6 +1716,12 @@ function renderScreen(){
 }
 let ccClose='eye';
 function stencilMode(on){   // 觀察者看到的畫面：像只出現在鏡面範圍裡
+  if(isLens()){   // 透鏡：透過透鏡只看得到像，透鏡後方的實物被擋住；像不做深度測試，鏡後的虛像也看得到
+    if(ccDish){const dm=ccDish.material;dm.stencilWrite=on;dm.stencilRef=1;dm.stencilFunc=THREE.AlwaysStencilFunc;dm.stencilZPass=THREE.ReplaceStencilOp;
+      if(on){dm.transparent=false;dm.opacity=1;dm.depthWrite=true;dm.color.set(S.night?0x2a3a52:0xdcebf2);dm.roughness=.9;}else lensGlass(dm);}
+    Object.values(imgMats).forEach(m=>{m.stencilWrite=on;m.stencilRef=1;m.stencilFunc=on?THREE.EqualStencilFunc:THREE.AlwaysStencilFunc;m.stencilZPass=THREE.KeepStencilOp;m.stencilFail=THREE.KeepStencilOp;m.depthTest=!on;});
+    return;
+  }
   if(ccDish){const dm=ccDish.material;dm.stencilWrite=on;dm.stencilRef=1;dm.stencilFunc=THREE.AlwaysStencilFunc;dm.stencilZPass=THREE.ReplaceStencilOp;dm.transparent=!on;dm.opacity=on?1:.62;dm.metalness=on?.1:.55;dm.roughness=on?.7:.16;dm.color.set(on?0xc9d3da:0xdde6ec);}
   Object.values(imgMats).forEach(m=>{m.stencilWrite=on;m.stencilRef=1;m.stencilFunc=on?THREE.EqualStencilFunc:THREE.AlwaysStencilFunc;m.stencilZPass=THREE.KeepStencilOp;m.stencilFail=THREE.KeepStencilOp;});
 }
@@ -1684,7 +1737,8 @@ function drawConcaveSide(){
   c.setTransform(1,0,0,1,0,0); c.fillStyle=S.night?'#0f1834':'#e9f5fc'; c.fillRect(0,0,w,h);
   const f=fEff(), Y=CC().y, bb=allBox(), o=selObj(), im=ccImage(o.p);
   let xs=[bb.min.x,CC().flat?0:-2*f,-.1,.3,eyePos().x], ys=[0,bb.max.y,Y+CC().A/2];
-  if(im&&Math.abs(im.q)<12){xs.push(-im.q);const bo=objBox(o);ys.push(Y+im.m*(bo.max.y-Y),Y+im.m*(bo.min.y-Y));}
+  if(isLens()){xs.push(2*Math.abs(f));if(CC().screen)xs.push(CC().s);}
+  if(im&&Math.abs(im.q)<12){xs.push(imgX(im.q));const bo=objBox(o);ys.push(Y+im.m*(bo.max.y-Y),Y+im.m*(bo.min.y-Y));}
   const x0=Math.min(...xs)-.3, x1=Math.max(...xs)+.3, y0=Math.min(...ys,-.1)-.1, y1=Math.max(...ys)+.2;
   const pad=6*dpr, sc=Math.min((w-2*pad)/(x1-x0),(h-2*pad)/(y1-y0));
   const ox=pad+((w-2*pad)-(x1-x0)*sc)/2, oy=h-pad-((h-2*pad)-(y1-y0)*sc)/2, X=x=>ox+(x-x0)*sc, Yc=y=>oy-(y-y0)*sc;
@@ -1692,10 +1746,18 @@ function drawConcaveSide(){
   if(f>0)[[-8,-2*f,'rgba(122,167,224,.25)'],[-2*f,-f,'rgba(242,176,74,.28)'],[-f,0,'rgba(226,69,60,.22)']].forEach(([a,b,col])=>{c.fillStyle=col;c.fillRect(X(Math.max(a,x0)),Yc(0),X(b)-X(Math.max(a,x0)),4*dpr);});
   c.strokeStyle=S.night?'rgba(255,255,255,.4)':'rgba(28,42,53,.45)'; c.lineWidth=1*dpr; c.setLineDash([5*dpr,4*dpr]); c.beginPath(); c.moveTo(0,Yc(Y)); c.lineTo(w,Yc(Y)); c.stroke(); c.setLineDash([]);
   // 鏡面
+  if(isLens()){   // 透鏡剖面（厚度放大一點，比較看得出形狀）
+    const a=CC().A/2, k=Math.max(1,4*dpr/Math.max(1e-3,lensHalf(0)*sc)); c.beginPath();
+    for(let i=0;i<=30;i++){const yy=-a+2*a*i/30;const x=lensHalf(Math.abs(yy))*Math.min(k,2.5);i?c.lineTo(X(x),Yc(Y+yy)):c.moveTo(X(x),Yc(Y+yy));}
+    for(let i=30;i>=0;i--){const yy=-a+2*a*i/30;c.lineTo(X(-lensHalf(Math.abs(yy))*Math.min(k,2.5)),Yc(Y+yy));}
+    c.closePath(); c.fillStyle='rgba(95,179,217,.35)'; c.fill(); c.strokeStyle='#3e95c0'; c.lineWidth=1.5*dpr; c.stroke();
+    c.strokeStyle='rgba(62,149,192,.5)'; c.setLineDash([3*dpr,3*dpr]); c.beginPath(); c.moveTo(X(0),Yc(Y-a)); c.lineTo(X(0),Yc(Y+a)); c.stroke(); c.setLineDash([]);
+  }else{
   c.strokeStyle='#5fb3d9'; c.lineWidth=3.5*dpr; c.beginPath();
-  for(let i=0;i<=30;i++){const yy=-CC().A/2+CC().A*i/30;const x=ccSurf(Math.abs(yy));i?c.lineTo(X(x),Yc(Y+yy)):c.moveTo(X(x),Yc(Y+yy));} c.stroke();
+  for(let i=0;i<=30;i++){const yy=-CC().A/2+CC().A*i/30;const x=ccSurf(Math.abs(yy));i?c.lineTo(X(x),Yc(Y+yy)):c.moveTo(X(x),Yc(Y+yy));} c.stroke();}
   c.fillStyle='#e2453c'; c.font=`700 ${11*dpr}px sans-serif`; c.textAlign='center';
-  if(!CC().flat)[['F',-f],['C',-2*f]].forEach(([t,x])=>{c.beginPath();c.arc(X(x),Yc(Y),3*dpr,0,7);c.fill();c.fillText(t,X(x),Yc(Y)-6*dpr);});
+  if(isLens())[['F',-f],['2F',-2*f],['F',f],['2F',2*f]].forEach(([t,x])=>{c.beginPath();c.arc(X(x),Yc(Y),3*dpr,0,7);c.fill();c.fillText(t,X(x),Yc(Y)-6*dpr);});
+  else if(!CC().flat)[['F',-f],['C',-2*f]].forEach(([t,x])=>{c.beginPath();c.arc(X(x),Yc(Y),3*dpr,0,7);c.fill();c.fillText(t,X(x),Yc(Y)-6*dpr);});
   // 物體
   S.objs.forEach(ob=>{const b=objBox(ob);c.fillStyle=ob.id===S.sel&&S.objs.length>1?'rgba(255,200,61,.35)':(S.night?'rgba(255,255,255,.12)':'rgba(30,50,70,.12)');c.fillRect(X(b.min.x),Yc(b.max.y),(b.max.x-b.min.x)*sc,(b.max.y-b.min.y)*sc);});
   // 屏幕
@@ -1705,13 +1767,13 @@ function drawConcaveSide(){
   const r=REG[o.id]; if(!r) return; r.root.updateMatrixWorld(true);
   c.lineWidth=1.5*dpr;
   ccSources().forEach(sv=>{
-    const P=sv.p, col=sv.col, pr=ccPrincipal(P), I=pr.I, real=pr.real, far=-(Math.max(-P.x,real?-I.x:0,Math.max(0,2*f))+.6);
+    const P=sv.p, col=sv.col, pr=ccPrincipal(P), I=pr.I, real=pr.real, far=rayFar(P,pr);
     if(CC().eyeRay){const er=ccEyeRay(P);if(er){c.strokeStyle=col;c.lineWidth=2.8*dpr;c.setLineDash([]);c.beginPath();c.moveTo(X(P.x),Yc(P.y));c.lineTo(X(er.M.x),Yc(er.M.y));c.lineTo(X(er.E.x),Yc(er.E.y));c.stroke();
       if(!er.real){c.globalAlpha=.6;c.setLineDash([4*dpr,3*dpr]);c.beginPath();c.moveTo(X(er.M.x),Yc(er.M.y));c.lineTo(X(er.I.x),Yc(er.I.y));c.stroke();c.setLineDash([]);c.globalAlpha=1;}c.lineWidth=1.5*dpr;}}
     const DASH=[[],[7*dpr,5*dpr],[.1,4.5*dpr]];
     if(CC().tri!==false&&!sv.eyeOnly) pr.rays.forEach(({M,rd,kind})=>{
       c.lineCap='round'; c.setLineDash(DASH[kind]||[]); c.lineWidth=(kind===2?2.4:1.6)*dpr;
-      c.strokeStyle=col;c.beginPath();c.moveTo(X(P.x),Yc(P.y));c.lineTo(X(M.x),Yc(M.y));if(rd.x<0){const t=(far-M.x)/rd.x;c.lineTo(X(M.x+rd.x*t),Yc(M.y+rd.y*t));}c.stroke();
+      c.strokeStyle=col;c.beginPath();c.moveTo(X(P.x),Yc(P.y));c.lineTo(X(M.x),Yc(M.y));if(rayOut(rd)){const t=(far-M.x)/rd.x;c.lineTo(X(M.x+rd.x*t),Yc(M.y+rd.y*t));}c.stroke();
       if(I&&!real){c.globalAlpha=.45;c.beginPath();c.moveTo(X(M.x),Yc(M.y));c.lineTo(X(I.x),Yc(I.y));c.stroke();c.globalAlpha=1;}
       c.setLineDash([]); c.lineWidth=1.5*dpr;});
     c.fillStyle=col; c.beginPath(); c.arc(X(P.x),Yc(P.y),3.4*dpr,0,7); c.fill();
@@ -1724,7 +1786,9 @@ function drawConcaveSide(){
 /* ---------- 視角、面板 ---------- */
 function viewForConcave(name){
   const bb=allBox(), objH=Math.max(1.6,bb.max.y), f=fEff(), o=selObj(), im=ccImage(o.p);
-  const x0=Math.min(bb.min.x,-2*f,CC().screen?-CC().s-.3:0,im&&im.q>0?-im.q:0)-.5, x1=Math.max(.6,im&&im.q<0?-im.q+.3:0), midX=(x0+x1)/2, span=x1-x0;
+  let x0=Math.min(bb.min.x,-2*f,CC().screen?-CC().s-.3:0,im&&im.q>0?-im.q:0)-.5, x1=Math.max(.6,im&&im.q<0?-im.q+.3:0);
+  if(isLens()){x0=Math.min(bb.min.x,-2*f,im&&im.q<0?im.q:0)-.4;x1=Math.max(2*f,CC().screen?CC().s:0,im&&im.q>0&&im.q<8?im.q:0,eyePos().x)+.4;}
+  const midX=(x0+x1)/2, span=x1-x0;
   const vf=THREE.MathUtils.degToRad(cam.fov), hf=Math.atan(Math.tan(vf/2)*cam.aspect);
   const dist=Math.max((span/2+.4)/Math.tan(hf),(objH/2+.5)/Math.tan(vf/2)), tgt=V3(midX,Math.min(1.1,objH/2),0);
   switch(name){
@@ -1744,7 +1808,13 @@ function syncConcaveUI(){
   const cvxL=S.scene==='convex', ln=(d)=>`<svg viewBox="0 0 34 8"><line x1="2" y1="4" x2="32" y2="4" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" ${d}/></svg>`;
   $('#triLegend').innerHTML=`<span>${ln('')}平行主軸 → 反射後${cvxL?'好像從 F 發出':'經過 F'}</span><span>${ln('stroke-dasharray="7 5"')}${cvxL?'朝向 F':'經過 F'} → 反射後平行主軸</span><span>${ln('stroke-dasharray="0.1 5"')}${cvxL?'朝向 C':'經過 C'} → 沿原路反射</span>`;
   $('#triLegend').hidden=c.tri===false;
-  const cvx=S.scene==='convex'; $('#ccTitle').textContent=cvx?'凸面鏡':'凹面鏡'; $('#ccFLab').textContent=cvx?'焦距 f（凸面鏡的焦點在鏡後）':'焦距 f';
+  const cvx=S.scene==='convex', L=isLens(); $('#ccTitle').textContent=L?'凸透鏡':cvx?'凸面鏡':'凹面鏡'; $('#ccFLab').textContent=cvx?'焦距 f（凸面鏡的焦點在鏡後）':L?'焦距 f（透鏡兩側各有一個焦點）':'焦距 f';
+  $('#ccALab').textContent=L?'透鏡直徑':'鏡面直徑'; $('#ccYLab').textContent=L?'透鏡中心高度':'鏡子中心高度';
+  $('#ccImgNote').textContent=L?'關閉時像只出現在透鏡範圍裡，就像真的透過透鏡看；從哪個角度看到什麼，跟觀察者看到的一樣。':'關閉時像只出現在鏡面裡，就像真的照鏡子；從哪個角度看到什麼，跟觀察者看到的一樣。';
+  $('#ccBulbLab').textContent=L?'燈泡放在焦點':'燈泡放在焦點（手電筒）'; $('#ccSLab').textContent=L?'屏幕到透鏡的距離':'屏幕到鏡子的距離';
+  $('#ccSRLab').textContent=L?'屏幕大小':'屏幕大小（鏡面直徑的）'; $('#ccAutoLab').textContent=L?'自動對準透鏡':'自動對準鏡子（垂直於反射光）';
+  $('#ccScrNote').textContent=L?'屏幕可直接拖曳。屏幕放在透鏡的另一側，前後移動找到最清楚的像。':'屏幕可直接拖曳。屏幕會擋住照向鏡子的光，建議物體放在主軸一側、屏幕放另一側。';
+  if(L) $('#triLegend').innerHTML=`<span>${ln('')}平行主軸 → 折射後經過另一側的 F</span><span>${ln('stroke-dasharray="7 5"')}經過 F → 折射後平行主軸</span><span>${ln('stroke-dasharray="0.1 5"')}經過透鏡中心 → 方向不變</span>`;
   $$('#cvFlat button').forEach(b=>b.classList.toggle('on',(+b.dataset.v===1)===!!c.flat));
   $('#ccSField').hidden=!c.screen;
   $$('#ccSeg button').forEach(b=>b.classList.toggle('on',b.dataset.v===ccClose));
@@ -1755,7 +1825,7 @@ function syncConcaveUI(){
   $('#eyeH').value=S.eye.y; $('#eyeHOut').textContent=S.eye.y.toFixed(2)+' m'; renderEyeChips();
   const o=selObj(), im=ccImage(o.p), f=c.f;
   $('#ccInfo').dataset.blk='';
-  $('#ccInfo').innerHTML=S.scene==='convex'?(c.flat?'平面鏡：正立、等大的虛像，像距等於物距。':'凸面鏡：不論物體在哪裡，像都在鏡子後方、焦點以內，是正立、縮小的虛像。'):!im?'物體在焦點上：反射光互相平行，<b>不成像</b>。'
+  $('#ccInfo').innerHTML=isLens()?(!im?'物體在焦點上：折射光互相平行，<b>不成像</b>。':o.p>2*f+.03?'物體在 2F 以外：像在透鏡另一側的 F 和 2F 之間。':Math.abs(o.p-2*f)<=.03?'物體在 2F 上：像在另一側的 2F 上。':o.p>f?'物體在 F 和 2F 之間：像在另一側的 2F 以外。':'物體在 F 以內：像和物體在透鏡的同一側。'):S.scene==='convex'?(c.flat?'平面鏡：正立、等大的虛像，像距等於物距。':'凸面鏡：不論物體在哪裡，像都在鏡子後方、焦點以內，是正立、縮小的虛像。'):!im?'物體在焦點上：反射光互相平行，<b>不成像</b>。'
     :o.p>2*f+.03?'物體在 C 以外：像在 F 和 C 之間。':Math.abs(o.p-2*f)<=.03?'物體在 C 上：像也在 C。':o.p>f?'物體在 F 和 C 之間：像在 C 以外。':'物體在 F 以內：像在鏡子後方。';
   syncScreenOut();
 }
@@ -1764,12 +1834,15 @@ function syncScreenOut(){
   $('#ccS').value=c.s; $('#ccSOut').textContent=c.s.toFixed(2)+' m';
   $('#ccSY').value=c.sy; $('#ccSYOut').textContent=(+c.sy).toFixed(2)+' m';
   $('#ccSZ').value=c.sz; $('#ccSZOut').textContent=Math.abs(c.sz)<.005?'在主軸上':(c.sz>0?'右 ':'左 ')+Math.abs(c.sz).toFixed(2)+' m';
-  $('#ccSR').value=c.sr; $('#ccSROut').textContent=Math.round(c.sr*100)+'%（'+scrW().toFixed(2)+' m）';
+  $('#ccSR').value=c.sr; $('#ccSROut').textContent=isLens()?scrW().toFixed(2)+' m':Math.round(c.sr*100)+'%（'+scrW().toFixed(2)+' m）';
   $('#cc_sAuto').checked=!!c.sAuto; $('#ccYaw').value=c.yaw; $('#ccYawOut').textContent=c.yaw+'°'; $('#ccPitch').value=c.pitch; $('#ccPitchOut').textContent=c.pitch+'°';
-  if(c.screen&&isCurved()){const b=screenBlock(objLight(selObj()));const el=$('#ccInfo');if(b>.02&&!el.dataset.blk){el.innerHTML+=`<br>屏幕擋住約 ${Math.round(b*100)}% 照向鏡子的光，像會變暗。`;el.dataset.blk=1;}}
+  if(c.screen&&isCurved()){const b=screenBlock(objLight(selObj()));const el=$('#ccInfo');if(b>.02&&!el.dataset.blk){el.innerHTML+=`<br>屏幕擋住約 ${Math.round(b*100)}% 照向${isLens()?'透鏡':'鏡子'}的光，像會變暗。`;el.dataset.blk=1;}}
 }
 function advConcave(){
   const o=selObj(), im=ccImage(o.p), f=fEff();
+  if(isLens()){$('#advStats').innerHTML=`<dt>焦距 f</dt><dd>${f.toFixed(2)} m</dd><dt>物距 p</dt><dd>${o.p.toFixed(2)} m</dd>`+
+    (im?`<dt>像距 q（1/p＋1/q＝1/f）</dt><dd>${im.q.toFixed(2)} m</dd><dt>放大率 m＝−q/p</dt><dd>${im.m.toFixed(2)}</dd><dt>像的種類</dt><dd>${im.q>0?'實像（透鏡另一側）':'虛像（和物體同側）'}</dd>`:'<dt>像</dt><dd>不成像</dd>')+
+    (CC().screen?`<dt>屏幕到透鏡</dt><dd>${CC().s.toFixed(2)} m</dd>`:'');return;}
   $('#advStats').innerHTML=`<dt>焦距 f${f<0?'（凸面鏡取負值）':''}</dt><dd>${CC().flat?'∞（平面鏡）':f.toFixed(2)+' m'}</dd><dt>曲率半徑 R＝2|f|</dt><dd>${CC().flat?'∞':(2*Math.abs(f)).toFixed(2)+' m'}</dd><dt>物距 p</dt><dd>${o.p.toFixed(2)} m</dd>`+
     (im?`<dt>像距 q（1/p＋1/q＝1/f）</dt><dd>${im.q.toFixed(2)} m</dd><dt>放大率 m＝−q/p</dt><dd>${im.m.toFixed(2)}</dd><dt>像的種類</dt><dd>${im.q>0?'實像（鏡前）':'虛像（鏡後）'}</dd>`:'<dt>像</dt><dd>不成像</dd>')+
     (CC().screen?`<dt>屏幕到鏡子</dt><dd>${CC().s.toFixed(2)} m</dd>`:'');
@@ -1940,14 +2013,14 @@ function onPointerDown(e){
     if(h){
       pending={oid:h.object.userData.oid,mi:h.object.userData.mi,local:h.object.worldToLocal(h.point.clone()).toArray(),
         color:'#'+(h.object.material.color?h.object.material.color.getHexString():'ffffff')};
-      setHint(S.scene!=='pinhole'?'起點設好了！再點鏡子上任一點，看光怎麼反射。':'起點設好了！再點箱子正面：點在黃色圈內，光會穿過小孔。');
+      setHint(isLens()?'起點設好了！再點透鏡上任一點，看光怎麼折射。':S.scene!=='pinhole'?'起點設好了！再點鏡子上任一點，看光怎麼反射。':'起點設好了！再點箱子正面：點在黃色圈內，光會穿過小孔。');
       updateRays(); stop(e); return;
     }
     if(pending&&isCurved()){
       const M=ccTap(e);
       if(M){
         handRays.push({oid:pending.oid,mi:pending.mi,local:pending.local,color:pending.color,target:{type:'cc',p:M.toArray()}}); pending=null;
-        setHint('白色虛線是法線，會通過曲率中心 C。可以再點物體畫下一條。'); updateRays(); commit(); stop(e); return;
+        setHint(isLens()?'光經過透鏡折射後，朝向像點前進。可以再點物體畫下一條。':'白色虛線是法線，會通過曲率中心 C。可以再點物體畫下一條。'); updateRays(); commit(); stop(e); return;
       }
       return;
     }
@@ -2007,13 +2080,13 @@ gl.addEventListener('pointermove',e=>{
       // 在面向相機的平面上拖曳：側視時前後上下、俯視時前後左右，都能自由移動
       const pl=new THREE.Plane().setFromNormalAndCoplanarPoint(cam.getWorldDirection(new THREE.Vector3()),drag.pt), P=new THREE.Vector3();
       if(raycaster.ray.intersectPlane(pl,P)){const C=P.sub(drag.off),W=scrW();
-        CC().s=Math.round(clamp(-C.x,.15,6)*100)/100; CC().sy=Math.round(clamp(C.y,W/2+.02,2.5)*100)/100; CC().sz=Math.round(clamp(C.z,-3,3)*100)/100;
+        CC().s=Math.round(clamp(isLens()?C.x:-C.x,.15,6)*100)/100; CC().sy=Math.round(clamp(C.y,W/2+.02,2.5)*100)/100; CC().sz=Math.round(clamp(C.z,-3,3)*100)/100;
         drag.moved=true; buildScreen(); changed(true); syncConcaveUI();}
       return;
     }
     if(drag.kind==='eye'){
       const pl=new THREE.Plane(V3(0,1,0),-drag.y), P=new THREE.Vector3();
-      if(raycaster.ray.intersectPlane(pl,P)){S.eye.x=clamp(P.x-drag.dx,-10,-.25);S.eye.z=clamp(P.z-drag.dz,-6,6);drag.moved=true;placeEye();changed(true);}
+      if(raycaster.ray.intersectPlane(pl,P)){S.eye.x=isLens()?clamp(P.x-drag.dx,.25,10):clamp(P.x-drag.dx,-10,-.25);S.eye.z=clamp(P.z-drag.dz,-6,6);drag.moved=true;placeEye();changed(true);}
       return;
     }
     if(drag.kind==='lamp'){
@@ -2309,7 +2382,7 @@ function renderObjPanel(){
       <button class="btn ghost small" data-act="del" ${S.objs.length<=1?'disabled':''}>刪除</button>
       ${S.scene==='mirror'?`<button class="btn ghost small" data-act="behind" ${S.objs.length>=MAX_OBJ||o.p<0?'disabled':''}>複製到鏡後的像的位置</button>`:''}</div>
     <div class="chips sm" data-act="type">${Object.entries(OBJ_NAME).map(([k,t])=>`<button data-v="${k}" class="${o.type===k?'on':''}">${t}</button>`).join('')}</div>
-    <div class="field"><div class="flab"><span>${S.scene==='pinhole'?'到小孔的距離':'到鏡子的距離'}</span><output>${fmtP(o.p)}</output></div><input type="range" min="${pMin()}" max="8" step="0.05" value="${o.p}" data-rg="p" aria-label="距離"></div>
+    <div class="field"><div class="flab"><span>${S.scene==='pinhole'?'到小孔的距離':isLens()?'到透鏡的距離':'到鏡子的距離'}</span><output>${fmtP(o.p)}</output></div><input type="range" min="${pMin()}" max="8" step="0.05" value="${o.p}" data-rg="p" aria-label="距離"></div>
     <div class="field"><div class="flab"><span>左右位置</span><output>${Math.abs(o.z)<.005?'正前方':(o.z>0?'右 ':'左 ')+Math.abs(o.z).toFixed(2)+' m'}</output></div><input type="range" min="-2" max="2" step="0.05" value="${o.z}" data-rg="z" aria-label="左右位置"></div>
     <div class="frow"><span>朝向</span>${chipsC('facing',[['box','面向箱子'],['back','背對'],['side','側身']],o.facing)}</div>`;
   if(o.type==='person'){
@@ -2427,12 +2500,15 @@ const PRED_PIN=[{k:'updown',label:'上下',opts:['正立','倒立']},{k:'lr',lab
 const PRED_MIR=[{k:'updown',label:'上下',opts:['正立','倒立']},{k:'kind',label:'種類',opts:['實像','虛像']},{k:'size',label:'大小',opts:['放大','縮小','一樣大']},{k:'dist',label:'像到鏡子的距離',opts:['比物距近','等於物距','比物距遠']},
   {k:'face',label:'鏡中人面向',opts:['和本人同方向','面向本人'],person:true},{k:'hand',label:'鏡中人舉旗的是他的',opts:['右手','左手'],person:true,flag:true}];
 const PRED_CC=[{k:'updown',label:'上下',opts:['正立','倒立','不成像']},{k:'size',label:'大小',opts:['放大','縮小','一樣大','不成像']},{k:'kind',label:'種類',opts:['實像','虛像','不成像']},{k:'pos',label:'像的位置',opts:['C 以外','C 上','F 和 C 之間','鏡子後方','不成像']}];
-function PRED(){const o=selObj();if(isCurved())return PRED_CC;return S.scene==='mirror'?PRED_MIR.filter(r=>(!r.person||o.type==='person')&&(!r.flag||o.custom.flag)):PRED_PIN;}
+const PRED_LENS=[{k:'updown',label:'上下',opts:['正立','倒立','不成像']},{k:'size',label:'大小',opts:['放大','縮小','一樣大','不成像']},{k:'kind',label:'種類',opts:['實像','虛像','不成像']},{k:'pos',label:'像的位置',opts:['另一側 2F 以外','另一側 2F 上','另一側 F 和 2F 之間','和物體同一側','不成像']}];
+function PRED(){const o=selObj();if(isLens())return PRED_LENS;if(isCurved())return PRED_CC;return S.scene==='mirror'?PRED_MIR.filter(r=>(!r.person||o.type==='person')&&(!r.flag||o.custom.flag)):PRED_PIN;}
 let predPick={}, predChecked=false;
 function predAnswers(){
   const o=selObj();
   if(isCurved()){const im=ccImage(o.p),f=CC().f,e=.03;if(!im)return {updown:'不成像',size:'不成像',kind:'不成像',pos:'不成像'};
-    const am=Math.abs(im.m);return {updown:im.q>0?'倒立':'正立',size:am>1.03?'放大':am<.97?'縮小':'一樣大',kind:im.q>0?'實像':'虛像',
+    const am=Math.abs(im.m);if(isLens())return {updown:im.q>0?'倒立':'正立',size:am>1.03?'放大':am<.97?'縮小':'一樣大',kind:im.q>0?'實像':'虛像',
+      pos:im.q<0?'和物體同一側':Math.abs(im.q-2*f)<=e?'另一側 2F 上':im.q>2*f?'另一側 2F 以外':'另一側 F 和 2F 之間'};
+    return {updown:im.q>0?'倒立':'正立',size:am>1.03?'放大':am<.97?'縮小':'一樣大',kind:im.q>0?'實像':'虛像',
       pos:im.q<0?'鏡子後方':Math.abs(im.q-2*f)<=e?'C 上':im.q>2*f?'C 以外':'F 和 C 之間'};}
   if(S.scene==='mirror') return {updown:'正立',kind:'虛像',size:'一樣大',dist:'等於物距',face:'面向本人',hand:o.custom&&o.custom.flagHand==='left'?'右手':'左手'};
   const m=S.d/o.p;return {updown:'倒立',lr:'相反',kind:'實像',size:m>1.06?'放大':m<.94?'縮小':'差不多'};
@@ -2566,6 +2642,29 @@ const CARD_CV={no:6,title:'路口反射鏡',steps:[
    ex:'凸面鏡讓平行光散開，反射光往回延長會交在鏡子後方的一點，這是凸面鏡的焦點（虛焦點），所以凸面鏡的焦距取負值。'}
 ]};
 
+const CARD_LENS={no:8,title:'凸透鏡',steps:[
+  {title:'平行光通過凸透鏡',setup:{reset:true,lens:{f:.5,A:.6,y:1,img:true,prin:false,cust:false,eyeRay:false,par:true,bulb:false,screen:false},night:false,view:'side'},
+   todo:'已打開「平行光入射」，一束和主軸平行的光從左邊照向凸透鏡，就像太陽光。',
+   q:'平行光通過凸透鏡之後，會怎麼走？',opts:['向外散開','會聚到另一側的同一點','方向完全不變'],ans:1,
+   ex:'凸透鏡中間厚、邊緣薄，光通過時會往厚的地方偏折，平行光就會聚在另一側主軸上的一點，這一點是焦點 F，到透鏡的距離是焦距 f。透鏡兩側各有一個焦點，用放大鏡把陽光聚成一個小亮點就是這個原理。'},
+  {title:'物體在 2F 以外',setup:{reset:true,lens:{par:false,prin:true,img:true,screen:true,s:1.6,sy:1,sz:0,sr:.6,sAuto:true,yaw:0,pitch:0},night:true,view:'side'},
+   todo:'蠟燭放在 1.8 m（2F 以外）。屏幕在透鏡右側，把屏幕前後拖（或用滑桿），直到右下角「屏幕上的像」最清楚。',
+   q:'屏幕上清楚的像是哪一種？',opts:['倒立、縮小的實像','倒立、放大的實像','正立、放大的虛像'],ans:0,
+   ex:'物體在 2F 以外時，像在另一側的 F 和 2F 之間，是倒立、縮小的實像，屏幕放在 0.7 m 左右最清楚。照相機、眼睛的水晶體就是這樣成像。'},
+  {title:'物體在 F 和 2F 之間',setup:{lens:{screen:true,prin:true},view:'side'},
+   todo:'把蠟燭拖到 0.75 m（F 和 2F 之間，地上的橘色區域），再前後移動屏幕找到清楚的像。',
+   q:'這時的像是哪一種？',opts:['倒立、縮小的實像','倒立、放大的實像','正立、放大的虛像'],ans:1,
+   ex:'物體在 F 和 2F 之間時，像跑到另一側的 2F 以外，是倒立、放大的實像，屏幕要放得比較遠（約 1.5 m）。投影機就是這樣把小圖片放大投到牆上，所以投影片要倒著放。'},
+  {title:'放大鏡：物體在 F 以內',setup:{reset:true,lens:{f:.5,A:.6,y:1,img:false,prin:true,par:false,bulb:false,screen:false},night:false,eye:{att:0,x:.9,z:.1,y:1.1},view:'observer'},
+   todo:'把蠟燭拖到 0.3 m（F 以內，地上的紅色區域），從「觀察者視角」透過透鏡看蠟燭。',
+   q:'透過透鏡看到的蠟燭是哪一種像？',opts:['倒立、縮小的實像','正立、放大的虛像','正立、等大的虛像'],ans:1,
+   ex:'物體在焦點以內時，折射光是散開的，往回延長才交在物體同一側，形成正立、放大的虛像。這就是放大鏡。打開「在空間中顯示像」，可以看到像比蠟燭更遠、更大。'},
+  {title:'不用屏幕也看得到實像？',setup:{reset:true,lens:{img:false,prin:false,eyeRay:true,screen:false},night:true,eye:{att:0,x:2.4,z:.2,y:1.05},view:'observer'},
+   todo:'蠟燭在 1.8 m，眼球在透鏡右側 2.4 m，比實像更遠。觀察右下角，再把眼球拖到 0.4 m（比實像近）比較。',
+   q:'眼睛在實像後方時，透過透鏡看到什麼？',opts:['倒立的蠟燭','正立的蠟燭','什麼都看不到'],ans:0,
+   ex:'實像是光真的會聚而成的，光通過像的位置後繼續前進，進到眼睛，所以眼睛在像的後方就能直接看到倒立的像，不一定要屏幕。眼睛比像還靠近透鏡時，光還沒會聚，就看不到清楚的像。'}
+]};
+
 const CARD_CC={no:7,title:'凹面鏡',steps:[
   {title:'平行光照到凹面鏡',setup:{reset:true,cc:{f:.6,A:.6,y:1,img:true,prin:false,par:true,bulb:false,screen:false},night:false,view:'side'},
    todo:'已打開「平行光入射」，一束和主軸平行的光照向凹面鏡，就像太陽光。',
@@ -2597,6 +2696,7 @@ const CARD_CC={no:7,title:'凹面鏡',steps:[
 const SCN={};
 function sceneDefaults(sc){
   if(sc==='convex'){const a=newObj('person',2.6,-.7,0),b=newObj('person',4.2,.9,1);b.pose={preset:'wave',q:null};return {objs:[a,b],lamp:{x:-5,z:-2.2},hand:[],strokes:[],eye:{x:-2.4,z:1.5,y:1.55,att:0}};}
+  if(sc==='lens') return {objs:[newObj('candle',1.8,0,0)],lamp:{x:-3.4,z:-1.8},hand:[],strokes:[],eye:{x:2.4,z:.3,y:1.05,att:0}};
   if(sc==='concave') return {objs:[newObj('candle',1.8,0,0)],lamp:{x:-3.4,z:-1.8},hand:[],strokes:[],eye:{x:-2.6,z:.3,y:1.05,att:0}};
   return sc==='mirror'?{objs:[newObj('person',1.5,0,0)],lamp:{x:-3.2,z:-1.8},hand:[],strokes:[]}
                       :{objs:[newObj('person',3,0,0)],lamp:{...DEF_LAMP},hand:[],strokes:[]};
@@ -2610,16 +2710,16 @@ function switchScene(sc){
   syncUid(); applyScene(); hist.stack=[]; hist.i=-1; commit(); goView('overview');
 }
 function applyScene(){
-  const mir=S.scene==='mirror', cc=isCurved(), cvx=S.scene==='convex';
+  const mir=S.scene==='mirror', cc=isCurved(), cvx=S.scene==='convex', lens=isLens();
   document.body.dataset.scene=S.scene; $('#sceneSel').value=S.scene;
   if(tool) setTool(tool); pending=null; ink.sel=-1;
   boxGroup.visible=S.scene==='pinhole'; mirrorGroup.visible=mir; ccGroup.visible=cc; if(!cc)ccLight.intensity=0;
   if(!cc||CC().img) cam.layers.enable(3); else cam.layers.disable(3);
   buildAllObjs(); buildApparatus(); placeEye(); applyGhostMode(); applyTime(); bgGroup.visible=S.bg;
   renderObjPanel(); renderViews(); redrawInk();
-  $('#sideTitle').textContent=mir?'俯視光路':'側視光路'; $('#scrTitle').textContent=mir?'觀察者看到的':cvx?'觀察者看到的':cc?'凹面鏡':'屏幕特寫'; $('#closeSeg').hidden=S.scene!=='pinhole'; $('#ccSeg').hidden=!(cc&&CC().screen);
+  $('#sideTitle').textContent=mir?'俯視光路':'側視光路'; $('#scrTitle').textContent=mir||cvx||lens?'觀察者看到的':cc?'凹面鏡':'屏幕特寫'; $('#closeSeg').hidden=S.scene!=='pinhole'; $('#ccSeg').hidden=!(cc&&CC().screen);
   predPick={}; predChecked=false;
-  CARD=mir?CARD_MIR:cvx?CARD_CV:cc?CARD_CC:CARD_PIN; cardI=0; Object.keys(cardPick).forEach(k=>delete cardPick[k]); Object.keys(cardShown).forEach(k=>delete cardShown[k]);
+  CARD=mir?CARD_MIR:cvx?CARD_CV:lens?CARD_LENS:cc?CARD_CC:CARD_PIN; cardI=0; Object.keys(cardPick).forEach(k=>delete cardPick[k]); Object.keys(cardShown).forEach(k=>delete cardShown[k]);
   if(!$('#drawer').hidden) renderCard();
   changed();
 }
@@ -2629,6 +2729,7 @@ function applySetup(st){
     if(k==='view'||k==='reset') return;
     if(k==='m'){Object.assign(S.m,st.m);return;}
     if(k==='cv'){Object.assign(S.cv,st.cv);if(S.cv.img)cam.layers.enable(3);return;}
+    if(k==='lens'){Object.assign(S.lens,st.lens);if(st.lens.screen!==undefined)ccClose=st.lens.screen?'screen':'eye';if(S.lens.img)cam.layers.enable(3);return;}
     if(k==='cc'){Object.assign(CC(),st.cc);if(st.cc.screen!==undefined)ccClose=st.cc.screen?'screen':'eye';if(CC().img)cam.layers.enable(3);return;}
     if(k==='eye'){Object.assign(S.eye,st.eye);return;}
     if(k==='holes'){S.holes=st.holes===2?[{id:newId(),z:-.06,y:0},{id:newId(),z:.06,y:0}]:[{id:newId(),z:0,y:0}];return;}
@@ -2673,7 +2774,8 @@ $('#cardBtn').onclick=()=>toggleCard();
 const SNAP_KEY='optics.snaps.v2';
 let snaps=store(SNAP_KEY)||[], cmpMode=false, cmpSel=[];
 function objSummary(s){return s.objs.map(o=>OBJ_NAME[o.type]+' '+o.p.toFixed(1)+' m').join('、');}
-function summary(s){if(s.scene==='convex'){const c=s.cv||DEF_CV;return `凸面鏡・${objSummary(s)}・${c.flat?'平面鏡比較':'f '+c.f.toFixed(2)+' m'}・${s.night?'夜晚':'白天'}`;}
+function summary(s){if(s.scene==='lens'){const c=s.lens||DEF_LENS;return `凸透鏡・${objSummary(s)}・f ${c.f.toFixed(2)} m${c.screen?'・屏幕 '+c.s.toFixed(2)+' m':''}・${s.night?'夜晚':'白天'}`;}
+  if(s.scene==='convex'){const c=s.cv||DEF_CV;return `凸面鏡・${objSummary(s)}・${c.flat?'平面鏡比較':'f '+c.f.toFixed(2)+' m'}・${s.night?'夜晚':'白天'}`;}
   if(s.scene==='concave'){const c=s.cc||DEF_CC;return `凹面鏡・${objSummary(s)}・f ${c.f.toFixed(2)} m${c.screen?'・屏幕 '+c.s.toFixed(2)+' m':''}・${s.night?'夜晚':'白天'}`;}
   if(s.scene==='mirror')return `平面鏡・${objSummary(s)}・鏡子 ${s.m.w.toFixed(2)}×${s.m.h.toFixed(2)} m${s.m.two?'・兩面鏡 '+s.m.ang+'°':''}${s.m.ghost?'・顯示虛像':''}・${s.night?'夜晚':'白天'}`;
   return `針孔・${objSummary(s)}・深度 ${Math.round(s.d*100)} cm・${SHAPE_NAME[s.shape]}孔 ${fmtMM(s.holeMM)} × ${s.holes.length}・${s.night?'夜晚':'白天'}`;}
@@ -2728,7 +2830,7 @@ function takeSnap(){
 }
 function restoreSnap(sn){
   const st=clone(sn.state); if((st.scene||'pinhole')!==S.scene) stashScene();
-  Object.keys(st).forEach(k=>{S[k]=st[k];}); S.scene=S.scene||'pinhole'; S.m=Object.assign({...DEF_M},S.m||{}); S.cc=Object.assign({...DEF_CC},S.cc||{}); S.cv=Object.assign({...DEF_CV},S.cv||{}); S.eye=Object.assign({...DEF_EYE},S.eye||{}); if(S.mrays===undefined)S.mrays=3; syncUid();
+  Object.keys(st).forEach(k=>{S[k]=st[k];}); S.scene=S.scene||'pinhole'; S.m=Object.assign({...DEF_M},S.m||{}); S.cc=Object.assign({...DEF_CC},S.cc||{}); S.cv=Object.assign({...DEF_CV},S.cv||{}); S.lens=Object.assign(clone(DEF_LENS),S.lens||{}); S.eye=Object.assign({...DEF_EYE},S.eye||{}); if(S.mrays===undefined)S.mrays=3; syncUid();
   handRays=clone(sn.hand||[]); pending=null;
   ink.strokes=clone(sn.strokes||[]); ink.sel=-1;
   applyScene(); hist.stack=[]; hist.i=-1;
@@ -2782,7 +2884,7 @@ function makeShot(){
   x.fillStyle='#1c2a35'; x.fillRect(0,base.height,c.width,barH);
   x.fillStyle='#ffffff'; x.font=`${Math.round(14*k)}px "Noto Sans TC",sans-serif`; x.textBaseline='middle';
   const now=new Date(), ds=now.toLocaleDateString('zh-TW')+' '+now.toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'});
-  x.fillText(`光學小站｜${S.scene==='mirror'?'平面鏡':S.scene==='convex'?'凸面鏡':S.scene==='concave'?'凹面鏡':'針孔成像'}｜${summary(S)}｜${ds}`,10*k,base.height+barH/2);
+  x.fillText(`光學小站｜${S.scene==='mirror'?'平面鏡':S.scene==='convex'?'凸面鏡':S.scene==='concave'?'凹面鏡':S.scene==='lens'?'凸透鏡':'針孔成像'}｜${summary(S)}｜${ds}`,10*k,base.height+barH/2);
   return c.toDataURL('image/png');
 }
 $('#shotBtn').onclick=()=>{const u=makeShot();$('#shotImg').src=u;$('#shotDl').href=u;$('#shotModal').hidden=false;};
@@ -2862,10 +2964,13 @@ renderer.shadowMap.needsUpdate=true;
 commit();
 requestAnimationFrame(loop);
 {const q=new URLSearchParams(location.search).get('card'), hsh=location.hash;
- if(/card-?7/.test(hsh)||q==='7'){switchScene('concave');toggleCard(true);} else if(/card-?6/.test(hsh)||q==='6'){switchScene('convex');toggleCard(true);} else
+ if(/card-?8/.test(hsh)||q==='8'){switchScene('lens');toggleCard(true);} else if(/card-?7/.test(hsh)||q==='7'){switchScene('concave');toggleCard(true);} else if(/card-?6/.test(hsh)||q==='6'){switchScene('convex');toggleCard(true);} else
  if(/card-?1/.test(hsh)||q==='1'){switchScene('mirror');toggleCard(true);}
  else if(/card-?2/.test(hsh)||q==='2') toggleCard(true);}
 $('#sceneSel').addEventListener('change',e=>switchScene(e.target.value));
+// 保險：整個頁面不應該捲動（只有側欄、說明、任務卡可以捲），萬一被捲動就立刻拉回來
+addEventListener('scroll',()=>{if(scrollX||scrollY)scrollTo(0,0);},{passive:true});
+document.addEventListener('scroll',e=>{const t=e.target;if(t&&t.nodeType===1&&(t===document.body||t.classList.contains('main')||t.classList.contains('app'))&&(t.scrollTop||t.scrollLeft)){t.scrollTop=0;t.scrollLeft=0;}},true);
 window.__lab={S,cam,REG,rayGroup,imgGroup,switchScene,get MIRRORS(){return MIRRORS;},get hand(){return handRays;},get hist(){return hist;},goView,applySetup,takeSnap,makeShot,undo,redo};
 })();
 </script>
