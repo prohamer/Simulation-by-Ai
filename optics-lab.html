@@ -348,7 +348,7 @@ body:not([data-scene="mirror"]) .only-mirror{display:none !important}
 
       <section class="psec">
         <h3>光線</h3>
-        <div class="field"><div class="flab"><span>每個物體的光線數量</span><output id="rOut"></output></div><input type="range" id="rays" min="0" max="30" step="1" aria-label="光線數量"></div>
+        <div class="field"><div class="flab"><span>每個物體的光線數量<span class="only-mirror note">（只畫鏡中看得到的）</span></span><output id="rOut"></output></div><input type="range" id="rays" min="0" max="30" step="1" aria-label="光線數量"></div>
         <label class="sw only-pinhole"><input type="checkbox" id="blockedChk"><span class="track"></span><span>顯示被箱子擋住的光線</span></label>
         <div class="btnrow"><button class="btn" id="handBtn">手繪光線</button><button class="btn ghost" id="handClear">清除手繪</button></div>
       </section>
@@ -1113,11 +1113,21 @@ function mirrorTap(e){
 
 /* ---------- 平面鏡的光線 ---------- */
 function updateRaysMirror(){
-  const E=eyePos(), pts=[];
-  S.objs.forEach(o=>pts.push(...samplePoints(o,S.mrays)));
-  pts.forEach(pt=>{
-    const v=seeFeature(E,pt.p); if(!v) return;
-    const col=rayColor(pt.color), rad=pt.feature?.008:.0045;
+  // 光線數量 = 每個物體畫幾條「觀察者看得到」的光線：特徵點優先，其餘從物體表面挑看得到的點
+  const E=eyePos(), vis=[];
+  S.objs.forEach(o=>{
+    const r=REG[o.id]; if(!r||o.p<0) return; r.root.updateMatrixWorld(true);
+    const fs=r.info.feats.slice(0,Math.min(S.mrays,r.info.feats.length)); let cnt=fs.length;
+    fs.forEach(f=>{const P=featWorld(f),v=seeFeature(E,P);if(v)vis.push({p:P,color:f.color,feature:true,v});});
+    const rng=mulberry32(97+o.id), pool=r.info.pool, tmp=new THREE.Vector3(); let tries=0;
+    while(cnt<S.mrays&&pool.length&&tries++<S.mrays*15){
+      const e=pool[Math.floor(rng()*pool.length)];
+      const P=tmp.fromBufferAttribute(e.m.geometry.attributes.position,e.i).applyMatrix4(e.m.matrixWorld).clone(), v=seeFeature(E,P);
+      if(v){vis.push({p:P,color:'#'+e.m.material.color.getHexString(),feature:false,v});cnt++;}
+    }
+  });
+  vis.forEach(pt=>{
+    const v=pt.v, col=rayColor(pt.color), rad=pt.feature?.008:.0045;
     beam(pt.p,v.R,col,rad); beam(v.R,E,col,rad); if(pt.feature) dot(v.R,col,.014);
     if(S.m.ext) dashed(v.R,v.Pi,col,rad*.8,.8);
   });
@@ -2207,6 +2217,6 @@ requestAnimationFrame(loop);
  if(/card-?1/.test(hsh)||q==='1'){switchScene('mirror');toggleCard(true);}
  else if(/card-?2/.test(hsh)||q==='2') toggleCard(true);}
 $('#sceneSel').addEventListener('change',e=>switchScene(e.target.value));
-window.__lab={S,cam,REG,switchScene,get MIRRORS(){return MIRRORS;},get hand(){return handRays;},get hist(){return hist;},goView,applySetup,takeSnap,makeShot,undo,redo};
+window.__lab={S,cam,REG,rayGroup,switchScene,get MIRRORS(){return MIRRORS;},get hand(){return handRays;},get hist(){return hist;},goView,applySetup,takeSnap,makeShot,undo,redo};
 })();
 </script>
