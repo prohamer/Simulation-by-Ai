@@ -1,4 +1,4 @@
-<title>光學小站V19</title>
+<title>光學小站V20</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -82,6 +82,8 @@ svg.i{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke
 .views{position:absolute;top:6px;left:6px;display:flex;flex-wrap:wrap;gap:4px;z-index:8;max-width:calc(100% - 150px)}
 .views button{border:0;background:var(--glass);border-radius:999px;padding:4px 11px;min-height:34px;font-weight:700;box-shadow:var(--shadow)}
 .views button.on{background:var(--accent);color:var(--accent-ink)}
+.views button.lbl{background:var(--sun);color:var(--sun-ink)}
+.views button.lbl.off{background:var(--glass);color:var(--muted)}
 .stagebtns{position:absolute;top:6px;right:6px;z-index:9;display:flex;gap:4px}
 .ib{border:0;width:40px;height:40px;border-radius:11px;background:var(--glass);box-shadow:var(--shadow);display:grid;place-items:center;padding:0}
 .ib:disabled{opacity:.4;cursor:default}
@@ -1138,7 +1140,7 @@ function textSprite(txt){
   x.font=font; const w=Math.ceil(x.measureText(txt).width)+28; c.width=w; c.height=fs+22;
   x.fillStyle='rgba(28,42,53,.88)'; x.fillRect(0,0,w,c.height); x.font=font; x.fillStyle='#ffffff'; x.textBaseline='middle'; x.fillText(txt,14,c.height/2+2);
   const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(c),depthTest:false,transparent:true}));
-  const k=.0032; sp.scale.set(w*k,c.height*k,1); sp.layers.set(1); sp.renderOrder=20; sp.userData.label=true; return sp;
+  const k=.0032; sp.scale.set(w*k,c.height*k,1); sp.layers.set(1); sp.renderOrder=20; sp.userData.label=true; sp.visible=showLabels; return sp;
 }
 function disposeLabels(){rayGroup.children.forEach(o=>{if(o.userData.label){o.material.map.dispose();o.material.dispose();}});}
 function dashed(a,b,col,rad,op=1){
@@ -1362,7 +1364,11 @@ $('#eyeH').addEventListener('change',()=>{syncUI();commit();});
 const VIEWS={pinhole:[['overview','全景'],['side','側視'],['top','俯視'],['back','屏幕後方'],['eye','物體看箱子']],
   mirror:[['overview','全景'],['side','側視'],['top','俯視'],['observer','觀察者視角'],['behind','鏡子後方']],
   concave:[['overview','全景'],['side','側視'],['top','俯視'],['observer','觀察者視角'],['screen','看屏幕']]};
-function renderViews(){$('#views').innerHTML=VIEWS[S.scene].map(([k,t])=>`<button data-view="${k}">${t}</button>`).join('');}
+// 3D 文字標籤（F、C、距離、角度）可以整個關掉，解說光路時畫面比較乾淨
+let showLabels=store('optics.labels'); if(showLabels===null) showLabels=true;
+function applyLabels(){scene.traverse(o=>{if(o.userData&&o.userData.label)o.visible=showLabels;});dirty=true;}
+function renderViews(){$('#views').innerHTML=VIEWS[S.scene].map(([k,t])=>`<button data-view="${k}">${t}</button>`).join('')+
+  `<button data-toggle="labels" class="lbl ${showLabels?'':'off'}" aria-pressed="${showLabels}">${showLabels?'標籤：開':'標籤：關'}</button>`;}
 
 /* ============================================================
    凹面鏡場景
@@ -2317,7 +2323,10 @@ $('#blockedChk').addEventListener('change',e=>{S.blocked=e.target.checked;change
 $('#advChk').addEventListener('change',e=>{S.adv=e.target.checked;changed();});
 $('#dayNight').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;S.night=b.dataset.v==='night';applyTime();changed();});
 $('#closeSeg').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;S.closeView=b.dataset.v;syncUI();drawCloseup();});
-$('#views').addEventListener('click',e=>{const b=e.target.closest('button[data-view]');if(b)goView(b.dataset.view);});
+$('#views').addEventListener('click',e=>{
+  const t=e.target.closest('button[data-toggle=labels]');
+  if(t){showLabels=!showLabels;store('optics.labels',showLabels);applyLabels();t.classList.toggle('off',!showLabels);t.setAttribute('aria-pressed',showLabels);t.textContent=showLabels?'標籤：開':'標籤：關';return;}
+  const b=e.target.closest('button[data-view]');if(b)goView(b.dataset.view);});
 $$('[data-collapse]').forEach(b=>b.onclick=()=>{const m=$('#'+b.dataset.collapse);m.classList.toggle('collapsed');b.textContent=m.classList.contains('collapsed')?'展開':'收起';drawSide();drawCloseup();});
 $('#handBtn').onclick=()=>setTool('hand');
 $('#handClear').onclick=()=>{if(!handRays.length)return;handRays=[];pending=null;updateRays();commit();};
