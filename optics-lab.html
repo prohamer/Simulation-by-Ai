@@ -1,4 +1,4 @@
-<title>光學小站V21</title>
+<title>光學小站V22</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -159,6 +159,9 @@ svg.i{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke
 .chips{display:flex;flex-wrap:wrap;gap:4px}
 .chips button{border:0;background:var(--chip);border-radius:9px;padding:3px 10px;min-height:34px;font-weight:700}
 .chips button.on{background:var(--accent);color:var(--accent-ink)}
+.legend{display:flex;flex-direction:column;gap:2px;font-size:12px;color:var(--muted);padding-left:4px}
+.legend span{display:flex;align-items:center;gap:6px}
+.legend svg{width:34px;height:8px;flex:none}
 .chips button.tool.on{background:var(--sun);color:var(--sun-ink)}
 .chips.sm button{min-height:30px;padding:2px 9px;font-size:13px}
 .chips button:disabled{opacity:.4;cursor:default}
@@ -359,8 +362,12 @@ body:not([data-scene="mirror"]) .only-mirror{display:none !important}
         <p class="note" id="ccInfo"></p>
         <label class="sw"><input type="checkbox" id="cc_img"><span class="track"></span><span>在空間中顯示像</span></label>
         <p class="note">關閉時像只出現在鏡面裡，就像真的照鏡子；從哪個角度看到什麼，跟觀察者看到的一樣。</p>
-        <label class="sw"><input type="checkbox" id="cc_prin"><span class="track"></span><span>三條主要光線</span></label>
-        <div class="frow"><span>光源點</span><div class="chips sm" id="ccSrc"><button data-v="feat">特徵點（2 個）</button><button data-v="custom">自訂</button></div></div>
+        <label class="sw"><input type="checkbox" id="cc_prin"><span class="track"></span><span>預設光線（選取物體的 2 個特徵點）</span></label>
+        <label class="sw"><input type="checkbox" id="cc_cust"><span class="track"></span><span>自訂光點的光線</span></label>
+        <label class="sw"><input type="checkbox" id="cc_tri"><span class="track"></span><span>三條主要光線</span></label>
+        <div class="legend" id="triLegend"></div>
+        <label class="sw"><input type="checkbox" id="cc_eyeRay"><span class="track"></span><span>進到眼睛的光線</span></label>
+        <p class="note" id="eyeNote"></p>
         <div class="btnrow" id="ccSrcTools"><button class="btn small" id="ccSrcBtn">新增／移除光源點</button><button class="btn ghost small" id="ccSrcClear">清除</button></div>
         <p class="note" id="ccSrcNote"></p>
         <label class="sw"><input type="checkbox" id="cc_par"><span class="track"></span><span>平行光入射（像太陽光）</span></label>
@@ -486,6 +493,7 @@ body:not([data-scene="mirror"]) .only-mirror{display:none !important}
         <li><b>像</b>：依面鏡公式算出每一點的像，直接在空間中畫出來。實像浮在鏡子前方，虛像在鏡子後方（較透明）。物體跨過焦點時，像會被撕開。</li>
         <li><b>地上的顏色</b>：藍色是 C 以外、橘色是 F 和 C 之間、紅色是 F 以內，F、C 也標在主軸上。</li>
         <li><b>屏幕</b>：打開「放屏幕」後，可直接拖曳到任何位置，也能用滑桿調整距離、高度、左右、大小與角度。預設大小是鏡面直徑的一半，並自動面向鏡子。屏幕會擋住照向鏡子的光，建議物體和屏幕分別放在主軸兩側。屏幕到達像的位置時最清楚；虛像接不到。右下角可切換「屏幕上的像」。</li>
+        <li><b>上方的「預設光線」「自訂光點」「進到眼睛」</b>：前兩個決定從哪些點畫光線（「自訂光點」按下去就能點物體新增或移除光點，再按一次退出）；「進到眼睛」可以單獨開啟，畫出光經過鏡面反射後真的進到眼球的路徑（沒有選光點時，用選取物體的特徵點），虛線往回延長到像點。三條主要光線用實線、虛線、點線區分。</li>
         <li><b>凸面鏡</b>：像永遠是正立、縮小的虛像。可切換成同樣大小的平面鏡，並打開「觀察者的視野範圍」比較兩者看得到的範圍。</li>
         <li><b>平行光、燈泡</b>：平行光反射後會聚在焦點；燈泡放在焦點，反射光變成平行光，就是手電筒的原理。</li>
       </ul>
@@ -539,14 +547,14 @@ const S={
   m:{w:.8,h:1.6,b:.2,ghost:false,ext:true,fov:false,two:false,ang:90},   // 平面鏡：寬、高、下緣離地、顯示虛像、延長虛線、視野、第二面鏡子
   eye:{x:-2.4,z:.7,y:1.5,att:0},   // 觀察者眼睛（att = 跟著哪個小人的眼睛，0 表示獨立的眼睛）
   mrays:3,
-  cc:{f:.6,A:.6,y:1.0,img:true,prin:true,par:false,bulb:false,screen:false,s:1.2,sy:1.0,sz:0,sr:.5,sAuto:true,yaw:0,pitch:0,src:'feat',pts:[]}   // 凹面鏡：焦距、鏡面直徑、中心高度、顯示像、主要光線、平行光、焦點燈泡、屏幕
+  cc:{f:.6,A:.6,y:1.0,img:true,prin:false,cust:false,tri:true,eyeRay:false,par:false,bulb:false,screen:false,s:1.2,sy:1.0,sz:0,sr:.5,sAuto:true,yaw:0,pitch:0,pts:[]}   // 凹面鏡：焦距、鏡面直徑、中心高度、顯示像、主要光線、平行光、焦點燈泡、屏幕
 };
-const DEF_CV={f:-.5,A:.8,y:1.5,img:true,prin:true,par:false,bulb:false,screen:false,s:1.2,sy:1.5,sz:0,sr:.5,sAuto:true,yaw:0,pitch:0,src:'feat',pts:[],flat:false,fov:false};
+const DEF_CV={f:-.5,A:.8,y:1.5,img:true,prin:false,cust:false,tri:true,eyeRay:false,par:false,bulb:false,screen:false,s:1.2,sy:1.5,sz:0,sr:.5,sAuto:true,yaw:0,pitch:0,src:'feat',pts:[],flat:false,fov:false};
 S.cv=JSON.parse(JSON.stringify(DEF_CV));   // 凸面鏡（焦距取負值）；flat：換成同樣大小的平面鏡比較
 function isCurved(){return S.scene==='concave'||S.scene==='convex';}
 function CC(){return S.scene==='convex'?S.cv:S.cc;}
 function fEff(){const c=CC();return c.flat?-1e5:c.f;}   // 實際計算用的焦距（平面鏡＝焦距無限大）
-const DEF_CC={f:.6,A:.6,y:1.0,img:true,prin:true,par:false,bulb:false,screen:false,s:1.2,sy:1.0,sz:0,sr:.5,sAuto:true,yaw:0,pitch:0,src:'feat',pts:[]};
+const DEF_CC={f:.6,A:.6,y:1.0,img:true,prin:false,cust:false,tri:true,eyeRay:false,par:false,bulb:false,screen:false,s:1.2,sy:1.0,sz:0,sr:.5,sAuto:true,yaw:0,pitch:0,src:'feat',pts:[]};
 const DEF_M={w:.8,h:1.6,b:.2,ghost:false,ext:true,fov:false,two:false,ang:90}, DEF_EYE={x:-2.4,z:.7,y:1.5,att:0};
 function pMin(){return S.scene==='mirror'?-8:isCurved()?.25:1;}
 // 距離限制：針孔 1～8 m；平面鏡可放在鏡前或鏡後（負值＝鏡後），但不能貼著鏡子
@@ -1380,7 +1388,12 @@ const VIEWS={pinhole:[['overview','全景'],['side','側視'],['top','俯視'],[
 let showLabels=store('optics.labels'); if(showLabels===null) showLabels=true;
 function applyLabels(){scene.traverse(o=>{if(o.userData&&o.userData.label)o.visible=showLabels;});dirty=true;}
 function renderViews(){$('#views').innerHTML=VIEWS[S.scene].map(([k,t])=>`<button data-view="${k}">${t}</button>`).join('')+
-  `<button data-toggle="labels" class="lbl ${showLabels?'':'off'}" aria-pressed="${showLabels}">${showLabels?'標籤：開':'標籤：關'}</button>`;}
+  (isCurved()?`<button data-toggle="prin" class="lbl">預設光線</button><button data-toggle="cust" class="lbl" data-tip="點物體新增光點，再點一次移除">自訂光點</button><button data-toggle="eyeRay" class="lbl" data-tip="畫出從光點經過鏡面、進到眼睛的光">進到眼睛</button>`:'')+
+  `<button data-toggle="labels" class="lbl ${showLabels?'':'off'}" aria-pressed="${showLabels}">${showLabels?'標籤：開':'標籤：關'}</button>`; syncTopToggles();}
+function syncTopToggles(){
+  if(!isCurved()) return;
+  ['prin','cust','eyeRay'].forEach(k=>{const b=$(`#views [data-toggle=${k}]`);if(b){const on=k==='cust'?tool==='src':!!CC()[k];b.classList.toggle('off',!on);b.setAttribute('aria-pressed',on);}});
+}
 
 /* ============================================================
    凹面鏡場景
@@ -1506,10 +1519,14 @@ function buildImages(){
 /* ---------- 光線 ---------- */
 const SRC_COLS=['#e2453c','#1f6fd1','#2a9a58','#8e5bd6','#f2a33a','#0fa3b1','#d6336c','#6b4a2f'], MAX_SRC=8;
 // 主要光線從哪些點出發：預設是選取物體的前兩個特徵點；自訂時由操作者點物體指定（跟著物體移動）
-function ccSources(){
-  if(CC().src==='custom') return (CC().pts||[]).map(pt=>{const p=handStart(pt);return p?{p,col:pt.color,custom:true}:null;}).filter(Boolean);
-  const o=selObj(), r=REG[o.id]; if(!r) return []; r.root.updateMatrixWorld(true);
-  return r.info.feats.slice(0,2).map(fe=>({p:featWorld(fe),col:rayColor(fe.color)}));
+function customPts(){return (CC().pts||[]).map(pt=>{const p=handStart(pt);return p?{p,col:pt.color,custom:true}:null;}).filter(Boolean);}
+function ccSources(){   // 預設光線（特徵點）與自訂光點可以同時開啟
+  const out=[], c=CC();
+  // 只開「進到眼睛」時：用選取物體的特徵點，但只畫進到眼睛的光（eyeOnly），不畫三條主要光線
+  const eyeOnly=c.eyeRay&&!c.prin&&!c.cust;
+  if(c.prin||eyeOnly){const o=selObj(), r=o&&REG[o.id]; if(r){r.root.updateMatrixWorld(true); r.info.feats.slice(0,2).forEach(fe=>out.push({p:featWorld(fe),col:rayColor(fe.color),eyeOnly}));}}
+  if(c.cust) out.push(...customPts());
+  return out;
 }
 // 三條主要光線：平行光、朝向 F 的光、朝向 C 的光。理想面鏡上，從 P 出發的光反射後都通過像點（實像）或從像點發散（虛像）
 function ccPrincipal(P){
@@ -1520,26 +1537,46 @@ function ccPrincipal(P){
     dirs.push((f>0&&p<2*f?P.clone().sub(C):C.clone().sub(P)).normalize());
   }
   dirs.forEach((d,i)=>{
-    if(d.x<=1e-3) return;
+    if(d.x<=1e-3) return;   // i：0 平行主軸、1 經過（朝向）F、2 經過（朝向）C
     const Mp=P.clone().addScaledVector(d,-P.x/d.x), M=ccHit(Mp.y,Mp.z);
     let rd;
     if(I) rd=(real?I.clone().sub(M):M.clone().sub(I)).normalize();
     else rd=i===0?F.clone().sub(M).normalize():i===1?V3(-1,0,0):d.clone().negate();   // 物體在焦點上：反射光互相平行
-    out.push({M,rd});
+    out.push({M,rd,kind:i});
   });
   return {rays:out,I,real};
 }
+// 三種線條樣式：實線、線段虛線、圓點虛線
+function dotted(a,b,col,rad,op=1){const L=a.distanceTo(b),n=Math.max(1,Math.floor(L/.06));for(let i=0;i<=n;i++)dot(a.clone().lerp(b,i/n),col,rad*1.5,op);}
+function styled(a,b,col,rad,kind,op=1){if(kind===1)dashed(a,b,col,rad,op);else if(kind===2)dotted(a,b,col,rad,op);else beam(a,b,col,rad,op);}
 function ccRaysFor(P,col,rad){
   const pr=ccPrincipal(P), far=-(Math.max(-P.x,pr.I&&pr.real?-pr.I.x:0,Math.max(0,2*fEff()))+.6);
-  pr.rays.forEach(({M,rd})=>{
-    const hs=screenHit(P,M); if(hs){beam(P,hs,col,rad);dot(hs,col,.012);return;}   // 入射光被屏幕擋住
-    beam(P,M,col,rad); if(Math.hypot(M.y-CC().y,M.z)>CC().A/2) dashed(V3(0,CC().y,M.z),V3(0,M.y,M.z),'#8a96a3',.003,.7);   // 碰到鏡面以外：畫出鏡面延伸線
-    if(rd.x<0){const t=(far-M.x)/rd.x;let end=M.clone().addScaledVector(rd,t>0?t:2);const hs2=screenHit(M,end);if(hs2)end=hs2;beam(M,end,col,rad);if(hs2)dot(hs2,col,.014);}
-    if(pr.I&&!pr.real) dashed(M,pr.I,col,rad*.8,.85);   // 虛像：反射光往回延長，交在鏡後
+  pr.rays.forEach(({M,rd,kind})=>{
+    const hs=screenHit(P,M); if(hs){styled(P,hs,col,rad,kind);dot(hs,col,.012);return;}   // 入射光被屏幕擋住
+    styled(P,M,col,rad,kind); if(Math.hypot(M.y-CC().y,M.z)>CC().A/2) dashed(V3(0,CC().y,M.z),V3(0,M.y,M.z),'#8a96a3',.003,.7);   // 碰到鏡面以外：畫出鏡面延伸線
+    if(rd.x<0){const t=(far-M.x)/rd.x;let end=M.clone().addScaledVector(rd,t>0?t:2);const hs2=screenHit(M,end);if(hs2)end=hs2;styled(M,end,col,rad,kind);if(hs2)dot(hs2,col,.014);}
+    if(pr.I&&!pr.real) styled(M,pr.I,col,rad*.6,kind,.45);   // 虛像：反射光往回延長（較淡），交在鏡後
   });
   if(pr.I) dot(pr.I,col,.022,pr.real?1:.7);
 }
 // 觀察者的視野範圍：眼睛看向鏡框一圈，光被反射後能照到的範圍（凸面鏡明顯比同樣大小的平面鏡寬）
+// 進到眼睛的光線：眼睛看向像點的視線和鏡面的交點 M，就是這條光在鏡面上反射的位置
+//（虛像：M 在眼睛和像之間；實像：光先經過像點再進到眼睛，所以眼睛要比像離鏡子更遠）
+function ccEyeRay(P){
+  const E=eyePos(), I=mapPoint(P), im=ccImage(-P.x); if(!I||!im) return null;
+  const real=im.q>0, d=I.clone().sub(E); if(Math.abs(d.x)<1e-6) return null;
+  const t=-E.x/d.x; if(real?!(t>1):!(t>0&&t<1)) return null;
+  const Mp=E.clone().addScaledVector(d,t); if(Math.hypot(Mp.y-CC().y,Mp.z)>CC().A/2) return null;
+  const M=ccHit(Mp.y,Mp.z);
+  if(screenHit(P,M)||occlude(P,M)||occlude(M,E,eyeOwner()?.08:.03)) return null;
+  return {M,I,E,real};
+}
+function drawEyeRay(sv){
+  const er=ccEyeRay(sv.p); if(!er) return false;
+  beam(sv.p,er.M,sv.col,.012); beam(er.M,er.E,sv.col,.012); dot(er.M,sv.col,.018);
+  if(!er.real) dashed(er.M,er.I,sv.col,.007,.6); else dot(er.I,sv.col,.02);
+  return true;
+}
 function drawCurvedFov(E){
   const A=CC().A/2, Y=CC().y, C=ccC(), pos=[], N=40, L=7, rim=[];
   for(let i=0;i<=N;i++){const a=i/N*Math.PI*2,M=ccHit(Y+A*Math.sin(a),A*Math.cos(a));
@@ -1553,8 +1590,10 @@ function drawCurvedFov(E){
 function updateRaysConcave(){
   const o=selObj(), r=REG[o.id], f=fEff(), Y=CC().y, A=CC().A/2;
   const srcs=ccSources();
-  if(CC().prin) srcs.forEach(sv=>ccRaysFor(sv.p,sv.col,.008));
-  srcs.forEach(sv=>{if(sv.custom){dot(sv.p,sv.col,.026);dot(sv.p,'#ffffff',.012);}});
+  const miss=[];
+  srcs.forEach(sv=>{if(CC().tri!==false&&!sv.eyeOnly)ccRaysFor(sv.p,sv.col,.008);if(CC().eyeRay&&!drawEyeRay(sv))miss.push(sv);});
+  const en=$('#eyeNote'); if(en) en.textContent=!CC().eyeRay?'':!srcs.length?'場景中沒有可追蹤的點。':miss.length?`從目前眼睛的位置看不到其中 ${miss.length} 個點的像，移動眼球試試看。`:'每一點的光都進到眼睛了。';
+  if(CC().cust||tool==='src') customPts().forEach(sv=>{dot(sv.p,sv.col,.026);dot(sv.p,'#ffffff',.012);});   // 自訂光點的位置記號
   if(CC().par){   // 平行光入射：反射後會聚在焦點
     for(let i=0;i<9;i++){const h=(-1+i/4)*A*.92, M=V3(ccSurf(Math.abs(h)),Y+h,0), F=ccF(), d=(f>0?F.clone().sub(M):M.clone().sub(F)).normalize();
       if(f<0&&!CC().flat) dashed(M,F,'#f2a81d',.004,.7);   // 凸面鏡：反射光好像從鏡後的焦點發出
@@ -1644,7 +1683,7 @@ function drawConcaveSide(){
   const {w,h,dpr}=fitCanvas(sideCv), c=sideCv.getContext('2d');
   c.setTransform(1,0,0,1,0,0); c.fillStyle=S.night?'#0f1834':'#e9f5fc'; c.fillRect(0,0,w,h);
   const f=fEff(), Y=CC().y, bb=allBox(), o=selObj(), im=ccImage(o.p);
-  let xs=[bb.min.x,CC().flat?0:-2*f,-.1,.3], ys=[0,bb.max.y,Y+CC().A/2];
+  let xs=[bb.min.x,CC().flat?0:-2*f,-.1,.3,eyePos().x], ys=[0,bb.max.y,Y+CC().A/2];
   if(im&&Math.abs(im.q)<12){xs.push(-im.q);const bo=objBox(o);ys.push(Y+im.m*(bo.max.y-Y),Y+im.m*(bo.min.y-Y));}
   const x0=Math.min(...xs)-.3, x1=Math.max(...xs)+.3, y0=Math.min(...ys,-.1)-.1, y1=Math.max(...ys)+.2;
   const pad=6*dpr, sc=Math.min((w-2*pad)/(x1-x0),(h-2*pad)/(y1-y0));
@@ -1667,12 +1706,18 @@ function drawConcaveSide(){
   c.lineWidth=1.5*dpr;
   ccSources().forEach(sv=>{
     const P=sv.p, col=sv.col, pr=ccPrincipal(P), I=pr.I, real=pr.real, far=-(Math.max(-P.x,real?-I.x:0,Math.max(0,2*f))+.6);
-    if(CC().prin) pr.rays.forEach(({M,rd})=>{
+    if(CC().eyeRay){const er=ccEyeRay(P);if(er){c.strokeStyle=col;c.lineWidth=2.8*dpr;c.setLineDash([]);c.beginPath();c.moveTo(X(P.x),Yc(P.y));c.lineTo(X(er.M.x),Yc(er.M.y));c.lineTo(X(er.E.x),Yc(er.E.y));c.stroke();
+      if(!er.real){c.globalAlpha=.6;c.setLineDash([4*dpr,3*dpr]);c.beginPath();c.moveTo(X(er.M.x),Yc(er.M.y));c.lineTo(X(er.I.x),Yc(er.I.y));c.stroke();c.setLineDash([]);c.globalAlpha=1;}c.lineWidth=1.5*dpr;}}
+    const DASH=[[],[7*dpr,5*dpr],[.1,4.5*dpr]];
+    if(CC().tri!==false&&!sv.eyeOnly) pr.rays.forEach(({M,rd,kind})=>{
+      c.lineCap='round'; c.setLineDash(DASH[kind]||[]); c.lineWidth=(kind===2?2.4:1.6)*dpr;
       c.strokeStyle=col;c.beginPath();c.moveTo(X(P.x),Yc(P.y));c.lineTo(X(M.x),Yc(M.y));if(rd.x<0){const t=(far-M.x)/rd.x;c.lineTo(X(M.x+rd.x*t),Yc(M.y+rd.y*t));}c.stroke();
-      if(I&&!real){c.setLineDash([4*dpr,3*dpr]);c.beginPath();c.moveTo(X(M.x),Yc(M.y));c.lineTo(X(I.x),Yc(I.y));c.stroke();c.setLineDash([]);}});
+      if(I&&!real){c.globalAlpha=.45;c.beginPath();c.moveTo(X(M.x),Yc(M.y));c.lineTo(X(I.x),Yc(I.y));c.stroke();c.globalAlpha=1;}
+      c.setLineDash([]); c.lineWidth=1.5*dpr;});
     c.fillStyle=col; c.beginPath(); c.arc(X(P.x),Yc(P.y),3.4*dpr,0,7); c.fill();
     if(I){c.strokeStyle=col;c.lineWidth=2*dpr;c.beginPath();c.arc(X(I.x),Yc(I.y),3.4*dpr,0,7);c.stroke();c.lineWidth=1.5*dpr;}
   });
+  {const E=eyePos();c.fillStyle='#ffffff';c.strokeStyle='#2f6fd1';c.lineWidth=2*dpr;c.beginPath();c.ellipse(X(E.x),Yc(E.y),6*dpr,4*dpr,0,0,7);c.fill();c.stroke();c.fillStyle='#2f6fd1';c.beginPath();c.arc(X(E.x),Yc(E.y),2*dpr,0,7);c.fill();c.lineWidth=1.5*dpr;}
   if(S.adv&&im){c.font=`${11*dpr}px ui-monospace,monospace`;c.fillStyle=S.night?'#e4edf3':'#1c2a35';c.textAlign='left';c.fillText(`p=${o.p.toFixed(2)} q=${im.q.toFixed(2)} m=${im.m.toFixed(2)}`,6*dpr,13*dpr);}
 }
 
@@ -1695,15 +1740,18 @@ function syncConcaveUI(){
   $('#ccF').value=Math.abs(c.f); $('#ccFOut').textContent=(S.scene==='convex'?'−':'')+Math.abs(c.f).toFixed(2)+' m';
   $('#ccA').value=c.A; $('#ccAOut').textContent=c.A.toFixed(2)+' m';
   $('#ccY').value=c.y; $('#ccYOut').textContent=c.y.toFixed(2)+' m';
-  ['img','prin','par','bulb','screen','fov'].forEach(k=>{$('#cc_'+k).checked=!!c[k];});
+  ['img','prin','cust','par','bulb','screen','fov','eyeRay'].forEach(k=>{$('#cc_'+k).checked=!!c[k];}); $('#cc_tri').checked=c.tri!==false;
+  const cvxL=S.scene==='convex', ln=(d)=>`<svg viewBox="0 0 34 8"><line x1="2" y1="4" x2="32" y2="4" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" ${d}/></svg>`;
+  $('#triLegend').innerHTML=`<span>${ln('')}平行主軸 → 反射後${cvxL?'好像從 F 發出':'經過 F'}</span><span>${ln('stroke-dasharray="7 5"')}${cvxL?'朝向 F':'經過 F'} → 反射後平行主軸</span><span>${ln('stroke-dasharray="0.1 5"')}${cvxL?'朝向 C':'經過 C'} → 沿原路反射</span>`;
+  $('#triLegend').hidden=c.tri===false;
   const cvx=S.scene==='convex'; $('#ccTitle').textContent=cvx?'凸面鏡':'凹面鏡'; $('#ccFLab').textContent=cvx?'焦距 f（凸面鏡的焦點在鏡後）':'焦距 f';
   $$('#cvFlat button').forEach(b=>b.classList.toggle('on',(+b.dataset.v===1)===!!c.flat));
   $('#ccSField').hidden=!c.screen;
   $$('#ccSeg button').forEach(b=>b.classList.toggle('on',b.dataset.v===ccClose));
   $('#ccSeg').hidden=!c.screen;
-  $$('#ccSrc button').forEach(b=>b.classList.toggle('on',b.dataset.v===c.src));
-  $('#ccSrcTools').hidden=c.src!=='custom'; $('#ccSrcBtn').classList.toggle('on',tool==='src');
-  $('#ccSrcNote').textContent=c.src==='custom'?`自訂光源點：目前 ${(c.pts||[]).length} 個（最多 8 個）。按「新增／移除光源點」後點物體。`:'用選取物體的前兩個特徵點（例如燭火、蠟燭底）畫主要光線。';
+  $('#ccSrcBtn').classList.toggle('on',tool==='src');
+  $('#ccSrcNote').textContent=`自訂光點：目前 ${(c.pts||[]).length} 個（最多 8 個）。按「新增／移除光源點」後點物體，再點一次可移除。`;
+  syncTopToggles();
   $('#eyeH').value=S.eye.y; $('#eyeHOut').textContent=S.eye.y.toFixed(2)+' m'; renderEyeChips();
   const o=selObj(), im=ccImage(o.p), f=c.f;
   $('#ccInfo').dataset.blk='';
@@ -1732,15 +1780,13 @@ ccSlider('#ccA','A'); ccSlider('#ccY','y');
 $('#cvFlat').addEventListener('click',e=>{const b=e.target.closest('button[data-v]');if(!b)return;CC().flat=b.dataset.v==='1';buildConcave();changed();});
 [['#ccS','s'],['#ccSY','sy'],['#ccSZ','sz'],['#ccSR','sr'],['#ccYaw','yaw'],['#ccPitch','pitch']].forEach(([id,k])=>$(id).addEventListener('input',e=>{CC()[k]=+e.target.value;buildScreen();changed(true);syncConcaveUI();}));
 $('#cc_sAuto').addEventListener('change',e=>{CC().sAuto=e.target.checked;buildScreen();changed();});
-['img','prin','par','bulb','screen','fov'].forEach(k=>$('#cc_'+k).addEventListener('change',e=>{
+$('#cc_tri').addEventListener('change',e=>{CC().tri=e.target.checked;changed();});
+['img','prin','cust','par','bulb','screen','fov','eyeRay'].forEach(k=>$('#cc_'+k).addEventListener('change',e=>{
   CC()[k]=e.target.checked; if(k==='img'){if(CC().img)cam.layers.enable(3);else cam.layers.disable(3);}
   if(k==='screen'){ccClose=CC().screen?'screen':'eye';}
   buildConcave(); changed();
 }));
-$('#ccSrc').addEventListener('click',e=>{const b=e.target.closest('button[data-v]');if(!b)return;CC().src=b.dataset.v;
-  if(CC().src==='custom'){if(tool!=='src')setTool('src');}else if(tool==='src')setTool('src');
-  changed();});
-$('#ccSrcBtn').onclick=()=>{setTool('src');syncUI();};
+$('#ccSrcBtn').onclick=()=>{setTool('src');if(tool==='src')CC().cust=true;changed();};
 $('#ccSrcClear').onclick=()=>{if(!(CC().pts||[]).length)return;CC().pts=[];changed();commit();toast('已清除光源點，可按復原找回');};
 $('#ccSeg').addEventListener('click',e=>{const b=e.target.closest('button[data-v]');if(!b)return;ccClose=b.dataset.v;syncUI();needPin=true;});
 
@@ -1883,6 +1929,7 @@ function onPointerDown(e){
     else{
       if(pts.length>=MAX_SRC){toast('最多 8 個光源點');return;}
       const used=pts.map(p=>p.color), col=SRC_COLS.find(c=>!used.includes(c))||SRC_COLS[pts.length%SRC_COLS.length];
+      CC().cust=true;
       pts.push({oid:h.object.userData.oid,mi:h.object.userData.mi,local:h.object.worldToLocal(P.clone()).toArray(),color:col});
       setHint(`新增了第 ${pts.length} 個光源點。再點一次同一點可以移除。`);
     }
@@ -2015,7 +2062,7 @@ function setTool(t){
     :tool==='punch'?'打洞：點箱子正面想開孔的位置（最多 3 個孔）。'
     :tool==='patch'?'補洞：點要補起來的黃色圈。'
     :tool==='src'?'點物體上的位置新增光源點，再點一次同一點可移除（最多 8 個）。':'');
-  $('#ccSrcBtn').classList.toggle('on',tool==='src');
+  $('#ccSrcBtn').classList.toggle('on',tool==='src'); syncTopToggles();
   updateRays();
 }
 
@@ -2363,6 +2410,11 @@ $('#advChk').addEventListener('change',e=>{S.adv=e.target.checked;changed();});
 $('#dayNight').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;S.night=b.dataset.v==='night';applyTime();changed();});
 $('#closeSeg').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;S.closeView=b.dataset.v;syncUI();drawCloseup();});
 $('#views').addEventListener('click',e=>{
+  const tg=e.target.closest('button[data-toggle=prin],button[data-toggle=cust],button[data-toggle=eyeRay]');
+  if(tg){const k=tg.dataset.toggle;
+    if(k==='cust'){setTool('src');if(tool==='src')CC().cust=true;changed();return;}   // 自訂光點：按一下進入新增／移除模式，再按一下退出
+    CC()[k]=!CC()[k];
+    changed(); return;}
   const t=e.target.closest('button[data-toggle=labels]');
   if(t){showLabels=!showLabels;store('optics.labels',showLabels);applyLabels();t.classList.toggle('off',!showLabels);t.setAttribute('aria-pressed',showLabels);t.textContent=showLabels?'標籤：開':'標籤：關';return;}
   const b=e.target.closest('button[data-view]');if(b)goView(b.dataset.view);});
