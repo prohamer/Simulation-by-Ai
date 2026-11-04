@@ -1,4 +1,4 @@
-<title>光學小站V26</title>
+<title>光學小站V27</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -1329,7 +1329,7 @@ function renderEye(){
   ecam.position.copy(E); ecam.lookAt(C);
   const sz=isCurved()?.6:Math.max(S.m.w*(S.m.two?1.6:1),S.m.h);   // 曲面鏡、透鏡：視野不跟著鏡面／透鏡直徑變，否則換大透鏡時像看起來會變小
   ecam.fov=clamp(THREE.MathUtils.radToDeg(2*Math.atan((sz/2+.25)/dist)),25,95); ecam.updateProjectionMatrix();
-  renderer.setRenderTarget(ert); renderer.render(scene,ecam); renderer.readRenderTargetPixels(ert,0,0,N,N,ebuf); renderer.setRenderTarget(null);
+  renderer.setRenderTarget(ert); renderPasses(ecam); renderer.readRenderTargetPixels(ert,0,0,N,N,ebuf); renderer.setRenderTarget(null);
   eImg.data.set(ebuf); ectx.putImageData(eImg,0,0); dirty=true;
 }
 function drawEyeView(){
@@ -1631,8 +1631,8 @@ function objLight(o){const r=REG[o.id];if(!r)return objCenter(o);r.root.updateMa
 
 /* ---------- 像：把每個三角形的頂點換到像的位置 ---------- */
 const imgMats={};
-function imgMat(col,real,basic){const k=col+real+basic;return imgMats[k]||(imgMats[k]=basic?new THREE.MeshBasicMaterial({color:col,transparent:true,opacity:real?.95:.6,side:THREE.DoubleSide,depthWrite:false})
-  :new THREE.MeshStandardMaterial({color:col,flatShading:true,transparent:true,opacity:real?.88:.5,side:THREE.DoubleSide,depthWrite:false,roughness:.9}));}
+function imgMat(col,real,basic){const k=col+real+basic;return imgMats[k]||(imgMats[k]=basic?new THREE.MeshBasicMaterial({color:col,transparent:true,opacity:real?.95:.6,side:THREE.DoubleSide,depthWrite:true})
+  :new THREE.MeshStandardMaterial({color:col,flatShading:true,transparent:true,opacity:real?.88:.5,side:THREE.DoubleSide,depthWrite:true,roughness:.9}));}   // 寫入深度：像裡前面的臉才會擋住後面的頭髮
 /* ---------- 透鏡表面的微弱反光：從物體這一側看透鏡，表面像一面很淡的曲面鏡 ----------
    凹透鏡朝向物體的那一面是凹面（像凹面鏡），凸透鏡是凸面（像凸面鏡）；只有約 4% 的光被反射，所以像很淡。 */
 const reflGroup=new THREE.Group(); scene.add(reflGroup); reflGroup.visible=false;
@@ -1660,30 +1660,52 @@ function buildReflImages(){
   Object.entries(out).forEach(([col,arr])=>{if(!arr.length)return;const ng=new THREE.BufferGeometry();ng.setAttribute('position',new THREE.Float32BufferAttribute(arr,3));
     const im=new THREE.Mesh(ng,reflMat(col));im.renderOrder=6;reflGroup.add(im);});
 }
+/* 共用：把物體的三角形換到像的位置
+   1. 只保留「從鏡面／透鏡看得到」的那一面（朝向它的三角形），背後的光到不了鏡面，不會成為像的一部分；
+      留下來的面仍有前後深度，像還是立體的。
+   2. 顏色先依物體原本受光的明暗算好（不受像被翻轉影響），屏幕、視網膜上的像才不會變暗。 */
+function imgMatVC(real){const k='vc'+real;return imgMats[k]||(imgMats[k]=new THREE.MeshBasicMaterial({vertexColors:true,transparent:true,opacity:real?.93:.55,side:THREE.DoubleSide,depthWrite:true}));}
+function buildImageSet(view,map,isReal){
+  const v=new THREE.Vector3(), a=new THREE.Vector3(), b=new THREE.Vector3(), c=new THREE.Vector3(), n=new THREE.Vector3(), cen=new THREE.Vector3(), col=new THREE.Color();
+  const L=sun.position.clone().sub(sun.target.position).normalize(), day=S.night?.38:1, out={true:{p:[],c:[]},false:{p:[],c:[]}};
+  S.objs.forEach(o=>{
+    const r=REG[o.id]; if(!r) return; r.root.updateMatrixWorld(true);
+    r.info.meshes.forEach(m=>{
+      const g0=m.geometry, g=g0.index?g0.toNonIndexed():g0, pos=g.attributes.position, two=m.material.side===THREE.DoubleSide, basic=!!m.material.isMeshBasicMaterial;
+      const base=m.material.color?m.material.color:new THREE.Color(1,1,1);
+      for(let i=0;i+2<pos.count;i+=3){
+        a.fromBufferAttribute(pos,i).applyMatrix4(m.matrixWorld); b.fromBufferAttribute(pos,i+1).applyMatrix4(m.matrixWorld); c.fromBufferAttribute(pos,i+2).applyMatrix4(m.matrixWorld);
+        n.subVectors(b,a).cross(v.subVectors(c,a)); if(n.lengthSq()<1e-14) continue; n.normalize();
+        cen.copy(a).add(b).add(c).multiplyScalar(1/3);
+        let face=n.dot(v.subVectors(view,cen));
+        if(face<=0){if(!two) continue; n.negate();}   // 背對鏡面的面不成像（雙面材質如旗子，翻面再算）
+        let side=null, ok=true; const tri=[];
+        for(const P of [a,b,c]){const sd=isReal(P);if(side===null)side=sd;else if(sd!==side){ok=false;break;}const w=map(P);if(!w){ok=false;break;}tri.push(w);}
+        if(!ok) continue;
+        const sh=basic?1:day*(.52+.48*Math.max(0,n.dot(L))); col.copy(base).multiplyScalar(sh);
+        const o2=out[side]; tri.forEach(w=>{o2.p.push(w.x,w.y,w.z);o2.c.push(col.r,col.g,col.b);});
+      }
+      if(g!==g0) g.dispose();
+    });
+  });
+  [true,false].forEach(real=>{
+    const o2=out[real]; if(!o2.p.length) return;
+    const ng=new THREE.BufferGeometry(); ng.setAttribute('position',new THREE.Float32BufferAttribute(o2.p,3)); ng.setAttribute('color',new THREE.Float32BufferAttribute(o2.c,3));
+    const im=new THREE.Mesh(ng,imgMatVC(real)); im.layers.set(3); im.renderOrder=5; imgGroup.add(im);
+  });
+}
 function buildImages(){
   imgGroup.traverse(o=>{if(o.geometry)o.geometry.dispose();}); imgGroup.clear(); dirty=true;
   buildReflImages();
   if(isEye()){buildEyeImages();return;}
   if(!isCurved()) return;
-  const f=fEff(), v=new THREE.Vector3();
-  S.objs.forEach(o=>{
-    const r=REG[o.id]; if(!r) return; r.root.updateMatrixWorld(true);
-    r.info.meshes.forEach(m=>{
-      const g0=m.geometry, g=g0.index?g0.toNonIndexed():g0, pos=g.attributes.position, out={true:[],false:[]};
-      for(let i=0;i+2<pos.count;i+=3){
-        let side=null, ok=true; const tri=[];
-        for(let k=0;k<3;k++){v.fromBufferAttribute(pos,i+k).applyMatrix4(m.matrixWorld);const s=f>0&&MX()-v.x>f;if(side===null)side=s;else if(s!==side){ok=false;break;}const w=mapPoint(v);if(!w){ok=false;break;}tri.push(w);}
-        if(ok) tri.forEach(w=>out[side].push(w.x,w.y,w.z));
-      }
-      if(g!==g0) g.dispose();
-      const col=m.material.color?'#'+m.material.color.getHexString():'#ffffff';
-      [true,false].forEach(real=>{
-        if(!out[real].length) return;
-        const ng=new THREE.BufferGeometry(); ng.setAttribute('position',new THREE.Float32BufferAttribute(out[real],3)); ng.computeVertexNormals();
-        const im=new THREE.Mesh(ng,imgMat(col,real,!!m.material.isMeshBasicMaterial)); im.layers.set(3); im.renderOrder=5; imgGroup.add(im);
-      });
-    });
-  });
+  const f=fEff();
+  buildImageSet(V3(MX(),CC().y,0),mapPoint,P=>f>0&&MX()-P.x>f);
+}
+// 屏幕、視網膜相機站在鏡面／透鏡上看實像：實像前後是反過來的（離鏡面近的部分成像在遠處），所以深度要反著比，才是「鏡面看到的」遮擋關係
+function withReversedDepth(fn){
+  const ms=Object.values(imgMats); ms.forEach(m=>{m.depthFunc=THREE.GreaterEqualDepth;});
+  renderer.state.buffers.depth.setClear(0); try{fn();}finally{renderer.state.buffers.depth.setClear(1); ms.forEach(m=>{m.depthFunc=THREE.LessEqualDepth;});}
 }
 
 /* ---------- 光線 ---------- */
@@ -1834,7 +1856,7 @@ function renderScreen(){
     scam.projectionMatrix.makePerspective(l,r,t,b,near,60); scam.projectionMatrixInverse.copy(scam.projectionMatrix).invert();
     const fog=scene.fog; scene.fog=null;
     const cc=new THREE.Color(); renderer.getClearColor(cc); const ca=renderer.getClearAlpha(); renderer.setClearColor(0x000000,1);
-    renderer.setRenderTarget(srt); renderer.render(scene,scam); renderer.readRenderTargetPixels(srt,0,0,NS,NS,sbuf); renderer.setRenderTarget(null);
+    renderer.setRenderTarget(srt); withReversedDepth(()=>renderer.render(scene,scam)); renderer.readRenderTargetPixels(srt,0,0,NS,NS,sbuf); renderer.setRenderTarget(null);
     renderer.setClearColor(cc,ca); scene.fog=fog;
     sImg.data.set(sbuf); srawCtx.putImageData(sImg,0,0);
     sflipCtx.setTransform(1,0,0,-1,0,NS); sflipCtx.clearRect(0,0,NS,NS); sflipCtx.drawImage(sraw,0,0); sflipCtx.setTransform(1,0,0,1,0,0);
@@ -1852,13 +1874,21 @@ function renderScreen(){
   ccScrTex.needsUpdate=true; dirty=true;
 }
 let ccClose='eye';
+let lensTwoPass=false;
+function renderPasses(c){   // 透鏡：先畫場景（透鏡不透明、寫入 stencil），清掉深度後只畫像，像之間仍互相遮擋
+  if(!lensTwoPass){renderer.render(scene,c);return;}
+  const mask=c.layers.mask, ac=renderer.autoClear, bg=scene.background;
+  c.layers.disable(3); renderer.render(scene,c);
+  renderer.autoClear=false; renderer.clearDepth(); scene.background=null; c.layers.set(3); renderer.render(scene,c);
+  renderer.autoClear=ac; scene.background=bg; c.layers.mask=mask;
+}
 function stencilMode(on){   // 觀察者看到的畫面：像只出現在鏡面範圍裡
   if(ccOcc) ccOcc.traverse(o=>{if(o.isMesh){const m=o.material;m.stencilWrite=on;m.stencilRef=0;m.stencilFunc=THREE.AlwaysStencilFunc;m.stencilZPass=THREE.ZeroStencilOp;}});
   if(isLens()){   // 透鏡：透過透鏡只看得到像，透鏡後方的實物被擋住；像不做深度測試，鏡後的虛像也看得到
     if(ccDish){const dm=ccDish.material;dm.stencilWrite=on;dm.stencilRef=1;dm.stencilFunc=THREE.AlwaysStencilFunc;dm.stencilZPass=THREE.ReplaceStencilOp;
       if(on){dm.transparent=false;dm.opacity=1;dm.depthWrite=true;dm.color.set(S.night?0x2a3a52:0xdcebf2);dm.roughness=.9;}else lensGlass(dm);}
-    Object.values(imgMats).forEach(m=>{m.stencilWrite=on;m.stencilRef=1;m.stencilFunc=on?THREE.EqualStencilFunc:THREE.AlwaysStencilFunc;m.stencilZPass=THREE.KeepStencilOp;m.stencilFail=THREE.KeepStencilOp;m.depthTest=!on;});
-    return;
+    Object.values(imgMats).forEach(m=>{m.stencilWrite=on;m.stencilRef=1;m.stencilFunc=on?THREE.EqualStencilFunc:THREE.AlwaysStencilFunc;m.stencilZPass=THREE.KeepStencilOp;m.stencilFail=THREE.KeepStencilOp;m.depthTest=true;});
+    lensTwoPass=on; return;
   }
   if(ccDish){const dm=ccDish.material;dm.stencilWrite=on;dm.stencilRef=1;dm.stencilFunc=THREE.AlwaysStencilFunc;dm.stencilZPass=THREE.ReplaceStencilOp;dm.transparent=!on;dm.opacity=on?1:.62;dm.metalness=on?.1:.55;dm.roughness=on?.7:.16;dm.color.set(on?0xc9d3da:0xdde6ec);}
   Object.values(imgMats).forEach(m=>{m.stencilWrite=on;m.stencilRef=1;m.stencilFunc=on?THREE.EqualStencilFunc:THREE.AlwaysStencilFunc;m.stencilZPass=THREE.KeepStencilOp;m.stencilFail=THREE.KeepStencilOp;});
@@ -2136,23 +2166,7 @@ function Pg2txt(){const Pg=eyPg();return (Pg<0?'凹透鏡 −':'凸透鏡 +')+Ma
 
 /* ---------- 像（放大後畫在眼睛裡） ---------- */
 function buildEyeImages(){
-  eyAim(); const v=new THREE.Vector3();
-  S.objs.forEach(o=>{
-    const r=REG[o.id]; if(!r) return; r.root.updateMatrixWorld(true);
-    r.info.meshes.forEach(m=>{
-      const g0=m.geometry, g=g0.index?g0.toNonIndexed():g0, pos=g.attributes.position, out=[];
-      for(let i=0;i+2<pos.count;i+=3){
-        const tri=[]; let ok=true;
-        for(let k=0;k<3;k++){v.fromBufferAttribute(pos,i+k).applyMatrix4(m.matrixWorld);const w=eyMapL(toL(v));if(!w||w.x<=0||w.x>2){ok=false;break;}tri.push(toW(w));}
-        if(ok) tri.forEach(w=>out.push(w.x,w.y,w.z));
-      }
-      if(g!==g0) g.dispose();
-      if(!out.length) return;
-      const col=m.material.color?'#'+m.material.color.getHexString():'#ffffff';
-      const ng=new THREE.BufferGeometry(); ng.setAttribute('position',new THREE.Float32BufferAttribute(out,3)); ng.computeVertexNormals();
-      const im=new THREE.Mesh(ng,imgMat(col,true,!!m.material.isMeshBasicMaterial)); im.layers.set(3); im.renderOrder=5; imgGroup.add(im);
-    });
-  });
+  eyAim(); buildImageSet(eyO(),P=>{const w=eyMapL(toL(P));return w&&w.x>0&&w.x<=2?toW(w):null;},()=>true);
 }
 
 /* ---------- 光線：每個特徵點畫一束光，穿過瞳孔不同位置；在角膜折一次（大）、水晶體再折一次（小） ---------- */
@@ -2201,7 +2215,7 @@ function renderRetina(){
     scam.matrixAutoUpdate=false; scam.matrix.makeBasis(vr,vu,n).setPosition(V); scam.updateMatrixWorld(true);
     scam.projectionMatrix.makePerspective(l,r,t,b,near,60); scam.projectionMatrixInverse.copy(scam.projectionMatrix).invert();
     const fog=scene.fog; scene.fog=null; const cc=new THREE.Color(); renderer.getClearColor(cc); const ca=renderer.getClearAlpha(); renderer.setClearColor(0x000000,1);
-    renderer.setRenderTarget(srt); renderer.render(scene,scam); renderer.readRenderTargetPixels(srt,0,0,NS,NS,sbuf); renderer.setRenderTarget(null);
+    renderer.setRenderTarget(srt); withReversedDepth(()=>renderer.render(scene,scam)); renderer.readRenderTargetPixels(srt,0,0,NS,NS,sbuf); renderer.setRenderTarget(null);
     renderer.setClearColor(cc,ca); scene.fog=fog;
     sImg.data.set(sbuf); srawCtx.putImageData(sImg,0,0);
     sflipCtx.setTransform(1,0,0,-1,0,NS); sflipCtx.clearRect(0,0,NS,NS); sflipCtx.drawImage(sraw,0,0); sflipCtx.setTransform(1,0,0,1,0,0);
@@ -3493,7 +3507,7 @@ function renderMain(){
   const front=realMirror&&isLens()&&cam.position.x<MX();
   if(front){lensFront(true);renderer.render(scene,cam);lensFront(false);return;}
   if(realMirror){stencilMode(true);cam.layers.enable(3);}
-  renderer.render(scene,cam);
+  renderPasses(cam);
   if(realMirror){stencilMode(false);cam.layers.disable(3);}
 }
 function lensFront(on){
