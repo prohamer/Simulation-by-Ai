@@ -1,0 +1,1758 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>光學實驗台</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: three-pane lab bench — chapter rail | darkroom stage | instrument panel. Stage is always a darkroom; UI chrome follows theme. */
+:root{
+  --bg:#eef1f4; --surface:#ffffff; --surface-2:#f5f7f9; --line:#d7dde4; --ink:#16202b; --ink-2:#4c5a6a; --ink-3:#7d8a98;
+  --accent:#0d7a86; --accent-ink:#ffffff; --accent-soft:#d9eef0; --warn:#b4560f;
+  --f-body:"Noto Sans TC",system-ui,-apple-system,"PingFang TC","Microsoft JhengHei",sans-serif;
+  --f-disp:"Noto Serif TC","Songti TC","PMingLiU",serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  --stage:#070b12;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0d1218; --surface:#141b23; --surface-2:#1a222c; --line:#27313d; --ink:#e3e9f0; --ink-2:#a9b6c4; --ink-3:#74828f;
+  --accent:#43c3cf; --accent-ink:#04191c; --accent-soft:#16333a; --warn:#f0a35e; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0d1218; --surface:#141b23; --surface-2:#1a222c; --line:#27313d; --ink:#e3e9f0; --ink-2:#a9b6c4; --ink-3:#74828f;
+  --accent:#43c3cf; --accent-ink:#04191c; --accent-soft:#16333a; --warn:#f0a35e; color-scheme:dark}
+html,body{height:100%}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14px;line-height:1.55}
+*{box-sizing:border-box}
+button,select,input{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+.app{display:grid;grid-template-columns:220px minmax(0,1fr) 330px;grid-template-rows:auto minmax(0,1fr);height:100%;
+  padding-left:max(0px, env(safe-area-inset-left,0px));padding-right:max(0px, env(safe-area-inset-right,0px))}
+.top{grid-column:1/-1;display:flex;align-items:baseline;gap:14px;padding:12px 18px;border-bottom:1px solid var(--line);background:var(--surface)}
+.top h1{font-family:var(--f-disp);font-size:20px;margin:0;letter-spacing:.04em}
+.top p{margin:0;color:var(--ink-3);font-size:13px}
+
+.rail{border-right:1px solid var(--line);background:var(--surface);overflow:auto;padding:10px 10px 18px}
+.chap{margin-top:10px}
+.chap h2{font-size:12px;font-weight:700;color:var(--ink-3);margin:0 6px 4px;letter-spacing:.06em;display:flex;gap:8px}
+.chap h2 b{font-family:var(--f-mono);font-weight:500;color:var(--accent)}
+.scene-btn{display:block;width:100%;text-align:left;border:0;background:none;padding:7px 10px;border-radius:6px;cursor:pointer;color:var(--ink-2)}
+.scene-btn:hover{background:var(--surface-2);color:var(--ink)}
+.scene-btn[aria-current="true"]{background:var(--accent-soft);color:var(--ink);font-weight:700}
+
+.stage-wrap{display:flex;flex-direction:column;min-width:0;min-height:0;background:var(--bg)}
+.toolbar{display:flex;align-items:center;gap:10px;padding:8px 12px;flex-wrap:wrap}
+.toolbar .scene-name{font-family:var(--f-disp);font-size:17px;font-weight:700;margin-right:auto;display:flex;gap:10px;align-items:baseline}
+.toolbar .scene-name small{font-family:var(--f-mono);font-size:12px;color:var(--accent);font-weight:500}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--surface)}
+.seg button{border:0;background:none;padding:5px 12px;cursor:pointer;color:var(--ink-2);white-space:nowrap}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);font-weight:700}
+.btn{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:5px 12px;cursor:pointer;color:var(--ink-2)}
+.btn:hover:not(:disabled){border-color:var(--accent);color:var(--ink)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:700}
+.btn.danger{color:var(--warn)}
+.stage{position:relative;flex:1;min-height:0;margin:0 12px;border-radius:10px;overflow:hidden;background:var(--stage)}
+.stage canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
+.hint{font-size:12px;color:var(--ink-3);padding:6px 14px 10px}
+.err3d{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#c9d6e8;padding:20px;text-align:center}
+
+/* floating tool palette (always on the darkroom stage) */
+.tools{position:absolute;top:10px;left:10px;display:flex;flex-direction:column;flex-wrap:wrap;align-content:flex-start;gap:4px;max-height:calc(100% - 20px);z-index:2;pointer-events:none}
+.tools .grp{display:flex;flex-direction:column;gap:2px;padding:3px;border-radius:9px;background:rgba(14,20,30,0.86);border:1px solid rgba(150,175,210,0.2);pointer-events:auto}
+.tbtn{width:34px;height:34px;border:0;border-radius:7px;background:transparent;color:#c9d6e8;display:grid;place-items:center;cursor:pointer;position:relative;padding:0}
+.tbtn svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.tbtn:hover:not(:disabled){background:rgba(150,175,210,0.18)}
+.tbtn[aria-pressed="true"]{background:#43c3cf;color:#04191c}
+.tbtn:disabled{opacity:.25;cursor:not-allowed}
+.tbtn .sw{width:16px;height:16px;border-radius:50%;border:2px solid rgba(255,255,255,.75)}
+.tip{position:absolute;left:42px;top:50%;transform:translateY(-50%);background:#0b1018;color:#e3e9f0;border:1px solid rgba(150,175,210,.3);padding:3px 8px;border-radius:6px;font-size:12px;white-space:nowrap;pointer-events:none;opacity:0;transition:opacity .12s;z-index:5}
+.tbtn:hover .tip,.tbtn:focus-visible .tip{opacity:1}
+.flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;transition:opacity .4s}
+
+.snaps{display:flex;gap:8px;overflow-x:auto;padding:8px 12px 0;align-items:stretch;min-height:80px}
+.snaps.drop{outline:2px dashed var(--accent);outline-offset:-2px;border-radius:10px}
+.snaps .head{display:flex;flex-direction:column;gap:5px;justify-content:center;flex:none}
+.snaps .head .lab{font-size:12px;color:var(--ink-3);white-space:nowrap}
+.snaps .head .icons{display:flex;gap:4px}
+.snaps .empty{font-size:12px;color:var(--ink-3);align-self:center;max-width:46ch}
+.ibtn{width:30px;height:30px;border:1px solid var(--line);border-radius:7px;background:var(--surface);color:var(--ink-2);display:grid;place-items:center;cursor:pointer;padding:0}
+.ibtn svg,.snapcard .acts svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.ibtn:hover:not(:disabled){border-color:var(--accent);color:var(--ink)}
+.ibtn:disabled{opacity:.4;cursor:not-allowed}
+.snapcard{flex:none;position:relative;width:120px;height:72px;border-radius:7px;overflow:hidden;border:1px solid var(--line);background:var(--stage)}
+.snapcard>button.th{border:0;padding:0;background:none;cursor:pointer;display:block;width:100%;height:100%}
+.snapcard img{width:100%;height:100%;object-fit:cover;display:block}
+.snapcard .cap{position:absolute;left:0;right:0;bottom:0;font-size:10.5px;color:#e3e9f0;background:linear-gradient(transparent,rgba(0,0,0,.8));padding:10px 5px 2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:left;pointer-events:none}
+.snapcard .acts{position:absolute;top:3px;right:3px;display:flex;gap:3px;opacity:0;transition:opacity .12s}
+.snapcard:hover .acts,.snapcard:focus-within .acts{opacity:1}
+@media (hover:none){.snapcard .acts{opacity:1}}
+.snapcard .acts button{width:24px;height:24px;border:0;border-radius:6px;background:rgba(10,14,20,.85);color:#e3e9f0;display:grid;place-items:center;cursor:pointer;padding:0}
+.snapcard .acts svg{width:14px;height:14px}
+.snapcard .acts button:hover{background:#43c3cf;color:#04191c}
+#jsonText{width:min(720px,80vw);max-width:100%;height:40vh;font-family:var(--f-mono);font-size:12px;border:1px solid var(--line);border-radius:8px;background:var(--surface-2);padding:8px;resize:vertical}
+.toast{position:fixed;left:50%;bottom:max(20px,env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:8px 10px 8px 14px;border-radius:10px;display:flex;gap:10px;align-items:center;z-index:60;font-size:13px;max-width:calc(100% - 32px)}
+.toast .btn{padding:3px 10px}
+.modal{position:fixed;inset:0;background:rgba(5,8,12,.72);display:flex;align-items:center;justify-content:center;z-index:50;
+  padding:max(16px,env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) max(16px,env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
+.modal .box{background:var(--surface);border-radius:12px;padding:14px;max-width:min(1100px,100%);max-height:100%;display:flex;flex-direction:column;gap:10px;min-width:0}
+.modal img{max-width:100%;max-height:70vh;object-fit:contain;border-radius:8px;background:var(--stage)}
+.modal .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.modal .cap{margin-right:auto;font-size:13px;color:var(--ink-2)}
+
+.panel{border-left:1px solid var(--line);background:var(--surface);overflow:auto;padding:14px 16px 24px;display:flex;flex-direction:column;gap:16px}
+.panel h3{font-size:12px;letter-spacing:.08em;color:var(--ink-3);margin:0 0 8px;font-weight:700}
+.controls{display:flex;flex-direction:column;gap:12px}
+.selbox{border:1px solid var(--accent);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:10px;background:var(--surface-2)}
+.selbox .ttl{font-weight:700;font-size:13px}
+.ctl label,.ctl .lab{display:flex;justify-content:space-between;gap:8px;font-size:13px;color:var(--ink-2);margin-bottom:3px}
+.ctl label.tog{justify-content:flex-start;margin-bottom:0}
+.ctl output{font-family:var(--f-mono);font-size:12.5px;color:var(--ink);font-variant-numeric:tabular-nums}
+.ctl input[type=range]{width:100%;accent-color:var(--accent)}
+.ctl .seg{display:flex}
+.ctl .seg button{flex:1;padding:5px 6px;font-size:13px}
+.ctl select{width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--surface-2)}
+.tog{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink-2);cursor:pointer}
+.tog input{accent-color:var(--accent);width:16px;height:16px}
+.btnrow{display:flex;flex-wrap:wrap;gap:6px}
+.btnrow .btn{font-size:13px;padding:4px 10px}
+.swatches{display:flex;gap:6px}
+.swatches button{width:24px;height:24px;border-radius:50%;border:2px solid transparent;cursor:pointer;outline-offset:1px}
+.swatches button[aria-pressed="true"]{border-color:var(--ink)}
+
+.info{font-size:13px;display:flex;flex-direction:column;gap:8px}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:3px 12px}
+.kv dt{color:var(--ink-3)}
+.kv dd{margin:0;font-family:var(--f-mono);font-variant-numeric:tabular-nums;text-align:right}
+.kv dd.t{font-family:var(--f-body);font-weight:700}
+.pill{display:inline-block;padding:1px 8px;border-radius:99px;font-size:12px;font-weight:700;background:var(--accent-soft);color:var(--ink)}
+.pill.warn{background:color-mix(in srgb,var(--warn) 20%,transparent);color:var(--warn)}
+.objtab{width:100%;border-collapse:collapse;font-size:12.5px}
+.objtab th{text-align:left;color:var(--ink-3);font-weight:500;padding:3px 4px;border-bottom:1px solid var(--line)}
+.objtab td{padding:5px 4px;border-bottom:1px solid var(--line);vertical-align:top}
+.objtab td.n{font-family:var(--f-mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+.objtab tr.sel td{background:var(--accent-soft)}
+.objtab tr{cursor:pointer}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:4px;vertical-align:-1px;border:1px solid rgba(0,0,0,.25)}
+.x{border:0;background:none;color:var(--ink-3);cursor:pointer;padding:0 4px;font-size:14px}
+.x:hover{color:var(--warn)}
+.notes ul{margin:0;padding-left:18px;color:var(--ink-2);display:flex;flex-direction:column;gap:5px}
+.notes li{max-width:60ch}
+.zones{width:100%;border-collapse:collapse;font-size:12px;margin-top:4px}
+.zones td,.zones th{border-bottom:1px solid var(--line);padding:3px 4px;text-align:left}
+.zones th{color:var(--ink-3);font-weight:500}
+.note-sm{font-size:12px;color:var(--ink-3)}
+
+@media (max-width:1100px){.app{grid-template-columns:190px minmax(0,1fr) 290px}}
+@media (max-width:860px){
+  html,body{height:auto}
+  .app{display:flex;flex-direction:column;height:auto;padding-left:0;padding-right:0}
+  .top{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));flex-wrap:wrap}
+  .rail{border-right:0;border-bottom:1px solid var(--line);display:flex;gap:4px;overflow-x:auto;padding:8px max(16px,env(safe-area-inset-left,0px))}
+  .chap{margin:0;display:flex;align-items:center;gap:2px;flex-shrink:0}
+  .chap h2{margin:0 4px 0 6px}
+  .chap h2 span{display:none}
+  .scene-btn{width:auto;white-space:nowrap;padding:6px 9px}
+  .toolbar{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+  .stage{flex:none;height:66vh;min-height:320px;margin:0 max(16px,env(safe-area-inset-left,0px))}
+  .snaps{padding-left:max(16px,env(safe-area-inset-left,0px))}
+  .hint{padding-left:max(16px,env(safe-area-inset-left,0px))}
+  .tbtn{width:30px;height:30px}
+  .panel{border-left:0;border-top:1px solid var(--line);padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+}
+@media (prefers-reduced-motion:reduce){.flash,.tip{transition:none}}
+</style>
+
+<div class="app">
+  <header class="top">
+    <h1>光學實驗台</h1>
+    <p>國中自然 第 4 章　光、影像與顏色</p>
+  </header>
+  <nav class="rail" id="rail" aria-label="實驗場景"></nav>
+  <main class="stage-wrap">
+    <div class="toolbar">
+      <div class="scene-name"><small id="sceneCh"></small><span id="sceneName"></span></div>
+      <div class="seg" role="group" aria-label="視角">
+        <button id="m2d" aria-pressed="true">2D</button>
+        <button id="m3d" aria-pressed="false">3D</button>
+      </div>
+      <button class="btn" id="resetView">重設視角</button>
+      <button class="btn" id="resetScene">重設實驗</button>
+    </div>
+    <div class="stage" id="stage">
+      <canvas id="cv2"></canvas>
+      <canvas id="cv3" hidden></canvas>
+      <div class="tools" id="tools" role="toolbar" aria-label="實驗工具"></div>
+      <div class="flash" id="flash"></div>
+      <div class="err3d" id="err3d" hidden>3D 繪圖程式庫沒有載入成功，請檢查網路後重新整理頁面。2D 模式不受影響。</div>
+    </div>
+    <div class="snaps" id="snaps" aria-label="情境快照"></div>
+    <input type="file" id="importFile" accept=".json,application/json" hidden>
+    <div class="hint" id="hint"></div>
+  </main>
+  <aside class="panel">
+    <section><h3>實驗控制</h3><div class="controls" id="controls"></div></section>
+    <section><h3>測量結果</h3><div class="info" id="info"></div></section>
+    <section class="notes"><h3>觀察重點</h3><div id="notes"></div></section>
+  </aside>
+</div>
+<div class="modal" id="jsonModal" hidden>
+  <div class="box" role="dialog" aria-modal="true" aria-labelledby="jsonTitle">
+    <strong id="jsonTitle">匯出快照</strong>
+    <p class="note-sm" style="margin:0">這個檢視無法直接下載檔案。請複製下面的內容，貼到記事本後存成 .json 檔，之後可用匯入按鈕載入。</p>
+    <textarea id="jsonText" spellcheck="false" readonly aria-label="快照 JSON 內容"></textarea>
+    <div class="row"><span class="cap"></span><button class="btn" id="jsonCopy">複製</button><button class="btn primary" id="jsonClose">關閉</button></div>
+  </div>
+</div>
+<div class="toast" id="toast" role="status" hidden><span id="toastMsg"></span><button class="btn" id="toastUndo" hidden>復原</button></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(()=>{
+"use strict";
+/* ================= math ================= */
+const D2R=Math.PI/180, R2D=180/Math.PI;
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const add=(a,b)=>[a[0]+b[0],a[1]+b[1]], sub=(a,b)=>[a[0]-b[0],a[1]-b[1]], mul=(a,k)=>[a[0]*k,a[1]*k];
+const dot=(a,b)=>a[0]*b[0]+a[1]*b[1], len=a=>Math.hypot(a[0],a[1]);
+const nrm=a=>{const l=len(a)||1;return [a[0]/l,a[1]/l]};
+const dirOf=a=>[Math.cos(a),Math.sin(a)];
+const lin=(a,b,n)=>n<=1?[(a+b)/2]:Array.from({length:n},(_,i)=>a+(b-a)*i/(n-1));
+const f1=v=>(Math.abs(v)<0.05?0:v).toFixed(1), f2=v=>(Math.abs(v)<0.005?0:v).toFixed(2);
+function reflectDir(d,n){const k=2*dot(d,n);return [d[0]-k*n[0],d[1]-k*n[1]];}
+function fresnel(n1,n2,ci,ct){const rs=((n1*ci-n2*ct)/(n1*ci+n2*ct))**2, rp=((n1*ct-n2*ci)/(n1*ct+n2*ci))**2;return (rs+rp)/2;}
+function refractDir(d,n,n1,n2){
+  let nn=n, ci=-dot(d,n); if(ci<0){nn=mul(n,-1);ci=-ci;}
+  const r=n1/n2, k=1-r*r*(1-ci*ci);
+  if(k<0) return {tir:true,d:reflectDir(d,nn),R:1,ci};
+  const ct=Math.sqrt(k);
+  return {tir:false,d:nrm(add(mul(d,r),mul(nn,r*ci-ct))),refl:reflectDir(d,nn),R:fresnel(n1,n2,ci,ct),ci,ct};
+}
+function raySeg(p,d,a,b){
+  const e=sub(b,a), den=d[0]*e[1]-d[1]*e[0]; if(Math.abs(den)<1e-12) return null;
+  const w=sub(a,p), t=(w[0]*e[1]-w[1]*e[0])/den, u=(w[0]*d[1]-w[1]*d[0])/den;
+  return (t>1e-6&&u>=0&&u<=1)?{t,u}:null;
+}
+function toEdge(p,d,b,m=3){
+  const x0=b[0]-m,x1=b[1]+m,y0=b[2]-m,y1=b[3]+m;
+  const tx=d[0]>1e-9?(x1-p[0])/d[0]:d[0]<-1e-9?(x0-p[0])/d[0]:Infinity;
+  const ty=d[1]>1e-9?(y1-p[1])/d[1]:d[1]<-1e-9?(y0-p[1])/d[1]:Infinity;
+  let t=Math.min(tx,ty); if(!(t>0.2)) t=0.2; if(!isFinite(t)) t=200;
+  return add(p,mul(d,t));
+}
+function clipX(pts,xmax){
+  const out=[pts[0]]; if(pts[0][0]>xmax) return null;
+  for(let i=1;i<pts.length;i++){const a=pts[i-1],b=pts[i];
+    if(b[0]>xmax){const t=(xmax-a[0])/(b[0]-a[0]);out.push([xmax,a[1]+(b[1]-a[1])*t]);return {pts:out,hit:true};}
+    out.push(b);}
+  return {pts:out,hit:false};
+}
+function pip(pt,poly){let c=false;for(let i=0,j=poly.length-1;i<poly.length;j=i++){const a=poly[i],q=poly[j];if((a[1]>pt[1])!==(q[1]>pt[1])&&pt[0]<(q[0]-a[0])*(pt[1]-a[1])/(q[1]-a[1])+a[0])c=!c;}return c;}
+// normal pointing to a mirror's back side: back=+1 → +x for vertical-ish mirrors, +y for horizontal-ish
+function backN(pts,back,dir){const ext=sub(pts[pts.length-1],pts[0]),vert=Math.abs(ext[1])>Math.abs(ext[0]);
+  let n=[-dir[1],dir[0]];const bv=vert?[back,0]:[0,back];if(dot(n,bv)<0)n=mul(n,-1);return n;}
+function seeded(i){const x=Math.sin(i*127.1+311.7)*43758.5453;return x-Math.floor(x);}
+function wl2rgb(w){
+  let r=0,g=0,b=0;
+  if(w<440){r=-(w-440)/60;b=1}else if(w<490){g=(w-440)/50;b=1}else if(w<510){g=1;b=-(w-510)/20}
+  else if(w<580){r=(w-510)/70;g=1}else if(w<645){r=1;g=-(w-645)/65}else{r=1}
+  let f=w<420?0.35+0.65*(w-380)/40:w>680?0.35+0.65*(720-w)/40:1;
+  const h=v=>Math.round(255*Math.pow(clamp(v*f,0,1),0.8)).toString(16).padStart(2,'0');
+  return '#'+h(r)+h(g)+h(b);
+}
+/* ---- general ray tracer used by custom light sources ----
+   optics elements: {kind:'mirror',pts} {kind:'absorb',pts} {kind:'region',pts,n} {kind:'lens',x,H,f} {kind:'arc',C,R,H,cc} */
+function traceGeneric(p,d,opt,b,maxN=30){
+  const pts=[p], regions=opt.filter(e=>e.kind==='region');
+  const nAt=q=>{let n=1;for(const r of regions) if(pip(q,r.pts)) n=r.n;return n;};
+  let cur=p, dir=nrm(d);
+  for(let k=0;k<maxN;k++){
+    let best=null;
+    const take=(t,e,x)=>{if(t>1e-6&&(!best||t<best.t)) best=Object.assign({t,e},x);};
+    for(const e of opt){
+      if(e.kind==='mirror'||e.kind==='absorb'){for(let i=1;i<e.pts.length;i++){const h=raySeg(cur,dir,e.pts[i-1],e.pts[i]);if(h)take(h.t,e,{a:e.pts[i-1],c:e.pts[i]});}}
+      else if(e.kind==='region'){const q=e.pts;for(let i=0;i<q.length;i++){const a=q[i],c=q[(i+1)%q.length],h=raySeg(cur,dir,a,c);if(h)take(h.t,e,{a,c});}}
+      else if(e.kind==='lens'){const h=raySeg(cur,dir,[e.x,-e.H],[e.x,e.H]);if(h)take(h.t,e,{});}
+      else if(e.kind==='arc'){const o=sub(cur,e.C),B=dot(o,dir),Cq=dot(o,o)-e.R*e.R,disc=B*B-Cq;
+        if(disc>=0)for(const t of [-B-Math.sqrt(disc),-B+Math.sqrt(disc)]){if(t<1e-4)continue;const q=add(cur,mul(dir,t));
+          if(Math.abs(q[1])<=e.H&&(e.cc?q[0]>=e.C[0]:q[0]<=e.C[0])){take(t,e,{});break;}}}
+    }
+    if(!best){pts.push(toEdge(cur,dir,b));break;}
+    const q=add(cur,mul(dir,best.t)), e=best.e; pts.push(q);
+    if(e.kind==='absorb') break;
+    if(e.kind==='mirror'){const s=sub(best.c,best.a);let n=nrm([-s[1],s[0]]);if(dot(n,dir)>0)n=mul(n,-1);dir=reflectDir(dir,n);}
+    else if(e.kind==='arc'){let n=nrm(sub(q,e.C));if(dot(n,dir)>0)n=mul(n,-1);dir=reflectDir(dir,n);}
+    else if(e.kind==='lens'){const s=Math.sign(dir[0])||1,m=dir[1]/dir[0],m2=m-s*q[1]/e.f;dir=nrm([s,s*m2]);}
+    else{const s=sub(best.c,best.a),nv=nrm([-s[1],s[0]]),n1=nAt(add(q,mul(dir,-1e-4))),n2=nAt(add(q,mul(dir,1e-4)));
+      if(Math.abs(n1-n2)>1e-9) dir=refractDir(dir,nv,n1,n2).d;}
+    cur=q;
+  }
+  return pts;
+}
+
+/* ================= stage palette (darkroom, fixed) ================= */
+const C={bg:'#070b12',grid1:'rgba(120,150,190,0.06)',grid5:'rgba(120,150,190,0.15)',axis:'rgba(150,175,210,0.5)',text:'#c9d6e8',dim:'#7f90a8',
+  glassFill:'rgba(120,190,255,0.15)',glassEdge:'#9fd3ff',mirror:'#e3eaf3',hatch:'rgba(200,210,225,0.35)',screen:'#dfe4ea',plate:'#5b6676',
+  obj:'#ffb347',base:'#5ee0ff',laser:'#ff4d4d',warm:'#ffe2a8',white:'#f4f7ff',handle:'rgba(255,255,255,0.5)'};
+const OBJ_COLORS=['#ffb347','#5ee0ff','#ff6fae','#a6f05a','#b28cff','#ffe066'];
+const SRC_COLORS=['#ffe066','#ff4d4d','#5ee0ff','#a6f05a','#ff6fae','#f4f7ff'];
+const DRAW_COLORS=['#ffffff','#ffe066','#ff6b6b','#5ee0ff','#a6f05a'];
+const MEDIA={air:{n:1.00,name:'空氣',fill:'rgba(0,0,0,0)'},water:{n:1.33,name:'水',fill:'rgba(70,150,255,0.20)'},
+  glass:{n:1.50,name:'玻璃',fill:'rgba(140,230,215,0.18)'},diamond:{n:2.42,name:'鑽石',fill:'rgba(220,220,255,0.22)'}};
+
+/* ================= thin-lens / mirror imaging ================= */
+function imageOf(u,fs){
+  if(Math.abs(u-fs)<0.15) return {inf:true};
+  const v=u*fs/(u-fs), m=-v/u;
+  return {inf:false,v,m,real:v>0};
+}
+function zoneName(u,f,kind){
+  const t=0.2, two=kind==='mirror'?'C（2F）':'2F';
+  if(Math.abs(u-f)<t) return '焦點 F 上';
+  if(Math.abs(u-2*f)<t) return two+' 上';
+  if(u>2*f) return two+' 外';
+  if(u>f) return 'F 與 '+two+' 之間';
+  return '焦點 F 內';
+}
+function propsText(img){
+  if(img.inf) return '不成像（光線平行射出）';
+  const am=Math.abs(img.m);
+  const size=Math.abs(am-1)<0.02?'等大':am>1?'放大':'縮小';
+  return (img.m<0?'倒立':'正立')+'、'+size+'、'+(img.real?'實像':'虛像');
+}
+function lensProfile(H,convex,f){
+  const p=clamp(12/Math.abs(f),0.35,2.2);
+  const tc=convex?0.35+p*1.6:0.35, te=convex?0.35:0.35+p*1.6;
+  return r=>{const q=(r/H)**2;return convex?te/2+(tc-te)/2*(1-q):tc/2+(te-tc)/2*q;};
+}
+function idealRay(P,yh,img,surfX,b,o={}){
+  const Hp=[surfX(yh),yh], out=[];
+  const main={t:'ray',pts:[P,Hp],c:o.c,w:o.w||1.7,a:o.a??1};
+  out.push(main);
+  if(img.inf){main.pts.push(toEdge(Hp,img.dir,b));return out;}
+  const I=[img.x,img.y];
+  if(img.real){ main.pts.push(toEdge(Hp,nrm(sub(I,Hp)),b)); }
+  else{ main.pts.push(toEdge(Hp,nrm(sub(Hp,I)),b)); out.push({t:'ray',pts:[Hp,o.backTo||I],c:o.c,w:1.2,a:(o.a??1)*0.75,dash:true}); }
+  return out;
+}
+
+/* ================= scenes ================= */
+const SCENES=[];
+const CHAPTERS=[['4-1','光的傳播'],['4-2','光的反射與面鏡成像'],['4-3','光的折射'],['4-4','透鏡成像'],['4-5','色散與顏色']];
+
+/* ---------- 4-1 影子 ---------- */
+SCENES.push({id:'shadow',ch:'4-1',name:'影子的形成',bounds:[-58,46,-24,24],bench:true,
+  init:()=>({L:30,s:0,o:8,d:25}),
+  controls:()=>[
+    {type:'slider',key:'s',label:'光源大小',min:0,max:12,step:0.5,fmt:v=>v==0?'點光源':v.toFixed(1)+' cm'},
+    {type:'slider',key:'L',label:'光源到物體',min:10,max:50,step:0.5,unit:'cm'},
+    {type:'slider',key:'o',label:'物體（圓形紙板）大小',min:2,max:16,step:0.5,unit:'cm'},
+    {type:'slider',key:'d',label:'物體到屏幕',min:8,max:40,step:0.5,unit:'cm'}],
+  build(st,b){
+    const {L,s,o,d}=st, k=(L+d)/L, sT=s/2, sB=-s/2, SH=20, P=[];
+    const pr=(ys,yo)=>ys+(yo-ys)*k;
+    const y1=pr(sT,o/2), y2=pr(sT,-o/2), y3=pr(sB,o/2), y4=pr(sB,-o/2);
+    P.push({t:'axis',x0:b[0],x1:b[1]});
+    P.push({t:'fill',pts:[[-L,sT+0.01],[d,SH],[d,-SH],[-L,sB-0.01]],c:'rgba(255,226,168,0.10)'});
+    P.push({t:'fill',pts:[[0,o/2],[d,y3],[d,y2],[0,-o/2]],c:'rgba(7,11,18,0.62)'});
+    if(s>o){const xs=L*o/(s-o); if(xs<d){const yu=sT+(o/2-sT)*(xs+L)/L;P.push({t:'fill',pts:[[0,o/2],[xs,yu],[0,-o/2]],c:'rgba(7,11,18,0.95)'});}
+      else P.push({t:'fill',pts:[[0,o/2],[d,y1],[d,y4],[0,-o/2]],c:'rgba(7,11,18,0.95)'});}
+    else P.push({t:'fill',pts:[[0,o/2],[d,y1],[d,y4],[0,-o/2]],c:'rgba(7,11,18,0.95)'});
+    for(const [ys,yo,ye] of [[sT,o/2,y1],[sT,-o/2,y2],[sB,o/2,y3],[sB,-o/2,y4]]) P.push({t:'ray',pts:[[-L,ys],[0,yo],[d,ye]],c:C.warm,w:1.3,a:0.9});
+    for(const yy of [0.8,-0.8]) P.push({t:'ray',pts:[[-L,0],[d,yy*SH*0.95]],c:C.warm,w:1,a:0.35});
+    if(s===0) P.push({t:'lamp',x:-L,y:0}); else P.push({t:'lampBar',x:-L,y0:sB,y1:sT});
+    P.push({t:'block',x:0,y0:-o/2,y1:o/2});
+    P.push({t:'screen',x:d,h:2*SH,main:true});
+    const um=y1>y4;
+    if(um) P.push({t:'label',x:d+2,y:(y1+y4)/2,text:'本影',c:C.text,align:'left'});
+    if(s>0) P.push({t:'label',x:d+2,y:(Math.max(y1,y4)+y3)/2,text:'半影',c:C.dim,align:'left'});
+    const sv={kind:'shadow',title:'屏幕正面',range:SH,umbra:um?Math.abs(y1-y4)/2:0,pen:Math.abs(y3-y2)/2};
+    const info=`<dl class="kv"><dt>光源</dt><dd class="t">${s===0?'點光源':'有大小的光源（'+f1(s)+' cm）'}</dd>
+      <dt>本影寬度</dt><dd>${um?f1(y1-y4)+' cm':'沒有本影'}</dd>
+      <dt>半影寬度（每側）</dt><dd>${s===0?'0（無半影）':f1(y3-y1)+' cm'}</dd>
+      <dt>影子總寬</dt><dd>${f1(y3-y2)} cm</dd></dl>`;
+    const H=[
+      {x:-L,y:0,cursor:'ew-resize',drag:(x)=>{st.L=clamp(Math.round(-x*2)/2,10,50)}},
+      {x:0,y:o/2,cursor:'ns-resize',drag:(x,y)=>{st.o=clamp(Math.round(y*4)/2,2,16)}},
+      {x:d,y:SH-2,cursor:'ew-resize',drag:(x)=>{st.d=clamp(Math.round(x*2)/2,8,40)}}];
+    const optics=[{kind:'absorb',pts:[[0,-o/2],[0,o/2]]},{kind:'absorb',pts:[[d,-SH],[d,SH]]}];
+    return {prims:P,handles:H,info,sv,optics};
+  },
+  notes:['光在同一種均勻介質中沿直線前進，這叫做光的直進。','點光源照射時，影子邊緣清楚，只有本影。','光源有大小時，影子中央是完全照不到光的本影，外圍是只照到部分光的半影。','也可以用工具列的「自訂發光點」放一個光源，觀察光線被紙板擋住的情形。']
+});
+
+/* ---------- 4-1 針孔成像 ---------- */
+SCENES.push({id:'pinhole',ch:'4-1',name:'針孔成像',bounds:[-58,46,-22,22],bench:true,
+  tools:{top:'showTop',bottom:'showBot',image:'showImg'},
+  init:()=>({u:30,h:10,d:20,a:0.3,holes:1,showTop:true,showBot:true,showImg:true}),
+  controls:()=>[
+    {type:'slider',key:'u',label:'物距（物體到針孔）',min:5,max:55,step:0.5,unit:'cm'},
+    {type:'slider',key:'d',label:'像距（針孔到紙屏）',min:3,max:42,step:0.5,unit:'cm'},
+    {type:'slider',key:'h',label:'物體高度',min:2,max:16,step:0.5,unit:'cm'},
+    {type:'slider',key:'a',label:'孔的大小',min:0.1,max:4,step:0.1,unit:'cm'},
+    {type:'seg',key:'holes',label:'針孔數量',options:[[1,'1 個'],[2,'2 個'],[3,'3 個']]}],
+  build(st,b){
+    const {u,h,d,a,holes}=st, P=[];
+    const hy=holes==1?[0]:holes==2?[-3.5,3.5]:[-5,0,5];
+    P.push({t:'axis',x0:b[0],x1:b[1]});
+    const items=[], blur=a*(u+d)/u;
+    for(const y0 of hy){
+      const img=py=>y0+(y0-py)*d/u;
+      for(const [py,c,show] of [[h/2,C.obj,st.showTop],[-h/2,C.base,st.showBot]]){
+        if(!show) continue;
+        P.push({t:'ray',pts:[[-u,py],[0,y0],[d,img(py)]],c,w:1.6});
+        if(a>0.8){P.push({t:'ray',pts:[[-u,py],[0,y0+a/2],[d,y0+a/2+(y0+a/2-py)*d/u]],c,w:1,a:0.3,arrow:false});
+          P.push({t:'ray',pts:[[-u,py],[0,y0-a/2],[d,y0-a/2+(y0-a/2-py)*d/u]],c,w:1,a:0.3,arrow:false});}
+      }
+      if(st.showImg){items.push({y0:img(-h/2),y1:img(h/2),c:C.obj,c0:C.base,blur,alpha:clamp(0.35+a*0.25,0.35,1)/Math.sqrt(holes)});
+        P.push({t:'blurArrow',x:d-0.4,y0:img(-h/2),y1:img(h/2),c:C.obj,blur});}
+    }
+    P.push({t:'arrowObj',x:-u,y0:-h/2,h,c:C.obj,c0:C.base,label:'物體'});
+    P.push({t:'plate',x:0,h:34,holes:hy.map(y=>({y,size:a}))});
+    P.push({t:'screen',x:d,h:34,main:true,label:'紙屏'});
+    let segs=[[-17,17]];
+    for(const y of hy){const ns=[];for(const [lo,hi] of segs){const a0=y-a/2,a1=y+a/2;if(a1<=lo||a0>=hi){ns.push([lo,hi]);continue;}if(a0>lo)ns.push([lo,a0]);if(a1<hi)ns.push([a1,hi]);}segs=ns;}
+    const optics=[...segs.map(([lo,hi])=>({kind:'absorb',pts:[[0,lo],[0,hi]]})),{kind:'absorb',pts:[[d,-17],[d,17]]}];
+    const hi=h*d/u;
+    const info=`<dl class="kv"><dt>物高</dt><dd>${f1(h)} cm</dd><dt>像高</dt><dd>${f1(hi)} cm</dd>
+      <dt>像高 ÷ 物高</dt><dd>${f2(hi/h)}</dd><dt>像距 ÷ 物距</dt><dd>${f2(d/u)}</dd>
+      <dt>像的性質</dt><dd class="t">倒立實像</dd><dt>清晰度</dt><dd class="t">${a<=0.5?'清楚':a<=1.5?'稍模糊':'模糊'}</dd></dl>
+      <p class="note-sm">像高 ÷ 物高 ＝ 像距 ÷ 物距。孔愈大，進來的光愈多，像愈亮但愈模糊。</p>`;
+    const H=[
+      {x:-u,y:-h/2,cursor:'ew-resize',drag:x=>{st.u=clamp(Math.round(-x*2)/2,5,55)}},
+      {x:-u,y:h/2,cursor:'ns-resize',drag:(x,y)=>{st.h=clamp(Math.round(y*4)/2,2,16)}},
+      {x:d,y:14,cursor:'ew-resize',drag:x=>{st.d=clamp(Math.round(x*2)/2,3,42)}}];
+    return {prims:P,handles:H,info,optics,sv:{kind:'arrows',title:'紙屏上看到的像',range:17,items}};
+  },
+  notes:['物體上每一點發出的光，經過針孔沿直線前進到紙屏，所以紙屏上出現倒立的實像（上下、左右都顛倒）。','物體上方（橘色）的光到了紙屏下方，物體下方（藍色）的光到了紙屏上方。','把紙屏拉遠，像變大；把物體移近，像也變大。','開多個孔，每個孔各成一個像。']
+});
+
+/* ---------- 4-2 反射定律 ---------- */
+function reflSurf(st){if(st.mode==='beam'&&st.rough){const s=[];for(let x=-34,k=0;x<=34.01;x+=2,k++)s.push([x,(seeded(k)-0.5)*1.6]);return s;}return [[-34,0],[34,0]];}
+function aimRefl(st){const i=st.i*D2R, side=st.lx>0?1:-1;
+  if(st.mode==='laser'){st.lx=side*26*Math.sin(i);st.ly=26*Math.cos(i);st.la=Math.atan2(-st.ly,-st.lx);}
+  else{const d=[Math.sin(i),-Math.cos(i)];st.bx=-d[0]*30;st.by=-d[1]*30;st.ba=Math.atan2(d[1],d[0]);}}
+SCENES.push({id:'reflection',ch:'4-2',name:'光的反射定律',bounds:[-40,40,-12,30],
+  init:()=>{const s={i:40,mode:'laser',rough:false,lx:-1,ly:1,la:0,bx:0,by:0,ba:0};s.mode='beam';aimRefl(s);s.mode='laser';aimRefl(s);return s;},
+  controls:st=>[
+    {type:'seg',key:'mode',label:'光源',options:[['laser','雷射筆'],['beam','平行光束']]},
+    {type:'slider',key:'i',label:'入射角（設定後光源會對準鏡面中央）',min:0,max:85,step:1,unit:'°',onInput:aimRefl},
+    st.mode==='laser'?{type:'buttons',items:[{label:'反轉光路（光的可逆性）',onClick:s=>{if(s._end){s.lx=s._end[0];s.ly=s._end[1];s.la=s._endAng;}}}]}
+      :{type:'seg',key:'rough',label:'反射面',options:[[false,'平滑（鏡面）'],[true,'粗糙（紙面）']]}],
+  build(st,b){
+    const P=[], surf=reflSurf(st), optics=[{kind:'mirror',pts:surf}];
+    P.push({t:'mirror',pts:surf,back:-1,rough:st.mode==='beam'&&st.rough});
+    if(st.mode==='laser'){
+      const S=[st.lx,st.ly], d=dirOf(st.la);
+      P.push({t:'laser',x:S[0],y:S[1],dir:d});
+      const objects=[{id:'laser',x:S[0],y:S[1],ang:st.la,label:'雷射筆',move:(x,y)=>{st.lx=clamp(x,-38,38);st.ly=clamp(y,0.5,28)},rotate:a=>{st.la=a}}];
+      const t=(S[1]>0&&d[1]<-1e-6)?-S[1]/d[1]:null, hx=t!=null?S[0]+d[0]*t:null;
+      if(t==null||Math.abs(hx)>34){P.push({t:'ray',pts:[S,toEdge(S,d,b)],c:C.laser,w:2.2});st._end=null;
+        return {prims:P,handles:[],objects,optics,info:'<p><span class="pill warn">雷射光沒有照到鏡面</span></p><p class="note-sm">點一下雷射筆，用箭頭拖移、用藍色圓環旋轉。</p>'};}
+      const Hp=[hx,0], r=[d[0],-d[1]], E=toEdge(Hp,r,b), idg=Math.acos(clamp(-d[1],0,1))*R2D;
+      st.i=Math.round(idg); st._end=add(Hp,mul(r,26)); st._endAng=Math.atan2(-r[1],-r[0]);
+      P.push({t:'ray',pts:[S,Hp,E],c:C.laser,w:2.2});
+      P.push({t:'line',pts:[[hx,-3],[hx,26]],c:C.dim,dash:true});
+      P.push({t:'label',x:hx+0.8,y:26,text:'法線',c:C.dim,align:'left'});
+      if(idg>0.5){P.push({t:'arc',x:hx,y:0,r:8,v1:[0,1],v2:mul(d,-1),c:'#ffd166',label:'入射角 '+idg.toFixed(0)+'°'});
+        P.push({t:'arc',x:hx,y:0,r:10.5,v1:[0,1],v2:r,c:'#7ee0a0',label:'反射角 '+idg.toFixed(0)+'°'});}
+      return {prims:P,handles:[],objects,optics,
+        info:`<dl class="kv"><dt>入射角</dt><dd>${idg.toFixed(1)}°</dd><dt>反射角</dt><dd>${idg.toFixed(1)}°</dd></dl><p><span class="pill">入射角 ＝ 反射角</span></p><p class="note-sm">入射角與反射角都是和「法線」的夾角，不是和鏡面的夾角。點一下雷射筆可以拖移、旋轉它。</p>`};
+    }
+    const d=dirOf(st.ba), perp=[-d[1],d[0]], c0=[st.bx,st.by];
+    P.push({t:'beamSrc',x:c0[0],y:c0[1],ang:st.ba,w:24,c:C.warm});
+    for(const o of lin(-10.8,10.8,7)){
+      const start=add(c0,mul(perp,o));
+      let best=null;
+      for(let j=1;j<surf.length;j++){const h=raySeg(start,d,surf[j-1],surf[j]); if(h&&(!best||h.t<best.t)) best={...h,j};}
+      if(!best){P.push({t:'ray',pts:[start,toEdge(start,d,b)],c:C.warm,w:1.5});continue;}
+      const hp=add(start,mul(d,best.t)), e=sub(surf[best.j],surf[best.j-1]); let n=nrm([-e[1],e[0]]); if(dot(n,d)>0) n=mul(n,-1);
+      P.push({t:'ray',pts:[start,hp,toEdge(hp,reflectDir(d,n),b)],c:C.warm,w:1.5});
+      if(st.rough) P.push({t:'line',pts:[hp,add(hp,mul(n,5))],c:C.dim,dash:true,a:0.6});
+    }
+    const idg=d[1]<0?Math.acos(clamp(-d[1],0,1))*R2D:null; if(idg!=null) st.i=Math.round(idg);
+    const objects=[{id:'beam',x:c0[0],y:c0[1],ang:st.ba,label:'平行光源',move:(x,y)=>{st.bx=clamp(x,-38,38);st.by=clamp(y,1,28)},rotate:a=>{st.ba=a}}];
+    return {prims:P,handles:[],objects,optics,info:`<dl class="kv"><dt>入射角</dt><dd>${idg==null?'—':idg.toFixed(1)+'°'}</dd><dt>反射方式</dt><dd class="t">${st.rough?'漫射（散射）':'單向反射'}</dd></dl>
+      <p class="note-sm">${st.rough?'粗糙表面每一點的法線方向不同，反射光射向四面八方，所以從各方向都看得到紙。每條光線仍然遵守反射定律（虛線是各點的法線）。':'平滑表面的法線方向都一樣，平行光反射後仍然平行。'}</p>`};
+  },
+  notes:['入射線、反射線和法線在同一平面上，入射線與反射線分在法線兩側。','入射角等於反射角。','光沿反射光的路徑射回去，會沿原來的入射路徑射出，這是光的可逆性。','平滑表面產生單向反射；粗糙表面產生漫射，我們才能從各方向看見物體。']
+});
+
+/* ---------- 4-2 平面鏡成像 ---------- */
+SCENES.push({id:'plane-mirror',ch:'4-2',name:'平面鏡成像',bounds:[-44,44,-20,20],
+  tools:{top:'showTop',bottom:'showBot',image:'showImg',eye:'eyeOn'},
+  init:()=>({ox:-18,oy:-6,h:8,ex:-30,ey:9,fan:false,showTop:true,showBot:true,showImg:true,eyeOn:true}),
+  controls:()=>[
+    {type:'slider',key:'ox',label:'物體位置（負值在鏡前）',min:-40,max:-2,step:0.5,unit:'cm'},
+    {type:'slider',key:'h',label:'物體高度',min:2,max:14,step:0.5,unit:'cm'},
+    {type:'toggle',key:'fan',label:'顯示物體頂端發出的更多光線'}],
+  build(st,b){
+    const P=[], M=16, {ox,oy,h,ex,ey}=st, E=[ex,ey];
+    P.push({t:'mirror',pts:[[0,-M],[0,M]],back:1});
+    P.push({t:'arrowObj',x:ox,y0:oy,h,c:C.obj,c0:C.base,label:'物體'});
+    if(st.showImg) P.push({t:'arrowObj',x:-ox,y0:oy,h,c:C.obj,c0:C.base,virtual:true,image:true,label:'像（虛像）'});
+    let seen=0, tried=0;
+    if(st.eyeOn) for(const [py,c,show] of [[oy+h,C.obj,st.showTop],[oy,C.base,st.showBot]]){
+      if(!show) continue; tried++;
+      const I=[-ox,py], t=(0-ex)/(I[0]-ex), ry=ey+t*(py-ey);
+      if(Math.abs(ry)<=M){seen++;P.push({t:'ray',pts:[[ox,py],[0,ry],E],c,w:1.7});if(st.showImg)P.push({t:'ray',pts:[[0,ry],I],c,w:1.1,a:0.7,dash:true});}
+    }
+    const fanFrom=[];
+    if(st.fan&&st.showTop) fanFrom.push([oy+h,C.obj]);
+    if(!st.eyeOn){ if(st.showTop) fanFrom.push([oy+h,C.obj]); if(st.showBot) fanFrom.push([oy,C.base]); }
+    for(const [py,c] of fanFrom){const tip=[ox,py], I=[-ox,py];
+      for(const yy of lin(-M+1,M-1,7)){const R=[0,yy], d=nrm(sub(R,tip)), r=[-d[0],d[1]];
+        P.push({t:'ray',pts:[tip,R,toEdge(R,r,b)],c,w:1,a:0.45});if(st.showImg)P.push({t:'ray',pts:[R,I],c,w:0.8,a:0.3,dash:true});}}
+    const yl=oy-3;
+    P.push({t:'line',pts:[[ox,yl],[0,yl]],c:C.dim,a:0.8});
+    P.push({t:'label',x:ox/2,y:yl-1.6,text:'物距 '+f1(-ox)+' cm',c:C.text});
+    if(st.showImg){P.push({t:'line',pts:[[0,yl],[-ox,yl]],c:C.dim,a:0.8,dash:true});P.push({t:'label',x:-ox/2,y:yl-1.6,text:'像距 '+f1(-ox)+' cm',c:C.text});}
+    if(st.eyeOn) P.push({t:'eye',x:ex,y:ey,dir:nrm(sub([0,(ey+oy)/2],E))});
+    const H=[{x:ox,y:oy,cursor:'move',drag:(x,y)=>{st.ox=clamp(Math.round(x*2)/2,-40,-2);st.oy=clamp(Math.round(y*2)/2,-15,15-st.h)}},
+      {x:ox,y:oy+h,cursor:'ns-resize',drag:(x,y)=>{st.h=clamp(Math.round((y-st.oy)*2)/2,2,Math.min(14,16-st.oy))}}];
+    if(st.eyeOn) H.push({x:ex,y:ey,cursor:'move',drag:(x,y)=>{st.ex=clamp(x,-42,-3);st.ey=clamp(y,-18,18)}});
+    return {prims:P,handles:H,optics:[{kind:'mirror',pts:[[0,-M],[0,M]]}],info:`<dl class="kv"><dt>物距</dt><dd>${f1(-ox)} cm</dd><dt>像距</dt><dd>${st.showImg?f1(-ox)+' cm':'？'}</dd>
+      <dt>物高 / 像高</dt><dd>${f1(h)} / ${st.showImg?f1(h):'？'} cm</dd><dt>像的性質</dt><dd class="t">${st.showImg?'正立、等大、虛像':'？'}</dd></dl>
+      ${st.eyeOn&&tried&&seen<tried?'<p><span class="pill warn">眼睛目前無法看到完整的像</span></p><p class="note-sm">反射光沒有進入眼睛。移動眼睛或物體試試看。</p>':''}
+      <p class="note-sm">拖曳眼睛可以改變觀察位置。虛線是反射光的反向延長線，交會處就是像的位置。</p>`};
+  },
+  notes:['平面鏡成正立、等大的虛像，像與物左右相反。','物體到鏡面的距離（物距）等於像到鏡面的距離（像距）。','虛像不是光線真的會聚形成，而是反射光反向延長線的交點，所以無法用紙屏接收。']
+});
+
+/* ---------- 4-2 凹面鏡與凸面鏡 ---------- */
+SCENES.push({id:'curved-mirror',ch:'4-2',name:'凹面鏡與凸面鏡',bounds:[-64,40,-22,22],
+  tools:st=>st.src==='object'?{r1:'r1',r2:'r2',r3:'r3',image:'showImg'}:{},
+  init:()=>({type:'concave',R:40,src:'parallel',n:7,sx:-20,sy:0,ox:-30,oh:5,r1:true,r2:true,r3:true,showImg:true}),
+  controls:st=>[
+    {type:'seg',key:'type',label:'面鏡種類',options:[['concave','凹面鏡'],['convex','凸面鏡']]},
+    {type:'seg',key:'src',label:'光源',options:[['parallel','平行光'],['point','點光源'],['object','物體成像']]},
+    {type:'slider',key:'R',label:'曲率半徑（焦距 = 半徑 ÷ 2）',min:24,max:60,step:1,unit:'cm'},
+    ...(st.src==='object'?[{type:'slider',key:'ox',label:'物體位置',min:-60,max:-2,step:0.5,unit:'cm'}]:[{type:'slider',key:'n',label:'光線數量',min:3,max:13,step:2}]),
+    ...(st.src==='point'?[{type:'buttons',items:[{label:'光源放到焦點',onClick:s=>{s.sx=s.type==='concave'?-s.R/2:-20;s.sy=0;}}]}]:[])],
+  build(st,b){
+    const P=[], R=st.R, f=R/2, cc=st.type==='concave', H=Math.min(15,R*0.42), Cx=cc?-R:R;
+    const sag=y=>cc?Cx+Math.sqrt(R*R-y*y):Cx-Math.sqrt(R*R-y*y);
+    const arc=lin(-H,H,41).map(y=>[sag(y),y]);
+    const optics=[{kind:'arc',C:[Cx,0],R,H,cc}];
+    P.push({t:'axis',x0:b[0],x1:b[1]});
+    P.push({t:'mirror',pts:arc,back:1});
+    const Fx=cc?-f:f;
+    P.push({t:'mark',x:Fx,y:0,label:cc?'F':'F（虛焦點）'});
+    if(Cx>b[0]&&Cx<b[1]) P.push({t:'mark',x:Cx,y:0,label:'C',dimmed:true});
+    let info='';
+    const hit=(p,d)=>{const o=sub(p,[Cx,0]),B=dot(o,d),Cq=dot(o,o)-R*R,disc=B*B-Cq; if(disc<0) return null;
+      for(const t of [-B-Math.sqrt(disc),-B+Math.sqrt(disc)]){ if(t<1e-4) continue; const q=add(p,mul(d,t));
+        if(Math.abs(q[1])<=H && (cc?q[0]>=Cx:q[0]<=Cx)) return q;} return null;};
+    const traceTo=(S,d,c,a=1)=>{const q=hit(S,d); if(!q){P.push({t:'ray',pts:[S,toEdge(S,d,b)],c,w:1.5,a});return;}
+      let n=nrm(sub(q,[Cx,0])); if(dot(n,d)>0) n=mul(n,-1); const r=reflectDir(d,n);
+      P.push({t:'ray',pts:[S,q,toEdge(q,r,b)],c,w:1.5,a});
+      if(r[0]<0 && (!cc || st.src==='point')){
+        const div=!cc || (st.src==='point' && -st.sx<f);
+        if(div){const tb=(Math.max(f,12)+6-q[0])/(-r[0]); P.push({t:'ray',pts:[q,add(q,mul(r,-Math.min(tb,60)))],c,w:0.9,a:0.45*a,dash:true});}
+      }};
+    if(st.src==='parallel'){
+      for(const y of lin(-H*0.9,H*0.9,st.n)) traceTo([b[0]-2,y],[1,0],C.warm);
+      info=`<dl class="kv"><dt>焦距 f</dt><dd>${f1(f)} cm</dd><dt>平行光反射後</dt><dd class="t">${cc?'會聚於焦點':'發散'}</dd></dl>
+        <p class="note-sm">${cc?'凹面鏡能把平行光會聚到焦點（太陽灶、衛星天線）。離主軸較遠的光線會聚點略偏，這是球面鏡的特性。':'凸面鏡使平行光發散，反射光的延長線（虛線）交於鏡後的虛焦點。'}</p>`;
+      return {prims:P,handles:[],info,optics};
+    }
+    if(st.src==='point'){
+      const S=[st.sx,st.sy];
+      for(const y of lin(-H*0.92,H*0.92,st.n)){const tg=[sag(y),y]; traceTo(S,nrm(sub(tg,S)),'#ffe066');}
+      P.push({t:'lamp',x:S[0],y:S[1]});
+      const u=-st.sx;
+      info=`<dl class="kv"><dt>焦距 f</dt><dd>${f1(f)} cm</dd><dt>光源到鏡面</dt><dd>${f1(u)} cm</dd></dl>
+        <p class="note-sm">${cc?(Math.abs(u-f)<0.6&&Math.abs(st.sy)<0.5?'光源在焦點上，反射光成為平行光，手電筒和車燈就是這樣設計的。':'拖曳光源到焦點 F，看看反射光有什麼變化。'):'凸面鏡讓反射光散開，看到的範圍較廣，常用於道路轉角反射鏡。'}</p>`;
+      return {prims:P,handles:[{x:S[0],y:S[1],cursor:'move',drag:(x,y)=>{st.sx=clamp(x,b[0]+2,-3);st.sy=clamp(y,-H,H);
+        if(Math.abs(st.sx+f)<0.8&&Math.abs(st.sy)<0.8&&cc){st.sx=-f;st.sy=0;}}}],info,optics};
+    }
+    const u=-st.ox, fs=cc?f:-f, img=imageOf(u,fs), P0=[st.ox,st.oh];
+    if(!img.inf){img.x=-img.v;img.y=img.m*st.oh;} else img.dir=nrm([st.ox,-st.oh]);
+    const sx=y=>sag(clamp(y,-R*0.95,R*0.95));
+    const yF=-st.oh*fs/(u-fs);
+    const mirrorRay=(yh,c,back)=>{const Hp=[sx(yh),yh];
+      if(img.inf){P.push({t:'ray',pts:[P0,Hp,toEdge(Hp,img.dir,b)],c,w:1.7});return;}
+      const I=[img.x,img.y];
+      if(img.real){P.push({t:'ray',pts:[P0,Hp,toEdge(Hp,nrm(sub(I,Hp)),b)],c,w:1.7});}
+      else{P.push({t:'ray',pts:[P0,Hp,toEdge(Hp,nrm(sub(Hp,I)),b)],c,w:1.7});P.push({t:'ray',pts:[Hp,back||I],c,w:1.1,a:0.7,dash:true});}};
+    if(st.r1) mirrorRay(st.oh,'#ffd166',cc?null:[f,0]);
+    if(st.r2) mirrorRay(0,'#7ee0a0',null);
+    if(st.r3){mirrorRay(yF,'#ff8fb8',null);
+      if(cc&&u<f) P.push({t:'ray',pts:[[-f,0],P0],c:'#ff8fb8',w:1,a:0.5,dash:true});
+      if(!cc) P.push({t:'ray',pts:[[sx(yF),yF],[f,0]],c:'#ff8fb8',w:1,a:0.5,dash:true});}
+    P.push({t:'arrowObj',x:st.ox,y0:0,h:st.oh,c:C.obj,label:'物體'});
+    if(st.showImg&&!img.inf&&Math.abs(img.v)<150) P.push({t:'arrowObj',x:img.x,y0:0,h:img.y,c:C.obj,virtual:!img.real,image:true,label:img.real?'實像':'虛像'});
+    const hide=!st.showImg;
+    info=`<dl class="kv"><dt>物體位置</dt><dd class="t">${cc?zoneName(u,f,'mirror'):'鏡前任意位置'}</dd><dt>物距</dt><dd>${f1(u)} cm</dd>
+      <dt>像距</dt><dd>${hide?'？':img.inf?'—':f1(Math.abs(img.v))+' cm（'+(img.real?'鏡前':'鏡後')+'）'}</dd>
+      <dt>放大率</dt><dd>${hide?'？':img.inf?'—':f2(Math.abs(img.m))+' 倍'}</dd><dt>像的性質</dt><dd class="t">${hide?'？':propsText(img)}</dd></dl>
+      <p class="note-sm">${cc?'黃線：平行主軸 → 反射後通過焦點；綠線：射向鏡面中心 → 對稱反射；粉紅線：通過焦點 → 反射後平行主軸。':'凸面鏡永遠成正立、縮小的虛像。'}</p>`;
+    return {prims:P,handles:[{x:st.ox,y:0,cursor:'ew-resize',drag:x=>{let v=clamp(Math.round(x*2)/2,-60,-2);if(cc){if(Math.abs(-v-f)<0.8)v=-f;if(Math.abs(-v-2*f)<0.8)v=-2*f;}st.ox=v;}},
+      {x:st.ox,y:st.oh,cursor:'ns-resize',drag:(x,y)=>{st.oh=clamp(Math.round(y*2)/2,1,12)}}],info,optics};
+  },
+  notes:['凹面鏡使平行光會聚於焦點；把光源放在焦點，反射光變成平行光（手電筒、車燈）。','凸面鏡使平行光發散，反射光的延長線交於鏡後的焦點，視野較廣（道路反射鏡、汽車後照鏡）。','物體在凹面鏡焦點內，成正立放大的虛像（化妝鏡）；在焦點外，成倒立的實像。']
+});
+
+/* ---------- 4-3 折射 ---------- */
+function aimRefr(st){const i=st.i*D2R, sg=st.from==='top'?1:-1, side=st.lx>0?1:-1;st.lx=side*24*Math.sin(i);st.ly=sg*Math.max(24*Math.cos(i),0.6);st.la=Math.atan2(-st.ly,-st.lx);}
+SCENES.push({id:'refraction',ch:'4-3',name:'光的折射',bounds:[-40,40,-27,27],
+  init:()=>{const s={top:'air',bot:'water',i:45,from:'top',lx:-1,ly:1,la:0};aimRefr(s);return s;},
+  controls:()=>[
+    {type:'select',key:'top',label:'上方介質',options:Object.entries(MEDIA).map(([k,v])=>[k,v.name+'（n = '+v.n.toFixed(2)+'）'])},
+    {type:'select',key:'bot',label:'下方介質',options:Object.entries(MEDIA).map(([k,v])=>[k,v.name+'（n = '+v.n.toFixed(2)+'）'])},
+    {type:'seg',key:'from',label:'雷射筆位置',options:[['top','在上方'],['bot','在下方']],onInput:aimRefr},
+    {type:'slider',key:'i',label:'入射角（設定後雷射對準中央）',min:0,max:89,step:1,unit:'°',onInput:aimRefr}],
+  build(st,b){
+    const P=[], top=MEDIA[st.top], bot=MEDIA[st.bot];
+    const topR=[[-40,0],[40,0],[40,27],[-40,27]], botR=[[-40,-27],[40,-27],[40,0],[-40,0]];
+    P.push({t:'medium',pts:topR,c:top.fill,label:top.name+'　n = '+top.n.toFixed(2),lx:-38,ly:24});
+    P.push({t:'medium',pts:botR,c:bot.fill,label:bot.name+'　n = '+bot.n.toFixed(2),lx:-38,ly:-24});
+    P.push({t:'line',pts:[[-40,0],[40,0]],c:'rgba(200,220,240,0.5)'});
+    const optics=[{kind:'region',pts:topR,n:top.n},{kind:'region',pts:botR,n:bot.n}];
+    const S=[st.lx,st.ly], d=dirOf(st.la);
+    P.push({t:'laser',x:S[0],y:S[1],dir:d});
+    const objects=[{id:'laser',x:S[0],y:S[1],ang:st.la,label:'雷射筆',move:(x,y)=>{st.lx=clamp(x,-39,39);st.ly=clamp(y,-26,26);if(Math.abs(st.ly)<0.6)st.ly=st.ly<0?-0.6:0.6;},rotate:a=>{st.la=a}}];
+    const t=Math.abs(d[1])>1e-6?-S[1]/d[1]:-1, hx=S[0]+d[0]*t;
+    if(!(t>0)||Math.abs(hx)>40){P.push({t:'ray',pts:[S,toEdge(S,d,b)],c:C.laser,w:2.2});
+      return {prims:P,handles:[],objects,optics,info:'<p><span class="pill warn">雷射光沒有射到兩種介質的界面</span></p><p class="note-sm">點一下雷射筆，用箭頭拖移、用藍色圓環旋轉。</p>'};}
+    const Hp=[hx,0], up=S[1]>0, sg=up?1:-1, n1=up?top.n:bot.n, n2=up?bot.n:top.n, m1=up?top:bot, m2=up?bot:top;
+    const idg=Math.acos(clamp(Math.abs(d[1]),0,1))*R2D; st.i=Math.round(idg); st.from=up?'top':'bot';
+    const res=refractDir(d,[0,sg],n1,n2), R=res.R;
+    P.push({t:'line',pts:[[hx,-26],[hx,26]],c:C.dim,dash:true});
+    P.push({t:'ray',pts:[S,Hp],c:C.laser,w:2.2});
+    let tdeg=null;
+    if(res.tir) P.push({t:'ray',pts:[Hp,toEdge(Hp,res.d,b)],c:C.laser,w:2.2});
+    else{
+      P.push({t:'ray',pts:[Hp,toEdge(Hp,res.d,b)],c:C.laser,w:2.2,a:clamp(1-R,0.25,1)});
+      P.push({t:'ray',pts:[Hp,toEdge(Hp,res.refl,b)],c:C.laser,w:1.6,a:clamp(R*1.6,0.08,1)});
+      tdeg=Math.asin(clamp(n1/n2*Math.sin(idg*D2R),-1,1))*R2D;
+      if(idg>0.5) P.push({t:'arc',x:hx,y:0,r:10,v1:[0,-sg],v2:res.d,c:'#7ee0a0',label:'折射角 '+tdeg.toFixed(1)+'°'});
+    }
+    if(idg>0.5) P.push({t:'arc',x:hx,y:0,r:7,v1:[0,sg],v2:mul(d,-1),c:'#ffd166',label:'入射角 '+idg.toFixed(0)+'°'});
+    if(res.tir&&idg>0.5) P.push({t:'arc',x:hx,y:0,r:10,v1:[0,sg],v2:res.d,c:'#7ee0a0',label:'反射角 '+idg.toFixed(0)+'°'});
+    const crit=n1>n2?Math.asin(n2/n1)*R2D:null;
+    const bend=Math.abs(n1-n2)<1e-6?'不偏折（兩邊介質相同）':idg<0.5?'垂直入射，不偏折':n2>n1?'折射光偏向法線':'折射光偏離法線';
+    const v=n=>(3/n).toFixed(2)+' × 10⁸ m/s';
+    const info=`<dl class="kv"><dt>光從</dt><dd class="t">${m1.name} → ${m2.name}</dd><dt>入射角</dt><dd>${idg.toFixed(1)}°</dd>
+      <dt>折射角</dt><dd>${res.tir?'—':tdeg.toFixed(1)+'°'}</dd><dt>反射光比例</dt><dd>${(R*100).toFixed(1)}%</dd>
+      ${crit!==null?`<dt>臨界角</dt><dd>${crit.toFixed(1)}°</dd>`:''}
+      <dt>光速（${m1.name}）</dt><dd>${v(n1)}</dd><dt>光速（${m2.name}）</dt><dd>${v(n2)}</dd></dl>
+      <p><span class="pill ${res.tir?'warn':''}">${res.tir?'全反射：光完全反射回 '+m1.name:bend}</span></p>`;
+    return {prims:P,handles:[],objects,optics,info};
+  },
+  notes:['光從一種介質斜射入另一種介質時，行進方向會改變，這叫做折射。','光從空氣進入水或玻璃（光速變慢）時，折射光偏向法線；反過來則偏離法線。','垂直入射時不偏折。折射時也有一部分光被反射。','光從水或玻璃射向空氣、且入射角大於臨界角時，光全部反射回來，稱為全反射。']
+});
+
+/* ---------- 4-3 水中的物體看起來變淺 ---------- */
+SCENES.push({id:'apparent-depth',ch:'4-3',name:'水中物體的位置',bounds:[-40,40,-30,28],
+  tools:{image:'showImg'},
+  init:()=>({D:15,obj:'coin',cx:4,ex:-22,ey:20,showImg:true}),
+  controls:()=>[
+    {type:'seg',key:'obj',label:'水中物體',options:[['coin','硬幣'],['stick','筷子']]},
+    {type:'slider',key:'D',label:'水深',min:5,max:25,step:0.5,unit:'cm'}],
+  build(st,b){
+    const P=[], D=st.D, nw=1.33, E=[st.ex,st.ey];
+    const water=[[-26,-D],[26,-D],[26,0],[-26,0]];
+    P.push({t:'medium',pts:water,c:MEDIA.water.fill,label:'水 n = 1.33',lx:-24.5,ly:-D+1.6});
+    P.push({t:'cup',x0:-26,x1:26,y0:-D-0.8,y1:5});
+    const optics=[{kind:'region',pts:water,n:nw},{kind:'absorb',pts:[[-26,5],[-26,-D-0.8],[26,-D-0.8],[26,5]]}];
+    const surfPt=(Q,Ei)=>{let lo=Math.min(Q[0],Ei[0]),hi=Math.max(Q[0],Ei[0]);
+      const g=x=>{const sw=(x-Q[0])/Math.hypot(x-Q[0],Q[1]), sa=(Ei[0]-x)/Math.hypot(Ei[0]-x,Ei[1]); return nw*sw-sa;};
+      for(let k=0;k<50;k++){const m=(lo+hi)/2; (g(m)>0)?hi=m:lo=m;} return [(lo+hi)/2,0];};
+    const apparent=Q=>{const S0=surfPt(Q,E), a=nrm(sub(E,S0)), pp=[-a[1],a[0]];
+      const E1=add(E,mul(pp,0.6)),E2=add(E,mul(pp,-0.6)), S1=surfPt(Q,E1),S2=surfPt(Q,E2);
+      const d1=nrm(sub(S1,E1)), d2=nrm(sub(S2,E2)), den=d1[0]*d2[1]-d1[1]*d2[0];
+      if(Math.abs(den)<1e-9) return {A:[Q[0],Q[1]/nw],S1,S2,S0,E1,E2};
+      const w=sub(S2,S1), t=(w[0]*d2[1]-w[1]*d2[0])/den; return {A:add(S1,mul(d1,t)),S1,S2,S0,E1,E2};};
+    const eyeH={x:E[0],y:E[1],cursor:'move',drag:(x,y)=>{st.ex=clamp(x,-38,38);st.ey=clamp(y,3,26)}};
+    if(st.obj==='coin'){
+      const Q=[st.cx,-D+0.35], ap=apparent(Q);
+      for(const [S,Ei] of [[ap.S1,ap.E1],[ap.S0,E],[ap.S2,ap.E2]]){P.push({t:'ray',pts:[Q,S,Ei],c:'#ffd166',w:1.4,a:0.9});if(st.showImg)P.push({t:'ray',pts:[S,ap.A],c:'#ffd166',w:1,a:0.6,dash:true});}
+      P.push({t:'coin',x:Q[0],y:Q[1]});
+      if(st.showImg){P.push({t:'coin',x:ap.A[0],y:ap.A[1],ghost:true});P.push({t:'label',x:ap.A[0]+2.2,y:ap.A[1]+1.2,text:'看到的位置',c:C.text,align:'left'});}
+      P.push({t:'label',x:Q[0]+2.2,y:Q[1]-0.2,text:'實際位置',c:C.dim,align:'left'});
+      P.push({t:'eye',x:E[0],y:E[1],dir:nrm(sub(ap.S0,E))});
+      const dA=-ap.A[1];
+      return {prims:P,handles:[eyeH,{x:Q[0],y:Q[1],cursor:'ew-resize',drag:x=>{st.cx=clamp(x,-23,23)}}],optics,
+        info:`<dl class="kv"><dt>硬幣實際深度</dt><dd>${f1(D-0.35)} cm</dd><dt>看起來的深度</dt><dd>${st.showImg?f1(dA)+' cm':'？'}</dd><dt>看起來 ÷ 實際</dt><dd>${st.showImg?f2(dA/(D-0.35)):'？'}</dd></dl>
+        <p class="note-sm">從正上方看，深度約為實際的 1 ÷ 1.33 ≈ 0.75 倍；斜著看會覺得更淺。拖曳眼睛試試看。</p>`};
+    }
+    const B=[st.cx,-D+0.6], T=[st.cx-16,10], tw=(0-T[1])/(B[1]-T[1]), W=[T[0]+(B[0]-T[0])*tw,0];
+    const pts=lin(0,1,12).map(t=>[W[0]+(B[0]-W[0])*t,W[1]+(B[1]-W[1])*t]).slice(1);
+    const ghost=[W,...pts.map(p=>apparent(p).A)];
+    P.push({t:'stick',pts:[T,W],c:'#d9a066'});
+    P.push({t:'stick',pts:[W,B],c:'#d9a066',a:st.showImg?0.35:1,dash:st.showImg});
+    if(st.showImg) P.push({t:'stick',pts:ghost,c:'#d9a066'});
+    const ap=apparent(B);
+    for(const [S,Ei] of [[ap.S1,ap.E1],[ap.S2,ap.E2]]){P.push({t:'ray',pts:[B,S,Ei],c:'#ffd166',w:1.3,a:0.85});if(st.showImg)P.push({t:'ray',pts:[S,ap.A],c:'#ffd166',w:1,a:0.6,dash:true});}
+    if(st.showImg) P.push({t:'label',x:ghost[ghost.length-1][0]+2,y:ghost[ghost.length-1][1]+1.5,text:'看到的筷子',c:C.text,align:'left'});
+    P.push({t:'eye',x:E[0],y:E[1],dir:nrm(sub(ap.S0,E))});
+    return {prims:P,handles:[eyeH,{x:B[0],y:B[1],cursor:'ew-resize',drag:x=>{st.cx=clamp(x,-10,23)}}],optics,
+      info:`<p>筷子插入水中，看起來在水面處<b>向上彎折</b>。</p><p class="note-sm">水中每一點發出的光在水面折射後偏離法線，眼睛沿著折射光的反方向看，所以每一點看起來都比實際高。淡色虛線是筷子的實際位置。</p>`};
+  },
+  notes:['水中物體發出的光，從水射入空氣時偏離法線。','眼睛認為光是直線傳來的，沿著折射光的反向延長線看，所以物體看起來比實際淺。','游泳池看起來比實際淺，插在水中的筷子看起來彎折，都是折射造成的。']
+});
+
+/* ---------- 4-4 透鏡的折射 ---------- */
+SCENES.push({id:'lens-rays',ch:'4-4',name:'透鏡與平行光',bounds:[-62,62,-22,22],bench:true,
+  init:()=>({type:'convex',f:15,n:7,ang:0,src:'parallel',sx:-15,sy:0}),
+  controls:st=>[
+    {type:'seg',key:'type',label:'透鏡種類',options:[['convex','凸透鏡'],['concave','凹透鏡']]},
+    {type:'seg',key:'src',label:'光源',options:[['parallel','平行光'],['point','點光源']]},
+    {type:'slider',key:'f',label:'焦距 f',min:6,max:25,step:0.5,unit:'cm'},
+    {type:'slider',key:'n',label:'光線數量',min:3,max:13,step:2},
+    ...(st.src==='parallel'?[{type:'slider',key:'ang',label:'光線傾斜角度',min:-25,max:25,step:1,unit:'°'}]:[{type:'buttons',items:[{label:'光源放到焦點',onClick:s=>{s.sx=-s.f;s.sy=0;}}]}])],
+  build(st,b){
+    const P=[], H=12, cv=st.type==='convex', fs=cv?st.f:-st.f, f=st.f;
+    P.push({t:'axis',x0:b[0],x1:b[1]});
+    P.push({t:'lens',x:0,H,convex:cv,f});
+    for(const s of [-1,1]){P.push({t:'mark',x:s*f,y:0,label:'F'});P.push({t:'mark',x:s*2*f,y:0,label:'2F',dimmed:true});}
+    const optics=[{kind:'lens',x:0,H,f:fs}];
+    const heights=lin(-H*0.82,H*0.82,st.n);
+    if(st.src==='parallel'){
+      const m=Math.tan(st.ang*D2R), xs=b[0]+5, ang=Math.atan(m);
+      for(const y of heights){const S=[xs,y+m*xs], m2=m-y/fs, d2=nrm([1,m2]);
+        P.push({t:'ray',pts:[S,[0,y],toEdge([0,y],d2,b)],c:C.warm,w:1.5});
+        if(!cv) P.push({t:'ray',pts:[[0,y],[fs,fs*m]],c:C.warm,w:0.9,a:0.45,dash:true});}
+      P.push({t:'beamSrc',x:xs,y:m*xs,ang,w:(heights[heights.length-1]-heights[0])*Math.cos(ang)+2,c:C.warm});
+      P.push({t:'point',x:fs,y:fs*m,c:cv?'#fff3c4':'#9fb3c8'});
+      const objects=[{id:'beam',x:xs,y:m*xs,ang,label:'平行光源',rotate:a=>{st.ang=clamp(Math.round(a*R2D),-25,25)}}];
+      return {prims:P,handles:[],objects,optics,info:`<dl class="kv"><dt>透鏡</dt><dd class="t">${cv?'凸透鏡（中央厚、邊緣薄）':'凹透鏡（中央薄、邊緣厚）'}</dd><dt>焦距 f</dt><dd>${f1(f)} cm</dd></dl>
+        <p><span class="pill">${cv?'平行光會聚於焦點':'平行光發散，延長線交於焦點'}</span></p>
+        <p class="note-sm">${st.ang!==0?'斜射的平行光會聚在通過焦點、垂直主軸的平面上（白點）。':'焦點到透鏡中心的距離叫做焦距。點一下左邊的平行光源，可以用藍色圓環旋轉光線方向。'}</p>`};
+    }
+    const S=[st.sx,st.sy], u=-st.sx, img=imageOf(u,fs);
+    for(const y of heights){const m=(y-S[1])/(0-S[0]), m2=m-y/fs, d2=nrm([1,m2]);
+      P.push({t:'ray',pts:[S,[0,y],toEdge([0,y],d2,b)],c:'#ffe066',w:1.5});
+      if(!img.inf&&!img.real){const I=[img.v,img.m*S[1]];P.push({t:'ray',pts:[[0,y],I],c:'#ffe066',w:0.9,a:0.45,dash:true});}}
+    P.push({t:'lamp',x:S[0],y:S[1]});
+    const txt=img.inf?'折射光成為平行光':img.real?'折射光會聚於透鏡右側 '+f1(img.v)+' cm 處':'折射光發散，延長線交於透鏡左側 '+f1(-img.v)+' cm 處';
+    const objects=[{id:'pt',x:S[0],y:S[1],label:'點光源',move:(x,y)=>{let vx=clamp(x,b[0]+2,-1),vy=clamp(y,-10,10);if(Math.abs(vx+f)<0.8&&Math.abs(vy)<0.8){vx=-f;vy=0;}st.sx=vx;st.sy=vy;}}];
+    return {prims:P,handles:[],objects,optics,info:`<dl class="kv"><dt>焦距 f</dt><dd>${f1(f)} cm</dd><dt>光源到透鏡</dt><dd>${f1(u)} cm</dd></dl><p><span class="pill">${txt}</span></p>`};
+  },
+  notes:['凸透鏡中央厚、邊緣薄，平行主軸的光經過後會聚於焦點，又稱會聚透鏡。','凹透鏡中央薄、邊緣厚，平行光經過後發散，折射光的延長線交於焦點，又稱發散透鏡。','透鏡兩側各有一個焦點；焦點到透鏡中心的距離叫焦距。','光源放在凸透鏡焦點上，折射光成為平行光。']
+});
+
+/* ---------- 4-4 透鏡成像（主場景） ---------- */
+function setSel(s,x){const o=s.objs.find(o=>o.id===s.sel); if(o) o.x=clamp(Math.round(x*10)/10,-70,-1);}
+SCENES.push({id:'lens-image',ch:'4-4',name:'透鏡成像',bounds:[-54,54,-19,19],bench:true,
+  tools:{top:'fan',r1:'r1',r2:'r2',r3:'r3',image:'showImg',screen:'screen',eye:'eyeOn'},
+  init:()=>({type:'convex',f:10,objs:[{id:1,x:-30,h:6,c:0}],sel:1,rays:'sel',fan:false,screen:false,sx:15,nextId:2,r1:true,r2:true,r3:true,showImg:true,eyeOn:false,ex:40,ey:3}),
+  controls:st=>[
+    {type:'seg',key:'type',label:'透鏡種類',options:[['convex','凸透鏡'],['concave','凹透鏡']]},
+    {type:'slider',key:'f',label:'焦距 f',min:5,max:20,step:0.5,unit:'cm'},
+    {type:'buttons',label:'物體',items:[
+      {label:'＋ 新增物體',primary:true,disabled:st.objs.length>=6,onClick:s=>{
+        const used=new Set(s.objs.map(o=>o.c)); const c=[0,1,2,3,4,5].find(k=>!used.has(k));
+        const xs=[-3*s.f,-1.5*s.f,-0.6*s.f,-2*s.f,-4*s.f,-1.2*s.f]; const x=clamp(xs[s.objs.length%6],-68,-1.5);
+        const o={id:s.nextId++,x,h:[6,5,4,7,5,3][s.objs.length%6],c}; s.objs.push(o); s.sel=o.id;},rebuild:true},
+      {label:'刪除選取的物體',disabled:st.objs.length<=1,onClick:s=>{s.objs=s.objs.filter(o=>o.id!==s.sel);s.sel=s.objs[0].id;},rebuild:true}]},
+    {type:'buttons',label:'把選取的物體放到',items:st.type==='convex'?[
+      {label:'2F 外',onClick:s=>setSel(s,-2.8*s.f)},{label:'2F 上',onClick:s=>setSel(s,-2*s.f)},{label:'F～2F',onClick:s=>setSel(s,-1.5*s.f)},
+      {label:'F 上',onClick:s=>setSel(s,-s.f)},{label:'F 內',onClick:s=>setSel(s,-0.55*s.f)}]:[
+      {label:'遠處',onClick:s=>setSel(s,-4*s.f)},{label:'2F',onClick:s=>setSel(s,-2*s.f)},{label:'F',onClick:s=>setSel(s,-s.f)},{label:'很近',onClick:s=>setSel(s,-0.5*s.f)}]},
+    {type:'seg',key:'rays',label:'畫出特殊光線',options:[['sel','選取的物體'],['all','全部物體'],['none','不顯示']]},
+    {type:'toggle',key:'screen',label:'放上光屏（觀察實像）',rebuild:true},
+    ...(st.screen?[{type:'slider',key:'sx',label:'光屏位置',min:2,max:70,step:0.5,unit:'cm'},
+      {type:'buttons',items:[{label:'光屏移到選取物體的成像處',onClick:s=>{const o=s.objs.find(o=>o.id===s.sel);const im=imageOf(-o.x,s.type==='convex'?s.f:-s.f);if(!im.inf&&im.real&&im.v<70)s.sx=Math.round(im.v*10)/10;}}]}]:[])],
+  build(st,b){
+    const P=[], H=12, cv=st.type==='convex', f=st.f, fs=cv?f:-f, D=2*H;
+    P.push({t:'axis',x0:b[0],x1:b[1]});
+    P.push({t:'lens',x:0,H,convex:cv,f});
+    for(const s of [-1,1]){P.push({t:'mark',x:s*f,y:0,label:'F'});P.push({t:'mark',x:s*2*f,y:0,label:'2F',dimmed:true});}
+    if(st.screen) P.push({t:'screen',x:st.sx,h:34,main:true,label:'光屏'});
+    const optics=[{kind:'lens',x:0,H,f:fs}]; if(st.screen) optics.push({kind:'absorb',pts:[[st.sx,-17],[st.sx,17]]});
+    const push=r=>{ if(st.screen&&r.t==='ray'&&!r.dash){const c=clipX(r.pts,st.sx); if(!c) return; r.pts=c.pts;} if(st.screen&&r.dash&&r.pts.some(p=>p[0]>st.sx)) return; P.push(r);};
+    const rows=[], svItems=[], H2=[];
+    for(const o of st.objs){
+      const col=OBJ_COLORS[o.c], u=-o.x, img=imageOf(u,fs), Pt=[o.x,o.h];
+      if(!img.inf){img.x=img.v;img.y=img.m*o.h;} else img.dir=nrm([u,-o.h]);
+      const show=st.rays==='all'||(st.rays==='sel'&&o.id===st.sel);
+      if(show){
+        const yF=-o.h*fs/(u-fs), surf=()=>0;
+        if(st.r1) idealRay(Pt,o.h,img,surf,b,{c:col,backTo:cv?null:[-f,0]}).forEach(push);
+        if(st.r2) idealRay(Pt,0,img,surf,b,{c:col}).forEach(push);
+        if(st.r3){idealRay(Pt,yF,img,surf,b,{c:col}).forEach(push);
+          if(cv&&u<f) push({t:'ray',pts:[[-f,0],Pt],c:col,w:1,a:0.5,dash:true});
+          if(!cv) push({t:'ray',pts:[[0,yF],[f,0]],c:col,w:1,a:0.5,dash:true});}
+        if(st.fan) for(const y of lin(-H*0.92,H*0.92,9)) idealRay(Pt,y,img,surf,b,{c:col,w:1,a:0.3}).forEach(r=>{if(!r.dash)push(r);});
+      }
+      P.push({t:'arrowObj',x:o.x,y0:0,h:o.h,c:col,label:st.objs.length>1?'物'+(st.objs.indexOf(o)+1):'物體',selected:o.id===st.sel&&st.objs.length>1});
+      if(st.showImg&&!img.inf&&Math.abs(img.v)<400) P.push({t:'arrowObj',x:img.x,y0:0,h:img.y,c:col,virtual:!img.real,image:true,label:img.real?'實像':'虛像'});
+      if(st.screen){
+        const s=st.sx; let blur, y1;
+        if(img.inf){blur=D;y1=-o.h*s/u;} else if(img.real){blur=D*Math.abs(s-img.v)/img.v;y1=-o.h*s/u;} else {blur=D*(s-img.v)/(-img.v);y1=img.y*(s-img.v)/(-img.v);}
+        svItems.push({y0:0,y1,c:col,blur,alpha:clamp(5/(blur+5),0.06,1)});
+        P.push({t:'blurArrow',x:s-0.4,y0:0,y1,c:col,blur});
+      }
+      rows.push({o,img,u,col});
+      H2.push({x:o.x,y:0,cursor:'ew-resize',sel:o.id,drag:x=>{let v=clamp(Math.round(x*2)/2,-70,-1);
+        for(const k of [1,2]) if(Math.abs(-v-k*f)<0.8) v=-k*f; o.x=v;}});
+      H2.push({x:o.x,y:o.h,cursor:'ns-resize',sel:o.id,drag:(x,y)=>{o.h=clamp(Math.round(y*2)/2,1,11)}});
+    }
+    if(st.screen) H2.push({x:st.sx,y:15,cursor:'ew-resize',drag:x=>{st.sx=clamp(Math.round(x*2)/2,2,70)}});
+    const sel=rows.find(r=>r.o.id===st.sel)||rows[0];
+    let eyeText='';
+    if(st.eyeOn){
+      const E=[st.ex,st.ey], Pt=[sel.o.x,sel.o.h]; let seen=0;
+      for(const dy of [-0.7,0.7]){const Ei=[E[0],E[1]+dy]; let yh;
+        if(sel.img.inf){const d=sel.img.dir; yh=Ei[1]-d[1]/d[0]*Ei[0];}
+        else{const I=[sel.img.x,sel.img.y]; if(Math.abs(Ei[0]-I[0])<1e-6) continue; yh=I[1]+(0-I[0])*(Ei[1]-I[1])/(Ei[0]-I[0]);}
+        if(Math.abs(yh)>H) continue; seen++;
+        push({t:'ray',pts:[Pt,[0,yh],Ei],c:'#ffffff',w:1.3,a:0.85});
+        if(st.showImg&&!sel.img.inf&&!sel.img.real) P.push({t:'ray',pts:[[0,yh],[sel.img.x,sel.img.y]],c:'#ffffff',w:1,a:0.45,dash:true});
+      }
+      P.push({t:'eye',x:E[0],y:E[1],dir:[-1,0]});
+      H2.push({x:E[0],y:E[1],cursor:'move',drag:(x,y)=>{st.ex=clamp(x,2,70);st.ey=clamp(y,-15,15)}});
+      eyeText=!seen?'光線沒有進入眼睛，移動眼睛試試看':sel.img.inf?'光線平行進入眼睛，看不到清楚的像':sel.img.real?(st.ex>sel.img.x?'眼睛看到倒立的實像':'眼睛在成像位置之前，看不清楚'):'眼睛透過透鏡看到'+propsText(sel.img);
+    }
+    const hide=!st.showImg;
+    let info=`<table class="objtab"><thead><tr><th>物體</th><th>物距</th><th>像距</th><th>像的性質</th><th></th></tr></thead><tbody>`+
+      rows.map((r,k)=>`<tr data-act="select" data-id="${r.o.id}" class="${r.o.id===st.sel?'sel':''}"><td><span class="dot" style="background:${r.col}"></span>物${k+1}</td>
+      <td class="n">${f1(r.u)}</td><td class="n">${hide?'？':r.img.inf?'∞':(r.img.real?'':'−')+f1(Math.abs(r.img.v))}</td><td>${hide?'？':propsText(r.img)}</td>
+      <td>${rows.length>1?`<button class="x" data-act="del" data-id="${r.o.id}" aria-label="刪除">×</button>`:''}</td></tr>`).join('')+`</tbody></table>`;
+    const am=sel.img.inf?null:Math.abs(sel.img.m);
+    info+=`<dl class="kv"><dt>選取物體位置</dt><dd class="t">${cv?zoneName(sel.u,f,'lens'):'凹透鏡前'}</dd><dt>放大率</dt><dd>${hide||am===null?'—':f2(am)+' 倍'}</dd>
+      ${hide?'':`<dt>公式檢查 1/物距 + 1/像距</dt><dd>${sel.img.inf?'—':f2(1/sel.u+1/sel.img.v)+' ≈ 1/f = '+f2(1/fs)}</dd>`}</dl>
+      ${eyeText?`<p><span class="pill">${eyeText}</span></p>`:''}
+      <p class="note-sm">單位：cm。像距為負表示虛像在透鏡左側（與物體同側）。按表格列可切換選取。</p>`;
+    if(st.screen){const it=svItems[st.objs.indexOf(sel.o)]; info+=`<p><span class="pill ${it.blur<0.6?'':'warn'}">光屏上${sel.img.real&&!sel.img.inf?(it.blur<0.6?'得到清楚的像':'的像模糊，移動光屏找清楚的位置'):'接收不到像（虛像或不成像）'}</span></p>`;}
+    if(cv&&!hide) info+=`<table class="zones"><tr><th>物體位置</th><th>成像位置</th><th>像的性質</th><th>應用</th></tr>
+      <tr><td>2F 外</td><td>F～2F</td><td>倒立縮小實像</td><td>照相機</td></tr><tr><td>2F 上</td><td>2F</td><td>倒立等大實像</td><td></td></tr>
+      <tr><td>F～2F</td><td>2F 外</td><td>倒立放大實像</td><td>投影機</td></tr><tr><td>F 上</td><td>—</td><td>不成像</td><td></td></tr>
+      <tr><td>F 內</td><td>同側</td><td>正立放大虛像</td><td>放大鏡</td></tr></table>`;
+    return {prims:P,handles:H2,info,optics,sv:st.screen?{kind:'arrows',title:'光屏上看到的像',range:17,items:svItems}:null};
+  },
+  onAction(act,id,st){const n=+id; if(act==='select') st.sel=n; if(act==='del'&&st.objs.length>1){st.objs=st.objs.filter(o=>o.id!==n);if(st.sel===n)st.sel=st.objs[0].id;return true;}},
+  notes:['三條特殊光線：① 平行主軸的光，折射後通過焦點；② 通過透鏡中心的光，方向不變；③ 通過焦點的光，折射後平行主軸。兩條光線的交點就是像點。','凸透鏡：物體由遠處移近透鏡（仍在焦點外）時，像愈來愈大、離透鏡愈來愈遠。','實像可以用光屏接收；虛像是光線延長線（虛線）的交點，只能透過透鏡用眼睛看到。','凹透鏡不論物體在哪裡，都成正立、縮小的虛像。']
+});
+
+/* ---------- 4-4 眼睛與視力矯正 ---------- */
+SCENES.push({id:'eye',ch:'4-4',name:'眼睛與視力矯正',bounds:[-78,32,-19,19],
+  init:()=>({eye:'myopia',dist:'far',glasses:false}),
+  controls:()=>[
+    {type:'seg',key:'eye',label:'眼睛',options:[['normal','正常'],['myopia','近視'],['hyper','遠視']]},
+    {type:'seg',key:'dist',label:'觀看',options:[['far','遠處物體'],['near','近處物體']]},
+    {type:'toggle',key:'glasses',label:'戴上矯正眼鏡'}],
+  build(st,b){
+    const P=[], RET=24, NEAR=60, GX=-12;
+    const range={normal:[16.5,24],myopia:[14.5,20],hyper:[20,28]}[st.eye];
+    let fg=null;
+    if(st.glasses&&st.eye==='myopia'){const fp=1/(1/range[1]-1/RET); fg=-(fp+GX);}
+    if(st.glasses&&st.eye==='hyper'){const np=1/(1/range[0]-1/RET), u=NEAR+GX, vi=np+GX; fg=1/(1/u-1/vi);}
+    let uEff=st.dist==='far'?Infinity:NEAR;
+    if(fg!==null){const ug=st.dist==='far'?Infinity:NEAR+GX; const vg=ug===Infinity?fg:ug*fg/(ug-fg); uEff=-(GX+vg);}
+    const fNeed=uEff===Infinity?RET:1/(1/uEff+1/RET), fe=clamp(fNeed,range[0],range[1]);
+    const v=uEff===Infinity?fe:1/(1/fe-1/uEff);
+    P.push({t:'axis',x0:b[0],x1:b[1]});
+    P.push({t:'eyeball',cx:12,r:12.6,ret:RET});
+    P.push({t:'lens',x:0,H:5,convex:true,f:fe*0.55,post:false});
+    if(fg!==null) P.push({t:'lens',x:GX,H:9,convex:fg>0,f:Math.abs(fg)/5,post:false,label:fg>0?'凸透鏡':'凹透鏡'});
+    const retina=lin(-0.85,0.85,20).map(a=>[12+12.6*Math.cos(a),12.6*Math.sin(a)]);
+    const optics=[{kind:'lens',x:0,H:5,f:fe},{kind:'absorb',pts:retina}]; if(fg!==null) optics.unshift({kind:'lens',x:GX,H:9,f:fg});
+    for(const y of lin(-4,4,5)){
+      let p, m;
+      if(st.dist==='far'){p=[b[0]-1,y];m=0;}else{p=[-NEAR,0];m=y/(fg!==null?(NEAR+GX):NEAR);}
+      const pts=[p]; let x=p[0], yy=p[1];
+      const lenses=fg!==null?[[GX,fg],[0,fe]]:[[0,fe]];
+      for(const [lx,lf] of lenses){yy=yy+m*(lx-x);x=lx;pts.push([x,yy]);m=m-yy/lf;}
+      const yr=yy+m*(RET-x); pts.push([RET,yr]);
+      P.push({t:'ray',pts,c:'#ffe066',w:1.5});
+      if(v>RET&&v<60) P.push({t:'ray',pts:[[RET,yr],[v,yy+m*(v-x)]],c:'#ffe066',w:0.9,a:0.45,dash:true});
+    }
+    if(st.dist==='near') P.push({t:'lamp',x:-NEAR,y:0});
+    if(v<60) P.push({t:'point',x:v,y:0,c:'#ffffff'});
+    P.push({t:'label',x:v<60?v:RET,y:-6,text:'成像點',c:C.text});
+    const err=v-RET, ok=Math.abs(err)<0.3, where=ok?'視網膜上':err<0?'視網膜前':'視網膜後';
+    const blur=Math.abs(err)*8/Math.max(v,1);
+    const info=`<dl class="kv"><dt>成像位置</dt><dd class="t">${where}</dd><dt>看起來</dt><dd class="t">${ok?'清楚':'模糊'}</dd>
+      ${fg!==null?`<dt>矯正鏡片</dt><dd class="t">${fg>0?'凸透鏡':'凹透鏡'}（焦距 ${f1(Math.abs(fg))}）</dd>`:''}</dl>
+      <p class="note-sm">${st.eye==='myopia'?'近視：晶狀體太凸或眼球太長，遠處物體成像在視網膜前。戴凹透鏡讓光先發散一些，就能成像在視網膜上。':st.eye==='hyper'?'遠視：晶狀體太扁或眼球太短，近處物體成像在視網膜後。戴凸透鏡讓光先會聚一些。':'正常眼睛會自動調整晶狀體的厚薄，遠近物體都能成像在視網膜上。'}</p>
+      <p class="note-sm">圖中尺寸為示意，眼球已放大。</p>`;
+    return {prims:P,handles:[],info,optics,sv:{kind:'eye',title:'眼睛看到的',blur}};
+  },
+  notes:['眼睛的晶狀體相當於凸透鏡，在視網膜上形成倒立縮小的實像。','近視看不清遠處：成像在視網膜前，用凹透鏡矯正。','遠視看不清近處：成像在視網膜後，用凸透鏡矯正。']
+});
+
+/* ---------- 4-5 色散 ---------- */
+const PRISM=(cx,cy,up,rot=0,s=22)=>{const h=s*Math.sqrt(3)/2, k=up?1:-1;
+  let pts=[[cx,cy+k*2*h/3],[cx-s/2,cy-k*h/3],[cx+s/2,cy-k*h/3]]; pts=up?[pts[1],pts[2],pts[0]]:[pts[0],pts[2],pts[1]];
+  const c=Math.cos(rot*D2R),sn=Math.sin(rot*D2R); return pts.map(([x,y])=>[cx+(x-cx)*c-(y-cy)*sn,cy+(x-cx)*sn+(y-cy)*c]);};
+const GLASS={crown:{A:1.5046,B:0.0042,name:'冕牌玻璃'},flint:{A:1.62,B:0.0095,name:'火石玻璃'},ex:{A:1.53,B:0.028,name:'誇張示範'}};
+SCENES.push({id:'prism',ch:'4-5',name:'三稜鏡色散',bounds:[-50,50,-28,28],
+  init:()=>({light:'white',glass:'flint',ang:27.5,sx:-42,sy:-14,px:0,py:0,rot:0,second:false,p2x:22,p2y:-12,rot2:0}),
+  controls:()=>[
+    {type:'seg',key:'light',label:'光源',options:[['white','白光'],['red','紅光'],['green','綠光'],['blue','藍光']]},
+    {type:'select',key:'glass',label:'稜鏡材料',options:Object.entries(GLASS).map(([k,v])=>[k,v.name])},
+    {type:'slider',key:'ang',label:'光線方向',min:-60,max:60,step:0.5,unit:'°'},
+    {type:'slider',key:'rot',label:'稜鏡旋轉',min:-60,max:60,step:1,unit:'°'},
+    {type:'toggle',key:'second',label:'加上第二個（倒放的）三稜鏡'}],
+  build(st,b){
+    const P=[], g=GLASS[st.glass], SX=44;
+    const polys=[{pts:PRISM(st.px,st.py,true,st.rot)}]; if(st.second) polys.push({pts:PRISM(st.p2x,st.p2y,false,st.rot2)});
+    for(const p of polys) P.push({t:'prism',pts:p.pts});
+    P.push({t:'screen',x:SX,h:52,main:true});
+    const wls=st.light==='white'?lin(400,700,25):st.light==='red'?[650]:st.light==='green'?[530]:[465];
+    const S=[st.sx,st.sy], d0=dirOf(st.ang*D2R);
+    const items=[]; let firstSeg=null; const devs={};
+    for(const wl of wls){
+      const n=g.A+g.B/((wl/1000)**2), col=wl2rgb(wl);
+      const opt=[...polys.map(p=>({kind:'region',pts:p.pts,n})),{kind:'absorb',pts:[[SX,-26],[SX,26]]}];
+      const pts=traceGeneric(S,d0,opt,b);
+      const last=pts[pts.length-1]; if(Math.abs(last[0]-SX)<1e-6) items.push({y:last[1],c:col});
+      if(!firstSeg) firstSeg=[pts[0],pts[1]];
+      P.push({t:'ray',pts:st.light==='white'?pts.slice(1):pts,c:col,w:st.light==='white'?1.4:2,a:st.light==='white'?0.55:1,arrow:false});
+      const a=pts[pts.length-2],z=pts[pts.length-1]; devs[wl]=Math.atan2(z[1]-a[1],z[0]-a[0])*R2D;
+    }
+    if(st.light==='white') P.unshift({t:'ray',pts:firstSeg,c:C.white,w:2.4});
+    P.push({t:'lamp',x:S[0],y:S[1],c:st.light==='white'?C.white:wl2rgb(wls[0])});
+    const n589=g.A+g.B/0.589**2, optics=[...polys.map(p=>({kind:'region',pts:p.pts,n:n589})),{kind:'absorb',pts:[[SX,-26],[SX,26]]}];
+    const nr=g.A+g.B/0.65**2, nv=g.A+g.B/0.40**2;
+    const objects=[
+      {id:'src',x:S[0],y:S[1],ang:st.ang*D2R,label:'光源',move:(x,y)=>{st.sx=clamp(x,-49,40);st.sy=clamp(y,-27,27)},rotate:a=>{let dg=a*R2D;st.ang=Math.round(clamp(dg,-90,90)*2)/2}},
+      {id:'p1',x:st.px,y:st.py,ang:(st.rot+90)*D2R,label:'三稜鏡',move:(x,y)=>{st.px=clamp(x,-35,35);st.py=clamp(y,-20,20)},rotate:a=>{let dg=Math.round(a*R2D-90);while(dg>180)dg-=360;while(dg<-180)dg+=360;st.rot=dg}}];
+    if(st.second) objects.push({id:'p2',x:st.p2x,y:st.p2y,ang:(st.rot2-90)*D2R,label:'第二個稜鏡',move:(x,y)=>{st.p2x=clamp(x,-35,40);st.p2y=clamp(y,-22,22)},rotate:a=>{let dg=Math.round(a*R2D+90);while(dg>180)dg-=360;while(dg<-180)dg+=360;st.rot2=dg}});
+    const spread=st.light==='white'&&devs[400]!=null?Math.abs(devs[400]-devs[700]):0;
+    const info=`<dl class="kv"><dt>紅光折射率</dt><dd>${nr.toFixed(3)}</dd><dt>紫光折射率</dt><dd>${nv.toFixed(3)}</dd>
+      ${st.light==='white'?`<dt>紅、紫光分開角度</dt><dd>${spread.toFixed(1)}°</dd>`:''}</dl>
+      <p><span class="pill">${st.light==='white'?(st.second?'第二個稜鏡可讓色光重新合成白光':'白光分散成紅橙黃綠藍靛紫'):'單色光經過稜鏡只會偏折，不會再分散'}</span></p>
+      <p class="note-sm">點一下光源或稜鏡，可以用箭頭拖移、用藍色圓環旋轉。${st.second?'調整第二個稜鏡的位置與角度，讓色光重新會合。':'紫光偏折最多，紅光偏折最少。'}</p>`;
+    return {prims:P,handles:[],objects,optics,info,sv:{kind:'spectrum',title:'屏幕上看到的',range:26,items}};
+  },
+  notes:['白光是由各種顏色的光混合而成。','白光經三稜鏡折射後，不同色光偏折程度不同而分開，這叫做色散（紫光偏折最大，紅光最小）。','牛頓用第二個倒放的稜鏡，把色光重新合成白光；單色光經過稜鏡不會再分散。','雨後的彩虹就是陽光被小水滴色散形成的。']
+});
+
+/* ---------- 4-5 色光與物體的顏色 ---------- */
+const LIGHTS={white:['白光',[1,1,1]],red:['紅光',[1,0,0]],green:['綠光',[0,1,0]],blue:['藍光',[0,0,1]],yellow:['黃光（紅＋綠）',[1,1,0]],magenta:['洋紅光（紅＋藍）',[1,0,1]],cyan:['青光（綠＋藍）',[0,1,1]]};
+const FILTERS={none:['不加玻璃紙',[1,1,1]],red:['紅色玻璃紙',[1,0.04,0.04]],green:['綠色玻璃紙',[0.04,1,0.04]],blue:['藍色玻璃紙',[0.04,0.04,1]]};
+const PAPERS=[['紅紙',[0.95,0.06,0.06]],['綠紙',[0.06,0.85,0.12]],['藍紙',[0.08,0.12,0.95]],['黃紙',[0.95,0.9,0.06]],['白紙',[0.95,0.95,0.95]],['黑紙',[0.04,0.04,0.04]]];
+function colorName(c){const t=c.map(v=>v>0.28?1:0).join('');return {'000':'黑色','100':'紅色','010':'綠色','001':'藍色','110':'黃色','101':'洋紅色','011':'青色','111':'白色'}[t];}
+const rgbCss=(c,k=1)=>`rgb(${c.map(v=>Math.round(255*clamp(v*k,0,1))).join(',')})`;
+function effLight(st){const L=LIGHTS[st.light][1], a=FILTERS[st.f1][1], b2=FILTERS[st.f2][1]; return L.map((v,i)=>v*a[i]*b2[i]);}
+SCENES.push({id:'color',ch:'4-5',name:'色光與物體的顏色',noOptics:true,bounds:st=>st.mode==='mix'?[-30,30,-22,22]:[-38,38,-18,26],
+  init:()=>({mode:'mix',r:1,g:1,b:1,onr:true,ong:true,onb:true,pos:{r:[-6,4],g:[6,4],b:[0,-6]},light:'white',f1:'none',f2:'none'}),
+  controls:st=>[
+    {type:'seg',key:'mode',label:'實驗',options:[['mix','色光三原色'],['object','物體的顏色']]},
+    ...(st.mode==='mix'?[
+      {type:'toggle',key:'onr',label:'紅光手電筒'},{type:'slider',key:'r',label:'紅光亮度',min:0,max:1,step:0.05,fmt:v=>Math.round(v*100)+'%'},
+      {type:'toggle',key:'ong',label:'綠光手電筒'},{type:'slider',key:'g',label:'綠光亮度',min:0,max:1,step:0.05,fmt:v=>Math.round(v*100)+'%'},
+      {type:'toggle',key:'onb',label:'藍光手電筒'},{type:'slider',key:'b',label:'藍光亮度',min:0,max:1,step:0.05,fmt:v=>Math.round(v*100)+'%'}]:[
+      {type:'select',key:'light',label:'光源顏色',options:Object.entries(LIGHTS).map(([k,v])=>[k,v[0]])},
+      {type:'select',key:'f1',label:'光源前的玻璃紙（第 1 張）',options:Object.entries(FILTERS).map(([k,v])=>[k,v[0]])},
+      {type:'select',key:'f2',label:'光源前的玻璃紙（第 2 張）',options:Object.entries(FILTERS).map(([k,v])=>[k,v[0]])}])],
+  build(st,b){
+    if(st.mode==='mix'){
+      const H=['r','g','b'].map(k=>({x:st.pos[k][0],y:st.pos[k][1],cursor:'move',drag:(x,y)=>{st.pos[k]=[clamp(x,-20,20),clamp(y,-12,12)]}}));
+      const c=[st.onr?st.r:0,st.ong?st.g:0,st.onb?st.b:0];
+      return {prims:[],handles:H,custom:'mix',info:`<dl class="kv"><dt>三光重疊處</dt><dd class="t"><span class="dot" style="background:${rgbCss(c)}"></span>${colorName(c)}</dd></dl>
+        <table class="zones"><tr><th>混合</th><th>結果</th></tr><tr><td>紅 ＋ 綠</td><td>黃</td></tr><tr><td>綠 ＋ 藍</td><td>青</td></tr><tr><td>紅 ＋ 藍</td><td>洋紅</td></tr><tr><td>紅 ＋ 綠 ＋ 藍</td><td>白</td></tr></table>
+        <p class="note-sm">拖曳光圈可移動位置。試著調整亮度，看重疊處的顏色怎麼變。</p>`};
+    }
+    const L=effLight(st);
+    const info=`<dl class="kv"><dt>照到紙上的光</dt><dd class="t"><span class="dot" style="background:${rgbCss(L)}"></span>${colorName(L)==='黑色'?'沒有光（全被濾掉）':colorName(L)+'光'}</dd></dl>
+      <table class="zones"><tr><th>紙</th><th>白光下</th><th>現在看起來</th></tr>${PAPERS.map(([n,r])=>{const s=r.map((v,i)=>v*L[i]);return `<tr><td>${n}</td><td>${colorName(r)}</td><td><span class="dot" style="background:${rgbCss(s)}"></span>${colorName(s)}</td></tr>`}).join('')}</table>
+      <p class="note-sm">不透明物體只反射和自己相同顏色的色光，其他色光被吸收。玻璃紙只讓和自己相同顏色的色光通過。</p>`;
+    return {prims:[],handles:[],custom:'object',info};
+  },
+  notes:['色光三原色是紅、綠、藍，混合可以得到各種顏色；三種等量混合成白光。','不透明物體的顏色，由它反射的色光決定：紅紙只反射紅光，在綠光下看起來是黑色。','透明物體的顏色，由透過的色光決定：紅色玻璃紙只讓紅光通過。','螢幕和投影機就是用紅、綠、藍三種色光組合出各種顏色。']
+});
+
+/* ================= app state ================= */
+const app={idx:0,states:{},hist:{},mode:'2d',view:{zoom:1,px:0,py:0},out:null,handles:[],hover:-1,sync:[],tool:'select',selObj:null,color:DRAW_COLORS[1],snaps:[],srcId:1,drawId:1,capturing:false};
+const cur=()=>SCENES[app.idx];
+const ser=st=>JSON.stringify(st,(k,v)=>k[0]==='_'?undefined:v);
+const S=()=>{const id=cur().id;let st=app.states[id];if(!st){st=app.states[id]=cur().init();}if(!st.sources)st.sources=[];if(!st.draw)st.draw=[];
+  if(!app.hist[id]) app.hist[id]={stack:[ser(st)],idx:0};return st;};
+/* ---- undo / redo: one history of whole-scene states per scene ---- */
+function pushHist(){const st=S(),h=app.hist[cur().id],s=ser(st);if(h.stack[h.idx]===s)return;h.stack.splice(h.idx+1);h.stack.push(s);if(h.stack.length>150)h.stack.shift();h.idx=h.stack.length-1;updateToolbar();}
+function commit(){refresh();pushHist();}
+function fixIds(st){if(!st.sources)st.sources=[];if(!st.draw)st.draw=[];
+  for(const s of st.sources)app.srcId=Math.max(app.srcId,(+s.id||0)+1);
+  for(const d of st.draw){if(d.id==null)d.id=app.drawId++;if(d.w==null)d.w=2.4;app.drawId=Math.max(app.drawId,(+d.id||0)+1);}}
+function applyHist(dir){const h=app.hist[cur().id];if(!h)return;const ni=h.idx+dir;if(ni<0||ni>=h.stack.length)return;
+  h.idx=ni;const st=JSON.parse(h.stack[ni]);app.states[cur().id]=st;fixIds(st);renderPanel();refresh();updateToolbar();}
+const bounds=()=>{const b=cur().bounds;return typeof b==='function'?b(S()):b;};
+const toolsOf=()=>{const t=cur().tools;return typeof t==='function'?t(S()):(t||{});};
+const els={rail:document.getElementById('rail'),controls:document.getElementById('controls'),info:document.getElementById('info'),notes:document.getElementById('notes'),
+  cv2:document.getElementById('cv2'),cv3:document.getElementById('cv3'),stage:document.getElementById('stage'),hint:document.getElementById('hint'),err3d:document.getElementById('err3d'),
+  tools:document.getElementById('tools'),snaps:document.getElementById('snaps'),modal:document.getElementById('jsonModal'),flash:document.getElementById('flash'),importFile:document.getElementById('importFile')};
+const ctx=els.cv2.getContext('2d');
+
+/* ================= rail ================= */
+function renderRail(){
+  els.rail.innerHTML='';
+  for(const [ch,title] of CHAPTERS){
+    const g=document.createElement('div');g.className='chap';
+    g.innerHTML=`<h2><b>${ch}</b><span>${title}</span></h2>`;
+    SCENES.forEach((sc,i)=>{if(sc.ch!==ch)return; const btn=document.createElement('button');btn.className='scene-btn';btn.textContent=sc.name;
+      btn.setAttribute('aria-current',i===app.idx?'true':'false');btn.onclick=()=>selectScene(i);g.appendChild(btn);});
+    els.rail.appendChild(g);
+  }
+}
+function selectScene(i,fromHash){
+  app.idx=i; app.view={zoom:1,px:0,py:0}; app.selObj=null; app.hover=-1;
+  if(!fromHash){try{history.replaceState(null,'','#'+cur().id);}catch(e){location.hash=cur().id;}}
+  if(['point','laser','beam'].includes(app.tool)&&cur().noOptics) app.tool='select';
+  renderRail(); renderPanel(); reset3DCamera(); refresh(); setHint();
+}
+
+/* ================= panel ================= */
+function el(tag,cls,html){const e=document.createElement(tag);if(cls)e.className=cls;if(html!=null)e.innerHTML=html;return e;}
+const SRC_NAMES={point:'自訂發光點',laser:'自訂光線（雷射）',beam:'平行光源'};
+function selSource(){const s=app.selObj;if(!s||!String(s).startsWith('u'))return null;return S().sources.find(x=>'u'+x.id===s)||null;}
+function renderPanel(){
+  const sc=cur(), st=S();
+  document.getElementById('sceneCh').textContent=sc.ch; document.getElementById('sceneName').textContent=sc.name;
+  els.controls.innerHTML=''; app.sync=[];
+  const src=selSource();
+  if(src){
+    const box=el('div','selbox');box.appendChild(el('div','ttl',SRC_NAMES[src.type]+'（已選取）'));
+    const cs=[];
+    if(src.type==='point') cs.push({type:'slider',key:'n',label:'光線數量',min:4,max:48,step:2});
+    if(src.type==='beam'){cs.push({type:'slider',key:'n',label:'光線數量',min:2,max:15,step:1});cs.push({type:'slider',key:'w',label:'光束寬度',min:2,max:30,step:0.5,unit:'cm'});}
+    if(src.type!=='point') cs.push({type:'slider',key:'angDeg',label:'方向',min:-180,max:180,step:1,unit:'°',get:()=>Math.round(src.ang*R2D),set:v=>{src.ang=v*D2R}});
+    cs.push({type:'swatches',key:'c',label:'顏色',options:SRC_COLORS});
+    cs.push({type:'buttons',items:[{label:'刪除這個光源',onClick:()=>deleteSel()}]});
+    for(const c of cs) box.appendChild(makeControl(c,src));
+    els.controls.appendChild(box);
+  }
+  const dr=selDraw();
+  if(dr){
+    const box=el('div','selbox');box.appendChild(el('div','ttl',DRAW_NAMES[dr.t]+'（已選取，可直接拖移）'));
+    const cs=[{type:'swatches',key:'c',label:'顏色',options:DRAW_COLORS.concat(['#ff9f43','#b28cff'])},
+      {type:'slider',key:'w',label:'線條粗細',min:1,max:8,step:0.5,fmt:v=>(+v).toFixed(1)}];
+    if(dr.t!=='ruler') cs.push({type:'toggle',key:'dash',label:'虛線'});
+    if(dr.t==='line') cs.push({type:'toggle',key:'arrow',label:'顯示箭頭'});
+    cs.push({type:'buttons',items:[{label:'複製一份',onClick:()=>dupDraw(dr)},{label:'刪除',onClick:()=>deleteSel()}]});
+    for(const c of cs) box.appendChild(makeControl(c,dr));
+    if(dr.t==='ruler'){const n=el('div','note-sm');box.appendChild(n);const upd=()=>{n.textContent='長度 '+f1(len(sub(dr.b,dr.a)))+' cm　·　拖曳兩端的方塊可調整';};upd();app.sync.push(upd);}
+    else if(dr.t==='line') box.appendChild(el('div','note-sm','拖曳兩端的方塊可調整起點與終點'));
+    els.controls.appendChild(box);
+  }
+  for(const c of sc.controls(st)) els.controls.appendChild(makeControl(c,st));
+  els.notes.innerHTML='<ul>'+sc.notes.map(n=>`<li>${n}</li>`).join('')+'</ul>';
+}
+function makeControl(c,st){
+  const id='c-'+cur().id+'-'+(c.key||c.label||'b').toString().replace(/\W/g,'');
+  const w=el('div','ctl');
+  const get=()=>c.get?c.get():st[c.key], set=v=>{if(c.set)c.set(v);else st[c.key]=v;};
+  if(c.type==='slider'){
+    const fmt=v=>c.fmt?c.fmt(v):(Number.isInteger(c.step)?v:(+v).toFixed(1))+(c.unit?(c.unit==='°'?'°':' '+c.unit):'');
+    const lab=el('label');lab.htmlFor=id;lab.innerHTML=`<span>${c.label}</span>`;const out=el('output');lab.appendChild(out);
+    const inp=el('input');inp.type='range';inp.id=id;inp.min=c.min;inp.max=c.max;inp.step=c.step;inp.value=get();
+    inp.oninput=()=>{set(+inp.value);c.onInput&&c.onInput(st);out.textContent=fmt(get());refresh();};
+    inp.onchange=()=>pushHist();
+    out.textContent=fmt(get()); w.append(lab,inp);
+    app.sync.push(()=>{if(document.activeElement!==inp)inp.value=get();out.textContent=fmt(get());});
+  }else if(c.type==='seg'){
+    w.appendChild(el('div','lab',`<span>${c.label}</span>`));
+    const g=el('div','seg');g.setAttribute('role','group');g.setAttribute('aria-label',c.label);
+    for(const [v,l] of c.options){const bt=el('button',null,l);bt.type='button';bt.setAttribute('aria-pressed',get()===v?'true':'false');
+      bt.onclick=()=>{set(v);c.onInput&&c.onInput(st);renderPanel();commit();};g.appendChild(bt);}
+    w.appendChild(g);
+    app.sync.push(()=>{[...g.children].forEach((bt,k)=>bt.setAttribute('aria-pressed',get()===c.options[k][0]?'true':'false'));});
+  }else if(c.type==='toggle'){
+    const lab=el('label','tog');const inp=el('input');inp.type='checkbox';inp.id=id;inp.checked=!!get();
+    inp.onchange=()=>{set(inp.checked);if(c.rebuild)renderPanel();commit();};lab.append(inp,document.createTextNode(c.label));w.appendChild(lab);
+    app.sync.push(()=>{inp.checked=!!get();});
+  }else if(c.type==='select'){
+    const lab=el('label');lab.htmlFor=id;lab.innerHTML=`<span>${c.label}</span>`;
+    const s=el('select');s.id=id;for(const [v,l] of c.options){const o=el('option',null,l);o.value=v;s.appendChild(o);}s.value=get();
+    s.onchange=()=>{set(s.value);commit();};w.append(lab,s);
+  }else if(c.type==='swatches'){
+    w.appendChild(el('div','lab',`<span>${c.label}</span>`));const r=el('div','swatches');
+    for(const col of c.options){const bt=el('button');bt.type='button';bt.style.background=col;bt.setAttribute('aria-label','顏色 '+col);bt.setAttribute('aria-pressed',get()===col?'true':'false');
+      bt.onclick=()=>{set(col);[...r.children].forEach(x=>x.setAttribute('aria-pressed',x===bt?'true':'false'));commit();};r.appendChild(bt);}
+    w.appendChild(r);
+  }else if(c.type==='buttons'){
+    if(c.label) w.appendChild(el('div','lab',`<span>${c.label}</span>`));
+    const r=el('div','btnrow');
+    for(const it of c.items){const bt=el('button','btn'+(it.primary?' primary':''),it.label);bt.type='button';bt.disabled=!!it.disabled;
+      bt.onclick=()=>{it.onClick(st);if(it.rebuild)renderPanel();commit();};r.appendChild(bt);}
+    w.appendChild(r);
+  }
+  return w;
+}
+els.info.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t)return;e.stopPropagation();
+  const sc=cur();if(!sc.onAction)return;const rb=sc.onAction(t.dataset.act,t.dataset.id,S());if(rb)renderPanel();commit();});
+
+/* ================= tool palette ================= */
+const LENS_I='<ellipse cx="10" cy="10" rx="1.8" ry="8"/>';
+const ICON={
+  select:'<path d="M5 3l10 7-4.6 1 2.6 5-2 1-2.6-5L5 15z" fill="currentColor" stroke="none"/>',
+  point:'<circle cx="10" cy="10" r="2.4" fill="currentColor"/><path d="M10 2v3M10 15v3M2 10h3M15 10h3M4.3 4.3l2.1 2.1M13.6 13.6l2.1 2.1M4.3 15.7l2.1-2.1M13.6 6.4l2.1-2.1"/>',
+  laser:'<path d="M2.5 15.5l5-5 2 2-5 5z"/><path d="M10.5 9.5l7-7"/><path d="M14 2.5h3.5V6"/>',
+  beam:'<path d="M3 4v12"/><path d="M5 6h11M5 10h11M5 14h11"/><path d="M14 4.5l2 1.5-2 1.5M14 8.5l2 1.5-2 1.5M14 12.5l2 1.5-2 1.5"/>',
+  delete:'<path d="M4 6h12M8 6V4h4v2M6 6l1 11h6l1-11"/><path d="M9 9v5M11 9v5"/>',
+  top:'<path d="M5 17V6"/><path d="M3 8l2-3 2 3"/><path d="M6 5.5L18 11"/><path d="M15 8.6l3 2.4-3.6.6"/>',
+  bottom:'<path d="M5 16V5"/><path d="M3 7l2-3 2 3"/><path d="M6 16L18 10"/><path d="M14.4 9.6l3.6.4-2.6 2.6"/>',
+  r1:LENS_I+'<path d="M1 10h18" stroke-dasharray="1.5 2" opacity=".55"/><path d="M1 4.5h9L18 15"/>',
+  r2:LENS_I+'<path d="M1 10h18" stroke-dasharray="1.5 2" opacity=".55"/><path d="M1 4L19 16"/>',
+  r3:LENS_I+'<path d="M1 10h18" stroke-dasharray="1.5 2" opacity=".55"/><circle cx="5" cy="10" r="1.3" fill="currentColor"/><path d="M1 14.5L10 5.2h9"/>',
+  image:'<path d="M5 16V5M3 7.5L5 5l2 2.5"/><path d="M15 4v11M13 12.5l2 2.5 2-2.5" stroke-dasharray="2 1.6"/>',
+  screen:'<rect x="12.5" y="2" width="4" height="16" rx="1"/><path d="M2 10h8M7.5 7.5L10 10l-2.5 2.5"/>',
+  eye:'<path d="M1.5 10S5 4.5 10 4.5 18.5 10 18.5 10 15 15.5 10 15.5 1.5 10 1.5 10z"/><circle cx="10" cy="10" r="2.6"/>',
+  pen:'<path d="M3 17l1-4L13.5 3.5l3 3L7 16z"/><path d="M11.5 5.5l3 3"/>',
+  line:'<path d="M3 16L16 5"/><path d="M10.5 4.5H16.5V10.5"/>',
+  ruler:'<rect x="2" y="7" width="16" height="6" rx="1"/><path d="M5 7v3M8 7v2M11 7v3M14 7v2"/>',
+  undo:'<path d="M7 4L3 8l4 4"/><path d="M3 8h9a4.5 4.5 0 010 9H8"/>',
+  clear:'<path d="M8 17h9"/><path d="M3.5 12.5l7-7a1.5 1.5 0 012 0l3 3a1.5 1.5 0 010 2L10 16H6.5z"/><path d="M7 9l5 5"/>',
+  snap:'<path d="M3 6.5h3l1.5-2h5L14 6.5h3v10H3z"/><circle cx="10" cy="11.5" r="3"/>',
+  redo:'<path d="M13 4l4 4-4 4"/><path d="M17 8H8a4.5 4.5 0 000 9h4"/>',
+  import:'<path d="M10 3v10M6 9l4 4 4-4"/><path d="M3 14v3h14v-3"/>',
+  export:'<path d="M10 13V3M6 7l4-4 4 4"/><path d="M3 14v3h14v-3"/>',
+  restore:'<path d="M4.5 7.5A6 6 0 1 1 4 11"/><path d="M4.5 3v4.5H9"/>'
+};
+const SVG=k=>`<svg viewBox="0 0 20 20" aria-hidden="true">${ICON[k]}</svg>`;
+const DRAW_NAMES={pen:'手繪線條',line:'手繪光線',ruler:'量尺'};
+const TOOLBAR=[
+  [['select','mode','選取／移動　Esc']],
+  [['point','mode','自訂發光點：點畫面放置'],['laser','mode','自訂光線（雷射）：點畫面放置'],['beam','mode','平行光源：點畫面放置'],['delete','action','刪除選取的光源或繪圖　Delete']],
+  [['top','toggle','頂端光線'],['bottom','toggle','底部光線'],['r1','toggle','平行主軸光線'],['r2','toggle','穿過鏡心光線'],['r3','toggle','通過焦點光線'],['image','toggle','成像'],['screen','toggle','屏幕'],['eye','toggle','觀察者眼睛']],
+  [['pen','mode','畫筆'],['line','mode','手繪光線（拖曳畫出箭頭）'],['ruler','mode','量尺（拖曳量距離）'],['color','action','畫筆顏色（點一下換色）'],['clear','action','清除所有繪圖']],
+  [['undo','action','復原　Ctrl+Z'],['redo','action','重做　Ctrl+Shift+Z'],['snap','action','儲存情境快照']]
+];
+const tbtns={};
+function buildToolbar(){
+  els.tools.innerHTML='';
+  for(const grp of TOOLBAR){const g=el('div','grp');
+    for(const [id,kind,tip] of grp){const bt=el('button','tbtn');bt.type='button';bt.dataset.tip=tip;
+      bt.innerHTML=(id==='color'?'<span class="sw"></span>':`<svg viewBox="0 0 20 20" aria-hidden="true">${ICON[id]}</svg>`)+`<span class="tip">${tip}</span>`;
+      bt.setAttribute('aria-label',tip);
+      bt.onclick=()=>toolClick(id,kind);g.appendChild(bt);tbtns[id]={bt,kind,tip};}
+    els.tools.appendChild(g);}
+}
+function updateToolbar(){
+  const sc=cur(),st=S(),tm=toolsOf(),hasOpt=!sc.noOptics&&app.out&&app.out.optics;
+  for(const [id,{bt,kind,tip}] of Object.entries(tbtns)){
+    let en=true,on=null;
+    if(kind==='mode'){if(['point','laser','beam'].includes(id))en=!!hasOpt;on=app.tool===id;}
+    else if(kind==='toggle'){en=!!tm[id];on=en&&!!st[tm[id]];}
+    else if(id==='delete') en=!!(selSource()||selDraw());
+    else if(id==='clear') en=st.draw.length>0;
+    else if(id==='undo'){const h=app.hist[sc.id];en=!!h&&h.idx>0;}
+    else if(id==='redo'){const h=app.hist[sc.id];en=!!h&&h.idx<h.stack.length-1;}
+    bt.disabled=!en; if(on!==null) bt.setAttribute('aria-pressed',on?'true':'false'); else bt.removeAttribute('aria-pressed');
+    const t=en?tip:tip+'（此實驗不適用）'; bt.querySelector('.tip').textContent=t; bt.setAttribute('aria-label',t);
+    if(id==='color') bt.querySelector('.sw').style.background=app.color;
+  }
+}
+function toolClick(id,kind){
+  const st=S();
+  if(kind==='mode'){setTool(app.tool===id&&id!=='select'?'select':id);return;}
+  if(kind==='toggle'){const k=toolsOf()[id];if(!k)return;st[k]=!st[k];renderPanel();commit();return;}
+  if(id==='delete') deleteSel();
+  else if(id==='undo') applyHist(-1);
+  else if(id==='redo') applyHist(1);
+  else if(id==='clear'){st.draw=[];if(String(app.selObj||'').startsWith('d')){app.selObj=null;renderPanel();}commit();}
+  else if(id==='color'){app.color=DRAW_COLORS[(DRAW_COLORS.indexOf(app.color)+1)%DRAW_COLORS.length];const d=selDraw();if(d){d.c=app.color;renderPanel();commit();}else updateToolbar();}
+  else if(id==='snap') saveSnapshot();
+}
+function setTool(t){app.tool=t;updateToolbar();setHint();const cvs=[els.cv2,els.cv3];cvs.forEach(c=>c.style.cursor=t==='select'?'default':'crosshair');}
+function setHint(){
+  const m={point:'點一下畫面放置發光點（放好後可拖移）',laser:'點一下畫面放置雷射光（放好後可拖移、旋轉）',beam:'點一下畫面放置平行光源（放好後可拖移、旋轉）',
+    pen:'在畫面上拖曳繪圖　·　Esc 結束',line:'拖曳畫出一條手繪光線　·　Esc 結束',ruler:'拖曳量測兩點距離（單位 cm）　·　Esc 結束'};
+  els.hint.textContent=m[app.tool]||(app.mode==='2d'?'拖曳虛線圓圈可移動物體　·　點一下光源、稜鏡或繪圖可選取、拖移、旋轉與編輯　·　滾輪或雙指縮放　·　拖曳空白處平移'
+    :'3D：拖曳圓點或箭頭可在實驗平面上移動物體　·　拖曳空白處旋轉　·　滾輪縮放　·　右鍵或 Shift＋拖曳平移');
+}
+function deleteSel(){const st=S(),s=selSource(),d=selDraw();if(s)st.sources=st.sources.filter(x=>x!==s);else if(d)st.draw=st.draw.filter(x=>x!==d);else return;app.selObj=null;renderPanel();commit();}
+function selDraw(){const s=app.selObj;if(!s||!String(s).startsWith('d'))return null;return S().draw.find(x=>'d'+x.id===s)||null;}
+function dupDraw(d){const c=JSON.parse(JSON.stringify(d));c.id=app.drawId++;const o=[2,-2];if(c.pts)c.pts=c.pts.map(p=>add(p,o));else{c.a=add(c.a,o);c.b=add(c.b,o);}
+  S().draw.push(c);app.selObj='d'+c.id;renderPanel();commit();}
+function newDraw(t,w){const it={id:app.drawId++,t,c:app.color,w:t==='ruler'?1.6:2.4,dash:false};if(t==='pen')it.pts=[w];else{it.a=w;it.b=w;if(t==='line')it.arrow=true;}return it;}
+function placeSource(type,w){const st=S();const s={id:app.srcId++,type,x:w[0],y:w[1],ang:0,n:type==='point'?16:7,w:10,c:type==='laser'?SRC_COLORS[1]:type==='beam'?SRC_COLORS[5]:SRC_COLORS[0]};
+  st.sources.push(s);app.selObj='u'+s.id;renderPanel();}
+function addExtras(out){
+  const sc=cur(),st=S(),b=bounds(); out.objects=out.objects||[];
+  if(sc.noOptics||!out.optics) return;
+  for(const s of st.sources){
+    const d=dirOf(s.ang), starts=[];
+    if(s.type==='point'){for(let i=0;i<s.n;i++){const a=s.ang+i*2*Math.PI/s.n;starts.push([[s.x,s.y],dirOf(a)]);}out.prims.push({t:'lamp',x:s.x,y:s.y,c:s.c});}
+    else if(s.type==='laser'){starts.push([[s.x,s.y],d]);out.prims.push({t:'laser',x:s.x,y:s.y,dir:d,c:s.c});}
+    else{const pp=[-d[1],d[0]];for(const o of lin(-s.w/2,s.w/2,s.n))starts.push([add([s.x,s.y],mul(pp,o)),d]);out.prims.push({t:'beamSrc',x:s.x,y:s.y,ang:s.ang,w:s.w,c:s.c});}
+    for(const [p,dd] of starts) out.prims.push({t:'ray',pts:traceGeneric(p,dd,out.optics,b),c:s.c,w:s.type==='laser'?2:1.4,a:s.type==='point'?0.75:1});
+    out.objects.push({id:'u'+s.id,x:s.x,y:s.y,ang:s.ang,label:SRC_NAMES[s.type],move:(x,y)=>{s.x=clamp(x,b[0]-5,b[1]+5);s.y=clamp(y,b[2]-5,b[3]+5);},rotate:s.type==='point'?null:(a=>{s.ang=a;})});
+  }
+}
+
+/* ================= handles & gizmo ================= */
+function gizmoScale(){return app.mode==='2d'?1/makeT().s:(T3.orb?T3.orb.dist*0.0011:0.1);}
+function selObjData(){return (app.out&&app.out.objects||[]).find(o=>o.id===app.selObj)||null;}
+function buildHandles(){
+  const out=app.out,k=gizmoScale(),H=[...out.handles];
+  for(const o of out.objects){
+    H.push({x:o.x,y:o.y,obj:o.id,rel:!!o.move,cursor:o.move?'move':'pointer',o0:()=>({x:o.x,y:o.y}),drag:o.move?((dx,dy,s0)=>o.move(s0.x+dx,s0.y+dy)):null});
+    if(app.selObj!==o.id) continue;
+    const g=k*58,r=k*44;
+    if(o.move){H.push({x:o.x+g,y:o.y,gz:'x',rel:true,cursor:'ew-resize',o0:()=>({x:o.x,y:o.y}),drag:(dx,dy,s0)=>o.move(s0.x+dx,s0.y)});
+      H.push({x:o.x,y:o.y+g,gz:'y',rel:true,cursor:'ns-resize',o0:()=>({x:o.x,y:o.y}),drag:(dx,dy,s0)=>o.move(s0.x,s0.y+dy)});}
+    if(o.rotate){const a=o.ang||0;H.push({x:o.x+r*Math.cos(a),y:o.y+r*Math.sin(a),gz:'r',cursor:'grab',o0:()=>({x:o.x,y:o.y}),
+      drag:(wx,wy,s0,ev)=>{let ang=Math.atan2(wy-s0.y,wx-s0.x);const stp=(ev&&ev.shiftKey?15:1)*D2R;ang=Math.round(ang/stp)*stp;o.rotate(ang);}});}
+  }
+  const d=selDraw();
+  if(d&&d.t!=='pen') for(const key of ['a','b']) H.push({x:d[key][0],y:d[key][1],dh:true,cursor:'crosshair',drag:(wx,wy)=>{d[key]=[wx,wy];}});
+  app.handles=H;
+}
+
+/* ================= 2D view ================= */
+let W=0,Hh=0,DPR=1;
+function makeT(){const b=bounds(),pad=26,s0=Math.min((W-2*pad)/(b[1]-b[0]),(Hh-2*pad)/(b[3]-b[2]));
+  const s=s0*app.view.zoom,cx=(b[0]+b[1])/2+app.view.px,cy=(b[2]+b[3])/2+app.view.py;
+  return {s,X:x=>W/2+(x-cx)*s,Y:y=>Hh/2-(y-cy)*s,inv:(px,py)=>[(px-W/2)/s+cx,-(py-Hh/2)/s+cy]};}
+function resize(){const r=els.stage.getBoundingClientRect();DPR=Math.min(window.devicePixelRatio||1,2);W=r.width;Hh=r.height;
+  els.cv2.width=Math.round(W*DPR);els.cv2.height=Math.round(Hh*DPR);if(T3.ok)T3.r.setSize(W,Hh,false);}
+const ORDER={fill:0,medium:1,cup:1,prism:2,axis:2,line:3,eyeball:3,arc:4,lens:5,mirror:5,plate:5,block:5,screen:5,ray:6,blurArrow:7,stick:7,coin:8,arrowObj:8,laser:9,lamp:9,lampBar:9,beamSrc:9,eye:9,point:10,mark:10,label:11};
+function draw2D(){
+  const out=app.out, T=makeT();
+  ctx.setTransform(DPR,0,0,DPR,0,0); ctx.fillStyle=C.bg; ctx.fillRect(0,0,W,Hh);
+  drawGrid(T);
+  if(out.custom==='mix') drawMix(T); else if(out.custom==='object') drawObjects(T);
+  const prims=[...out.prims].sort((a,b2)=>(ORDER[a.t]??5)-(ORDER[b2.t]??5));
+  for(const p of prims) drawPrim(p,T);
+  drawDrawings(T);
+  if(!app.capturing) app.handles.forEach((h,i)=>{if(h.gz)return;const x=T.X(h.x),y=T.Y(h.y),hv=i===app.hover,sel=h.obj!=null&&h.obj===app.selObj;
+    if(h.dh){const s=hv?7:5;ctx.fillStyle='#ffffff';ctx.strokeStyle='#070b12';ctx.lineWidth=1.5;ctx.fillRect(x-s,y-s,2*s,2*s);ctx.strokeRect(x-s,y-s,2*s,2*s);return;}
+    ctx.beginPath();ctx.arc(x,y,hv?11:8,0,Math.PI*2);ctx.strokeStyle=hv||sel?'rgba(255,255,255,0.95)':C.handle;ctx.lineWidth=hv||sel?2:1.2;ctx.setLineDash(hv||sel?[]:[3,3]);ctx.stroke();ctx.setLineDash([]);});
+  const o=selObjData(); if(o&&!app.capturing) drawGizmo2D(o,T);
+  if(out.sv){const sz=Math.min(170,W*0.3,Hh*0.42);drawScreenView(ctx,W-sz-12,30,sz,sz,out.sv);
+    ctx.fillStyle=C.text;ctx.font='12px "Noto Sans TC",sans-serif';ctx.textAlign='left';ctx.fillText(out.sv.title,W-sz-12,22);}
+  ctx.fillStyle=C.dim;ctx.font='11px "IBM Plex Mono",monospace';ctx.textAlign='right';
+  ctx.fillText(cur().id==='eye'?'示意比例':cur().id==='color'?'':'小格 1 cm',W-12,Hh-10);
+}
+function drawGizmo2D(o,T){
+  const x=T.X(o.x),y=T.Y(o.y),hidx=app.hover>=0?app.handles[app.hover]:null;
+  ctx.save();
+  if(o.rotate){const a=o.ang||0;ctx.strokeStyle='rgba(90,169,255,0.7)';ctx.lineWidth=2;ctx.beginPath();ctx.arc(x,y,44,0,7);ctx.stroke();
+    const kx=x+44*Math.cos(a),ky=y-44*Math.sin(a),hv=hidx&&hidx.gz==='r';ctx.fillStyle='#5aa9ff';ctx.beginPath();ctx.arc(kx,ky,hv?8:6,0,7);ctx.fill();
+    ctx.strokeStyle='rgba(90,169,255,0.5)';ctx.setLineDash([3,3]);ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(kx,ky);ctx.stroke();ctx.setLineDash([]);
+    ctx.fillStyle='#bcd9ff';ctx.font='11px "IBM Plex Mono",monospace';ctx.textAlign='left';ctx.fillText(Math.round(a*R2D)+'°',kx+10,ky-6);}
+  if(o.move){for(const [ax,col,dx,dy] of [['x','#ff5c5c',58,0],['y','#5cff8a',0,-58]]){const hv=hidx&&hidx.gz===ax;
+    ctx.strokeStyle=col;ctx.fillStyle=col;ctx.lineWidth=hv?4:2.5;ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+dx,y+dy);ctx.stroke();
+    drawArrowHead(x+dx*1.12,y+dy*1.12,Math.atan2(dy,dx),hv?11:9);}}
+  ctx.fillStyle='#ffffff';ctx.fillRect(x-4,y-4,8,8);
+  if(o.label){ctx.fillStyle=C.text;ctx.font='12px "Noto Sans TC",sans-serif';ctx.textAlign='left';ctx.fillText(o.label,x+10,y+20);}
+  ctx.restore();
+}
+function drawDrawings(T){const st=S(),selD=app.capturing?null:selDraw();
+  for(const d of st.draw){ctx.save();const w=d.w||2.4,gp=d.t==='pen'?d.pts:[d.a,d.b];ctx.lineCap='round';ctx.lineJoin='round';
+    if(d===selD){ctx.strokeStyle='rgba(67,195,207,0.45)';ctx.lineWidth=w+9;path(gp,T);ctx.stroke();}
+    ctx.strokeStyle=d.c||'#fff';ctx.fillStyle=d.c||'#fff';ctx.lineWidth=w;if(d.dash&&d.t!=='ruler')ctx.setLineDash([w*3+4,w*2+4]);
+    if(d.t==='pen'){path(d.pts,T);ctx.stroke();}
+    else if(d.t==='line'){const x1=T.X(d.a[0]),y1=T.Y(d.a[1]),x2=T.X(d.b[0]),y2=T.Y(d.b[1]),L=Math.hypot(x2-x1,y2-y1);path([d.a,d.b],T);ctx.stroke();ctx.setLineDash([]);
+      if(L>8&&d.arrow!==false){const an=Math.atan2(y2-y1,x2-x1),hs=6+w;drawArrowHead(x2,y2,an,hs);if(L>60)drawArrowHead((x1+x2)/2,(y1+y2)/2,an,hs*0.85);}}
+    else if(d.t==='ruler'){const x1=T.X(d.a[0]),y1=T.Y(d.a[1]),x2=T.X(d.b[0]),y2=T.Y(d.b[1]),an=Math.atan2(y2-y1,x2-x1),nx=-Math.sin(an)*7,ny=Math.cos(an)*7;
+      ctx.strokeStyle=d.c||'#ffffff';ctx.lineWidth=w;ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.moveTo(x1-nx,y1-ny);ctx.lineTo(x1+nx,y1+ny);ctx.moveTo(x2-nx,y2-ny);ctx.lineTo(x2+nx,y2+ny);ctx.stroke();
+      const t=f1(len(sub(d.b,d.a)))+' cm';ctx.font='bold 12px "IBM Plex Mono",monospace';const tw=ctx.measureText(t).width;const mx=(x1+x2)/2+nx*2,my=(y1+y2)/2+ny*2;
+      ctx.fillStyle='rgba(7,11,18,0.85)';ctx.fillRect(mx-tw/2-4,my-9,tw+8,18);ctx.fillStyle='#ffffff';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(t,mx,my);}
+    ctx.restore();}}
+function drawGrid(T){
+  const b0=T.inv(0,Hh), b1=T.inv(W,0); const step=T.s<3?5:1;
+  ctx.lineWidth=1;
+  for(let x=Math.floor(b0[0]/step)*step;x<=b1[0];x+=step){const X=Math.round(T.X(x))+0.5;ctx.strokeStyle=x%5===0?C.grid5:C.grid1;ctx.beginPath();ctx.moveTo(X,0);ctx.lineTo(X,Hh);ctx.stroke();}
+  for(let y=Math.floor(b0[1]/step)*step;y<=b1[1];y+=step){const Y=Math.round(T.Y(y))+0.5;ctx.strokeStyle=y%5===0?C.grid5:C.grid1;ctx.beginPath();ctx.moveTo(0,Y);ctx.lineTo(W,Y);ctx.stroke();}
+}
+function path(pts,T){ctx.beginPath();pts.forEach((p,i)=>i?ctx.lineTo(T.X(p[0]),T.Y(p[1])):ctx.moveTo(T.X(p[0]),T.Y(p[1])));}
+function drawArrowHead(x,y,ang,sz){ctx.beginPath();ctx.moveTo(x+Math.cos(ang)*sz,y+Math.sin(ang)*sz);
+  ctx.lineTo(x+Math.cos(ang+2.5)*sz,y+Math.sin(ang+2.5)*sz);ctx.lineTo(x+Math.cos(ang-2.5)*sz,y+Math.sin(ang-2.5)*sz);ctx.closePath();ctx.fill();}
+function drawPrim(p,T){
+  ctx.save(); ctx.globalAlpha=p.a??1;
+  switch(p.t){
+  case 'fill': path(p.pts,T);ctx.closePath();ctx.fillStyle=p.c;ctx.fill();break;
+  case 'medium': path(p.pts,T);ctx.closePath();ctx.fillStyle=p.c;ctx.fill();
+    if(p.label){ctx.fillStyle=C.text;ctx.font='13px "Noto Sans TC",sans-serif';ctx.textAlign='left';ctx.fillText(p.label,T.X(p.lx),T.Y(p.ly));}break;
+  case 'cup': ctx.strokeStyle='rgba(190,215,240,0.6)';ctx.lineWidth=2;path([[p.x0,p.y1],[p.x0,p.y0],[p.x1,p.y0],[p.x1,p.y1]],T);ctx.stroke();break;
+  case 'axis': ctx.strokeStyle=C.axis;ctx.lineWidth=1;ctx.setLineDash([8,6]);path([[p.x0,0],[p.x1,0]],T);ctx.stroke();break;
+  case 'line': ctx.strokeStyle=p.c;ctx.lineWidth=p.w||1;if(p.dash)ctx.setLineDash([5,5]);path(p.pts,T);ctx.stroke();break;
+  case 'arc':{const a1=Math.atan2(p.v1[1],p.v1[0]),a2=Math.atan2(p.v2[1],p.v2[0]);let da=a2-a1;while(da>Math.PI)da-=2*Math.PI;while(da<-Math.PI)da+=2*Math.PI;
+    const r=p.r*T.s;ctx.strokeStyle=p.c;ctx.lineWidth=1.6;ctx.beginPath();ctx.arc(T.X(p.x),T.Y(p.y),r,-a1,-(a1+da),da>0);ctx.stroke();
+    const am=a1+da/2;ctx.fillStyle=p.c;ctx.font='12px "Noto Sans TC",sans-serif';ctx.textAlign=Math.cos(am)>0.2?'left':Math.cos(am)<-0.2?'right':'center';
+    ctx.fillText(p.label,T.X(p.x)+Math.cos(am)*(r+8),T.Y(p.y)-Math.sin(am)*(r+8)+4);break;}
+  case 'ray':{ctx.globalCompositeOperation='lighter';ctx.lineJoin='round';ctx.lineCap='round';
+    if(p.dash)ctx.setLineDash([6,5]);
+    path(p.pts,T);ctx.strokeStyle=p.c;
+    if(!p.dash){ctx.globalAlpha=(p.a??1)*0.16;ctx.lineWidth=(p.w||1.5)*4;ctx.stroke();}
+    ctx.globalAlpha=p.a??1;ctx.lineWidth=p.w||1.5;ctx.stroke();
+    if(!p.dash&&p.arrow!==false){ctx.fillStyle=p.c;for(let i=1;i<p.pts.length;i++){const a=p.pts[i-1],c2=p.pts[i],x1=T.X(a[0]),y1=T.Y(a[1]),x2=T.X(c2[0]),y2=T.Y(c2[1]);
+      const L=Math.hypot(x2-x1,y2-y1);if(L<60)continue;const tt=i===1?0.5:0.35;drawArrowHead(x1+(x2-x1)*tt,y1+(y2-y1)*tt,Math.atan2(y2-y1,x2-x1),5);}}
+    break;}
+  case 'lens':{const prof=lensProfile(p.H,p.convex,p.f),N=30,pts=[];
+    for(let i=0;i<=N;i++){const r=-p.H+2*p.H*i/N;pts.push([p.x+prof(r),r]);}for(let i=N;i>=0;i--){const r=-p.H+2*p.H*i/N;pts.push([p.x-prof(r),r]);}
+    path(pts,T);ctx.closePath();ctx.fillStyle=C.glassFill;ctx.fill();ctx.strokeStyle=C.glassEdge;ctx.lineWidth=1.4;ctx.stroke();
+    if(p.label){ctx.fillStyle=C.text;ctx.font='12px "Noto Sans TC",sans-serif';ctx.textAlign='center';ctx.fillText(p.label,T.X(p.x),T.Y(p.H)-8);}break;}
+  case 'mirror':{path(p.pts,T);ctx.strokeStyle=C.mirror;ctx.lineWidth=3;ctx.lineJoin='round';ctx.stroke();
+    ctx.strokeStyle=C.hatch;ctx.lineWidth=1;let acc=0;
+    for(let i=1;i<p.pts.length;i++){const a=p.pts[i-1],c2=p.pts[i],seg=len(sub(c2,a));if(seg<1e-6)continue;const dir=mul(sub(c2,a),1/seg);
+      const n=backN(p.pts,p.back,dir);
+      while(acc<seg){const q=add(a,mul(dir,acc)),e=add(q,add(mul(n,1.2),mul(dir,-0.8)));path([q,e],T);ctx.stroke();acc+=1.4;}acc-=seg;}
+    break;}
+  case 'plate':{const hw=0.5,top=p.h/2;let segs=[[-top,top]];
+    for(const hl of p.holes){const ns=[];for(const [a,c2] of segs){const lo=hl.y-hl.size/2,hi=hl.y+hl.size/2;if(hi<=a||lo>=c2){ns.push([a,c2]);continue;}if(lo>a)ns.push([a,lo]);if(hi<c2)ns.push([hi,c2]);}segs=ns;}
+    ctx.fillStyle=C.plate;for(const [a,c2] of segs)ctx.fillRect(T.X(p.x-hw),T.Y(c2),hw*2*T.s,(c2-a)*T.s);break;}
+  case 'block': ctx.fillStyle=C.plate;ctx.fillRect(T.X(p.x-0.4),T.Y(p.y1),0.8*T.s,(p.y1-p.y0)*T.s);break;
+  case 'screen': ctx.fillStyle=C.screen;ctx.globalAlpha=0.85;ctx.fillRect(T.X(p.x),T.Y(p.h/2),0.6*T.s,p.h*T.s);
+    if(p.label){ctx.globalAlpha=1;ctx.fillStyle=C.text;ctx.font='12px "Noto Sans TC",sans-serif';ctx.textAlign='center';ctx.fillText(p.label,T.X(p.x+0.3),T.Y(p.h/2)-6);}break;
+  case 'blurArrow':{if(p.blur>20)break;ctx.globalCompositeOperation='lighter';ctx.strokeStyle=p.c;
+    const lo=Math.max(Math.min(p.y0,p.y1)-p.blur/2,-17),hi=Math.min(Math.max(p.y0,p.y1)+p.blur/2,17);
+    ctx.globalAlpha=clamp(3/(p.blur+3),0.12,1);ctx.lineWidth=4;ctx.lineCap='butt';path([[p.x,lo],[p.x,hi]],T);ctx.stroke();break;}
+  case 'arrowObj':{const x=T.X(p.x),y0=T.Y(p.y0),y1=T.Y(p.y0+p.h),dir=Math.sign(p.h)||1,head=Math.min(Math.abs(y1-y0)*0.4,13);
+    if(p.selected){ctx.strokeStyle='rgba(255,255,255,0.25)';ctx.lineWidth=12;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(x,y0);ctx.lineTo(x,y1);ctx.stroke();}
+    if(p.virtual){ctx.globalAlpha=0.6;ctx.setLineDash([4,3]);}
+    const g=ctx.createLinearGradient(x,y0,x,y1);g.addColorStop(0,p.c0||p.c);g.addColorStop(1,p.c);
+    ctx.strokeStyle=g;ctx.lineWidth=3.5;ctx.lineCap='butt';ctx.beginPath();ctx.moveTo(x,y0);ctx.lineTo(x,y1+dir*head*0.9);ctx.stroke();ctx.setLineDash([]);
+    ctx.fillStyle=p.c;ctx.beginPath();ctx.moveTo(x,y1);ctx.lineTo(x-head*0.55,y1+dir*head);ctx.lineTo(x+head*0.55,y1+dir*head);ctx.closePath();
+    if(p.virtual){ctx.strokeStyle=p.c;ctx.lineWidth=1.5;ctx.stroke();}else ctx.fill();
+    if(p.label){ctx.globalAlpha=0.95;ctx.fillStyle=C.text;ctx.font='12px "Noto Sans TC",sans-serif';ctx.textAlign='center';ctx.fillText(p.label,x,(p.h>0?y1-7:y1+17));}break;}
+  case 'laser':{const ang=Math.atan2(-p.dir[1],p.dir[0]),x=T.X(p.x),y=T.Y(p.y),L=Math.max(6*T.s,26),w=Math.max(2*T.s,9);
+    ctx.translate(x,y);ctx.rotate(ang);ctx.fillStyle='#3a4352';ctx.strokeStyle='#8b97a8';ctx.lineWidth=1;ctx.fillRect(-L,-w/2,L,w);ctx.strokeRect(-L,-w/2,L,w);
+    ctx.fillStyle=p.c||C.laser;ctx.fillRect(-3,-w/4,3,w/2);break;}
+  case 'beamSrc':{const x=T.X(p.x),y=T.Y(p.y),w=p.w*T.s,dep=Math.max(2.2*T.s,10);ctx.translate(x,y);ctx.rotate(-p.ang);
+    ctx.fillStyle='#3a4352';ctx.strokeStyle='#8b97a8';ctx.lineWidth=1;ctx.fillRect(-dep,-w/2-3,dep,w+6);ctx.strokeRect(-dep,-w/2-3,dep,w+6);
+    ctx.fillStyle=p.c||C.warm;ctx.globalAlpha=0.9;ctx.fillRect(-2.5,-w/2,2.5,w);break;}
+  case 'lamp':{const x=T.X(p.x),y=T.Y(p.y),r=Math.max(1.4*T.s,7),c=p.c||'#ffd27a';const g=ctx.createRadialGradient(x,y,0,x,y,r*2.4);g.addColorStop(0,'#fffbe8');g.addColorStop(0.35,c);g.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.globalCompositeOperation='lighter';ctx.fillStyle=g;ctx.beginPath();ctx.arc(x,y,r*2.4,0,7);ctx.fill();ctx.globalCompositeOperation='source-over';ctx.fillStyle='#fffbe8';ctx.beginPath();ctx.arc(x,y,r*0.5,0,7);ctx.fill();break;}
+  case 'lampBar':{ctx.globalCompositeOperation='lighter';ctx.strokeStyle='#ffe2a8';ctx.lineCap='round';ctx.globalAlpha=0.25;ctx.lineWidth=16;path([[p.x,p.y0],[p.x,p.y1]],T);ctx.stroke();
+    ctx.globalAlpha=1;ctx.lineWidth=5;ctx.strokeStyle='#fff3d0';ctx.stroke();break;}
+  case 'eye':{const x=T.X(p.x),y=T.Y(p.y),s=Math.max(2.2*T.s,12),ang=Math.atan2(-p.dir[1],p.dir[0]);ctx.translate(x,y);ctx.rotate(ang);
+    ctx.fillStyle='#f2f4f7';ctx.beginPath();ctx.moveTo(-s,0);ctx.quadraticCurveTo(0,-s*0.75,s,0);ctx.quadraticCurveTo(0,s*0.75,-s,0);ctx.fill();
+    ctx.fillStyle='#2f6fb3';ctx.beginPath();ctx.arc(s*0.35,0,s*0.36,0,7);ctx.fill();ctx.fillStyle='#0a0d12';ctx.beginPath();ctx.arc(s*0.45,0,s*0.16,0,7);ctx.fill();break;}
+  case 'coin':{ctx.globalAlpha=p.ghost?0.55:1;ctx.fillStyle=p.ghost?'rgba(255,209,102,0.5)':'#e0b54a';ctx.strokeStyle='#ffd166';ctx.lineWidth=1;if(p.ghost)ctx.setLineDash([3,2]);
+    ctx.beginPath();ctx.ellipse(T.X(p.x),T.Y(p.y),1.6*T.s,0.45*T.s,0,0,7);ctx.fill();ctx.stroke();break;}
+  case 'stick': ctx.strokeStyle=p.c;ctx.lineWidth=Math.max(0.7*T.s,4);ctx.lineCap='round';ctx.lineJoin='round';if(p.dash)ctx.setLineDash([6,5]);path(p.pts,T);ctx.stroke();break;
+  case 'prism': path(p.pts,T);ctx.closePath();ctx.fillStyle='rgba(160,210,255,0.14)';ctx.fill();ctx.strokeStyle=C.glassEdge;ctx.lineWidth=1.4;ctx.stroke();break;
+  case 'eyeball':{const cx=T.X(p.cx),cy=T.Y(0),r=p.r*T.s;ctx.strokeStyle='rgba(200,215,235,0.45)';ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(cx,cy,r,0,7);ctx.stroke();
+    ctx.strokeStyle='#ff7a7a';ctx.lineWidth=3;ctx.beginPath();ctx.arc(cx,cy,r,-0.85,0.85);ctx.stroke();
+    ctx.fillStyle='#ff9a9a';ctx.font='12px "Noto Sans TC",sans-serif';ctx.textAlign='left';ctx.fillText('視網膜',cx+r+6,cy-r*0.55);break;}
+  case 'point':{const x=T.X(p.x),y=T.Y(p.y);ctx.fillStyle=p.c;ctx.beginPath();ctx.arc(x,y,3.5,0,7);ctx.fill();break;}
+  case 'mark':{const x=T.X(p.x),y=T.Y(p.y);ctx.globalAlpha=p.dimmed?0.6:1;ctx.fillStyle=C.text;ctx.beginPath();ctx.arc(x,y,3,0,7);ctx.fill();
+    ctx.font=(p.dimmed?'12px ':'bold 13px ')+'"IBM Plex Mono",monospace';ctx.textAlign='center';ctx.fillText(p.label,x,y+17);break;}
+  case 'label':{ctx.fillStyle=p.c||C.text;ctx.font=(p.size||12)+'px "Noto Sans TC",sans-serif';ctx.textAlign=p.align||'center';ctx.fillText(p.text,T.X(p.x),T.Y(p.y)+4);break;}
+  }
+  ctx.restore();
+}
+/* ---- screen-view inset (also used as 3D texture) ---- */
+function blurCopies(n){const a=[];for(let i=0;i<n;i++){const r=Math.sqrt((i+0.5)/n),t=i*2.39996;a.push([r*Math.cos(t),r*Math.sin(t)]);}return a;}
+const BC=blurCopies(18);
+function drawScreenView(g,x,y,w,h,sv){
+  g.save();g.beginPath();g.rect(x,y,w,h);g.clip();
+  const sc=(h*0.94)/(2*(sv.range||17)),cx=x+w/2,cy=y+h/2,Y=v=>cy-v*sc;
+  if(sv.kind==='shadow'){g.fillStyle='#efe2c2';g.fillRect(x,y,w,h);
+    const R2=sv.pen*sc,R1=sv.umbra*sc;const gr=g.createRadialGradient(cx,cy,Math.max(R1,0.01),cx,cy,Math.max(R2,R1+0.01));
+    gr.addColorStop(0,R1>0?'#14120e':'#6b6253');gr.addColorStop(1,'rgba(239,226,194,1)');g.fillStyle=gr;g.beginPath();g.arc(cx,cy,R2,0,7);g.fill();
+    if(R1>0){g.fillStyle='#14120e';g.beginPath();g.arc(cx,cy,R1,0,7);g.fill();}
+  }else if(sv.kind==='eye'){g.fillStyle='#e8ebef';g.fillRect(x,y,w,h);
+    const b=sv.blur*w*0.07, rows=[[0.3,0.2,'E'],[0.58,0.12,'Ш　E'],[0.8,0.075,'E　Ш　E']];
+    g.textAlign='center';g.textBaseline='middle';
+    for(const [ry,sz,t] of rows){g.font=`bold ${sz*h}px "IBM Plex Mono",monospace`;
+      if(b<0.6){g.fillStyle='#111';g.fillText(t,cx,y+ry*h);}else{g.fillStyle='rgba(17,17,17,'+(1.6/BC.length)+')';for(const o of BC)g.fillText(t,cx+o[0]*b,y+ry*h+o[1]*b);}}
+  }else{g.fillStyle='#14181f';g.fillRect(x,y,w,h);g.globalCompositeOperation='lighter';
+    if(sv.kind==='spectrum'){for(const it of sv.items){const yy=Y(it.y);const gr=g.createLinearGradient(0,yy-7,0,yy+7);gr.addColorStop(0,'rgba(0,0,0,0)');gr.addColorStop(0.5,it.c);gr.addColorStop(1,'rgba(0,0,0,0)');
+      g.globalAlpha=sv.items.length>1?0.55:1;g.fillStyle=gr;g.fillRect(x+w*0.15,yy-7,w*0.7,14);}}
+    else for(const it of sv.items){
+      const bp=it.blur*sc, y0=Y(it.y0),y1=Y(it.y1),dir=Math.sign(y1-y0)||1,hd=Math.min(Math.abs(y1-y0)*0.35,w*0.09);
+      const drawA=(ox,oy)=>{g.beginPath();g.moveTo(cx+ox,y0+oy);g.lineTo(cx+ox,y1-dir*hd*0.8+oy);g.stroke();g.beginPath();g.moveTo(cx+ox,y1+oy);g.lineTo(cx+ox-hd*0.6,y1-dir*hd+oy);g.lineTo(cx+ox+hd*0.6,y1-dir*hd+oy);g.closePath();g.fill();};
+      const gr=g.createLinearGradient(0,y0,0,y1);gr.addColorStop(0,it.c0||it.c);gr.addColorStop(1,it.c);g.strokeStyle=gr;g.fillStyle=it.c;g.lineWidth=Math.max(3,w*0.025);
+      if(bp>h*1.2){const rg=g.createRadialGradient(cx,(y0+y1)/2,0,cx,(y0+y1)/2,h*0.7);rg.addColorStop(0,it.c);rg.addColorStop(1,'rgba(0,0,0,0)');g.globalAlpha=0.18;g.fillStyle=rg;g.fillRect(x,y,w,h);}
+      else if(bp<1){g.globalAlpha=it.alpha;drawA(0,0);}
+      else{g.globalAlpha=Math.min(1,it.alpha*2.2/BC.length*3);for(const o of BC)drawA(o[0]*bp/2,o[1]*bp/2);}
+    }}
+  g.restore();g.save();g.strokeStyle='rgba(200,215,235,0.35)';g.lineWidth=1;g.strokeRect(x+0.5,y+0.5,w-1,h-1);g.restore();
+}
+/* ---- color scene custom drawing ---- */
+function drawMix(T){const st=S();ctx.save();ctx.fillStyle='#0c0f14';ctx.fillRect(T.X(-28),T.Y(20),56*T.s,40*T.s);
+  ctx.globalCompositeOperation='lighter';
+  for(const [k,col] of [['r',[1,0,0]],['g',[0,1,0]],['b',[0,0,1]]]){if(!st['on'+k])continue;const p=st.pos[k],i=st[k];
+    const x=T.X(p[0]),y=T.Y(p[1]),r=11*T.s;const g=ctx.createRadialGradient(x,y,r*0.8,x,y,r*1.06);g.addColorStop(0,rgbCss(col,i));g.addColorStop(1,'rgba(0,0,0,0)');ctx.fillStyle=g;ctx.beginPath();ctx.arc(x,y,r*1.06,0,7);ctx.fill();}
+  ctx.restore();ctx.fillStyle=C.dim;ctx.font='12px "Noto Sans TC",sans-serif';ctx.textAlign='center';ctx.fillText('白色牆面（暗室中）',T.X(0),T.Y(-19));}
+function drawObjects(T){const st=S(),L=effLight(st);ctx.save();
+  const lamp=[0,23];
+  ctx.globalCompositeOperation='lighter';path([[lamp[0]-1.5,lamp[1]],[lamp[0]+1.5,lamp[1]],[30,13],[-30,13]],T);ctx.closePath();ctx.fillStyle='rgba(255,255,255,0.06)';ctx.fill();
+  path([[-30,13],[30,13],[34,-6],[-34,-6]],T);ctx.closePath();ctx.fillStyle=rgbCss(L,0.16);ctx.fill();ctx.globalCompositeOperation='source-over';
+  ctx.fillStyle='#ffffff';ctx.beginPath();ctx.arc(T.X(lamp[0]),T.Y(lamp[1]),1.3*T.s,0,7);ctx.fill();
+  ctx.fillStyle=C.text;ctx.font='12px "Noto Sans TC",sans-serif';ctx.textAlign='left';ctx.fillText(LIGHTS[st.light][0],T.X(2.2),T.Y(lamp[1])+4);
+  [st.f1,st.f2].forEach((f,k)=>{if(f==='none')return;const y=19-k*2.6, c=FILTERS[f][1];ctx.fillStyle=rgbCss(c,0.85);ctx.globalAlpha=0.75;
+    ctx.fillRect(T.X(-8-k),T.Y(y),(16+2*k)*T.s,1*T.s);ctx.globalAlpha=1;ctx.fillStyle=C.text;ctx.textAlign='left';ctx.fillText(FILTERS[f][0],T.X(9+k),T.Y(y-0.5)+4);});
+  ctx.fillStyle='#1b2230';ctx.fillRect(T.X(-36),T.Y(-6),72*T.s,3*T.s);
+  PAPERS.forEach(([n,r],i)=>{const x=-27.5+i*11, s=r.map((v,j)=>v*L[j]);ctx.fillStyle=rgbCss(s);ctx.fillRect(T.X(x-4),T.Y(3),8*T.s,9*T.s);
+    ctx.strokeStyle='rgba(200,215,235,0.25)';ctx.strokeRect(T.X(x-4),T.Y(3),8*T.s,9*T.s);
+    ctx.fillStyle=C.text;ctx.textAlign='center';ctx.font='13px "Noto Sans TC",sans-serif';ctx.fillText(n,T.X(x),T.Y(-11));
+    ctx.fillStyle=C.dim;ctx.font='12px "Noto Sans TC",sans-serif';ctx.fillText('看起來：'+colorName(s),T.X(x),T.Y(-14));});
+  ctx.restore();}
+
+/* ================= 3D ================= */
+const T3={ok:false,orb:null,hm:[]};
+function ensure3D(){
+  if(T3.ok) return true; if(!window.THREE) return false;
+  try{
+    const R=new THREE.WebGLRenderer({canvas:els.cv3,antialias:true});R.setPixelRatio(Math.min(window.devicePixelRatio||1,2));R.setSize(W,Hh,false);
+    T3.r=R;T3.scene=new THREE.Scene();T3.scene.background=new THREE.Color(0x070b12);
+    T3.cam=new THREE.PerspectiveCamera(38,1,0.5,3000);T3.root=new THREE.Group();T3.scene.add(T3.root);
+    T3.amb=new THREE.AmbientLight(0xffffff,0.55);T3.dir=new THREE.DirectionalLight(0xffffff,0.75);T3.dir.position.set(40,90,70);
+    T3.scene.add(T3.amb,T3.dir);T3.ray=new THREE.Raycaster();T3.ok=true;
+  }catch(err){return false;}
+  return true;
+}
+function reset3DCamera(){const b=bounds(),sx=b[1]-b[0],sy=b[3]-b[2];T3.orb={theta:-0.5,phi:1.08,dist:Math.max(sx,sy*1.6)*1.15,t:[(b[0]+b[1])/2,(b[2]+b[3])/2-2,0]};}
+function clearRoot(){T3.root.traverse(o=>{if(o.geometry)o.geometry.dispose();if(o.material){(Array.isArray(o.material)?o.material:[o.material]).forEach(m=>{if(m.map)m.map.dispose();m.dispose();});}});
+  while(T3.root.children.length)T3.root.remove(T3.root.children[0]);}
+const V3=(x,y,z=0)=>new THREE.Vector3(x,y,z);
+function hexOnly(c){if(!c)return '#ffffff';if(c[0]==='#')return c;const m=c.match(/[\d.]+/g);if(!m)return '#ffffff';return '#'+m.slice(0,3).map(v=>(+v|0).toString(16).padStart(2,'0')).join('');}
+function tube(a,b,col,op,r){const A=V3(a[0],a[1],a[2]||0),B=V3(b[0],b[1],b[2]||0),L=A.distanceTo(B);if(L<1e-3)return;
+  const m=new THREE.Mesh(new THREE.CylinderGeometry(r,r,L,8,1,true),new THREE.MeshBasicMaterial({color:hexOnly(col),transparent:true,opacity:op,blending:THREE.AdditiveBlending,depthWrite:false}));
+  m.position.copy(A).add(B).multiplyScalar(0.5);m.quaternion.setFromUnitVectors(V3(0,1,0),B.clone().sub(A).normalize());T3.root.add(m);return m;}
+function line3(pts,col,dash,op=1,z=0){const g=new THREE.BufferGeometry().setFromPoints(pts.map(p=>V3(p[0],p[1],p[2]??z)));
+  const m=dash?new THREE.LineDashedMaterial({color:hexOnly(col),dashSize:1.2,gapSize:0.9,transparent:true,opacity:op}):new THREE.LineBasicMaterial({color:hexOnly(col),transparent:true,opacity:op});
+  const l=new THREE.Line(g,m);if(dash)l.computeLineDistances();T3.root.add(l);return l;}
+function sprite(text,col,x,y,z,size){const c=document.createElement('canvas'),g=c.getContext('2d');g.font='bold 44px "Noto Sans TC",sans-serif';const w=Math.ceil(g.measureText(text).width)+16;
+  c.width=w;c.height=60;g.font='bold 44px "Noto Sans TC",sans-serif';g.fillStyle=col||C.text;g.textBaseline='middle';g.fillText(text,8,32);
+  const s=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(c),transparent:true,depthTest:false}));s.scale.set(size*w/60,size,1);s.position.set(x,y,z);s.renderOrder=10;T3.root.add(s);}
+const phong=(c,o={})=>new THREE.MeshPhongMaterial(Object.assign({color:c,shininess:60},o));
+function mesh(g,m,pos){const x=new THREE.Mesh(g,m);if(pos)x.position.set(...pos);T3.root.add(x);return x;}
+function orient(m,a,b){const A=V3(a[0],a[1],a[2]||0),B=V3(b[0],b[1],b[2]||0);m.position.copy(A).add(B).multiplyScalar(0.5);m.quaternion.setFromUnitVectors(V3(0,1,0),B.clone().sub(A).normalize());return m;}
+let _glow=null;function glowTex(){if(_glow)return _glow.clone();const c=document.createElement('canvas');c.width=c.height=64;const g=c.getContext('2d');const r=g.createRadialGradient(32,32,0,32,32,32);
+  r.addColorStop(0,'rgba(255,255,255,1)');r.addColorStop(0.3,'rgba(255,255,255,0.4)');r.addColorStop(1,'rgba(255,255,255,0)');g.fillStyle=r;g.fillRect(0,0,64,64);_glow=new THREE.CanvasTexture(c);return _glow.clone();}
+function build3D(){
+  if(!T3.ok) return; clearRoot(); T3.amb.intensity=0.55;T3.dir.intensity=0.75;
+  const out=app.out,b=bounds(),sc=cur(),sx=b[1]-b[0],span=Math.max(sx,b[3]-b[2]),tableY=b[2]-1,R=span*0.0016,DZ=Math.min(30,span*0.3);
+  const tw=sx*1.2, td=Math.max(50,sx*0.55);
+  mesh(new THREE.BoxGeometry(tw,1,td),phong(0x18202c,{shininess:10}),[(b[0]+b[1])/2,tableY-0.5,0]);
+  const grid=new THREE.GridHelper(Math.max(tw,td),Math.round(Math.max(tw,td)/5),0x2a3850,0x1c2636);grid.position.set((b[0]+b[1])/2,tableY+0.02,0);T3.root.add(grid);
+  if(sc.bench) mesh(new THREE.BoxGeometry(sx*1.05,1.2,3),phong(0x2d3647),[(b[0]+b[1])/2,tableY+0.6,0]);
+  const post=(x,ytop)=>{if(ytop<=tableY+0.5)return;mesh(new THREE.CylinderGeometry(0.35,0.35,ytop-tableY,10),phong(0x485468),[x,(ytop+tableY)/2,0]);mesh(new THREE.CylinderGeometry(1.6,1.8,0.8,16),phong(0x3a4558),[x,tableY+(sc.bench?1.6:0.4),0]);};
+  if(out.custom){build3DColor(out,b,tableY);build3DOverlay(span);return;}
+  for(const p of out.prims){
+    switch(p.t){
+    case 'ray':{for(let i=1;i<p.pts.length;i++){const a=p.pts[i-1],c=p.pts[i];
+        if(p.dash){line3([a,c],p.c,true,(p.a??1)*0.8);}else{tube(a,c,p.c,Math.min(1,(p.a??1)*0.9),R*(p.w||1.5)/1.5);tube(a,c,p.c,(p.a??1)*0.12,R*3.2*(p.w||1.5)/1.5);}}break;}
+    case 'line': line3(p.pts,p.c,p.dash,0.8);break;
+    case 'axis': line3([[p.x0,0],[p.x1,0]],C.axis,true,0.6);break;
+    case 'arc':{const a1=Math.atan2(p.v1[1],p.v1[0]),a2=Math.atan2(p.v2[1],p.v2[0]);let da=a2-a1;while(da>Math.PI)da-=2*Math.PI;while(da<-Math.PI)da+=2*Math.PI;
+      const pts=lin(0,1,24).map(t=>[p.x+p.r*Math.cos(a1+da*t),p.y+p.r*Math.sin(a1+da*t)]);line3(pts,p.c,false,1);const am=a1+da/2;
+      sprite(p.label,p.c,p.x+(p.r+4)*Math.cos(am),p.y+(p.r+3)*Math.sin(am),0.5,span*0.022);break;}
+    case 'label': sprite(p.text,p.c,p.x,p.y,0.5,span*0.022);break;
+    case 'mark': mesh(new THREE.SphereGeometry(span*0.0045,12,8),new THREE.MeshBasicMaterial({color:0xc9d6e8}),[p.x,p.y,0]);sprite(p.label,C.text,p.x,p.y-span*0.03,0,span*0.022);break;
+    case 'point': mesh(new THREE.SphereGeometry(span*0.005,12,8),new THREE.MeshBasicMaterial({color:hexOnly(p.c)}),[p.x,p.y,0]);break;
+    case 'lens':{const prof=lensProfile(p.H,p.convex,p.f),pts=[];for(let i=0;i<=24;i++){const r=p.H*i/24;pts.push(new THREE.Vector2(r,-prof(r)));}
+      for(let i=24;i>=0;i--){const r=p.H*i/24;pts.push(new THREE.Vector2(r,prof(r)));}
+      const m=mesh(new THREE.LatheGeometry(pts,48),phong(0x9fd3ff,{transparent:true,opacity:0.32,shininess:120,specular:0xffffff,side:THREE.DoubleSide,depthWrite:false}),[p.x,0,0]);m.rotation.z=-Math.PI/2;
+      const ring=mesh(new THREE.TorusGeometry(p.H+0.3,0.35,8,48),phong(0x5b6676),[p.x,0,0]);ring.rotation.y=Math.PI/2;
+      if(p.post!==false) post(p.x,-p.H-0.3);break;}
+    case 'mirror':{const back=p.back||1,th=0.7,pts=p.pts;const sh=new THREE.Shape();
+      const off=pts.map((q,i)=>{const a=pts[Math.max(0,i-1)],c=pts[Math.min(pts.length-1,i+1)],d=nrm(sub(c,a));return add(q,mul(backN(pts,back,d),th));});
+      pts.forEach((q,i)=>i?sh.lineTo(q[0],q[1]):sh.moveTo(q[0],q[1]));for(let i=off.length-1;i>=0;i--)sh.lineTo(off[i][0],off[i][1]);
+      const g=new THREE.ExtrudeGeometry(sh,{depth:DZ*0.8,bevelEnabled:false});g.translate(0,0,-DZ*0.4);
+      mesh(g,phong(0xe3eaf3,{shininess:140,specular:0xffffff}));
+      if(sc.id==='plane-mirror'||sc.id==='curved-mirror'){const yb=Math.min(...pts.map(q=>q[1]));post(pts[Math.floor(pts.length/2)][0]+0.4*back,yb);}
+      break;}
+    case 'plate':{const sh=new THREE.Shape();const hw=DZ*0.45;sh.moveTo(-hw,-p.h/2);sh.lineTo(hw,-p.h/2);sh.lineTo(hw,p.h/2);sh.lineTo(-hw,p.h/2);sh.lineTo(-hw,-p.h/2);
+      for(const hl of p.holes){const hp=new THREE.Path();hp.absarc(0,hl.y,Math.max(hl.size/2,0.08),0,Math.PI*2,true);sh.holes.push(hp);}
+      const g=new THREE.ExtrudeGeometry(sh,{depth:0.8,bevelEnabled:false,curveSegments:24});const m=mesh(g,phong(0x5b6676,{side:THREE.DoubleSide}),[p.x-0.4,0,0]);m.rotation.y=Math.PI/2;post(p.x,-p.h/2);break;}
+    case 'block':{const r=(p.y1-p.y0)/2,m=mesh(new THREE.CylinderGeometry(r,r,0.5,40),phong(0x5b6676),[p.x,(p.y0+p.y1)/2,0]);m.rotation.z=Math.PI/2;post(p.x,p.y0);break;}
+    case 'screen':{const w=DZ*0.9;mesh(new THREE.BoxGeometry(0.6,p.h,w),phong(0xdfe4ea,{shininess:5}),[p.x+0.3,0,0]);
+      if(p.main&&out.sv){const c=document.createElement('canvas');c.width=Math.round(512*w/p.h);c.height=512;drawScreenView(c.getContext('2d'),0,0,c.width,512,out.sv);
+        const pl=mesh(new THREE.PlaneGeometry(w,p.h),new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(c)}),[p.x-0.05,0,0]);pl.rotation.y=-Math.PI/2;}
+      post(p.x+0.3,-p.h/2);break;}
+    case 'medium':case 'prism':{if(p.t==='medium'&&/,\s*0\)$/.test(p.c))break;const sh=new THREE.Shape();p.pts.forEach((q,i)=>i?sh.lineTo(q[0],q[1]):sh.moveTo(q[0],q[1]));
+      const dz=p.t==='prism'?16:DZ*0.9,g=new THREE.ExtrudeGeometry(sh,{depth:dz,bevelEnabled:false});g.translate(0,0,-dz/2);
+      const col=p.t==='prism'?0xa8d4ff:hexOnly(p.c);mesh(g,phong(col,{transparent:true,opacity:p.t==='prism'?0.28:0.3,depthWrite:false,shininess:100,side:THREE.DoubleSide}));
+      T3.root.add(new THREE.LineSegments(new THREE.EdgesGeometry(g),new THREE.LineBasicMaterial({color:0x9fd3ff,transparent:true,opacity:0.5})));
+      if(p.label)sprite(p.label,C.text,p.lx+6,p.ly,dz/2,span*0.02);break;}
+    case 'cup':{const g=new THREE.BoxGeometry(p.x1-p.x0,p.y1-p.y0,DZ*0.9);mesh(g,phong(0xbfd7f0,{transparent:true,opacity:0.08,depthWrite:false,side:THREE.DoubleSide}),[(p.x0+p.x1)/2,(p.y0+p.y1)/2,0]);
+      T3.root.add(new THREE.LineSegments(new THREE.EdgesGeometry(g),new THREE.LineBasicMaterial({color:0xbfd7f0,transparent:true,opacity:0.5})).translateX((p.x0+p.x1)/2).translateY((p.y0+p.y1)/2));break;}
+    case 'arrowObj':{const col=hexOnly(p.c),h=p.h,hd=Math.min(Math.abs(h)*0.35,3),sg=Math.sign(h)||1,mat=phong(col,{transparent:!!p.virtual,opacity:p.virtual?0.35:1,emissive:col,emissiveIntensity:p.image?0.35:0.15});
+      const shaftL=Math.abs(h)-hd;if(shaftL>0)mesh(new THREE.CylinderGeometry(0.35,0.35,shaftL,12),mat,[p.x,p.y0+sg*shaftL/2,0]);
+      const cone=mesh(new THREE.ConeGeometry(hd*0.55,hd,16),mat,[p.x,p.y0+h-sg*hd/2,0]);if(sg<0)cone.rotation.z=Math.PI;
+      if(!p.image) post(p.x,p.y0-0.2);
+      if(p.label)sprite(p.label,C.text,p.x,p.y0+h+sg*span*0.025,0,span*0.02);break;}
+    case 'laser':{const d=p.dir,L=6,c=add([p.x,p.y],mul(d,-L/2));const m=mesh(new THREE.CylinderGeometry(1,1,L,16),phong(0x3a4352),[c[0],c[1],0]);
+      m.quaternion.setFromUnitVectors(V3(0,1,0),V3(d[0],d[1],0));mesh(new THREE.SphereGeometry(0.5,10,8),new THREE.MeshBasicMaterial({color:hexOnly(p.c||C.laser)}),[p.x,p.y,0]);break;}
+    case 'beamSrc':{const d=dirOf(p.ang),c=add([p.x,p.y],mul(d,-1.2));const m=mesh(new THREE.BoxGeometry(2.4,p.w+1,6),phong(0x3a4352),[c[0],c[1],0]);m.rotation.z=p.ang;
+      const f=mesh(new THREE.BoxGeometry(0.2,p.w,5),new THREE.MeshBasicMaterial({color:hexOnly(p.c||C.warm)}),[p.x,p.y,0]);f.rotation.z=p.ang;break;}
+    case 'lamp':{mesh(new THREE.SphereGeometry(1.3,20,14),new THREE.MeshBasicMaterial({color:hexOnly(p.c||'#fff2c8')}),[p.x,p.y,0]);
+      const s=new THREE.Sprite(new THREE.SpriteMaterial({map:glowTex(),color:hexOnly(p.c||'#ffd27a'),transparent:true,blending:THREE.AdditiveBlending,depthWrite:false}));s.scale.set(9,9,1);s.position.set(p.x,p.y,0);T3.root.add(s);break;}
+    case 'lampBar':{mesh(new THREE.CylinderGeometry(0.8,0.8,Math.max(p.y1-p.y0,0.5),16),new THREE.MeshBasicMaterial({color:0xfff2c8}),[p.x,(p.y0+p.y1)/2,0]);post(p.x,p.y0);break;}
+    case 'eye':{mesh(new THREE.SphereGeometry(1.4,20,14),phong(0xf2f4f7),[p.x,p.y,0]);const ir=add([p.x,p.y],mul(p.dir,1.05));mesh(new THREE.SphereGeometry(0.6,14,10),phong(0x2f6fb3),[ir[0],ir[1],0]);
+      const pu=add([p.x,p.y],mul(p.dir,1.4));mesh(new THREE.SphereGeometry(0.25,10,8),new THREE.MeshBasicMaterial({color:0x000000}),[pu[0],pu[1],0]);break;}
+    case 'coin': mesh(new THREE.CylinderGeometry(1.6,1.6,0.35,28),phong(0xe0b54a,{transparent:!!p.ghost,opacity:p.ghost?0.35:1,shininess:90}),[p.x,p.y,0]);break;
+    case 'stick': if(!p.dash&&p.pts.length===2){orient(mesh(new THREE.CylinderGeometry(0.4,0.4,len(sub(p.pts[1],p.pts[0])),10),phong(0xd9a066)),p.pts[0],p.pts[1]);}
+      else if(!p.dash) line3(p.pts,p.c,false,0.7);break;
+    case 'eyeball':{mesh(new THREE.SphereGeometry(p.r,32,20),phong(0xdfe6ee,{transparent:true,opacity:0.12,depthWrite:false,side:THREE.DoubleSide}),[p.cx,0,0]);
+      const pts=lin(-0.85,0.85,30).map(a=>[p.cx+p.r*Math.cos(a),p.r*Math.sin(a)]);line3(pts,'#ff7a7a',false,1);sprite('視網膜','#ff9a9a',p.cx+p.r+4,p.r*0.6,0,span*0.022);break;}
+    }
+  }
+  build3DOverlay(span);
+}
+// drawings, draggable-point markers and the move/rotate gizmo, all lying in the experiment plane z=0
+function build3DOverlay(span){
+  const st=S(),k=gizmoScale();
+  const selD=app.capturing?null:selDraw();
+  for(const d of st.draw){
+    const w=d.w||2.4;
+    if(d===selD){const gp=d.t==='pen'?d.pts:[d.a,d.b];for(let i=1;i<gp.length;i++)tube(gp[i-1],gp[i],'#43c3cf',0.35,k*(w+8)*0.5);}
+    if(d.t==='pen'&&d.pts.length>1){if(w>3&&!d.dash){for(let i=1;i<d.pts.length;i++)tube(d.pts[i-1],d.pts[i],d.c,0.95,k*w*0.5);}else line3(d.pts,d.c,!!d.dash,1,0.3);}
+    else if(d.t==='line'){const a=d.a,b=d.b,L=len(sub(b,a));if(L<0.01)continue;if(d.dash)line3([a,b],d.c,true,1,0.3);else tube(a,b,d.c,0.95,k*w*0.5);
+      if(d.arrow!==false){const u=nrm(sub(b,a));const cn=mesh(new THREE.ConeGeometry(k*(3+w),k*(8+2*w),12),new THREE.MeshBasicMaterial({color:hexOnly(d.c)}));orient(cn,sub(b,mul(u,k*(8+2*w))),b);}}
+    else if(d.t==='ruler'){line3([d.a,d.b],d.c||'#ffffff',false,1,0.3);sprite(f1(len(sub(d.b,d.a)))+' cm',d.c||'#ffffff',(d.a[0]+d.b[0])/2,(d.a[1]+d.b[1])/2+k*14,0.3,k*16);}
+  }
+  T3.hm=[];
+  if(app.capturing) return;
+  app.handles.forEach((h,i)=>{if(h.gz){T3.hm.push(null);return;}
+    const sel=h.obj!=null&&h.obj===app.selObj;
+    const m=new THREE.Mesh(new THREE.SphereGeometry(k*6,16,10),new THREE.MeshBasicMaterial({color:sel?0x43c3cf:0xffffff,transparent:true,opacity:sel?0.75:0.4,depthTest:false}));
+    m.position.set(h.x,h.y,0);m.renderOrder=20;if(i===app.hover)m.scale.setScalar(1.5);T3.root.add(m);T3.hm.push(m);});
+  const o=selObjData(); if(!o) return;
+  const basic=c=>new THREE.MeshBasicMaterial({color:c,depthTest:false,transparent:true,opacity:0.95});
+  const add3=m=>{m.renderOrder=21;return m;};
+  if(o.rotate){const r=k*44;add3(mesh(new THREE.TorusGeometry(r,k*1.4,8,64),basic(0x5aa9ff),[o.x,o.y,0]));
+    const a=o.ang||0;add3(mesh(new THREE.SphereGeometry(k*6,16,10),basic(0x5aa9ff),[o.x+r*Math.cos(a),o.y+r*Math.sin(a),0]));}
+  if(o.move){for(const [col,dx,dy] of [[0xff5c5c,1,0],[0x5cff8a,0,1]]){const g=k*58,e=[o.x+dx*g,o.y+dy*g];
+    add3(orient(mesh(new THREE.CylinderGeometry(k*1.5,k*1.5,g,10),basic(col)),[o.x,o.y],e));
+    add3(orient(mesh(new THREE.ConeGeometry(k*5,k*12,14),basic(col)),e,[e[0]+dx*k*12,e[1]+dy*k*12]));}}
+  add3(mesh(new THREE.BoxGeometry(k*7,k*7,k*7),basic(0xffffff),[o.x,o.y,0]));
+}
+function build3DColor(out,b,tableY){
+  const st=S();
+  if(out.custom==='mix'){
+    const c=document.createElement('canvas');c.width=1024;c.height=732;const g=c.getContext('2d');g.fillStyle='#0c0f14';g.fillRect(0,0,1024,732);g.globalCompositeOperation='lighter';
+    const X=x=>(x+28)/56*1024,Y=y=>(20-y)/40*732,s=1024/56;
+    for(const [k,col] of [['r',[1,0,0]],['g',[0,1,0]],['b',[0,0,1]]]){if(!st['on'+k])continue;const p=st.pos[k];g.fillStyle=rgbCss(col,st[k]);g.beginPath();g.arc(X(p[0]),Y(p[1]),11*s,0,7);g.fill();}
+    mesh(new THREE.PlaneGeometry(56,40),new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(c)}),[0,0,0]);
+    for(const [k,col] of [['r',0xff3030],['g',0x30ff60],['b',0x4070ff]]){if(!st['on'+k])continue;const p=st.pos[k];const src=V3(p[0]*1.6,p[1]*0.6+4,55);const tgt=V3(p[0],p[1],0);
+      const L=src.distanceTo(tgt),cone=mesh(new THREE.ConeGeometry(11,L,32,1,true),new THREE.MeshBasicMaterial({color:col,transparent:true,opacity:0.06*st[k],blending:THREE.AdditiveBlending,depthWrite:false,side:THREE.DoubleSide}));
+      cone.position.copy(src).add(tgt).multiplyScalar(0.5);cone.quaternion.setFromUnitVectors(V3(0,-1,0),tgt.clone().sub(src).normalize());
+      const fl=mesh(new THREE.CylinderGeometry(1.4,1.1,5,16),phong(0x2a3140));fl.position.copy(src);fl.quaternion.setFromUnitVectors(V3(0,-1,0),tgt.clone().sub(src).normalize());
+      mesh(new THREE.SphereGeometry(1.2,12,8),new THREE.MeshBasicMaterial({color:col}),[src.x,src.y,src.z-2.4]);}
+    return;
+  }
+  const L=effLight(st);T3.amb.intensity=0.04;T3.dir.intensity=0;
+  const lc=new THREE.Color(L[0],L[1],L[2]);const spot=new THREE.SpotLight(lc,1.6,0,0.75,0.4);spot.position.set(0,24,6);spot.target.position.set(0,-6,0);T3.root.add(spot,spot.target);
+  const pl=new THREE.PointLight(lc,0.5,0);pl.position.set(0,20,20);T3.root.add(pl);
+  mesh(new THREE.SphereGeometry(1.3,16,12),new THREE.MeshBasicMaterial({color:0xffffff}),[0,24,6]);
+  [st.f1,st.f2].forEach((f,k)=>{if(f==='none')return;const c=FILTERS[f][1];mesh(new THREE.BoxGeometry(16+2*k,0.15,12+2*k),new THREE.MeshBasicMaterial({color:new THREE.Color(c[0],c[1],c[2]),transparent:true,opacity:0.55}),[0,19-k*2.6,6]);});
+  mesh(new THREE.BoxGeometry(72,1,30),new THREE.MeshLambertMaterial({color:0x666a70}),[0,-6.5,0]);
+  PAPERS.forEach(([n,r],i)=>{const x=-27.5+i*11;mesh(new THREE.BoxGeometry(8,9,0.8),new THREE.MeshLambertMaterial({color:new THREE.Color(r[0],r[1],r[2])}),[x,-1.5,0]);
+    const s=r.map((v,j)=>v*L[j]);sprite(n+'：'+colorName(s),C.text,x-3.5,-9.5,8,1.7);});
+}
+function render3D(){
+  if(!T3.ok) return; const o=T3.orb,t=V3(...o.t);
+  T3.cam.aspect=W/Math.max(Hh,1);T3.cam.updateProjectionMatrix();
+  T3.cam.position.set(t.x+o.dist*Math.sin(o.phi)*Math.sin(o.theta),t.y+o.dist*Math.cos(o.phi),t.z+o.dist*Math.sin(o.phi)*Math.cos(o.theta));
+  T3.cam.lookAt(t);T3.cam.updateMatrixWorld();T3.r.render(T3.scene,T3.cam);
+}
+function project3(x,y){const v=V3(x,y,0).project(T3.cam);return [(v.x+1)/2*W,(1-v.y)/2*Hh,v.z];}
+function world3(px,py){if(!T3.ok)return null;T3.ray.setFromCamera(new THREE.Vector2(px/W*2-1,-(py/Hh)*2+1),T3.cam);
+  const p=new THREE.Vector3();return T3.ray.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0,0,1),0),p)?[p.x,p.y]:null;}
+
+/* ================= pointer interaction (shared by 2D and 3D) ================= */
+const ptrs=new Map(); let gesture=null;
+function evPos(e){const r=e.currentTarget.getBoundingClientRect();return [e.clientX-r.left,e.clientY-r.top];}
+function toWorld(px,py){return app.mode==='2d'?makeT().inv(px,py):world3(px,py);}
+function handlePx(h){if(app.mode==='2d'){const T=makeT();return [T.X(h.x),T.Y(h.y)];}const p=project3(h.x,h.y);return p[2]>1?[-1e4,-1e4]:[p[0],p[1]];}
+function hitHandle(px,py){let best=-1,bd=1e9;const lim=matchMedia('(pointer:coarse)').matches?24:15;
+  app.handles.forEach((h,i)=>{const q=handlePx(h);let d=Math.hypot(q[0]-px,q[1]-py);if(h.gz||h.dh)d-=5;if(d<lim&&d<bd){bd=d;best=i;}});return best;}
+function worldPx(p){if(app.mode==='2d'){const T=makeT();return [T.X(p[0]),T.Y(p[1])];}const q=project3(p[0],p[1]);return [q[0],q[1]];}
+function segDist(p,a,b){const ab=sub(b,a),t=clamp(dot(sub(p,a),ab)/(dot(ab,ab)||1),0,1);return len(sub(p,add(a,mul(ab,t))));}
+function hitDrawing(px,py){const st=S(),lim=matchMedia('(pointer:coarse)').matches?14:7;
+  for(let i=st.draw.length-1;i>=0;i--){const d=st.draw[i],pp=(d.t==='pen'?d.pts:[d.a,d.b]).map(worldPx);
+    for(let k=0;k<pp.length;k++){if(segDist([px,py],pp[k],pp[k+1]||pp[k])<lim+(d.w||2.4)/2) return d;}}
+  return null;}
+const pdist=()=>{const a=[...ptrs.values()];return Math.hypot(a[0][0]-a[1][0],a[0][1]-a[1][1]);};
+function redraw(){if(app.mode==='2d')draw2D();else{build3D();render3D();}}
+function onDown(e){
+  const [px,py]=evPos(e); e.currentTarget.setPointerCapture(e.pointerId); ptrs.set(e.pointerId,[px,py]);
+  if(ptrs.size===2){gesture={type:'pinch',d:pdist(),zoom:app.view.zoom,dist:T3.orb.dist};return;}
+  const w=toWorld(px,py), st=S(), tool=app.tool;
+  if(['point','laser','beam'].includes(tool)){if(w){placeSource(tool,w);setTool('select');commit();}return;}
+  if(tool==='pen'&&w){const it=newDraw('pen',w);st.draw.push(it);gesture={type:'draw',it,lp:[px,py]};return;}
+  if((tool==='line'||tool==='ruler')&&w){const it=newDraw(tool,w);st.draw.push(it);gesture={type:'draw',it};return;}
+  const i=hitHandle(px,py);
+  if(i>=0&&w){const h=app.handles[i];let changed=false;
+    if(h.obj!=null&&app.selObj!==h.obj){app.selObj=h.obj;changed=true;}
+    if(h.sel!=null&&st.sel!==h.sel) st.sel=h.sel;
+    gesture={type:'drag',h,start:w,s0:h.o0?h.o0():null};
+    if(changed) renderPanel(); refresh(); return;}
+  if(tool==='select'&&w){const d=hitDrawing(px,py);
+    if(d){const ch=app.selObj!=='d'+d.id;app.selObj='d'+d.id;gesture={type:'moveDraw',it:d,start:w,orig:JSON.parse(JSON.stringify(d)),moved:false};if(ch)renderPanel();refresh();return;}}
+  if(app.mode==='2d') gesture={type:'pan',px,py,vx:app.view.px,vy:app.view.py,moved:false};
+  else gesture={type:'orbit',px,py,o:{...T3.orb,t:[...T3.orb.t]},pan:e.button===2||e.shiftKey,moved:false};
+}
+function onMove(e){
+  const [px,py]=evPos(e); if(ptrs.has(e.pointerId)) ptrs.set(e.pointerId,[px,py]);
+  if(!gesture){const i=hitHandle(px,py);if(i!==app.hover){app.hover=i;
+      if(app.mode==='2d')draw2D();else{T3.hm.forEach((m,k)=>m&&m.scale.setScalar(k===i?1.5:1));render3D();}}
+    if(app.tool==='select') e.currentTarget.style.cursor=i>=0?(app.handles[i].cursor||'grab'):(hitDrawing(px,py)?'move':'default');return;}
+  if(gesture.type==='pinch'){if(ptrs.size<2)return;const k=pdist()/gesture.d;
+    if(app.mode==='2d'){app.view.zoom=clamp(gesture.zoom*k,0.4,6);draw2D();}else{T3.orb.dist=clamp(gesture.dist/k,20,800);refresh();}return;}
+  const w=toWorld(px,py);
+  if(gesture.type==='draw'){if(!w)return;const it=gesture.it;
+    if(it.t==='pen'){if(Math.hypot(px-gesture.lp[0],py-gesture.lp[1])<2)return;gesture.lp=[px,py];it.pts.push(w);}else it.b=w;redraw();return;}
+  if(gesture.type==='moveDraw'){if(!w)return;const dd=[w[0]-gesture.start[0],w[1]-gesture.start[1]],o=gesture.orig,it=gesture.it;
+    if(it.pts)it.pts=o.pts.map(p=>add(p,dd));else{it.a=add(o.a,dd);it.b=add(o.b,dd);}gesture.moved=true;buildHandles();app.sync.forEach(f=>f());redraw();return;}
+  if(gesture.type==='drag'){const h=gesture.h;if(!h.drag||!w)return;
+    if(h.rel) h.drag(w[0]-gesture.start[0],w[1]-gesture.start[1],gesture.s0,e); else h.drag(w[0],w[1],gesture.s0,e);
+    refresh();return;}
+  const dx=px-gesture.px,dy=py-gesture.py; if(Math.hypot(dx,dy)>3) gesture.moved=true;
+  if(gesture.type==='pan'){const T=makeT();app.view.px=gesture.vx-dx/T.s;app.view.py=gesture.vy+dy/T.s;draw2D();return;}
+  if(gesture.type==='orbit'){const o=gesture.o;
+    if(gesture.pan){const k=o.dist*0.0016,th=o.theta;T3.orb.t=[o.t[0]-dx*k*Math.cos(th),o.t[1]+dy*k,o.t[2]+dx*k*Math.sin(th)];}
+    else{T3.orb.theta=o.theta-dx*0.008;T3.orb.phi=clamp(o.phi-dy*0.008,0.12,Math.PI-0.12);}
+    render3D();}
+}
+function onUp(e){
+  ptrs.delete(e.pointerId);
+  if(ptrs.size===0){
+    if(gesture&&(gesture.type==='pan'||gesture.type==='orbit')&&!gesture.moved&&app.selObj){app.selObj=null;renderPanel();refresh();}
+    if(gesture&&gesture.type==='draw'){const it=gesture.it;if((it.t!=='pen'&&len(sub(it.b,it.a))<0.3)||(it.t==='pen'&&it.pts.length<2)){S().draw.pop();}commit();}
+    if(gesture&&(gesture.type==='drag'||(gesture.type==='moveDraw'&&gesture.moved))) commit();
+    if(gesture&&gesture.type==='orbit'&&gesture.moved&&app.selObj) refresh();
+    gesture=null;
+  }else if(gesture&&gesture.type==='pinch') gesture=null;
+}
+for(const cv of [els.cv2,els.cv3]){
+  cv.addEventListener('pointerdown',onDown);cv.addEventListener('pointermove',onMove);
+  cv.addEventListener('pointerup',onUp);cv.addEventListener('pointercancel',onUp);
+  cv.addEventListener('contextmenu',e=>e.preventDefault());
+}
+els.cv2.addEventListener('wheel',e=>{e.preventDefault();const r=els.cv2.getBoundingClientRect(),px=e.clientX-r.left,py=e.clientY-r.top;
+  const T=makeT(),[wx,wy]=T.inv(px,py);app.view.zoom=clamp(app.view.zoom*Math.exp(-e.deltaY*0.0015),0.4,6);
+  const T2=makeT(),[wx2,wy2]=T2.inv(px,py);app.view.px+=wx-wx2;app.view.py+=wy-wy2;buildHandles();draw2D();},{passive:false});
+els.cv3.addEventListener('wheel',e=>{e.preventDefault();T3.orb.dist=clamp(T3.orb.dist*Math.exp(e.deltaY*0.0012),20,800);refresh();},{passive:false});
+window.addEventListener('keydown',e=>{
+  const t=e.target||{},tag=t.tagName||'';if(tag==='TEXTAREA'||tag==='SELECT'||(tag==='INPUT'&&!/range|checkbox|radio|button/.test(t.type)))return;
+  if(!els.modal.hidden){if(e.key==='Escape')closeJson();return;}
+  if(e.key==='Escape'){setTool('select');if(app.selObj){app.selObj=null;renderPanel();refresh();}}
+  else if((e.key==='Delete'||e.key==='Backspace')&&(selSource()||selDraw())){e.preventDefault();deleteSel();}
+  else if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){e.preventDefault();applyHist(e.shiftKey?1:-1);}
+  else if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='y'){e.preventDefault();applyHist(1);}
+});
+
+/* ================= scenario snapshots (JSON: save / restore / import / export) ================= */
+let DL=null;
+(async()=>{try{if(window.claude&&typeof window.claude.use==='function') DL=await window.claude.use('downloads');}catch(err){DL=null;}})();
+const SNAP_KEY='optics-lab-snaps-v1';
+function validSnap(s){return !!(s&&typeof s==='object'&&SCENES.some(sc=>sc.id===s.scene)&&s.state&&typeof s.state==='object'&&!Array.isArray(s.state));}
+function loadSnaps(){try{const s=JSON.parse(localStorage.getItem(SNAP_KEY)||'[]');if(Array.isArray(s))app.snaps=s.filter(validSnap);}catch(err){}}
+function persistSnaps(){try{localStorage.setItem(SNAP_KEY,JSON.stringify(app.snaps));}catch(err){}}
+const newSnapId=()=>'s'+Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+function stamp(d=new Date()){const p=n=>String(n).padStart(2,'0');return `${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}`;}
+let toastT=null;
+function toast(msg,undo){const t=document.getElementById('toast'),b=document.getElementById('toastUndo');document.getElementById('toastMsg').textContent=msg;
+  b.hidden=!undo;b.onclick=()=>{t.hidden=true;if(undo)undo();};t.hidden=false;clearTimeout(toastT);toastT=setTimeout(()=>{t.hidden=true;},undo?6000:2600);}
+function captureThumb(){
+  let url=null; app.capturing=true;
+  try{redraw();const src=app.mode==='2d'?els.cv2:els.cv3;const c=document.createElement('canvas'),w=240,h=Math.max(1,Math.round(240*src.height/Math.max(src.width,1)));
+    c.width=w;c.height=h;c.getContext('2d').drawImage(src,0,0,w,h);url=c.toDataURL('image/jpeg',0.8);}catch(err){url=null;}
+  app.capturing=false; redraw(); return url;
+}
+function saveSnapshot(){
+  const st=S(),d=new Date(),p=n=>String(n).padStart(2,'0');
+  const snap={format:'optics-lab-snapshot',version:1,id:newSnapId(),scene:cur().id,mode:app.mode,view:{...app.view},
+    orb:T3.orb?{theta:T3.orb.theta,phi:T3.orb.phi,dist:T3.orb.dist,t:[...T3.orb.t]}:null,
+    state:JSON.parse(ser(st)),cap:`${cur().ch} ${cur().name}　${p(d.getHours())}:${p(d.getMinutes())}`,time:d.toISOString(),thumb:captureThumb()};
+  app.snaps.push(snap); persistSnaps(); renderSnaps();
+  els.flash.style.transition='none';els.flash.style.opacity='0.5';requestAnimationFrame(()=>{els.flash.style.transition='';els.flash.style.opacity='0';});
+  toast('已儲存情境快照');
+}
+function restoreSnap(s){
+  const i=SCENES.findIndex(sc=>sc.id===s.scene); if(i<0) return;
+  const prev=app.states[s.scene], prevIdx=app.idx;
+  try{
+    const st=JSON.parse(JSON.stringify(s.state)); fixIds(st); app.states[s.scene]=st;
+    selectScene(i);
+    if(s.view) app.view={zoom:clamp(+s.view.zoom||1,0.4,6),px:+s.view.px||0,py:+s.view.py||0};
+    if(s.orb&&typeof s.orb.dist==='number'&&Array.isArray(s.orb.t)) T3.orb={theta:+s.orb.theta||0,phi:+s.orb.phi||1,dist:s.orb.dist,t:s.orb.t.map(Number)};
+    setMode(s.mode==='3d'?'3d':'2d');
+    pushHist(); toast('已回復情境：'+(s.cap||''));
+  }catch(err){
+    if(prev) app.states[s.scene]=prev; else delete app.states[s.scene];
+    selectScene(prevIdx); toast('這個快照的內容有誤，無法回復');
+  }
+}
+async function exportSnaps(list,name){
+  if(!list.length) return;
+  const data=JSON.stringify({format:'optics-lab-snapshots',version:1,app:'光學實驗台',exported:new Date().toISOString(),snaps:list});
+  if(DL){try{await DL.save({filename:name,data});toast('已匯出 '+list.length+' 個快照');return;}
+    catch(err){const c=err&&err.code;if(c==='declined')return;if(c==='rate_limited'){toast('上一個儲存視窗還沒關閉，請稍後再試');return;}}}
+  document.getElementById('jsonTitle').textContent='匯出快照：'+name;
+  const ta=document.getElementById('jsonText');ta.value=data;document.getElementById('jsonCopy').textContent='複製';
+  els.modal.hidden=false;ta.focus();ta.select();
+}
+function closeJson(){els.modal.hidden=true;}
+document.getElementById('jsonClose').onclick=closeJson;
+els.modal.addEventListener('click',e=>{if(e.target===els.modal)closeJson();});
+document.getElementById('jsonCopy').onclick=()=>{const ta=document.getElementById('jsonText'),bt=document.getElementById('jsonCopy');
+  const fb=()=>{ta.focus();ta.select();bt.textContent='已選取，請按 Ctrl+C';};
+  try{navigator.clipboard.writeText(ta.value).then(()=>{bt.textContent='已複製';},fb);}catch(err){fb();}};
+function importText(txt){
+  let obj; try{obj=JSON.parse(txt);}catch(err){toast('無法讀取：這不是有效的 JSON 檔');return;}
+  const list=Array.isArray(obj)?obj:(obj&&Array.isArray(obj.snaps))?obj.snaps:[obj];
+  const ok=list.filter(validSnap).map(s=>({format:'optics-lab-snapshot',version:1,id:newSnapId(),scene:s.scene,mode:s.mode==='3d'?'3d':'2d',
+    view:s.view&&typeof s.view==='object'?s.view:null,orb:s.orb&&typeof s.orb==='object'?s.orb:null,state:s.state,
+    cap:String(s.cap||SCENES.find(x=>x.id===s.scene).name).slice(0,80),time:String(s.time||''),
+    thumb:typeof s.thumb==='string'&&/^data:image\/(jpeg|png|webp);base64,/.test(s.thumb)?s.thumb:null}));
+  if(!ok.length){toast('檔案裡沒有可用的光學實驗台快照');return;}
+  app.snaps.push(...ok); persistSnaps(); renderSnaps();
+  toast('已匯入 '+ok.length+' 個快照'+(ok.length<list.length?'（略過 '+(list.length-ok.length)+' 個無法辨識的項目）':''));
+}
+function readFile(f){if(!f)return;const r=new FileReader();r.onload=()=>importText(String(r.result));r.onerror=()=>toast('檔案讀取失敗');r.readAsText(f);}
+els.importFile.onchange=()=>{readFile(els.importFile.files[0]);els.importFile.value='';};
+els.snaps.addEventListener('dragover',e=>{e.preventDefault();els.snaps.classList.add('drop');});
+els.snaps.addEventListener('dragleave',()=>els.snaps.classList.remove('drop'));
+els.snaps.addEventListener('drop',e=>{e.preventDefault();els.snaps.classList.remove('drop');readFile(e.dataTransfer.files[0]);});
+function deleteSnap(s){const i=app.snaps.indexOf(s);if(i<0)return;app.snaps.splice(i,1);persistSnaps();renderSnaps();
+  toast('已刪除快照',()=>{app.snaps.splice(Math.min(i,app.snaps.length),0,s);persistSnaps();renderSnaps();});}
+function renderSnaps(){
+  const box=els.snaps; box.innerHTML='';
+  const head=el('div','head'); const lab=el('span','lab'); lab.textContent='情境快照'+(app.snaps.length?' · '+app.snaps.length+' 個':''); head.appendChild(lab);
+  const ic=el('div','icons');
+  const mk=(icon,label,fn,dis)=>{const b=el('button','ibtn',SVG(icon));b.type='button';b.title=label;b.setAttribute('aria-label',label);b.disabled=!!dis;b.onclick=fn;return b;};
+  ic.append(mk('snap','儲存目前情境',saveSnapshot),mk('import','匯入快照（JSON 檔，也可以拖曳到這裡）',()=>els.importFile.click()),
+    mk('export','匯出全部快照為 JSON',()=>exportSnaps(app.snaps,'光學實驗台快照-'+stamp()+'.json'),!app.snaps.length));
+  head.appendChild(ic); box.appendChild(head);
+  if(!app.snaps.length){box.appendChild(el('div','empty','按相機圖示儲存目前的實驗情境，之後可一鍵回復，也能匯出成 JSON 檔與同學分享。'));}
+  for(const s of app.snaps){
+    const card=el('div','snapcard'), th=el('button','th'); th.type='button'; th.title='回復這個情境'; th.setAttribute('aria-label','回復情境 '+s.cap);
+    if(s.thumb){const im=el('img');im.src=s.thumb;im.alt='';th.appendChild(im);}
+    const cap=el('span','cap'); cap.textContent=s.cap; th.appendChild(cap); th.onclick=()=>restoreSnap(s); card.appendChild(th);
+    const acts=el('div','acts');
+    const ab=(icon,label,fn)=>{const b=el('button',null,SVG(icon));b.type='button';b.title=label;b.setAttribute('aria-label',label+'：'+s.cap);b.onclick=e=>{e.stopPropagation();fn();};return b;};
+    acts.append(ab('restore','回復情境',()=>restoreSnap(s)),
+      ab('export','匯出這個快照',()=>exportSnaps([s],((SCENES.find(x=>x.id===s.scene)||{}).name||'快照')+'-'+stamp()+'.json')),
+      ab('delete','刪除快照',()=>deleteSnap(s)));
+    card.appendChild(acts); box.appendChild(card);
+  }
+}
+
+/* ================= main loop ================= */
+function refresh(){
+  const sc=cur(),st=S();
+  app.out=sc.build(st,bounds());
+  addExtras(app.out);
+  if(app.selObj&&!app.out.objects.some(o=>o.id===app.selObj)&&!selDraw()){app.selObj=null;renderPanel();}
+  buildHandles();
+  if(app.hover>=app.handles.length) app.hover=-1;
+  els.info.innerHTML=app.out.info||'';
+  app.sync.forEach(f=>f());
+  updateToolbar();
+  redraw();
+}
+function setMode(m){
+  if(m==='3d'&&!ensure3D()){els.err3d.hidden=false;els.cv2.hidden=true;els.cv3.hidden=true;app.mode='3d';}
+  else{els.err3d.hidden=true;app.mode=m;els.cv2.hidden=m!=='2d';els.cv3.hidden=m!=='3d';}
+  document.getElementById('m2d').setAttribute('aria-pressed',m==='2d');document.getElementById('m3d').setAttribute('aria-pressed',m==='3d');
+  app.hover=-1; setHint(); resize(); if(T3.ok&&m==='3d') render3D(); refresh();
+}
+document.getElementById('m2d').onclick=()=>setMode('2d');
+document.getElementById('m3d').onclick=()=>setMode('3d');
+document.getElementById('resetView').onclick=()=>{app.view={zoom:1,px:0,py:0};reset3DCamera();refresh();};
+document.getElementById('resetScene').onclick=()=>{app.states[cur().id]=cur().init();app.selObj=null;renderPanel();commit();};
+new ResizeObserver(()=>{resize();if(app.out){buildHandles();redraw();}}).observe(els.stage);
+function fromHash(){const id=(location.hash||'').slice(1);return SCENES.findIndex(s=>s.id===id);}
+window.addEventListener('hashchange',()=>{const i=fromHash();if(i>=0&&i!==app.idx)selectScene(i,true);});
+const hi=fromHash(); app.idx=hi>=0?hi:SCENES.findIndex(s=>s.id==='lens-image');
+buildToolbar(); loadSnaps(); renderSnaps(); resize(); renderRail(); renderPanel(); reset3DCamera(); setMode('2d');
+if(document.fonts&&document.fonts.ready) document.fonts.ready.then(()=>{if(app.mode==='2d')draw2D();});
+window.__optics={app,SCENES,setMode,selectScene,refresh,imageOf,S,setTool,toWorld,handlePx};
+})();
+</script>
+
+</body></html>
