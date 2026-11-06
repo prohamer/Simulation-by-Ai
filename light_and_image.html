@@ -1,4 +1,5 @@
-<title>光與影像V32</title>
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>光與影像V33</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -3497,7 +3498,16 @@ function starSvg(kind){
   if(kind==='solid') return '<svg class="st" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7.5" fill="#5a6b78"/></svg>';
   return '<svg class="st" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7.5" fill="none" stroke="#9aa7b3" stroke-width="2"/></svg>';
 }
-function stepMedal(no,i){const r=REC.card[no+'-'+i];if(!r||!r.done)return 'empty';if(!r.q||r.att<=1)return 'gold';return r.att===2?'silver':'solid';}
+const MEDAL_RANK={empty:0,solid:1,silver:2,gold:3};
+function curMedal(r){if(!r||!r.done)return 'empty';if(!r.q||r.att<=1)return 'gold';return r.att===2?'silver':'solid';}
+function stepMedal(no,i){const r=REC.card[no+'-'+i];if(!r)return 'empty';const a=curMedal(r),b=r.best||'empty';return MEDAL_RANK[a]>=MEDAL_RANK[b]?a:b;}   // 重做時保留最好的一次
+function stepRetried(no,i){const r=REC.card[no+'-'+i];return !!(r&&r.retry);}
+function retryStep(i){   // 再挑戰：記下目前最好的結果，清掉作答與過關條件，重設場景
+  const k=cardKey(i), r=REC.card[k]; if(!r) return;
+  r.best=stepMedal(CARD.no,i); r.retry=(r.retry||0)+1;
+  Object.assign(r,{att:0,ok:false,wrong:false,rev:false,cond:{},done:false}); delete r.pick; delete MEM[k];
+  recSave(); resetStepScene(i); renderCard(); syncCardLocks(); toast('重新挑戰這一步：表現更好會升級，原本的結果會保留');
+}
 function renderCard(soft){
   const st=curStep(), dr=$('#drawer'), c=cst(), m=cmem(), done=stepDone(cardI);
   let opts='', ex='';
@@ -3519,6 +3529,7 @@ function renderCard(soft){
       ${(st.opts&&!c.ok)||(!st.opts&&!c.rev&&!(st.chk||[]).length)?`<button class="btn" id="cardReveal" ${st.opts&&c.pick===undefined?'disabled':''}>${st.opts?(c.wrong?'再看一次結果':'我觀察好了，看結果'):'看說明'}</button>`:''}
       ${!st.opts&&(st.chk||[]).length&&!c.rev&&done?'<button class="btn ghost" id="cardReveal">看說明</button>':''}
       ${ex}
+      ${done||c.att>0?`<button class="btn ghost small" id="cardRetry">再挑戰這一步${stepRetried(CARD.no,cardI)?`（已重做 ${cst().retry} 次）`:''}</button>`:''}
     </div>
     <div class="card-nav"><button class="btn ghost small" id="cardCert">證書</button><button class="btn ghost" id="cardPrev" ${cardI===0?'disabled':''}>上一步</button><button class="btn" id="cardNext" ${cardI===CARD.steps.length-1?'disabled':''}>下一步</button></div>`;
   $('#cardClose').onclick=()=>toggleCard(false);
@@ -3531,6 +3542,7 @@ function renderCard(soft){
     if(st.opts){c.att++;c.ok=c.pick===st.ans;c.wrong=!c.ok;if(c.ok&&st.after)goView(st.after);}else c.rev=true;
     c.done=stepDone(cardI); recSave(); renderCard(); syncCardLocks();};
   dr.querySelectorAll('[data-opt]').forEach(b=>b.onclick=()=>{if(c.ok)return;c.pick=+b.dataset.opt;c.wrong=false;renderCard();syncCardLocks();});
+  const rt=$('#cardRetry'); if(rt) rt.onclick=()=>retryStep(cardI);
   const tf=$('#traceFree'); if(tf) tf.onclick=()=>{cmem().free=true;if(!ink.on)$('#inkFab').click();renderCard();updateRays();drawSide();};
   const tg=$('#traceGuide'); if(tg) tg.onclick=()=>{cmem().free=false;if(ink.on)$('#inkFab').click();renderCard();updateRays();drawSide();};
   const ts=$('#traceSelf'); if(ts) ts.onclick=()=>{const mm=cmem();mm.self=true;CC().prin=true;CC().tri=true;cardTick();syncCardLocks();changed();toast('已顯示正確的三條主要光線，和你畫的比一比');};
@@ -3608,7 +3620,8 @@ function drawCert(){
   REC_SC.forEach(([sc,nm,cf],i)=>{
     const C=cf(); y+=74; x.fillStyle=i%2?'#f3efe4':'#fffaf0'; x.fillRect(tx,y-48,W-2*tx,74);
     x.textAlign='left'; x.fillStyle='#1c2a35'; x.font=`700 27px ${F}`; x.fillText(`${C.no}　${nm}`,tx+16,y);
-    C.steps.forEach((_,j)=>{const k=stepMedal(C.no,j);tot++;if(k==='gold')tg++;else if(k==='silver')ts++;else if(k==='solid')tso++;drawMedal(x,tx+nameW+starW*j+24,y-11,k,24);});
+    C.steps.forEach((_,j)=>{const k=stepMedal(C.no,j);tot++;if(k==='gold')tg++;else if(k==='silver')ts++;else if(k==='solid')tso++;const cx=tx+nameW+starW*j+24;drawMedal(x,cx,y-11,k,24);
+      if(stepRetried(C.no,j)){x.save();x.font=`700 15px ${F}`;x.fillStyle='#1f6fd1';x.textAlign='center';x.fillText('重做',cx,y+20);x.restore();}});
     const pr=REC.pred.filter(p=>p.sc===sc); x.textAlign='center'; x.font=`500 26px ${F}`; x.fillStyle=pr.length?'#1c2a35':'#a0a8ae';
     x.fillText(pr.length?`核對 ${pr.length} 次・全對 ${pr.filter(p=>p.all).length} 次`:'—',predX+110,y);
   });
@@ -3619,7 +3632,7 @@ function drawCert(){
   x.font=`500 24px ${F}`; x.textAlign='left'; const ws=items.map(([,t])=>44+x.measureText(t).width+40), tw=ws.reduce((a,b)=>a+b,0); let lx=W/2-tw/2;
   items.forEach(([k,t],i)=>{drawMedal(x,lx+18,y-9,k,18);x.fillStyle='#4a5a66';x.fillText(t,lx+44,y);lx+=ws[i];});
   x.textAlign='center'; x.font=`700 34px ui-monospace,Menlo,monospace`; x.fillStyle='#cf4458'; x.fillText('驗證碼 '+code,W/2,H-108);
-  x.font=`500 22px ${F}`; x.fillStyle='#6b7a86'; x.fillText('步驟完成＝預測答對＋過關條件都達成；作答次數以按「看結果」計算。',W/2,H-70);
+  x.font=`500 22px ${F}`; x.fillStyle='#6b7a86'; x.fillText('步驟完成＝預測答對＋過關條件都達成；作答次數以按「看結果」計算；重做過的步驟保留最好的一次，下方標「重做」。',W/2,H-70);
   REC.codes=(REC.codes||[]).concat([{code,t:now,name}]).slice(-20); store(REC_KEY,REC);
   const url=cv.toDataURL('image/png'); $('#certImg').src=url; $('#certDl').href=url; $('#certDl').download=`光學小站學習證書_${name}.png`;
 }
@@ -3855,3 +3868,5 @@ document.addEventListener('scroll',e=>{const t=e.target;if(t&&t.nodeType===1&&(t
 window.__lab={S,cam,REG,rayGroup,imgGroup,switchScene,get MIRRORS(){return MIRRORS;},get hand(){return handRays;},get hist(){return hist;},goView,applySetup,takeSnap,makeShot,undo,redo};
 })();
 </script>
+
+</body></html>
