@@ -1,5 +1,5 @@
 <!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
-<title>光學實驗台V7</title>
+<title>光學實驗台V8</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
@@ -129,6 +129,8 @@ button,select,input{font:inherit;color:inherit}
 .tcard .goal{font-size:13px;color:var(--ink-2);margin:0;max-width:75ch}
 .tcard:not(.active) .goal{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .tcard .hints{margin:0;padding-left:18px;font-size:12.5px;color:var(--ink-2)}
+.frozenbox{position:relative}.frozennote{display:flex;gap:8px;align-items:center;font-size:12.5px;color:var(--warn);background:color-mix(in srgb,var(--warn) 12%,transparent);border-radius:8px;padding:7px 10px;margin:0 0 10px}
+.frozennote svg{width:16px;height:16px;flex:none;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}.frozenctl{opacity:.45;pointer-events:none;filter:grayscale(.4)}.frozenbox.hidevals output{visibility:hidden}
 .tcard .msg{font-size:13px;padding:6px 10px;border-radius:8px;max-width:75ch}
 .tcard .msg.ok{background:var(--accent-soft);color:var(--ink)}
 .tcard .msg.no{background:color-mix(in srgb,var(--warn) 16%,transparent);color:var(--warn)}
@@ -1070,63 +1072,118 @@ SCENES.push({id:'lens-image',ch:'4-4',name:'透鏡成像',bounds:[-54,54,-19,19]
 
 /* ---------- 4-4 眼睛與視力矯正 ---------- */
 // near/far-sightedness by axial length; the correcting lens starts flat and its centre is dragged to make it convex or concave
-const EYE_RET={normal:24,myopia:28,hyper:20}, EYE_FAR=2000, EYE_NEAR=60, EYE_GX=-12, EYE_PK=0.001;
+/* eye model (units ≈ mm, eye enlarged): cornea at x=0 (fixed power) + crystalline lens at EYE_LX (accommodates) */
+const EYE_GX=-12, EYE_GXD=-5, EYE_PK=0.001, EYE_FAR=2000, EYE_NEAR=25, EYE_NP=11, EYE_UMAX=600, EYE_LX=5.2, EYE_PC=1/36, EYE_N=24, EYE_RY=11.4;
+// the eye is drawn ~10× enlarged (inside the eye 1 grid unit = 1 mm); light-point distances use the grid as-is (1 unit = 1 cm),
+// so the optics use 10·u mm. Glasses: optics 12 mm in front of the cornea, drawn at EYE_GXD.
+const EYE_COLS=['#ffe066','#7fd4ff','#ff9ad5'];
+const eyeV2=V0=>{const V1=V0+EYE_PC;return V1/(1-EYE_LX*V1);};              // vergence just before the lens
+const EYE_PL0=1/(EYE_N-EYE_LX)-eyeV2(0);                                       // relaxed lens of a normal eye
+const EYE_ACC=1/(EYE_N-EYE_LX)-eyeV2(-1/(EYE_NP*10))-EYE_PL0;                        // accommodation: normal near point 11 cm (young adult)
+const eyeImgX=(V0,Pl)=>{const V3=eyeV2(V0)+Pl;return V3>1e-9?EYE_LX+1/V3:1e5;};
+// axial length for a refractive error (deg = 度, 100 度 = 1 D); myopia: relaxed eye focuses a point 1/D away
+const eyeAxial=(eye,deg)=>eye==='normal'?EYE_N:eyeImgX((eye==='myopia'?-1:1)*deg/100*0.001,EYE_PL0);
+function eyeFix(st){
+  if(st.deg==null) st.deg=600;
+  if(!st.pts||!st.pts.length){st.pts=[{id:1,u:st.dist==='near'?EYE_NEAR:EYE_FAR,y:0}];st.focus=1;}
+  if(!st.pts.some(q=>q.id===st.focus)) st.focus=st.pts[0].id;
+  return st.pts.find(q=>q.id===st.focus);}
 function animateEye(st){
-  const to={_u:st.dist==='far'?EYE_FAR:EYE_NEAR,_ret:EYE_RET[st.eye]};
-  const from={_u:st._uShown??to._u,_ret:st._retShown??to._ret};
+  const fp=eyeFix(st), RET=eyeAxial(st.eye,st.deg);
+  const toU=st.dist==='far'?EYE_FAR:st.dist==='near'?EYE_NEAR:fp.u;
+  const from={_u:st._uShown??fp.u,_ret:st._retShown??RET}, to={_u:toU,_ret:RET};
+  fp.u=toU; if(toU>=1000) fp.y=0;
   animate(st,from,to,{_u:'log'});
 }
 SCENES.push({id:'eye',ch:'4-4',name:'眼睛與視力矯正',bounds:[-78,36,-19,19],
-  init:()=>({eye:'myopia',dist:'far',glasses:false,gv:0}),
-  controls:st=>[
+  init:()=>({eye:'normal',deg:600,dist:'far',glasses:false,gv:0,pts:[{id:1,u:EYE_FAR,y:0}],focus:1,nextPt:2}),
+  controls:st=>{eyeFix(st);return [
     {type:'seg',key:'eye',label:'眼睛',options:[['normal','正常'],['myopia','近視'],['hyper','遠視']],onInput:animateEye},
-    {type:'seg',key:'dist',label:'觀看',options:[['far','遠處物體'],['near','近處物體']],onInput:animateEye},
+    ...(st.eye!=='normal'?[{type:'slider',key:'deg',label:(st.eye==='myopia'?'近視':'遠視')+'度數',min:100,max:800,step:50,fmt:v=>v+' 度'}]:[]),
+    {type:'seg',key:'dist',label:'對焦中的光點移到',options:[['far','遠處'],['near','近處（25 cm）']],onInput:animateEye},
+    {type:'buttons',items:[
+      {label:'＋ 新增光點',rebuild:true,onClick:s=>{if(s.pts.length>=3)return;const id=s.nextPt=(s.nextPt||s.pts.length+1);s.nextPt=id+1;
+        const used=s.pts.map(q=>q.u);const u=[40,15,60,8].find(v=>!used.includes(v))||30;s.pts.push({id,u,y:s.pts.length===1?4:-4});s.focus=id;}},
+      ...(st.pts.length>1?[{label:'刪除對焦中的光點',rebuild:true,onClick:s=>{s.pts=s.pts.filter(q=>q.id!==s.focus);s.focus=s.pts[0].id;}}]:[])]},
     {type:'toggle',key:'glasses',label:'戴上鏡片（一開始是平光）',rebuild:true},
-    ...(st.glasses?[{type:'slider',key:'gv',label:'鏡片彎曲（負＝凹透鏡、正＝凸透鏡）',min:-10,max:10,step:0.1,fmt:v=>v==0?'平光':(v<0?'凹 ':'凸 ')+Math.abs(v).toFixed(1)},
-      {type:'buttons',items:[{label:'鏡片調回平光',onClick:s=>{s.gv=0;}}]}]:[])],
+    ...(st.glasses?[{type:'slider',key:'gv',label:'鏡片度數（負＝凹透鏡、正＝凸透鏡）',min:-10,max:10,step:0.25,fmt:v=>v==0?'平光':(v<0?'凹 ':'凸 ')+Math.round(Math.abs(v)*100)+' 度'},
+      {type:'buttons',items:[{label:'鏡片調回平光',onClick:s=>{s.gv=0;}}]}]:[])];},
   build(st,b){
-    const P=[], GX=EYE_GX, RET=st._ret??EYE_RET[st.eye], uObj=st._u??(st.dist==='far'?EYE_FAR:EYE_NEAR);
-    st._retShown=RET; st._uShown=uObj;
-    const Pg=st.glasses?st.gv*EYE_PK:0;            // eyeglass power (1/cm)
-    // vergence of the light reaching the eye lens
-    let V2=-1/uObj;
-    if(st.glasses){const V1=-1/(uObj+GX)+Pg; V2=V1/(1+GX*V1);}
-    const Pe=clamp(1/RET-V2,1/24,1/16.5), fe=1/Pe, Vt=V2+Pe, v=Vt>1e-6?1/Vt:1e4;
-    const ry=12.6, cx=RET/2, rx=RET/2+0.6;
-    P.push({t:'axis',x0:b[0],x1:b[1]});
-    P.push({t:'eyeball',cx,rx,ry,cmp:Math.abs(RET-24)>0.05?{cx:12,rx:12.6}:null});
-    P.push({t:'lens',x:0,H:5,convex:true,f:fe*0.55,post:false});
-    if(st.glasses){const flat=Math.abs(Pg)<1e-7;
-      P.push({t:'lens',x:GX,H:9,convex:Pg>=0,f:flat?1e9:1/(Math.abs(Pg)*25),post:false,label:flat?'平光鏡片':Pg>0?'凸透鏡':'凹透鏡'});}
-    const retina=lin(-0.85,0.85,20).map(a=>[cx+rx*Math.cos(a),ry*Math.sin(a)]);
-    const optics=[{kind:'lens',x:0,H:5,f:fe},{kind:'absorb',pts:retina}]; if(st.glasses&&Math.abs(Pg)>1e-7) optics.unshift({kind:'lens',x:GX,H:9,f:1/Pg});
+    const fp=eyeFix(st);
+    const P=[], GX=EYE_GX, RET=st._ret??eyeAxial(st.eye,st.deg);
+    st._retShown=RET; st._uShown=st._u??fp.u;
+    st.dist=fp.u>=1000?'far':Math.abs(fp.u-EYE_NEAR)<0.5?'near':'';
+    const Pg=st.glasses?st.gv*EYE_PK:0;
+    const uOf=q=>q===fp&&st._u!=null?st._u:q.u;
+    const Vin=u=>{let V=-1/u;if(st.glasses){const V1=-1/(u+GX)+Pg;V=V1/(1+GX*V1);}return V;};   // vergence arriving at the cornea
+    // the lens accommodates for the focused point, within its range
+    const PlNeed=1/(RET-EYE_LX)-eyeV2(Vin(uOf(fp)*10));
+    const Pl=clamp(PlNeed,EYE_PL0,EYE_PL0+EYE_ACC), accState=PlNeed<EYE_PL0-1e-6?'min':PlNeed>EYE_PL0+EYE_ACC+1e-6?'max':'ok';
+    // anatomy
+    const cx=(RET+1.2)/2, rx=(RET-1.2)/2, ry=EYE_RY, hj=5.5;
+    const xj=cx-rx*Math.sqrt(1-(hj/ry)**2), Rc=(hj*hj+xj*xj)/(2*xj);
     const retX=y=>cx+rx*Math.sqrt(Math.max(0,1-(y/ry)**2));
-    const firstX=st.glasses?GX:0, lenses=st.glasses?[[GX,Pg],[0,Pe]]:[[0,Pe]];
-    for(const y of lin(-4,4,5)){
-      const m0=y/(firstX+uObj), x0=Math.max(-uObj,b[0]-1), p=[x0,m0*(x0+uObj)];
-      const pts=[p]; let x=p[0], yy=p[1], m=m0;
-      for(const [lx,lp] of lenses){yy=yy+m*(lx-x);x=lx;pts.push([x,yy]);m=m-yy*lp;}
-      let xr=RET; for(let k=0;k<4;k++) xr=retX(yy+m*(xr-x)); const yr=yy+m*(xr-x);
-      pts.push([xr,yr]);
-      P.push({t:'ray',pts,c:'#ffe066',w:1.5});
-      if(v>xr&&v<70) P.push({t:'ray',pts:[[xr,yr],[v,yy+m*(v-x)]],c:'#ffe066',w:0.9,a:0.45,dash:true});
-    }
-    if(uObj<=76){P.push({t:'lamp',x:-uObj,y:0});P.push({t:'label',x:-uObj,y:-4.5,text:'物體',c:C.text});}
-    else P.push({t:'label',x:b[0]+2,y:6.5,text:'來自遠處物體的光（近似平行）',c:C.dim,align:'left'});
-    if(v<70) P.push({t:'point',x:v,y:0,c:'#ffffff'});
-    P.push({t:'label',x:clamp(v<70?v:RET,-5,34),y:-6,text:'成像點',c:C.text});
-    const err=v-RET, ok=Math.abs(err)<0.3, where=ok?'視網膜上':err<0?'視網膜前':'視網膜後';
-    const blur=Math.abs(err)*8/Math.max(v,1);
-    const H=st.glasses?[{x:GX+st.gv*0.25,y:0,cursor:'ew-resize',drag:x=>{st.gv=clamp(Math.round((x-GX)*4*10)/10,-10,10);}}]:[];
-    const lensTxt=!st.glasses?'沒有戴':Math.abs(Pg)<1e-7?'平光（還沒有彎曲）':(Pg>0?'凸透鏡':'凹透鏡')+'（彎曲 '+Math.abs(st.gv).toFixed(1)+'）';
-    const info=`<dl class="kv"><dt>眼軸長度（示意）</dt><dd>${f1(RET)}${st.eye==='normal'?'':'（正常 24.0）'}</dd><dt>成像位置</dt><dd class="t">${where}</dd><dt>看起來</dt><dd class="t">${ok?'清楚':'模糊'}</dd>
+    const irisY=4, cmp=Math.abs(RET-EYE_N)>0.05?{cx:(EYE_N+1.2)/2,rx:(EYE_N-1.2)/2}:null;
+    P.push({t:'axis',x0:b[0],x1:b[1]});
+    P.push({t:'eyeball',cx,rx,ry,hj,Rc,cmp,lx:EYE_LX,irisY});
+    P.push({t:'line',pts:[[-EYE_NP,0.8],[-EYE_NP,-13.5]],c:'rgba(126,224,160,0.55)',w:1.2,dash:true});P.push({t:'label',x:-EYE_NP,y:-15.3,text:'正常眼明視近點 11 cm',c:'#7ee0a0',size:11});
+    const thick=0.9+1.3*(Pl-EYE_PL0)/EYE_ACC;
+    P.push({t:'crystal',x:EYE_LX+0.4,H:3.9,w:1.3+thick*0.6});
+    if(st.glasses){const flat=Math.abs(Pg)<1e-7;
+      P.push({t:'lens',x:EYE_GXD,H:9,convex:Pg>=0,f:flat?1e9:1/(Math.abs(Pg)*25),post:false,label:flat?'平光鏡片':Pg>0?'凸透鏡':'凹透鏡'});}
+    const elems=(st.glasses?[[GX,Pg]]:[]).concat([[0,EYE_PC],[EYE_LX,Pl]]);
+    const optics=[{kind:'lens',x:0,H:hj,f:1/EYE_PC},{kind:'lens',x:EYE_LX,H:irisY,f:1/Pl},{kind:'absorb',pts:lin(-0.85,0.85,20).map(a=>[cx+rx*Math.cos(a),ry*Math.sin(a)])}];
+    if(st.glasses&&Math.abs(Pg)>1e-7) optics.unshift({kind:'lens',x:EYE_GXD,H:9,f:1/Pg});
+    const firstX=st.glasses?GX:0, res=[], farX=b[0]+(b[1]-b[0])*0.12;
+    st.pts.forEach((q,qi)=>{
+      const u=uOf(q), far=u>=1000, sy=far?0:q.y, foc=q===fp, col=EYE_COLS[qi%3];
+      const rays=[];
+      for(const h of lin(-3.3,3.3,5)){
+        const U=u*10, m0=far?0:(h-sy)/(firstX+U), x0=far?b[0]-1:-u, p=[x0,far?h:sy];
+        const pts=[p]; let x=p[0], yy=p[1], m=m0, blocked=false;
+        for(const [lx,lp] of elems){yy=(x===x0&&!far)?sy+m0*(lx+U):yy+m*(lx-x);x=lx;pts.push([lx===GX?EYE_GXD:x,yy]);
+          if(lx===EYE_LX&&Math.abs(yy)>irisY){blocked=true;break;} m=m-yy*lp;}
+        if(blocked){P.push({t:'ray',pts,c:col,w:foc?1.5:1,a:foc?1:0.55});continue;}
+        let xr=RET; for(let k=0;k<4;k++) xr=retX(yy+m*(xr-x)); const yr=yy+m*(xr-x);
+        pts.push([xr,yr]); rays.push({y:yy,m,yr});
+        P.push({t:'ray',pts,c:col,w:foc?1.5:1,a:foc?1:0.55});
+      }
+      // image point: where the rays leaving the lens cross
+      let v=1e5, vy=0; if(rays.length>=2){const r1=rays[0],r2=rays[rays.length-1]; if(Math.abs(r1.m-r2.m)>1e-9){const t=(r2.y-r1.y)/(r1.m-r2.m);v=EYE_LX+t;vy=r1.y+r1.m*t;}}
+      if(v<EYE_LX) v=1e5;
+      const xr=retX(vy), spread=rays.length?Math.max(...rays.map(r=>r.yr))-Math.min(...rays.map(r=>r.yr)):0;
+      if(v>xr&&v<70) for(const r of rays) P.push({t:'ray',pts:[[xr,r.yr],[v,r.y+r.m*(v-EYE_LX)]],c:col,w:0.9,a:0.4,dash:true});
+      if(v<70) P.push({t:'point',x:v,y:vy,c:col});
+      const err=v-xr; res.push({q,u,far,col,foc,v,err,spread,ok:Math.abs(err)<0.3});
+      if(!far){P.push({t:'lamp',x:-u,y:sy,c:col});
+        P.push({t:'label',x:-u,y:sy-3.6,text:f1(u)+' cm'+(foc?'・對焦中':''),c:foc?col:C.dim});}
+      else{P.push({t:'point',x:farX,y:7.5,c:col});P.push({t:'label',x:farX+1.5,y:7.5,text:'遠處光源（光近似平行）'+(foc?'・對焦中':''),c:foc?col:C.dim,align:'left'});}
+    });
+    const R=res.find(r=>r.foc), where=R.ok?'視網膜上':R.err<0?'視網膜前':'視網膜後';
+    const PlNaked=clamp(1/(RET-EYE_LX)-eyeV2(-1/(uOf(fp)*10)),EYE_PL0,EYE_PL0+EYE_ACC);
+    const over=st.glasses&&Pg<0&&R.ok&&Pl-PlNaked>0.0004;   // > 0.4 D extra accommodation caused by a too-strong concave lens
+    // handles: drag a light point (left of the glasses); far light: grab it at the left edge
+    const H=st.pts.map((q,qi)=>{const far=uOf(q)>=1000;
+      return {x:far?farX:-uOf(q),y:far?7.5:q.y,cursor:'move',
+        o0:()=>{st.focus=q.id;return null;},
+        drag:(wx,wy)=>{st.focus=q.id; q.u=clamp(Math.round(-wx*2)/2,7,EYE_UMAX);q.y=clamp(Math.round(wy*2)/2,-8,8);}};});
+    if(st.glasses) H.push({x:EYE_GXD+st.gv*0.25,y:0,cursor:'ew-resize',drag:x=>{st.gv=clamp(Math.round((x-EYE_GXD)*4*4)/4,-10,10);}});
+    const lensTxt=!st.glasses?'沒有戴':Math.abs(Pg)<1e-7?'平光':(Pg>0?'凸透鏡 ':'凹透鏡 ')+Math.round(Math.abs(st.gv)*100)+' 度';
+    const accTxt=accState==='max'?'已調到最厚，還是不夠':accState==='min'?'已放到最扁':(Pl-EYE_PL0)<EYE_ACC*0.02?'放鬆（最扁）':'變厚調節中';
+    const info=`<dl class="kv"><dt>眼睛</dt><dd class="t">${st.eye==='normal'?'正常':(st.eye==='myopia'?'近視 ':'遠視 ')+st.deg+' 度'}</dd>
+      <dt>眼軸長度（示意）</dt><dd>${f1(RET)}${st.eye==='normal'?'':'（正常 24.0）'}</dd>
+      <dt>水晶體</dt><dd class="t">${accTxt}</dd>
+      <dt>對焦光點成像</dt><dd class="t">${where}</dd><dt>看起來</dt><dd class="t">${R.ok?(over?'清楚，但水晶體一直用力':'清楚'):'模糊'}</dd>
       <dt>鏡片</dt><dd class="t">${lensTxt}</dd></dl>
+      ${over?'<p class="note-sm" style="color:var(--warn)">鏡片度數太深（過度矯正）：看遠處時水晶體也得一直變厚來補償，雖然看得清楚，但眼睛很容易疲勞。試著把鏡片度數調淺。</p>':''}
+      <p class="note-sm">拖曳光點可以改變遠近；點一下光點，水晶體就改成對焦在那個光點。角膜的折射固定，對焦靠水晶體變厚或變薄。</p>
       ${st.glasses?'<p class="note-sm">拖曳鏡片中央的圓點：往右拖變凸透鏡、往左拖變凹透鏡。也可以用右側滑桿微調。</p>':''}
-      <p class="note-sm">${st.eye==='myopia'?'近視：眼軸比正常長，遠處物體成像在視網膜前。':st.eye==='hyper'?'遠視：眼軸比正常短，近處物體成像在視網膜後。':'正常眼睛會自動調整晶狀體的厚薄，遠近物體都能成像在視網膜上。'}</p>
-      <p class="note-sm">${st.eye==='normal'?'':'虛線是正常眼球的大小，方便對照。'}圖中尺寸為示意，眼球已放大。</p>`;
-    return {prims:P,handles:H,info,optics,meta:{ok,gv:st.glasses?st.gv:0},sv:{kind:'eye',title:'眼睛看到的',blur}};
+      <p class="note-sm">${st.eye==='myopia'?'近視：眼軸比正常長，度數愈深眼軸愈長；遠處物體成像在視網膜前。':st.eye==='hyper'?'遠視：眼軸比正常短，度數愈深眼軸愈短；近處物體成像在視網膜後。':'正常眼睛靠水晶體變厚變薄，遠近物體都能成像在視網膜上。'}</p>
+      <p class="note-sm">${st.eye==='normal'?'':'虛線是正常眼球的大小，方便對照。'}眼球放大約 10 倍；光點的距離直接看背景網格（小格 1 cm）。</p>`;
+    const sv={kind:'eye',title:'眼睛看到的',blur:R.spread,pts:res.length>1?res.map(r=>({c:r.col,blur:r.spread,foc:r.foc,u:r.u})):null};
+    return {prims:P,handles:H,info,optics,meta:{ok:R.ok,over,far:R.far,near:!R.far&&R.u<=EYE_NEAR+0.5,gv:st.glasses?st.gv:0,acc:accState},sv};
   },
-  notes:['眼睛的晶狀體相當於凸透鏡，在視網膜上形成倒立縮小的實像。','近視：眼軸太長（或晶狀體太凸），遠物成像在視網膜前，用凹透鏡矯正。','遠視：眼軸太短（或晶狀體太扁），近物成像在視網膜後，用凸透鏡矯正。']
+  notes:['角膜和水晶體一起把光折射到視網膜上，形成倒立縮小的實像；角膜的折射固定，水晶體可以改變厚薄來對焦。','近視：眼軸太長，遠物成像在視網膜前，用凹透鏡矯正；度數愈深，眼軸愈長。','遠視：眼軸太短，近物成像在視網膜後，用凸透鏡矯正；度數愈深，眼軸愈短。']
 });
 
 /* ---------- 4-5 色散 ---------- */
@@ -1235,13 +1292,13 @@ function fromH(d,H,T,tolH){let a=d.a,b=d.b;
   const L=len(sub(b,a)); if(L<3) return null; const u=mul(sub(b,a),1/L),w=sub(H,a),t=dot(w,u);
   if(t<0||t>L||Math.abs(w[0]*u[1]-w[1]*u[0])>tolH) return null;
   const P=add(a,mul(u,t)); return dot(sub(T,P),u)>=0?[P,b]:[P,a];}
-function drawnThrough(st,H,T,tolH=2,tolT=1.5){return st.draw.some(d=>{
+function drawnThrough(st,H,T,tolH=1,tolT=0.6){return st.draw.some(d=>{
   if(d.t!=='line'&&d.t!=='ruler') return false; if(len(sub(d.b,d.a))<3) return false;
   const ab=fromH(d,H,T,tolH); if(!ab) return false; const [a,b]=ab;
   const u=nrm(sub(b,a)),v=sub(T,a),along=dot(v,u); if(along<=0) return false;
   return Math.abs(v[0]*u[1]-v[1]*u[0])<tolT&&len(sub(b,a))>=Math.min(along,8);});}
 // why a drawn ray fails drawnThrough — tells what is wrong, never where the answer is
-function rayFb(d,H,T,tolH=2,tolT=1.5){
+function rayFb(d,H,T,tolH=1,tolT=0.6){
   const ab=fromH(d,H,T,tolH); if(!ab) return '起點不對：請從黃色光線打到透鏡的那一點（標著「從這裡開始畫」）開始畫。'; const [a,b]=ab;
   const u=nrm(sub(b,a)),v=sub(T,a),along=dot(v,u);
   if(along<=0) return '方向不對：光線穿過透鏡後是往前（右邊）走的，再想想它會往哪裡去。';
@@ -1251,12 +1308,15 @@ function rayFb(d,H,T,tolH=2,tolT=1.5){
 const angOff=(u,ax)=>Math.round(Math.asin(Math.min(1,Math.abs(u[ax])))/D2R);
 function lensSetup(st,x=-25,h=6){st.type='convex';st.f=10;st.objs=[{id:1,x,h,c:0}];st.sel=1;st.rays='sel';st.fan=false;st.screen=false;st.eyeOn=false;}
 const LOCK_RAYS=['image','r1','r2','r3','top'];
-const rayTask=(id,title,goal,hints,hitY,target,reveal,quiz,explain)=>({id,title,goal,hints,lock:LOCK_RAYS,reveal,
-  setup:st=>{lensSetup(st);},
-  extra:st=>{const o=st.objs[0],H=[0,hitY(st)];return {prims:[{t:'ray',pts:[[o.x,o.h],H],c:'#ffd166',w:2},{t:'label',x:1.5,y:H[1]+2.4,text:'從這裡開始畫',c:'#ffd166',align:'left'}],handles:[]};},
-  check:({st})=>drawnThrough(st,[0,hitY(st)],target(st)),
-  drawFb:(d,{st})=>rayFb(d,[0,hitY(st)],target(st)),
-  answerPrims:st=>{const H=[0,hitY(st)];return [{t:'ray',pts:[H,add(H,mul(nrm(sub(target(st),H)),60))],c:'#7ee0a0',w:2,dash:true}];},
+const rayTask=(id,title,goal,hints,hitY,target,reveal,quiz,explain,init)=>({id,title,goal,hints,lock:LOCK_RAYS,reveal,keepExtra:true,freeze:true,
+  setup:(st,data)=>{lensSetup(st);if(init)init(st,data);},
+  // the incident (yellow) ray stays visible after the drawing passes; then the correct path is shown in green
+  extra:(st,data)=>{const o=st.objs[0],H=[0,hitY(st,data)],P=[{t:'ray',pts:[[o.x,o.h],H],c:'#ffd166',w:2}];
+    if(acting()) P.push({t:'label',x:1.5,y:H[1]+2.4,text:'從這裡開始畫',c:'#ffd166',align:'left'});
+    else P.push({t:'ray',pts:[H,add(H,mul(nrm(sub(target(st,data),H)),45))],c:'#7ee0a0',w:2.2,dash:true});
+    return {prims:P,handles:[]};},
+  check:({st,data})=>drawnThrough(st,[0,hitY(st,data)],target(st,data)),
+  drawFb:(d,{st,data})=>rayFb(d,[0,hitY(st,data)],target(st,data)),
   quiz,explain});
 const TASKS={
 shadow:[
@@ -1289,12 +1349,12 @@ reflection:[
     hints:['法線和鏡面垂直。','從入射點往上畫，畫好後放開。'],hide:['normal'],
     setup:st=>{st.mode='laser';st.i=40;st.lx=-1;aimRefl(st);},
     drawFb:(d,{out})=>{const hp=out.meta&&out.meta.hp;if(!hp)return '';const v=sub(d.b,d.a),L=len(v),u=mul(v,1/L),w=sub(hp,d.a);
-      if(Math.abs(u[0])>Math.sin(5*D2R)) return '法線要和鏡面垂直，你畫的線和垂直方向差了約 '+angOff(u,0)+'°。';
-      if(Math.abs(w[0]*u[1]-w[1]*u[0])>=1.2||dot(w,u)<=-1||dot(w,u)>=L+1) return '方向正確，但法線要通過雷射打在鏡面上的那一點（入射點）。';
+      if(Math.abs(u[0])>Math.sin(2*D2R)) return '法線要和鏡面垂直，你畫的線和垂直方向差了約 '+angOff(u,0)+'°。';
+      if(Math.abs(w[0]*u[1]-w[1]*u[0])>=0.5||dot(w,u)<=-1||dot(w,u)>=L+1) return '方向正確，但法線要通過雷射打在鏡面上的那一點（入射點）。';
       if(L<8) return '位置正確！但線太短了，請畫到 8 cm 以上。';return '';},
     check:({st,out})=>{const hp=out.meta&&out.meta.hp;if(!hp)return false;return st.draw.some(d=>{if(d.t!=='line'&&d.t!=='ruler')return false;
-      const v=sub(d.b,d.a),L=len(v);if(L<8)return false;const u=mul(v,1/L);if(Math.abs(u[0])>Math.sin(5*D2R))return false;
-      const w=sub(hp,d.a);return Math.abs(w[0]*u[1]-w[1]*u[0])<1.2&&dot(w,u)>-1&&dot(w,u)<L+1;});},
+      const v=sub(d.b,d.a),L=len(v);if(L<8)return false;const u=mul(v,1/L);if(Math.abs(u[0])>Math.sin(2*D2R))return false;
+      const w=sub(hp,d.a);return Math.abs(w[0]*u[1]-w[1]*u[0])<0.5&&dot(w,u)>-1&&dot(w,u)<L+1;});},
     answerPrims:(st,data,out)=>{const hp=out&&out.meta&&out.meta.hp;return hp?[{t:'line',pts:[[hp[0],-3],[hp[0],26]],c:'#7ee0a0',dash:true,w:2}]:[];},
     quiz:{q:'關於法線，下列何者正確？（可複選）',opts:['法線與鏡面垂直','法線與鏡面平行','入射角是入射線與法線的夾角','入射角是入射線與鏡面的夾角','入射線與反射線分在法線兩側'],ans:[0,2,4]},
     explain:'法線是通過入射點、垂直於鏡面的線；入射角與反射角都是和法線的夾角。'},
@@ -1374,7 +1434,7 @@ refraction:[
     quiz:{q:'從水面上看水中的物體，下列何者正確？（可複選）',opts:['看起來比實際淺','看起來比實際深','視線愈斜，看起來愈淺','因為光從水射入空氣時偏離法線','因為光的反射'],ans:[0,2,3]},
     explain:'視線愈斜，折射造成的偏折愈大，物體看起來就愈淺。'}],
 'lens-rays':[
-  {id:'lr-1',title:'量出焦距',goal:'用平行光照射凸透鏡，再用「量尺」從透鏡中心量到光線會聚的點。量尺長度要等於焦距（誤差 0.5 cm 以內）。',
+  {id:'lr-1',freeze:true,freezeHide:true,title:'量出焦距',goal:'用平行光照射凸透鏡，再用「量尺」從透鏡中心量到光線會聚的點。量尺長度要等於焦距（誤差 0.5 cm 以內）。',
     hints:['工具列選「量尺」，從透鏡中心（主軸上）拖到光線會聚點。','光線要平行主軸射入（傾斜角度 0°）。'],
     setup:st=>{st.type='convex';st.el='lens';st.src='parallel';st.ang=0;st.f=[9,12,14,17,20][Math.floor(Math.random()*5)];},
     drawTool:'量尺',
@@ -1391,22 +1451,22 @@ refraction:[
     quiz:{q:'點光源與凸透鏡，下列何者正確？（可複選）',opts:['光源在焦點上，折射光成為平行主軸的平行光','光源在焦平面但不在主軸上，折射光平行但斜向','光源在焦點上，折射光會聚到另一側的焦點','這和平行光會聚於焦點互為相反的光路'],ans:[0,1,3]},
     explain:'光源放在凸透鏡的焦點，折射光成為平行主軸的平行光，這和平行光會聚於焦點是相反的光路。'}],
 'lens-image':[
-  {id:'li-c',title:'標出鏡心',goal:'主軸和焦點已暫時隱藏。把白色的「鏡心？」標記拖到透鏡的鏡心（光心）位置，再按「送出答案」。',submit:true,lock:LOCK_RAYS,reveal:['image'],hide:['axis','marks'],
+  {id:'li-c',freeze:true,title:'標出鏡心',goal:'主軸和焦點已暫時隱藏。把白色的「鏡心？」標記拖到透鏡的鏡心（光心）位置，再按「送出答案」。',submit:true,lock:LOCK_RAYS,reveal:['image'],hide:['axis','marks'],
     hints:['鏡心在透鏡的正中央。','透鏡上下對稱，中心點就在最厚（凸透鏡）的地方的正中間。'],
     setup:(st,data)=>{lensSetup(st);st.draw=[];data.px=8;data.py=8;},
     extra:(st,data)=>({prims:[{t:'mark',x:data.px,y:data.py,label:'鏡心？'}],handles:[{x:data.px,y:data.py,cursor:'move',drag:(x,y)=>{data.px=Math.round(x*4)/4;data.py=Math.round(y*4)/4;}}]}),
     check:({data})=>Math.abs(data.px)<=0.6&&Math.abs(data.py)<=0.6,wrong:'還沒對準。鏡心在透鏡的正中央。',
     quiz:{q:'關於鏡心（光心），下列何者正確？（可複選）',opts:['在透鏡的正中央','通過鏡心的光線方向不變','位在主軸上','一定在焦點上'],ans:[0,1,2]},
     explain:'鏡心是透鏡的中心點，位在主軸上；通過鏡心的光線方向不變。'},
-  {id:'li-a',title:'畫出主軸',goal:'主軸和焦點已暫時隱藏。用「手繪光線」或「量尺」，畫出通過鏡心、和透鏡垂直的主軸（從透鏡左邊畫到右邊）。',lock:LOCK_RAYS,reveal:['image'],hide:['axis','marks'],
+  {id:'li-a',freeze:true,title:'畫出主軸',goal:'主軸和焦點已暫時隱藏。用「手繪光線」或「量尺」，畫出通過鏡心、和透鏡垂直的主軸（從透鏡左邊畫到右邊）。',lock:LOCK_RAYS,reveal:['image'],hide:['axis','marks'],
     hints:['主軸通過鏡心，而且和透鏡垂直（水平）。','從透鏡左邊至少 5 cm 處，水平畫到右邊至少 5 cm 處。'],
     setup:st=>{lensSetup(st);},
     drawFb:d=>{const v=sub(d.b,d.a),L=len(v),u=mul(v,1/L);
-      if(Math.abs(u[1])>Math.sin(5*D2R)) return '主軸要和透鏡垂直，你畫的線傾斜了約 '+angOff(u,1)+'°。';
-      if(Math.abs(d.a[1]+(0-d.a[0])*u[1]/u[0])>=1) return '方向正確，但主軸要通過鏡心（透鏡的正中央）。';
+      if(Math.abs(u[1])>Math.sin(2*D2R)) return '主軸要和透鏡垂直，你畫的線傾斜了約 '+angOff(u,1)+'°。';
+      if(Math.abs(d.a[1]+(0-d.a[0])*u[1]/u[0])>=0.5) return '方向正確，但主軸要通過鏡心（透鏡的正中央）。';
       if(Math.min(d.a[0],d.b[0])>-5||Math.max(d.a[0],d.b[0])<5||L<15) return '位置正確！但線要從透鏡左邊畫到右邊，兩側各至少 5 cm。';return '';},
     check:({st})=>st.draw.some(d=>{if(d.t!=='line'&&d.t!=='ruler')return false;const v=sub(d.b,d.a),L=len(v);if(L<15)return false;const u=mul(v,1/L);
-      if(Math.abs(u[1])>Math.sin(5*D2R))return false;if(Math.min(d.a[0],d.b[0])>-5||Math.max(d.a[0],d.b[0])<5)return false;return Math.abs(d.a[1]+(0-d.a[0])*u[1]/u[0])<1;}),
+      if(Math.abs(u[1])>Math.sin(2*D2R))return false;if(Math.min(d.a[0],d.b[0])>-5||Math.max(d.a[0],d.b[0])<5)return false;return Math.abs(d.a[1]+(0-d.a[0])*u[1]/u[0])<0.5;}),
     answerPrims:()=>[{t:'line',pts:[[-50,0],[50,0]],c:'#7ee0a0',dash:true,w:2}],
     quiz:{q:'關於主軸，下列何者正確？（可複選）',opts:['通過鏡心並和透鏡垂直','兩個焦點都在主軸上','和透鏡平行','平行主軸的光經凸透鏡後通過焦點'],ans:[0,1,3]},
     explain:'主軸通過鏡心並和透鏡垂直，兩個焦點都在主軸上。'},
@@ -1427,10 +1487,12 @@ refraction:[
     '通過焦點射向凸透鏡的光，折射後平行主軸；三條特殊光線交於同一點，就是像點。'),
   rayTask('li-1d','畫出任意一道光線','黃色光線是物體頂端發出的「任意」一條光線。利用前面畫的三條光線找到它們的交點，畫出這條光線折射後的路徑。',
     ['前面三條光線交在哪一點？','從黃色光線打到透鏡的點出發，畫向那個交點。'],
-    ()=>9, st=>{const o=st.objs[0],im=imageOf(-o.x,st.f);return [im.v,im.m*o.h];}, ['image','r1','r2','r3','top'],
+    (st,data)=>data.hy, st=>{const o=st.objs[0],im=imageOf(-o.x,st.f);return [im.v,im.m*o.h];}, ['image','r1','r2','r3'],
     {q:'為什麼只要畫兩、三條特殊光線就能找到像？（可複選）',opts:['物體上一點發出的所有光線，折射後都會通過同一個像點','特殊光線折射後的方向容易判斷','只有特殊光線會折射','其他光線不會成像'],ans:[0,1]},
-    '物體上一點發出的所有光線，折射後都會通過同一個像點；特殊光線方向好判斷，所以用它們找像點。'),
-  {id:'li-2',title:'預測成像位置',goal:'成像和三條特殊光線已暫時隱藏，畫布已清空。物體在 F 與 2F 之間。用「手繪光線」畫出光線找到像的位置，再把白色「預測像」拖過去：拖底部圓圈改位置，拖頂端圓圈改高度（往主軸下方拖就是倒立）。完成後按「送出答案」。',
+    '物體上一點發出的所有光線，折射後都會通過同一個像點；特殊光線方向好判斷，所以用它們找像點。',
+    (st,data)=>{const bad=[st.objs[0].h,0,-st.objs[0].h*st.f/(-st.objs[0].x-st.f)];let y;
+      do{y=Math.round((Math.random()*19-9.5)*2)/2;}while(bad.some(v=>Math.abs(y-v)<2));data.hy=y;}),
+  {id:'li-2',freeze:true,title:'預測成像位置',goal:'成像和三條特殊光線已暫時隱藏，畫布已清空。物體在 F 與 2F 之間。用「手繪光線」畫出光線找到像的位置，再把白色「預測像」拖過去：拖底部圓圈改位置，拖頂端圓圈改高度（往主軸下方拖就是倒立）。完成後按「送出答案」。',
     lock:LOCK_RAYS,reveal:['image','r1','r2','r3'],submit:true,hideInfo:true,
     hints:['用「手繪光線」畫出兩條特殊光線，交點就是像的頂端。','把預測像的頂端拖到交點，底部在交點正下方的主軸上。'],
     setup:(st,data)=>{lensSetup(st,-15,5);st.draw=[];data.px=20;data.ph=5;},
@@ -1448,20 +1510,20 @@ refraction:[
     quiz:{q:'物體放在凸透鏡的 2F 上時，下列何者正確？（可複選）',opts:['像在另一側的 2F 上','像是倒立、等大的實像','像是正立的虛像','紙屏要放在像的位置，才能看到清楚的像'],ans:[0,1,3]},
     explain:'物體在 2F 上，像也在另一側的 2F 上，是倒立、等大的實像。'}],
 eye:[
-  {id:'ey-1',title:'矯正近視',goal:'近視眼看遠處時，影像落在視網膜前。鏡片一開始是平光：拖曳鏡片中央的圓點（或用滑桿）調整鏡片的彎曲，讓影像回到視網膜上。',
-    hints:['近視要讓光先「發散」一些，鏡片要往哪個方向彎？','往左拖變凹透鏡，慢慢加大彎曲，看成像點的位置。'],
-    setup:st=>{st.eye='myopia';st.dist='far';st.glasses=true;st.gv=0;},
-    check:({st,out})=>st.eye==='myopia'&&st.dist==='far'&&st.glasses&&st.gv<0&&out.meta&&out.meta.ok,
+  {id:'ey-1',title:'矯正近視',goal:'這是 600 度的近視眼，看遠處時影像落在視網膜前。鏡片一開始是平光：拖曳鏡片中央的圓點（或用滑桿）調整鏡片度數，讓影像回到視網膜上，而且度數不要配得太深。',
+    hints:['近視要讓光先「發散」一些，鏡片要往哪個方向彎？','往左拖變凹透鏡，慢慢加深，影像一回到視網膜上就停；太深會「過度矯正」，看右側的水晶體狀態。'],
+    setup:st=>{st.eye='myopia';st.deg=600;st.dist='far';st.pts=[{id:1,u:EYE_FAR,y:0}];st.focus=1;st.glasses=true;st.gv=0;},
+    check:({st,out})=>st.eye==='myopia'&&out.meta&&out.meta.far&&st.glasses&&st.gv<0&&out.meta.ok&&!out.meta.over,
     quiz:{q:'關於近視與矯正，下列何者正確？（可複選）',opts:['要用凹透鏡矯正','要用凸透鏡矯正','凹透鏡讓光先發散一些','近視眼的眼軸比正常長'],ans:[0,2,3]},
     explain:'近視眼的眼軸太長，遠物成像在視網膜前；戴凹透鏡讓光先發散，就能成像在視網膜上。'},
   {id:'ey-3',title:'矯正遠視',goal:'遠視眼看近處時，影像落在視網膜後。鏡片一開始是平光：拖曳鏡片中央的圓點（或用滑桿）調整鏡片的彎曲，讓影像回到視網膜上。',
     hints:['遠視要讓光先「會聚」一些，鏡片要往哪個方向彎？','往右拖變凸透鏡，慢慢加大彎曲，看成像點的位置。'],
-    setup:st=>{st.eye='hyper';st.dist='near';st.glasses=true;st.gv=0;},
-    check:({st,out})=>st.eye==='hyper'&&st.dist==='near'&&st.glasses&&st.gv>0&&out.meta&&out.meta.ok,
+    setup:st=>{st.eye='hyper';st.deg=600;st.dist='near';st.pts=[{id:1,u:EYE_NEAR,y:0}];st.focus=1;st.glasses=true;st.gv=0;},
+    check:({st,out})=>st.eye==='hyper'&&out.meta&&out.meta.near&&st.glasses&&st.gv>0&&out.meta.ok,
     quiz:{q:'關於遠視與矯正，下列何者正確？（可複選）',opts:['要用凸透鏡矯正','要用凹透鏡矯正','凸透鏡讓光先會聚一些','遠視眼的眼軸比正常短'],ans:[0,2,3]},
     explain:'遠視眼的眼軸太短，近物成像在視網膜後；戴凸透鏡讓光先會聚，就能成像在視網膜上。'},
   {id:'ey-2',title:'遠視看近物',goal:'先作答：遠視眼（眼軸較短）看近處物體，影像會落在哪裡？答完後切換到遠視、近處物體觀察。',hideInfo:true,
-    setup:st=>{st.eye='normal';st.dist='far';st.glasses=false;},choices:['視網膜前','視網膜上','視網膜後'],answer:2,
+    setup:st=>{st.eye='normal';st.dist='far';st.pts=[{id:1,u:EYE_FAR,y:0}];st.focus=1;st.glasses=false;},choices:['視網膜前','視網膜上','視網膜後'],answer:2,
     explain:'遠視眼的眼軸太短，近物成像在視網膜後，需要戴凸透鏡矯正。'}],
 prism:[
   {id:'pr-1',title:'哪種色光偏折最多',goal:'觀察白光通過三稜鏡後的色帶，哪一種顏色的光偏折（轉彎）最多？',hideInfo:true,setup:st=>{st.light='white';st.count=1;},
@@ -1560,6 +1622,10 @@ function selectScene(i,fromHash){
 function el(tag,cls,html){const e=document.createElement(tag);if(cls)e.className=cls;if(html!=null)e.innerHTML=html;return e;}
 const SRC_NAMES={point:'自訂發光點',laser:'自訂光線（雷射）',beam:'平行光源'};
 function selSource(){const s=app.selObj;if(!s||!String(s).startsWith('u'))return null;return S().sources.find(x=>'u'+x.id===s)||null;}
+// tasks with freeze:true lock the scene (right-panel controls and object handles) while the student works
+function frozen(){const tk=taskOf();return !!(tk&&tk.freeze&&acting());}
+function handleAllowed(h){if(!frozen())return true;if(h.dh||h.task)return true;
+  const o=h.obj!=null?String(h.obj):h.gz?String(app.selObj||''):'';return o.startsWith('u');}
 function renderPanel(){
   const sc=cur(), st=S();
   document.getElementById('sceneCh').textContent=sc.ch; document.getElementById('sceneName').textContent=sc.name;
@@ -1589,7 +1655,10 @@ function renderPanel(){
     else if(dr.t==='line') box.appendChild(el('div','note-sm','拖曳兩端的方塊可調整起點與終點'));
     els.controls.appendChild(box);
   }
-  for(const c of sc.controls(st)) els.controls.appendChild(makeControl(c,st));
+  if(frozen()){const tk=taskOf(),fb=el('div','frozenbox'+(tk.freezeHide?' hidevals':''));
+    fb.appendChild(el('div','frozennote',SVG('lock')+'<span>任務進行中，實驗設定已鎖定；結束任務後就能調整。</span>'));
+    const inner=el('div','frozenctl');inner.inert=true;for(const c of sc.controls(st)) inner.appendChild(makeControl(c,st));fb.appendChild(inner);els.controls.appendChild(fb);}
+  else for(const c of sc.controls(st)) els.controls.appendChild(makeControl(c,st));
   els.notes.innerHTML='<ul>'+sc.notes.map(n=>`<li>${n}</li>`).join('')+'</ul>';
 }
 function makeControl(c,st){
@@ -1667,6 +1736,7 @@ const ICON={
   hint:'<path d="M7.5 14.5h5M8.5 17.5h3"/><path d="M10 2.5a5 5 0 0 0-3 9c.6.5 1 1.2 1 2v1h4v-1c0-.8.4-1.5 1-2a5 5 0 0 0-3-9z"/>',
   check:'<path d="M4 10.5l4 4 8-9"/>',
   play:'<path d="M6.5 4.5l9 5.5-9 5.5z"/>',
+  lock:'<rect x="4.5" y="9" width="11" height="8" rx="1.6"/><path d="M7 9V6.5a3 3 0 0 1 6 0V9"/>',
   award:'<circle cx="10" cy="7.5" r="5"/><path d="M7 11.6L5.8 18.5 10 16.3l4.2 2.2L13 11.6"/><path d="M8 7.6l1.4 1.4 2.8-2.8"/>',
   x:'<path d="M5 5l10 10M15 5L5 15"/>',
   eyeOpen:'<path d="M1.5 10S5 4.5 10 4.5 18.5 10 18.5 10 15 15.5 10 15.5 1.5 10 1.5 10z"/><circle cx="10" cy="10" r="2.6"/>'
@@ -1858,7 +1928,7 @@ function draw2D(){
   const o=selObjData(); if(o&&!app.capturing) drawGizmo2D(o,T);
   if(out.sv) drawInset(out.sv);
   ctx.fillStyle=C.dim;ctx.font='11px "IBM Plex Mono",monospace';ctx.textAlign='right';
-  ctx.fillText(cur().id==='eye'?'示意比例':cur().id==='color'?'':'小格 '+(app.gridStep||1)+' cm',W-12,Hh-10);
+  ctx.fillText(cur().id==='eye'?'小格 '+(app.gridStep||1)+' cm（眼球放大約 10 倍）':cur().id==='color'?'':'小格 '+(app.gridStep||1)+' cm',W-12,Hh-10);
 }
 function drawGizmo2D(o,T){
   const x=T.X(o.x),y=T.Y(o.y),hidx=app.hover>=0?app.handles[app.hover]:null;
@@ -1966,9 +2036,21 @@ function drawPrim(p,T){
   case 'eyeball':{const X=T.X(p.cx),Y0=T.Y(0),rx=p.rx*T.s,ry=p.ry*T.s;
     if(p.cmp){ctx.save();ctx.setLineDash([5,4]);ctx.strokeStyle='rgba(200,215,235,0.6)';ctx.lineWidth=1.2;ctx.beginPath();ctx.ellipse(T.X(p.cmp.cx),Y0,p.cmp.rx*T.s,ry,0,0,7);ctx.stroke();
       ctx.fillStyle='rgba(200,215,235,0.75)';ctx.font='11px "Noto Sans TC",sans-serif';ctx.textAlign='center';ctx.fillText('虛線：正常眼球',T.X(p.cmp.cx),Y0+ry+15);ctx.restore();}
-    ctx.strokeStyle='rgba(200,215,235,0.5)';ctx.lineWidth=1.5;ctx.beginPath();ctx.ellipse(X,Y0,rx,ry,0,0,7);ctx.stroke();
+    if(p.hj){const tj=Math.PI-Math.asin(p.hj/p.ry);
+      ctx.fillStyle='rgba(200,215,235,0.05)';ctx.beginPath();ctx.ellipse(X,Y0,rx,ry,0,-tj,tj);const ph=Math.asin(p.hj/p.Rc);ctx.arc(T.X(p.Rc),Y0,p.Rc*T.s,Math.PI-ph,Math.PI+ph);ctx.closePath();ctx.fill();
+      ctx.strokeStyle='rgba(200,215,235,0.55)';ctx.lineWidth=1.5;ctx.beginPath();ctx.ellipse(X,Y0,rx,ry,0,-tj,tj);ctx.stroke();
+      ctx.strokeStyle='rgba(150,215,255,0.9)';ctx.lineWidth=2;ctx.beginPath();ctx.arc(T.X(p.Rc),Y0,p.Rc*T.s,Math.PI-ph,Math.PI+ph);ctx.stroke();
+      // iris (with the pupil between)
+      const ix=T.X(p.lx-0.5),iy0=p.irisY*T.s,iy1=Math.min(p.hj+1.6,p.ry*0.68)*T.s;ctx.strokeStyle='#8a5a3c';ctx.lineWidth=Math.max(2.5,0.5*T.s);ctx.lineCap='butt';
+      ctx.beginPath();ctx.moveTo(ix,Y0-iy0);ctx.lineTo(ix,Y0-iy1);ctx.moveTo(ix,Y0+iy0);ctx.lineTo(ix,Y0+iy1);ctx.stroke();
+      ctx.fillStyle='rgba(170,220,255,0.95)';ctx.font='12px "Noto Sans TC",sans-serif';ctx.textAlign='right';ctx.fillText('角膜',T.X(-0.6),Y0-p.hj*T.s-8);
+      ctx.fillStyle='#c99a78';ctx.textAlign='center';ctx.fillText('虹膜',ix,Y0+iy1+15);}
+    else{ctx.strokeStyle='rgba(200,215,235,0.5)';ctx.lineWidth=1.5;ctx.beginPath();ctx.ellipse(X,Y0,rx,ry,0,0,7);ctx.stroke();}
     ctx.strokeStyle='#ff7a7a';ctx.lineWidth=3;ctx.beginPath();ctx.ellipse(X,Y0,rx,ry,0,-0.85,0.85);ctx.stroke();
     ctx.fillStyle='#ff9a9a';ctx.font='12px "Noto Sans TC",sans-serif';ctx.textAlign='left';ctx.fillText('視網膜',X+rx+6,Y0-ry*0.55);break;}
+  case 'crystal':{const x=T.X(p.x),y=T.Y(0);ctx.fillStyle='rgba(170,215,255,0.28)';ctx.strokeStyle='#9fd0ff';ctx.lineWidth=1.5;
+    ctx.beginPath();ctx.ellipse(x,y,p.w*T.s,p.H*T.s,0,0,7);ctx.fill();ctx.stroke();
+    ctx.fillStyle='#9fd0ff';ctx.font='12px "Noto Sans TC",sans-serif';ctx.textAlign='center';ctx.fillText('水晶體',x+6,y-p.H*T.s-20);break;}
   case 'point':{const x=T.X(p.x),y=T.Y(p.y);ctx.fillStyle=p.c;ctx.beginPath();ctx.arc(x,y,3.5,0,7);ctx.fill();break;}
   case 'mark':{const x=T.X(p.x),y=T.Y(p.y);ctx.globalAlpha=p.dimmed?0.6:1;ctx.fillStyle=C.text;ctx.beginPath();ctx.arc(x,y,3,0,7);ctx.fill();
     ctx.font=(p.dimmed?'12px ':'bold 13px ')+'"IBM Plex Mono",monospace';ctx.textAlign='center';ctx.fillText(p.label,x,y+17);break;}
@@ -1986,6 +2068,13 @@ function drawScreenView(g,x,y,w,h,sv){
     const R2=sv.pen*sc,R1=sv.umbra*sc;const gr=g.createRadialGradient(cx,cy,Math.max(R1,0.01),cx,cy,Math.max(R2,R1+0.01));
     gr.addColorStop(0,R1>0?'#14120e':'#6b6253');gr.addColorStop(1,'rgba(239,226,194,1)');g.fillStyle=gr;g.beginPath();g.arc(cx,cy,R2,0,7);g.fill();
     if(R1>0){g.fillStyle='#14120e';g.beginPath();g.arc(cx,cy,R1,0,7);g.fill();}
+  }else if(sv.kind==='eye'&&sv.pts){g.fillStyle='#14181f';g.fillRect(x,y,w,h);
+    const ps=[...sv.pts].sort((a,b)=>b.u-a.u),n=ps.length;g.textAlign='center';g.textBaseline='middle';
+    ps.forEach((q,i)=>{const px=x+w*(i+0.5)/n,py=y+h*0.45,r0=Math.min(w/n,h)*0.07,R=r0+q.blur*Math.min(w/n,h)*0.11;
+      const gr=g.createRadialGradient(px,py,0,px,py,R);gr.addColorStop(0,'#ffffff');gr.addColorStop(Math.min(0.9,r0/R),q.c);gr.addColorStop(1,'rgba(0,0,0,0)');
+      g.globalAlpha=Math.max(0.35,Math.min(1,(r0/R)*1.6));g.fillStyle=gr;g.beginPath();g.arc(px,py,R,0,7);g.fill();g.globalAlpha=1;
+      g.fillStyle=q.foc?q.c:'#9aa6b8';g.font=`${Math.max(11,Math.min(h*0.075,w/n*0.16))}px "Noto Sans TC",sans-serif`;
+      g.fillText(q.u>=1000?'遠處':i===n-1?'最近':'較近',px,y+h*0.8);if(q.foc)g.fillText('對焦',px,y+h*0.91);});
   }else if(sv.kind==='eye'){g.fillStyle='#e8ebef';g.fillRect(x,y,w,h);
     const b=sv.blur*w*0.07, rows=[[0.3,0.2,'E'],[0.58,0.12,'Ш　E'],[0.8,0.075,'E　Ш　E']];
     g.textAlign='center';g.textBaseline='middle';
@@ -2118,6 +2207,7 @@ function build3D(){
       m.quaternion.setFromUnitVectors(V3(0,1,0),V3(d[0],d[1],0));mesh(new THREE.SphereGeometry(0.5,10,8),new THREE.MeshBasicMaterial({color:hexOnly(p.c||C.laser)}),[p.x,p.y,0]);break;}
     case 'beamSrc':{const d=dirOf(p.ang),c=add([p.x,p.y],mul(d,-1.2));const m=mesh(new THREE.BoxGeometry(2.4,p.w+1,6),phong(0x3a4352),[c[0],c[1],0]);m.rotation.z=p.ang;
       const f=mesh(new THREE.BoxGeometry(0.2,p.w,5),new THREE.MeshBasicMaterial({color:hexOnly(p.c||C.warm)}),[p.x,p.y,0]);f.rotation.z=p.ang;break;}
+    case 'crystal':{const m=mesh(new THREE.SphereGeometry(1,28,18),phong(0xaad7ff,{transparent:true,opacity:0.45,shininess:110}),[p.x,0,0]);m.scale.set(p.w,p.H,p.H);break;}
     case 'lamp':{mesh(new THREE.SphereGeometry(1.3,20,14),new THREE.MeshBasicMaterial({color:hexOnly(p.c||'#fff2c8')}),[p.x,p.y,0]);
       const s=new THREE.Sprite(new THREE.SpriteMaterial({map:glowTex(),color:hexOnly(p.c||'#ffd27a'),transparent:true,blending:THREE.AdditiveBlending,depthWrite:false}));s.scale.set(9,9,1);s.position.set(p.x,p.y,0);T3.root.add(s);break;}
     case 'lampBar':{mesh(new THREE.CylinderGeometry(0.8,0.8,Math.max(p.y1-p.y0,0.5),16),new THREE.MeshBasicMaterial({color:0xfff2c8}),[p.x,(p.y0+p.y1)/2,0]);post(p.x,p.y0);break;}
@@ -2128,6 +2218,8 @@ function build3D(){
       else if(!p.dash) line3(p.pts,p.c,false,0.7);break;
     case 'eyeball':{const m=mesh(new THREE.SphereGeometry(1,32,20),phong(0xdfe6ee,{transparent:true,opacity:0.12,depthWrite:false,side:THREE.DoubleSide}),[p.cx,0,0]);m.scale.set(p.rx,p.ry,p.ry);
       const pts=lin(-0.85,0.85,30).map(a=>[p.cx+p.rx*Math.cos(a),p.ry*Math.sin(a)]);line3(pts,'#ff7a7a',false,1);sprite('視網膜','#ff9a9a',p.cx+p.rx+4,p.ry*0.6,0,span*0.022);
+      if(p.hj){const ph=Math.asin(p.hj/p.Rc),cap=mesh(new THREE.SphereGeometry(p.Rc,32,12,0,Math.PI*2,0,ph),phong(0x9fd0ff,{transparent:true,opacity:0.22,depthWrite:false,side:THREE.DoubleSide}),[p.Rc,0,0]);cap.rotation.z=Math.PI/2;
+        const ir=mesh(new THREE.RingGeometry(p.irisY,Math.min(p.hj+1.6,p.ry*0.68),40),phong(0x8a5a3c,{side:THREE.DoubleSide}),[p.lx-0.5,0,0]);ir.rotation.y=Math.PI/2;}
       if(p.cmp){line3(lin(0,2*Math.PI,64).map(a=>[p.cmp.cx+p.cmp.rx*Math.cos(a),p.ry*Math.sin(a)]),'#c8d7eb',true,0.7);sprite('虛線：正常眼球','#c8d7eb',p.cmp.cx,-p.ry-3,0,span*0.018);}
       break;}
     }
@@ -2219,7 +2311,8 @@ function onDown(e){
   if(['point','laser','beam'].includes(tool)){if(w){placeSource(tool,w);setTool('select');commit();}return;}
   if(tool==='pen'&&w){const it=newDraw('pen',w);st.draw.push(it);gesture={type:'draw',it,lp:[px,py]};return;}
   if((tool==='line'||tool==='ruler')&&w){const it=newDraw(tool,w);st.draw.push(it);gesture={type:'draw',it};return;}
-  const i=hitHandle(px,py);
+  let i=hitHandle(px,py);
+  if(i>=0&&!handleAllowed(app.handles[i])){toast('任務進行中，物體位置已鎖定');i=-1;}
   if(i>=0&&w){const h=app.handles[i];let changed=false;
     if(h.obj!=null&&app.selObj!==h.obj){app.selObj=h.obj;changed=true;}
     if(h.sel!=null&&st.sel!==h.sel) st.sel=h.sel;
@@ -2408,7 +2501,7 @@ function startTask(t){
   const st=S(); if(t.setup) t.setup(st,app.task.data); fixIds(st); app.selObj=null;
   renderPanel(); commit(); renderTasks(); setTaskOpen(true);
 }
-function endTask(){app.task=null;refresh();renderTasks();}
+function endTask(){app.task=null;renderPanel();refresh();renderTasks();}
 function revealLocks(t){const st=S(),tm=toolsOf();for(const k of (t.reveal||t.lock||[])) if(tm[k]) st[tm[k]]=true;}
 function actDone(){
   const t=taskOf(); if(!t||!acting()) return;
@@ -2442,7 +2535,7 @@ function taskBefore(st){const tk=taskOf();if(tk&&acting()&&tk.lock){const tm=too
 function taskAfter(st,b){
   const tk=taskOf(); if(!tk) return;
   const T=app.task;
-  if(acting()&&tk.extra){try{const ex=tk.extra(st,T.data,b);app.out.prims.push(...ex.prims);app.out.handles.push(...ex.handles);}catch(err){}}
+  if((acting()||tk.keepExtra)&&tk.extra){try{const ex=tk.extra(st,T.data,b);app.out.prims.push(...ex.prims);app.out.handles.push(...ex.handles.map(h=>Object.assign(h,{task:true})));}catch(err){}}
   if(T.showAns&&tk.answerPrims){try{app.out.prims.push(...tk.answerPrims(st,T.data,app.out));}catch(err){}}
   // judge only once the student lets go (no drag / drawing / slider in progress)
   const busy=app.sliding||(gesture&&['drag','moveDraw','draw','pinch'].includes(gesture.type));
@@ -2643,7 +2736,7 @@ window.addEventListener('hashchange',()=>{const i=fromHash();if(i>=0&&i!==app.id
 const hi=fromHash(); app.idx=hi>=0?hi:SCENES.findIndex(s=>s.id==='lens-image');
 buildToolbar(); loadSnaps(); renderSnaps(); renderTasks(); resize(); renderRail(); renderPanel(); reset3DCamera(); setMode('2d');
 if(document.fonts&&document.fonts.ready) document.fonts.ready.then(()=>{if(app.mode==='2d')draw2D();});
-window.__optics={drawFeedback,app,SCENES,setMode,selectScene,refresh,imageOf,S,setTool,toWorld,handlePx,startTask,endTask,chooseTask,submitTask,submitQuiz};window.__TASKS=TASKS;window.__aim=aimRefl;window.__aimR=aimRefr;
+window.__optics={drawFeedback,eyeAxial,app,SCENES,setMode,selectScene,refresh,imageOf,S,setTool,toWorld,handlePx,startTask,endTask,chooseTask,submitTask,submitQuiz};window.__TASKS=TASKS;window.__aim=aimRefl;window.__aimR=aimRefr;
 })();
 </script>
 
