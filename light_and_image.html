@@ -1,5 +1,4 @@
-<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
-<title>光與影像V34</title>
+<title>光學小站V35</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -385,8 +384,8 @@ body:not([data-scene="mirror"]) .only-mirror{display:none !important}
         <h3>鏡子</h3>
         <div class="field"><div class="flab"><span>鏡子前後位置 <small>（也可直接拖曳鏡框）</small></span><output id="mXOut"></output></div><input type="range" id="mX" min="-1" max="1" step="0.01" aria-label="鏡子前後位置"></div>
         <div class="field"><div class="flab"><span>鏡子寬度</span><output id="mWOut"></output></div><input type="range" id="mW" min="0.3" max="2" step="0.05" aria-label="鏡子寬度"></div>
-        <div class="field"><div class="flab"><span>鏡子高度</span><output id="mHOut"></output></div><input type="range" id="mH" min="0.2" max="2" step="0.05" aria-label="鏡子高度"></div>
-        <div class="field"><div class="flab"><span>下緣離地</span><output id="mBOut"></output></div><input type="range" id="mB" min="0" max="1.4" step="0.05" aria-label="下緣離地"></div>
+        <div class="field"><div class="flab"><span>鏡子高度</span><output id="mHOut"></output></div><input type="range" id="mH" min="0.2" max="2" step="0.01" aria-label="鏡子高度"></div>
+        <div class="field"><div class="flab"><span>下緣離地</span><output id="mBOut"></output></div><input type="range" id="mB" min="0" max="1.4" step="0.01" aria-label="下緣離地"></div>
         <label class="sw"><input type="checkbox" id="ghostChk"><span class="track"></span><span>顯示虛像（鏡子變透明）</span></label>
         <label class="sw"><input type="checkbox" id="extChk"><span class="track"></span><span>虛線：反射光往回延長</span></label>
         <label class="sw"><input type="checkbox" id="fovChk"><span class="track"></span><span>觀察者的視野範圍</span></label>
@@ -1226,6 +1225,7 @@ function eyePos(){
   return V3(S.eye.x,S.eye.y,S.eye.z);
 }
 function mirrorCenter(){return isCurved()?V3(MX(),CC().y,0):V3(MX(),S.m.b+S.m.h/2,0);}
+function obsTarget(){if(S.scene==='mirror'&&S.m.two&&MIRRORS.length>1){const a=MIRRORS[0].c,b=MIRRORS[1].c;return V3((a.x+b.x)/2*.3+a.x*.7,S.m.b+S.m.h/2,(a.z+b.z)/2*.3+b.z*.7);}return mirrorCenter();}   // 兩面鏡子：看向牆角附近
 function placeEye(){
   dirty=true;
   const on=(S.scene==='mirror'||isCurved())&&!eyeOwner(); eyeGroup.visible=on; if(!on) return;
@@ -1284,6 +1284,21 @@ function mirrorHit(E,P,mr){   // 眼睛看物體 P 的像時，視線穿過鏡�
 function seeFeature(E,P){
   for(const mr of MIRRORS){const h=mirrorHit(E,P,mr);if(h&&!occlude(P,h.R)&&!occlude(h.R,E,eyeOwner()?.08:.03))return Object.assign(h,{mr});}
   return null;
+}
+function hitMirrorSeg(a,b,mr){   // a 在鏡前、b 在鏡後，線段穿過鏡面範圍內的點
+  const da=a.clone().sub(mr.c).dot(mr.n), db=b.clone().sub(mr.c).dot(mr.n); if(da<=0||db>=0) return null;
+  const R=a.clone().lerp(b,da/(da-db)), rel=R.clone().sub(mr.c);
+  if(Math.abs(rel.dot(mr.u))>mr.w/2||R.y<mr.b||R.y>mr.b+mr.h) return null; return R;
+}
+function seeVia(E,P,seq){   // 光從 P 依序經 seq 各鏡反射到眼睛，是否走得通
+  const Q=[P.clone()]; seq.forEach(mr=>Q.push(Q[Q.length-1].clone().applyMatrix4(mr.R)));
+  let cur=E.clone(); for(let i=seq.length-1;i>=0;i--){const h=hitMirrorSeg(cur,Q[i+1],seq[i]);if(!h)return null;cur=h;}
+  return Q[Q.length-1];
+}
+function imagesSeen(E,P){   // 眼睛看得到 P 的幾個像（一次、兩次反射；同一位置的像算一個）
+  const M=MIRRORS, seqs=M.map(m=>[m]); if(M.length>1){seqs.push([M[0],M[1]],[M[1],M[0]]);}
+  const pts=[]; seqs.forEach(s=>{const q=seeVia(E,P,s);if(q&&!pts.some(p=>p.distanceTo(q)<.05))pts.push(q);});
+  return {n:pts.length,pts,single:M.map(m=>!!seeVia(E,P,[m]))};
 }
 function reflAngle(a,R,mr){const d=R.clone().sub(a).normalize();return THREE.MathUtils.radToDeg(Math.acos(clamp(-d.dot(mr.n),-1,1)));}
 function mirrorTap(e){
@@ -1431,7 +1446,7 @@ function viewForMirror(name){
   switch(name){
     case 'side': return {p:tgt.clone().add(V3(0,0,dist*1.05)),t:tgt};
     case 'top': return {p:V3(midX,dist*1.05+1,.001),t:V3(midX,.3,0)};
-    case 'observer': {const C=mirrorCenter();return {p:E.clone().addScaledVector(C.clone().sub(E).normalize(),-.02),t:C};}
+    case 'observer': {const C=obsTarget();return {p:E.clone().addScaledVector(C.clone().sub(E).normalize(),-.02),t:C};}
     case 'behind': return {p:V3(Math.max(3,-x0*.9),1.5,.8),t:V3(0,1,0)};
     default: return {p:tgt.clone().add(V3(0,.34,1).normalize().multiplyScalar(dist*1.15)),t:tgt.clone().add(V3(0,-.15,0))};   // 全景：正前方、稍微俯視，地面保持水平
   }
@@ -2018,7 +2033,7 @@ function viewForConcave(name){
   switch(name){
     case 'side': return {p:tgt.clone().add(V3(0,0,dist*1.05)),t:tgt};
     case 'top': return {p:V3(midX,dist*1.05+1,.001),t:V3(midX,.3,0)};
-    case 'observer': {const E=eyePos(),C=mirrorCenter();return {p:E.clone().addScaledVector(C.clone().sub(E).normalize(),-.02),t:C};}
+    case 'observer': {const E=eyePos(),C=obsTarget();return {p:E.clone().addScaledVector(C.clone().sub(E).normalize(),-.02),t:C};}
     case 'screen': {const F=scrFrame();return {p:F.C.clone().addScaledVector(F.n,.8).add(V3(0,.1,.3)),t:F.C};}
     default: return {p:tgt.clone().add(V3(0,.34,1).normalize().multiplyScalar(dist*1.15)),t:tgt.clone().add(V3(0,-.15,0))};   // 全景：正前方、稍微俯視，地面保持水平
   }
@@ -3197,14 +3212,18 @@ const CARD_MIR={no:2,title:'鏡子裡的我',steps:[
    todo:'按「手繪光線」：先點旗子，再點鏡子上任一點。白色虛線是法線（和鏡面垂直的線）。多畫幾條，點在鏡子的不同位置。',
    q:'入射光和法線的夾角（入射角），和反射光和法線的夾角（反射角）有什麼關係？把答案寫在學習單上。',
    ex:'入射角等於反射角，而且入射光、反射光、法線都在同一個平面上。打開「進階」可以看到角度。把反射光往回延長（虛線），每一條都會通過旗子的像，所以我們看起來像是光從鏡子後面的像發出來的。'},
-  {title:'全身鏡要多長？',setup:{m:{w:.6,h:.5,b:.9,ghost:false,fov:false,two:false},eye:{att:'first'},mrays:3,view:'side'},
-   todo:'觀察者已改成小人自己的眼睛，鏡子只有 50 cm。調整「鏡子高度」和「下緣離地」，直到右側「觀察者在鏡中看得到」的頭頂和腳都打勾。',
+  {title:'全身鏡要多長？',setup:{m:{w:.6,h:.5,b:.9,ghost:false,fov:false,two:false},eye:{att:'first'},mrays:3,view:'observer'},
+   todo:'觀察者已改成小人自己的眼睛。小人身高 1.71 m（腳底到頭頂），眼睛離地 1.56 m；鏡子只有 50 cm。調整「鏡子高度」和「下緣離地」（每次可調 1 cm），直到右側「觀察者在鏡中看得到」的頭頂和腳都打勾，再試著把鏡子縮到最短。',
    q:'要從鏡中看到自己的全身，鏡子最短要多長？',opts:['身高的 1/4','身高的 1/2','和身高一樣'],ans:1,
    ex:'頭頂的光在「眼睛和頭頂的中間高度」反射，腳的光在「眼睛和腳的中間高度」反射，所以鏡子只要身高的一半，而且和人站多遠無關。試試把小人往後拉，看看是不是仍然看得到全身。'},
-  {title:'兩面鏡子',setup:{adv:true,m:{two:true,ang:90,ghost:true,w:.8,h:1.6,b:.2,fov:false},eye:{att:0,x:-2.4,z:-.6,y:1.5},view:'top'},
-   todo:'已打開「進階」並加上第二面鏡子，兩面鏡子夾 90°。',
-   q:'兩面鏡子夾 90° 時，會出現幾個像？',opts:['2 個','3 個','4 個'],ans:1,
-   ex:'夾角 90° 有 3 個像，60° 有 5 個，45° 有 7 個，像的個數 ＝ 360° ÷ 夾角 − 1。其中有一個像，是光在兩面鏡子各反射一次形成的。用右側的夾角按鈕試試看。'}
+  {title:'兩面鏡子',setup:{adv:true,objP:1.2,m:{two:true,ang:90,ghost:false,w:1.8,h:1.6,b:.2,fov:false},eye:{att:0,x:-2.6,z:-2,y:1.5},view:'observer'},
+   todo:'已打開「進階」，加上第二面鏡子，兩面夾 90°，每面寬 1.8 m。觀察者站在斜前方。先預測，再從觀察者的眼睛數數鏡子裡有幾個人。',
+   q:'兩面鏡子夾 90° 時，觀察者會看到幾個像？',opts:['2 個','3 個','4 個'],ans:1,
+   ex:'可以看到 3 個像：兩面鏡子各一個，還有一個在牆角，是光在兩面鏡子各反射一次形成的（它的左右和平常的鏡中像相反）。打開「顯示虛像」再切到上視圖，可以看到 3 個像的位置。夾角 60° 有 5 個、45° 有 7 個，像的個數 ＝ 360° ÷ 夾角 − 1。'},
+  {title:'鏡子太窄時',setup:{objP:1.2,m:{two:true,ang:90,ghost:false,w:.8,h:1.6,b:.2,fov:false},eye:{att:0,x:-2.4,z:-1,y:1.5},view:'observer'},
+   todo:'同樣夾 90°，但鏡子縮成 80 cm 寬，觀察者換到小人的左後方。從觀察者的眼睛看，側邊那面鏡子裡的像不見了。先回答問題，再加寬鏡子或移動觀察者，直到把它找回來。',
+   q:'像的位置是由物體和鏡子決定的。這時候看不到側邊鏡子裡的像，原因是什麼？',opts:['那個像消失了，鏡子太窄就不會成像','像還在原處，但它的反射光沒有進到觀察者的眼睛','鏡子太窄，光碰到鏡子不會反射'],ans:1,
+   ex:'像的位置只和物體、鏡面所在的平面有關，所以像一直都在。要看到像，從物體出發的光必須真的打到鏡子上，反射後進入眼睛；也就是眼睛和像的連線要穿過鏡面。鏡子太窄時，這條連線落在鏡子外面，就看不到。加寬鏡子或換個位置看，像就出現了。這也是上一題要用寬鏡子的原因。'}
 ]};
 
 const CARD_CV={no:4,title:'路口反射鏡',steps:[
@@ -3324,7 +3343,9 @@ CARD_LENS.steps.splice(1,0,
 const STEPX={
   pinhole:[{},{chk:[['畫出至少 2 條穿過小孔的手繪光線',()=>CK.hand('hole')>=2]]},{chk:[['箱子深度拉到 90 cm 以上',()=>S.d>=.9]]},{chk:[['孔徑拉到 40 mm 以上',()=>S.holeMM>=40]]},{},{}],
   mirror:[{},{},{chk:[['小人站在離鏡子 2.9～3.1 m',()=>Math.abs(CK.d()-3)<=.1]]},{chk:[['畫出至少 3 條手繪反射光線',()=>CK.hand('mirror')>=3]]},
-    {chk:[['觀察者看得到自己的頭頂和腳，而且鏡子不超過 85 cm',()=>{const own=eyeOwner();if(!own)return false;const E=eyePos(),top=featWorld(REG[own.id].info.feats[1]).y;return S.m.b<=E.y/2+.005&&S.m.b+S.m.h>=(E.y+top)/2-.005&&S.m.h<=.85;}]]},{}],
+    {chk:[['右側「頭頂」和「腳」都打勾（看得到全身）',()=>{const own=eyeOwner();if(!own)return false;const E=eyePos(),fs=REG[own.id].info.feats;return !!seeFeature(E,featWorld(fs[1]))&&!!seeFeature(E,featWorld(fs[2]));}],
+      ['同時鏡子縮短到 0.88 m 以下（身高的一半約 0.86 m）',()=>{const own=eyeOwner();if(!own)return false;const E=eyePos(),fs=REG[own.id].info.feats,H=featWorld(fs[1]).y-featWorld(fs[2]).y;return !!seeFeature(E,featWorld(fs[1]))&&!!seeFeature(E,featWorld(fs[2]))&&S.m.h<=H/2+.02;}]]},{},
+    {chk:[['觀察者看到側邊鏡子裡的像（加寬鏡子或移動觀察者都可以）',()=>{if(MIRRORS.length<2)return false;const o=S.objs.find(o=>o.type==='person');if(!o)return false;const r=REG[o.id];r.root.updateMatrixWorld(true);const c=new THREE.Box3().setFromObject(r.root).getCenter(new THREE.Vector3());c.y=1.1;return imagesSeen(eyePos(),c).single[1];}]]}],
   concave:[{},{},{chk:[['屏幕放在像最清楚的位置（誤差 5 cm 內）',()=>CK.scrAt()]]},{chk:[['蠟燭在 F 和 C 之間',()=>{const d=CK.d(),f=fEff();return d>f&&d<2*f;}],['屏幕放在像最清楚的位置',()=>CK.scrAt()]]},
     {chk:[['蠟燭在 F 以內',()=>CK.d()<fEff()]]},{chk:[['屏幕前後移動超過 1 m',m=>CK.moved(m)]]}],
   convex:[{},{chk:[['小人走到 5 m 以外，也走到 0.6 m 以內',m=>CK.both(m,.6,5)]]},{chk:[['凸面鏡和平面鏡都切換過',m=>{m[CC().flat?'a':'b']=1;return m.a&&m.b;}]]},{chk:[['凸面鏡和平面鏡都切換過',m=>{m[CC().flat?'a':'b']=1;return m.a&&m.b;}]]},{}],
@@ -3536,7 +3557,7 @@ function renderCard(soft){
   $('#cardClose').onclick=()=>toggleCard(false);
   $('#cardCert').onclick=openCert;
   $('#cardSetup').onclick=()=>resetStepScene(cardI);
-  const go=i=>{cardI=i;renderCard();updateRays();drawSide();if(cardHideMarks()!==lastHide)buildConcaveIf();};
+  const go=i=>{cardI=i;renderCard();resetStepScene(i);};   // 進到某一步時，自動帶入這一步的場景
   $('#cardPrev').onclick=()=>go(cardI-1); $('#cardNext').onclick=()=>go(cardI+1);
   dr.querySelectorAll('[data-go]').forEach(b=>b.onclick=()=>go(+b.dataset.go));
   const rv=$('#cardReveal'); if(rv) rv.onclick=()=>{
@@ -3568,13 +3589,13 @@ function resetStepScene(i){
   S.night=false; S.adv=false; handRays=[]; pending=null; ink.strokes=[]; ink.sel=-1; try{redrawInk();}catch(e){}
   delete MEM[cardKey(i)]; ccClose='eye'; eyClose='retina';
   applySetup(stepSetupFull(i)); syncCardLocks(); if(cardHideMarks()!==lastHide) buildConcaveIf(); updateRays(); drawSide();
-  toast('已重設這一步的場景');
+  toast('已帶入這一步的場景');
 }
 let lastHide=false;
 function buildConcaveIf(){lastHide=cardHideMarks();if(isCurved())buildConcave();drawSide();}
 function curCardNo(){return CARD.no;}
 function toggleCard(on){const dr=$('#drawer');dr.hidden=on===undefined?!dr.hidden:!on;$('#cardBtn').classList.toggle('on',!dr.hidden);
-  if(!dr.hidden){renderCard();if(narrow()){$('#main').classList.add('showpanel');$('#panelBtn').classList.add('on');}const pn=$('#panel');if(pn)pn.scrollTop=0;}
+  if(!dr.hidden){renderCard();resetStepScene(cardI);if(narrow()){$('#main').classList.add('showpanel');$('#panelBtn').classList.add('on');}const pn=$('#panel');if(pn)pn.scrollTop=0;}
   syncCardLocks(); if(cardHideMarks()!==lastHide) buildConcaveIf(); updateRays(); drawSide();}
 $('#cardBtn').onclick=()=>toggleCard();
 
@@ -3866,8 +3887,6 @@ applyLock();
 // 保險：整個頁面不應該捲動（只有側欄、說明、任務卡可以捲），萬一被捲動就立刻拉回來
 addEventListener('scroll',()=>{if(scrollX||scrollY)scrollTo(0,0);},{passive:true});
 document.addEventListener('scroll',e=>{const t=e.target;if(t&&t.nodeType===1&&(t===document.body||t.classList.contains('main')||t.classList.contains('app'))&&(t.scrollTop||t.scrollLeft)){t.scrollTop=0;t.scrollLeft=0;}},true);
-window.__lab={S,cam,REG,rayGroup,imgGroup,switchScene,updateRays,get MIRRORS(){return MIRRORS;},get hand(){return handRays;},get hist(){return hist;},goView,applySetup,takeSnap,makeShot,undo,redo};
+window.__lab={imagesSeen,eyePos,S,cam,REG,rayGroup,imgGroup,switchScene,updateRays,get MIRRORS(){return MIRRORS;},get hand(){return handRays;},get hist(){return hist;},goView,applySetup,takeSnap,makeShot,undo,redo};
 })();
 </script>
-
-</body></html>
