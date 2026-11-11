@@ -1,5 +1,5 @@
 <!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
-<title>光學實驗台V9</title>
+<title>光學實驗台V10</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
@@ -129,6 +129,8 @@ button,select,input{font:inherit;color:inherit}
 .tcard .goal{font-size:13px;color:var(--ink-2);margin:0;max-width:75ch}
 .tcard:not(.active) .goal{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .tcard .hints{margin:0;padding-left:18px;font-size:12.5px;color:var(--ink-2)}
+[hidden]{display:none!important}
+.selnote{font-weight:700;font-size:13px;padding:8px 10px;border-radius:8px;background:color-mix(in srgb,var(--accent,#2aa198) 14%,transparent)}
 .frozenbox{position:relative}.frozennote{display:flex;gap:8px;align-items:center;font-size:12.5px;color:var(--warn);background:color-mix(in srgb,var(--warn) 12%,transparent);border-radius:8px;padding:7px 10px;margin:0 0 10px}
 .frozennote svg{width:16px;height:16px;flex:none;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}.frozenctl{opacity:.45;pointer-events:none;filter:grayscale(.4)}.frozenbox.hidevals output{visibility:hidden}
 .tcard .msg{font-size:13px;padding:6px 10px;border-radius:8px;max-width:75ch}
@@ -453,12 +455,13 @@ function wl2rgb(w){
 /* ---- general ray tracer used by custom light sources ----
    optics elements: {kind:'mirror',pts} {kind:'absorb',pts} {kind:'region',pts,n} {kind:'lens',x,H,f} {kind:'arc',C,R,H,cc} */
 // ray vs mirror x = s·k·y² (|y| ≤ H); returns the nearest t > 0 or null
+const rot2=(v,a)=>{const c=Math.cos(a),s=Math.sin(a);return [v[0]*c-v[1]*s,v[0]*s+v[1]*c];};
 function parabHit(p,d,s,k,H){const a=s*k*d[1]*d[1], bq=2*s*k*p[1]*d[1]-d[0], c=s*k*p[1]*p[1]-p[0], ts=[];
   if(Math.abs(a)<1e-12){if(Math.abs(bq)>1e-12)ts.push(-c/bq);}else{const D=bq*bq-4*a*c;if(D<0)return null;const r=Math.sqrt(D);ts.push((-bq-r)/(2*a),(-bq+r)/(2*a));}
   let best=null;for(const t of ts){if(t>1e-4&&Math.abs(p[1]+t*d[1])<=H&&(best==null||t<best))best=t;}return best;}
-function traceGeneric(p,d,opt,b,maxN=30){
-  const pts=[p], regions=opt.filter(e=>e.kind==='region');
-  const nAt=q=>{let n=1;for(const r of regions) if(pip(q,r.pts)) n=r.n;return n;};
+function traceGeneric(p,d,opt,b,maxN=30,lam=0){
+  const pts=[p], regions=opt.filter(e=>e.kind==='region'), dl=lam?1e6/(lam*lam)-1e6/(550*550):0;
+  const nAt=q=>{let n=1;for(const r of regions) if(pip(q,r.pts)) n=r.n+(r.B||0)*dl;return n;};
   let cur=p, dir=nrm(d);
   for(let k=0;k<maxN;k++){
     let best=null;
@@ -468,6 +471,8 @@ function traceGeneric(p,d,opt,b,maxN=30){
       else if(e.kind==='region'){const q=e.pts;for(let i=0;i<q.length;i++){const a=q[i],c=q[(i+1)%q.length],h=raySeg(cur,dir,a,c);if(h)take(h.t,e,{a,c});}}
       else if(e.kind==='lens'){const h=raySeg(cur,dir,[e.x,-e.H],[e.x,e.H]);if(h)take(h.t,e,{});}
       else if(e.kind==='parab'){const t=parabHit(cur,dir,e.s,e.k,e.H);if(t!=null)take(t,e,{});}
+      else if(e.kind==='lensR'){const v=rot2([0,e.H],e.ang),h=raySeg(cur,dir,sub(e.c,v),add(e.c,v));if(h)take(h.t,e,{});}
+      else if(e.kind==='parabR'){const t=parabHit(rot2(sub(cur,e.c),-e.ang),rot2(dir,-e.ang),e.s,e.k,e.H);if(t!=null)take(t,e,{});}
       else if(e.kind==='arc'){const o=sub(cur,e.C),B=dot(o,dir),Cq=dot(o,o)-e.R*e.R,disc=B*B-Cq;
         if(disc>=0)for(const t of [-B-Math.sqrt(disc),-B+Math.sqrt(disc)]){if(t<1e-4)continue;const q=add(cur,mul(dir,t));
           if(Math.abs(q[1])<=e.H&&(e.cc?q[0]>=e.C[0]:q[0]<=e.C[0])){take(t,e,{});break;}}}
@@ -478,8 +483,11 @@ function traceGeneric(p,d,opt,b,maxN=30){
     if(e.kind==='mirror'){const s=sub(best.c,best.a);let n=nrm([-s[1],s[0]]);if(dot(n,dir)>0)n=mul(n,-1);dir=reflectDir(dir,n);}
     else if(e.kind==='arc'){let n=nrm(sub(q,e.C));if(dot(n,dir)>0)n=mul(n,-1);dir=reflectDir(dir,n);}
     else if(e.kind==='parab'){let n=nrm([1,-2*e.s*e.k*q[1]]);if(dot(n,dir)>0)n=mul(n,-1);dir=reflectDir(dir,n);}
+    else if(e.kind==='parabR'){const lq=rot2(sub(q,e.c),-e.ang),ld=rot2(dir,-e.ang);let n=nrm([1,-2*e.s*e.k*lq[1]]);if(dot(n,ld)>0)n=mul(n,-1);dir=rot2(reflectDir(ld,n),e.ang);}
+    else if(e.kind==='lensR'){const ld=rot2(dir,-e.ang),ly=rot2(sub(q,e.c),-e.ang)[1],sg=Math.sign(ld[0])||1;
+      if(Math.abs(ld[0])>1e-9){const m2=ld[1]/ld[0]-sg*ly/e.f;dir=rot2(nrm([sg,sg*m2]),e.ang);}}
     else if(e.kind==='lens'){const s=Math.sign(dir[0])||1,m=dir[1]/dir[0],m2=m-s*q[1]/e.f;dir=nrm([s,s*m2]);}
-    else{const s=sub(best.c,best.a),nv=nrm([-s[1],s[0]]),n1=nAt(add(q,mul(dir,-1e-4))),n2=nAt(add(q,mul(dir,1e-4)));
+    else{const s=sub(best.c,best.a),nv=(e.nrmAt&&e.nrmAt(q))||nrm([-s[1],s[0]]),n1=nAt(add(q,mul(dir,-1e-4))),n2=nAt(add(q,mul(dir,1e-4)));
       if(Math.abs(n1-n2)>1e-9) dir=refractDir(dir,nv,n1,n2).d;}
     cur=q;
   }
@@ -534,7 +542,7 @@ function idealRay(P,yh,img,surfX,b,o={}){
 
 /* ================= scenes ================= */
 const SCENES=[];
-const CHAPTERS=[['4-1','光的傳播'],['4-2','光的反射與面鏡成像'],['4-3','光的折射'],['4-4','透鏡成像'],['4-5','色散與顏色']];
+const CHAPTERS=[['4-1','光的傳播'],['4-2','光的反射與面鏡成像'],['4-3','光的折射'],['4-4','透鏡成像'],['4-5','色散與顏色'],['自由','自由探索']];
 
 /* ---------- 4-1 影子 ---------- */
 SCENES.push({id:'shadow',ch:'4-1',name:'影子的形成',bounds:[-58,46,-24,24],bench:true,
@@ -1284,6 +1292,176 @@ SCENES.push({id:'color',ch:'4-5',name:'色光與物體的顏色',noOptics:true,b
 });
 
 /* ================= guided tasks ================= */
+/* ---------- 自由探索：空白實驗台，自由放入、移除、組合各種光學元件 ---------- */
+const PG_TYPES={
+  pmirror:{name:'平面鏡',def:{L:16}},
+  ccmirror:{name:'凹面鏡',def:{f:12,H:8}},
+  cvmirror:{name:'凸面鏡',def:{f:12,H:8}},
+  cxlens:{name:'凸透鏡',def:{f:12,H:8,ideal:false,surf:'sph',mat:'glass',n:1.5}},
+  cclens:{name:'凹透鏡',def:{f:12,H:8,ideal:false,surf:'sph',mat:'glass',n:1.5}},
+  rect:{name:'長方形玻璃磚',def:{w:20,h:8,mat:'glass',n:1.5}},
+  semi:{name:'半圓形磚',def:{R:10,mat:'glass',n:1.5}},
+  prism:{name:'三稜鏡',def:{s:16,A:60,mat:'glass',n:1.5}},
+  screen:{name:'紙屏',def:{L:24}},
+  block:{name:'擋板',def:{L:10}},
+  pinhole:{name:'針孔板',def:{L:24,holes:1,hole:1,gap:4}},
+  object:{name:'箭頭物體',def:{h:6,rays:true,n:7,c:'#ffb347'}}};
+const PG_GROUPS=[['面鏡',['pmirror','ccmirror','cvmirror']],['透鏡',['cxlens','cclens']],['介質',['rect','semi','prism']],['物體與屏幕',['object','screen','pinhole','block']]];
+const PG_DISP={water:0.0031,glass:0.0042,diamond:0.018,custom:0.0042};
+const PG_IMG=['pmirror','ccmirror','cvmirror','cxlens','cclens'];
+// one-tap set-ups: elements + custom light sources
+const PG_TPL={
+  periscope:{name:'潛望鏡',els:[{type:'pmirror',x:-10,y:0,ang:-45,L:12},{type:'pmirror',x:-10,y:24,ang:-45,L:12},{type:'screen',x:30,y:24,ang:0,L:16}],
+    src:[{type:'beam',x:-45,y:0,ang:0,n:5,w:6,c:'#f4f7ff'}]},
+  kepler:{name:'克卜勒望遠鏡（兩個凸透鏡）',els:[{type:'cxlens',x:-15,y:0,ang:0,f:20,H:9,ideal:true},{type:'cxlens',x:11,y:0,ang:0,f:6,H:5,ideal:true}],
+    src:[{type:'beam',x:-50,y:0,ang:0,n:7,w:12,c:'#f4f7ff'}]},
+  galileo:{name:'伽利略望遠鏡（凸透鏡＋凹透鏡）',els:[{type:'cxlens',x:-15,y:0,ang:0,f:20,H:9,ideal:true},{type:'cclens',x:-1,y:0,ang:0,f:6,H:5,ideal:true}],
+    src:[{type:'beam',x:-50,y:0,ang:0,n:7,w:12,c:'#f4f7ff'}]},
+  newton:{name:'反射式望遠鏡（牛頓式）',els:[{type:'ccmirror',x:30,y:0,ang:0,f:25,H:9},{type:'pmirror',x:12,y:0,ang:45,L:9},{type:'block',x:8.4,y:0,ang:0,L:6.6},
+    {type:'cxlens',x:12,y:12,ang:90,f:5,H:3,ideal:true}],
+    src:[{type:'beam',x:-30,y:0,ang:0,n:9,w:14,c:'#f4f7ff'}]},
+  camera:{name:'照相機成像',els:[{type:'object',x:-30,y:0,ang:0,h:6,rays:true,n:7,c:'#ffb347'},{type:'cxlens',x:0,y:0,ang:0,f:10,H:9,ideal:true},{type:'screen',x:15,y:0,ang:0,L:24}],src:[]},
+  dispersion:{name:'三稜鏡色散',els:[{type:'prism',x:0,y:0,ang:0,s:18,A:60,mat:'glass',n:1.5},{type:'screen',x:40,y:-14,ang:20,L:30}],
+    src:[{type:'laser',x:-40,y:-12,ang:20,n:7,w:10,c:'#f4f7ff',white:true}],strong:true},
+  tir:{name:'全反射',els:[{type:'semi',x:0,y:0,ang:0,R:14,mat:'glass',n:1.5}],
+    src:[{type:'laser',x:-5.88+25*Math.cos(50*D2R),y:25*Math.sin(50*D2R),ang:230,n:7,w:10,c:'#ff4d4d'}]}};
+// real (thick) symmetric lens: conic surfaces x = ±(tc/2 ∓ sag(y)), sag = c·y²/(1+√(1−(1+K)c²y²)); K=0 is a sphere
+function pgLensGeom(cv,f,H0,n,K){
+  const R=2*(n-1)*f, c=1/R, Kmax=(1+K)>0?1/((1+K)*c*c):Infinity, H=Math.min(H0,Math.sqrt(Kmax)*0.97,R*((1+K)>0?1:5)*0.99);
+  const sag=y=>c*y*y/(1+Math.sqrt(Math.max(0,1-(1+K)*c*c*y*y))), dsag=y=>c*y/Math.sqrt(Math.max(1e-9,1-(1+K)*c*c*y*y));
+  const tc=cv?2*sag(H)+0.4:0.6, xr=y=>cv?tc/2-sag(y):tc/2+sag(y), dxr=y=>cv?-dsag(y):dsag(y);
+  const ys=lin(-H,H,97), loc=ys.map(y=>[xr(y),y]).concat(ys.slice().reverse().map(y=>[-xr(y),y]));
+  // outward-agnostic surface normal at a local point (null on the flat rim)
+  const nrmL=L=>{if(Math.abs(L[1])>H-1e-3)return null;const sd=Math.sign(L[0])||1;return nrm([1,-sd*dxr(L[1])]);};
+  return {H,loc,nrmL};}
+const PG_ASPH={};
+// conic constant that makes parallel light along the axis meet at one point (minimal spherical aberration)
+function pgAsphK(cv,f,H,n){
+  const key=[cv,f,H,n].join(); if(PG_ASPH[key]!=null) return PG_ASPH[key];
+  const B=[-600,600,-400,400];
+  const cost=K=>{const g=pgLensGeom(cv,f,H,n,K),opt=[{kind:'region',pts:g.loc,n,nrmAt:q=>g.nrmL(q)}],xs=[];
+    for(const fr of [0.05,0.3,0.5,0.7,0.85]){const y=g.H*fr,pts=traceGeneric([-60,y],[1,0],opt,B,8);if(pts.length<4)return 1e6;
+      const q=pts[pts.length-2],e=pts[pts.length-1],d=sub(e,q);if(Math.abs(d[1])<1e-9)return 1e6;xs.push(q[0]-q[1]*d[0]/d[1]);}
+    return xs.slice(1).reduce((a,x)=>a+(x-xs[0])**2,0);};
+  let lo=-80,hi=3;for(let it=0;it<50;it++){const m1=lo+(hi-lo)*0.382,m2=lo+(hi-lo)*0.618;if(cost(m1)<cost(m2))hi=m2;else lo=m1;}
+  return PG_ASPH[key]=(lo+hi)/2;}
+function pgTemplate(st,k){const T=PG_TPL[k];st.els=[];st.nextEl=1;
+  for(const e of T.els){const id=st.nextEl++;st.els.push({...JSON.parse(JSON.stringify(PG_TYPES[e.type].def)),...e,id});}
+  st.sources=T.src.map(s=>({...s,ang:s.ang*D2R,id:app.srcId++}));st.strong=!!T.strong;app.selObj=null;}
+// thin-lens / mirror image of a world point through one element (null if none)
+function pgImage(el,P){
+  const a=el.ang*D2R,c=[el.x,el.y],L=rot2(sub(P,c),-a),W=q=>add(c,rot2(q,a));
+  if(el.type==='pmirror'){return {p:W([-L[0],L[1]]),real:false};}
+  const lens=el.type==='cxlens'||el.type==='cclens';
+  if(!lens&&L[0]>=-1e-6) return null;
+  const side=lens?(Math.sign(L[0])||-1):-1, u=side*L[0], fs=(el.type==='cxlens'||el.type==='ccmirror')?el.f:-el.f;
+  if(Math.abs(u-fs)<1e-6) return {inf:true};
+  const v=1/(1/fs-1/u), m=-v/u;
+  return {p:W([lens?-side*v:-v, L[1]*m]),real:v>0};}
+const pgN=e=>e.mat==='custom'?e.n:MEDIA[e.mat].n;
+const pgSel=st=>{const s=String(app.selObj||'');return s.startsWith('pg')?(st.els||[]).find(e=>'pg'+e.id===s)||null:null;};
+function pgAdd(st,type){
+  st.els=st.els||[]; const id=st.nextEl=(st.nextEl||1); st.nextEl=id+1;
+  const k=st.els.length%5, e={id,type,x:-6+k*3,y:k*2-4,ang:0,...JSON.parse(JSON.stringify(PG_TYPES[type].def))};
+  st.els.push(e); app.selObj='pg'+id;}
+SCENES.push({id:'playground',ch:'自由',name:'自由組合實驗台',bounds:[-60,60,-32,32],rayBounds:[-600,600,-400,400],
+  init:()=>({els:[],nextEl:1,showF:true}),
+  controls:st=>{
+    const cs=[];
+    for(const [g,types] of PG_GROUPS) cs.push({type:'buttons',label:'新增'+g,items:types.map(t=>({label:'＋ '+PG_TYPES[t].name,rebuild:true,onClick:s=>pgAdd(s,t)}))});
+    cs.push({type:'buttons',label:'一鍵範本（會取代目前的元件與光源）',items:Object.entries(PG_TPL).map(([k,T])=>({label:T.name,rebuild:true,onClick:s=>pgTemplate(s,k)}))});
+    const e=pgSel(st);
+    if(e){
+      const T=e.type, P=(key,label,min,max,step,unit)=>({type:'slider',key:'pg'+key,label,min,max,step,unit,get:()=>e[key],set:v=>{e[key]=v;}});
+      cs.push({type:'note',text:'已選取：'+PG_TYPES[T].name});
+      cs.push({type:'slider',key:'pgang',label:'旋轉角度',min:-180,max:180,step:0.5,fmt:v=>(+v).toFixed(1)+'°',get:()=>e.ang,set:v=>{e.ang=v;}});
+      if(T==='pmirror'||T==='screen'||T==='block'||T==='pinhole') cs.push(P('L','長度',2,60,0.5,'cm'));
+      if(T==='pinhole'){cs.push({type:'seg',key:'pgholes',label:'孔數',options:[[1,'1 個'],[2,'2 個'],[3,'3 個']],get:()=>e.holes,set:v=>{e.holes=v;}});cs.push(P('hole','孔徑',0.2,10,0.1,'cm'));if(e.holes>1)cs.push(P('gap','孔的間距',1,10,0.5,'cm'));}
+      if(T==='object'){cs.push(P('h','高度',1,15,0.5,'cm'));cs.push({type:'toggle',key:'pgrays',label:'從頂端發出光線',get:()=>e.rays,set:v=>{e.rays=v;}});if(e.rays)cs.push(P('n','光線數量',3,15,2));
+        cs.push({type:'swatches',key:'pgc',label:'顏色',options:OBJ_COLORS,get:()=>e.c,set:v=>{e.c=v;}});}
+      if(T==='ccmirror'||T==='cvmirror'||T==='cxlens'||T==='cclens'){cs.push(P('f','焦距 f',3,40,0.5,'cm'));cs.push(P('H','半高（口徑的一半）',2,20,0.5,'cm'));}
+      if(T==='rect'){cs.push(P('w','寬',2,60,0.5,'cm'));cs.push(P('h','高',2,40,0.5,'cm'));}
+      if(T==='semi') cs.push(P('R','半徑',3,30,0.5,'cm'));
+      if(T==='prism'){cs.push(P('s','邊長',4,40,0.5,'cm'));cs.push(P('A','頂角',20,120,1,'°'));}
+      if(T==='cxlens'||T==='cclens'){cs.push({type:'toggle',key:'pgideal',label:'理想透鏡（不考慮厚度，只在中央折射一次）',get:()=>!!e.ideal,set:v=>{e.ideal=v;},rebuild:true});
+        if(!e.ideal) cs.push({type:'seg',key:'pgsurf',label:'鏡面形狀',options:[['sph','球面'],['asph','非球面']],get:()=>e.surf,set:v=>{e.surf=v;}});}
+      if(e.mat&&!e.ideal){cs.push({type:'seg',key:'pgmat',label:'材質',options:[['water','水'],['glass','玻璃'],['diamond','鑽石'],['custom','自訂']],get:()=>e.mat,set:v=>{e.mat=v;}});
+        if(e.mat==='custom') cs.push({type:'slider',key:'pgn',label:'折射率 n',min:1.0,max:2.5,step:0.01,fmt:v=>(+v).toFixed(2),get:()=>e.n,set:v=>{e.n=v;}});}
+      cs.push({type:'buttons',items:[
+        {label:'複製一份',rebuild:true,onClick:s=>{const c=JSON.parse(JSON.stringify(e));c.id=s.nextEl++;c.x+=3;c.y-=3;s.els.push(c);app.selObj='pg'+c.id;}},
+        {label:'刪除',rebuild:true,onClick:s=>{s.els=s.els.filter(x=>x!==e);app.selObj=null;}}]});
+    }
+    cs.push({type:'toggle',key:'showF',label:'顯示透鏡和面鏡的焦點'});
+    cs.push({type:'toggle',key:'strong',label:'誇張色散（讓白光的顏色分得更開）'});
+    if((st.els||[]).length) cs.push({type:'buttons',items:[{label:'清除全部元件',rebuild:true,onClick:s=>{s.els=[];app.selObj=null;}}]});
+    return cs;},
+  delSel:(st,id)=>{const s=String(id||'');if(!s.startsWith('pg'))return false;const n=st.els.length;st.els=st.els.filter(e=>'pg'+e.id!==s);return st.els.length<n;},
+  build(st,b){
+    const P=[], optics=[], objects=[]; st.els=st.els||[];
+    st.els=st.els.filter(e=>PG_TYPES[e.type]);
+    for(const e of st.els){const df=PG_TYPES[e.type].def;for(const k in df) if(e[k]===undefined) e[k]=JSON.parse(JSON.stringify(df[k]));}
+    for(const e of st.els){
+      const a=e.ang*D2R, W=q=>add([e.x,e.y],rot2(q,a)), id='pg'+e.id, T=e.type;
+      if(T==='pmirror'){const pts=[W([0,-e.L/2]),W([0,e.L/2])];P.push({t:'mirror',pts,back:1});optics.push({kind:'mirror',pts});}
+      else if(T==='ccmirror'||T==='cvmirror'){const cc=T==='ccmirror',ps=cc?-1:1,k=1/(4*e.f),pts=lin(-e.H,e.H,41).map(y=>W([ps*k*y*y,y]));
+        P.push({t:'mirror',pts,back:1});optics.push({kind:'parabR',c:[e.x,e.y],ang:a,s:ps,k,H:e.H});
+        if(st.showF){const F=W([cc?-e.f:e.f,0]);P.push({t:'mark',x:F[0],y:F[1],label:cc?'F':'F（虛）',dimmed:!cc});}}
+      else if((T==='cxlens'||T==='cclens')&&!e.ideal){const cv=T==='cxlens',n=pgN(e)||1.5;
+        // symmetric lens (lensmaker: 1/f = (n-1)·2/R); convex: thin edge, concave: thin centre; aspheric = optimised conic
+        const K=e.surf==='asph'?pgAsphK(cv,e.f,e.H,n):0, g=pgLensGeom(cv,e.f,e.H,n,K), pts=g.loc.map(W);
+        P.push({t:'medium',pts,c:e.surf==='asph'?'rgba(150,230,200,0.18)':C.glassFill});P.push({t:'line',pts:pts.concat([pts[0]]),c:e.surf==='asph'?'#9fe8c8':C.glassEdge,w:1.3});
+        // exact surface normals (facets only locate the hit point)
+        const nrmAt=q=>{const v=g.nrmL(rot2(sub(q,[e.x,e.y]),-a));return v&&rot2(v,a);};
+        optics.push({kind:'region',pts,n,B:PG_DISP[e.mat]*(st.strong?5:1),nrmAt});
+        if(st.showF) for(const sg of [-1,1]){const F=W([sg*e.f,0]);P.push({t:'mark',x:F[0],y:F[1],label:'F',dimmed:!cv});}}
+      else if(T==='cxlens'||T==='cclens'){const cv=T==='cxlens';P.push({t:'lens',x:e.x,y:e.y,ang:a,H:e.H,convex:cv,f:e.f,post:false});
+        optics.push({kind:'lensR',c:[e.x,e.y],ang:a,H:e.H,f:cv?e.f:-e.f});
+        if(st.showF) for(const sg of [-1,1]){const F=W([sg*e.f,0]);P.push({t:'mark',x:F[0],y:F[1],label:'F',dimmed:!cv});}}
+      else if(T==='rect'||T==='semi'||T==='prism'){
+        let loc;
+        if(T==='rect') loc=[[-e.w/2,-e.h/2],[e.w/2,-e.h/2],[e.w/2,e.h/2],[-e.w/2,e.h/2]];
+        else if(T==='semi'){loc=lin(-Math.PI/2,Math.PI/2,49).map(t=>[e.R*Math.cos(t)-e.R*0.42,e.R*Math.sin(t)]);}
+        else{const h=e.s*Math.cos(e.A*D2R/2),bh=e.s*Math.sin(e.A*D2R/2);loc=[[0,2*h/3],[-bh,-h/3],[bh,-h/3]];}
+        const pts=loc.map(W), m=e.mat==='custom'?null:MEDIA[e.mat];
+        P.push({t:'medium',pts,c:m?m.fill:'rgba(200,170,255,0.2)'});P.push({t:'line',pts:pts.concat([pts[0]]),c:C.glassEdge,w:1.2});
+        optics.push({kind:'region',pts,n:pgN(e),B:PG_DISP[e.mat]*(st.strong?5:1)});}
+      else if(T==='screen'){P.push({t:'screenR',x:e.x,y:e.y,rot:e.ang,h:e.L});optics.push({kind:'absorb',pts:[W([0,-e.L/2]),W([0,e.L/2])]});}
+      else if(T==='block'){const pts=[W([0,-e.L/2]),W([0,e.L/2])];P.push({t:'stick',pts,c:C.plate});optics.push({kind:'absorb',pts});}
+      else if(T==='pinhole'){const hs=lin(-(e.holes-1)/2,(e.holes-1)/2,e.holes).map(k=>k*e.gap);let segs=[[-e.L/2,e.L/2]];
+        for(const hc of hs){const lo=hc-e.hole/2,hi=hc+e.hole/2,ns=[];for(const [s0,s1] of segs){if(hi<=s0||lo>=s1){ns.push([s0,s1]);continue;}if(lo>s0)ns.push([s0,lo]);if(hi<s1)ns.push([hi,s1]);}segs=ns;}
+        for(const [s0,s1] of segs){const pts=[W([0,s0]),W([0,s1])];P.push({t:'stick',pts,c:C.plate});optics.push({kind:'absorb',pts});}}
+      else if(T==='object'){P.push({t:'arrowPts',a:[e.x,e.y],b:W([0,e.h]),c:e.c,label:'物體'});}
+      objects.push({id,x:e.x,y:e.y,ang:a,label:PG_TYPES[T].name,move:(x,y)=>{e.x=Math.round(x*10)/10;e.y=Math.round(y*10)/10;},rotate:r=>{e.ang=Math.round(r*R2D*10)/10;}});
+    }
+    // arrow objects: rays from the tip (real tracing) and, with exactly one lens or mirror and no media, its image
+    const imgEls=st.els.filter(x=>PG_IMG.includes(x.type)), media=st.els.some(x=>['rect','semi','prism'].includes(x.type)||((x.type==='cxlens'||x.type==='cclens')&&!x.ideal));
+    let imgNote='';
+    for(const o of st.els.filter(x=>x.type==='object')){
+      const a=o.ang*D2R, base=[o.x,o.y], tip=add(base,rot2([0,o.h],a));
+      if(o.rays){const others=st.els.filter(x=>x.type!=='object');let tg=null,bd=1e9;
+        for(const x of others){const d=len(sub([x.x,x.y],tip));if(d<bd){bd=d;tg=x;}}
+        let dirs;
+        if(tg){const half=(tg.H||tg.L/2||tg.h/2||tg.R||tg.s/2||6)*0.9,ta=tg.ang*D2R;dirs=lin(-half,half,o.n).map(y=>nrm(sub(add([tg.x,tg.y],rot2([0,y],ta)),tip)));}
+        else dirs=lin(-20,20,o.n).map(dg=>dirOf(a-Math.PI/2+Math.PI/2+dg*D2R));
+        for(const d of dirs) P.push({t:'ray',pts:traceGeneric(tip,d,optics,this.rayBounds),c:o.c,w:1.2,a:0.8});}
+      if(imgEls.length===1&&!media){const el=imgEls[0],i1=pgImage(el,base),i2=pgImage(el,tip);
+        if(i1&&i2&&!i1.inf&&!i2.inf) P.push({t:'arrowPts',a:i1.p,b:i2.p,c:o.c,virtual:!i2.real,image:true,label:i2.real?'實像':'虛像'});}
+    }
+    if(st.els.some(x=>x.type==='object')) imgNote=imgEls.length===1&&!media?'場上只有一個透鏡或面鏡，所以畫出物體的像。':'場上有多個透鏡、面鏡、介質或真實厚透鏡時，不另外標示像，看光線交會的位置判斷。';
+    if(!st.els.length&&!(st.sources||[]).length){
+      P.push({t:'label',x:0,y:4,text:'空白實驗台：從右側「＋ 新增」放入面鏡、透鏡、介質、紙屏或擋板',c:C.dim,size:14});
+      P.push({t:'label',x:0,y:-1,text:'光源在左側工具列（雷射筆、發光點、平行光源），每種元件都可以放好幾個',c:C.dim,size:13});}
+    const e=pgSel(st);
+    const info=`<dl class="kv"><dt>元件數</dt><dd>${st.els.length}</dd><dt>光源數</dt><dd>${(st.sources||[]).length}</dd>${e&&e.mat?`<dt>折射率</dt><dd>${pgN(e).toFixed(2)}</dd>`:''}</dl>
+      <p class="note-sm">點元件中央的圓點可以選取：拖曳移動，用旋轉控制把手或右側滑桿轉方向，按 Delete 刪除。光源在左側工具列。</p>
+      <p class="note-sm">${imgNote||'多個元件串在一起時，光線用真實的反射、折射計算（含全反射與色散）。'}</p>
+      ${e&&(e.type==='cxlens'||e.type==='cclens')?(e.ideal?'<p class="note-sm">理想透鏡：假設沒有厚度，光只在透鏡中央折射一次，平行主軸的光準確通過焦點（課本畫法）。</p>':(e.surf==='asph'?'<p class="note-sm">非球面透鏡：表面的彎曲程度從中央往邊緣慢慢改變，讓邊緣的光也聚在同一點，消除球面像差（相機鏡頭、高度數眼鏡常用）。它是針對沿主軸射入的平行光設計的，斜射或近處的光仍會有一點偏差。</p>':'<p class="note-sm">球面透鏡：光進入和離開透鏡各折射一次。因為有厚度，實際會聚的位置和標示的 F 會差一點；靠近邊緣的光會聚得比較近（球面像差）。</p>')):''}
+      <p class="note-sm">白光：選取左側工具列放的光源，在右側勾選「白光」，遇到三稜鏡或介質就會分出顏色。</p>`;
+    return {prims:P,handles:[],objects,optics,info};
+  },
+  notes:['自由組合各種光學元件，觀察光線怎麼反射、折射。','試試看：用兩面平面鏡做潛望鏡、用兩個凸透鏡做望遠鏡、讓雷射在玻璃磚裡全反射。']
+});
+
 /* goal · hints[] · setup(st,data) · check({st,out,data}) — auto-checked when the student lets go (drag / slider)
    choices[]+answer · submit (checked on 送出答案) · quiz {q,opts,ans[]} = conclusion check after the action
    lock[] toolbar toggles forced off during the action · reveal[] (default lock) turned on after it
@@ -1642,7 +1820,8 @@ function renderPanel(){
     if(src.type==='beam'){cs.push({type:'slider',key:'n',label:'光線數量',min:2,max:15,step:1});cs.push({type:'slider',key:'w',label:'光束寬度',min:2,max:30,step:0.5,unit:'cm'});}
     if(src.type!=='point') cs.push({type:'slider',key:'angDeg',label:'方向',min:-180,max:180,step:0.1,unit:'°',fmt:v=>(+v).toFixed(1)+'°',get:()=>Math.round(src.ang*R2D*10)/10,set:v=>{src.ang=v*D2R}});
     if(src.type==='laser') cs.push({type:'buttons',items:[{label:'反向射回（驗證光路可逆）',onClick:()=>reverseLaser(src)}]});
-    cs.push({type:'swatches',key:'c',label:'顏色',options:SRC_COLORS});
+    cs.push({type:'toggle',key:'white',label:'白光（遇到稜鏡、介質會色散）'});
+    cs.push({type:'swatches',key:'c',label:'顏色（非白光時）',options:SRC_COLORS});
     cs.push({type:'buttons',items:[{label:'刪除這個光源',onClick:()=>deleteSel()}]});
     for(const c of cs) box.appendChild(makeControl(c,src));
     els.controls.appendChild(box);
@@ -1705,7 +1884,7 @@ function makeControl(c,st){
     for(const it of c.items){const bt=el('button','btn'+(it.primary?' primary':''),it.label);bt.type='button';bt.disabled=!!it.disabled;
       bt.onclick=()=>{it.onClick(st);if(it.rebuild)renderPanel();commit();};r.appendChild(bt);}
     w.appendChild(r);
-  }
+  }else if(c.type==='note'){const n=el('div','selnote');n.textContent=c.text;w.appendChild(n);}
   return w;
 }
 els.info.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t)return;e.stopPropagation();
@@ -1800,7 +1979,7 @@ function setHint(){
   els.hint.textContent=m[app.tool]||(app.mode==='2d'?'拖曳虛線圓圈可移動物體　·　點一下光源、稜鏡或繪圖可選取、拖移、旋轉與編輯　·　滾輪或雙指縮放　·　拖曳空白處平移'
     :'3D：拖曳圓點或箭頭可在實驗平面上移動物體　·　拖曳空白處旋轉　·　滾輪縮放　·　右鍵或 Shift＋拖曳平移');
 }
-function deleteSel(){const st=S(),s=selSource(),d=selDraw();if(s)st.sources=st.sources.filter(x=>x!==s);else if(d)st.draw=st.draw.filter(x=>x!==d);else return;app.selObj=null;renderPanel();commit();}
+function deleteSel(){const st=S(),s=selSource(),d=selDraw(),sc=cur();if(s)st.sources=st.sources.filter(x=>x!==s);else if(d)st.draw=st.draw.filter(x=>x!==d);else if(!(sc.delSel&&sc.delSel(st,app.selObj)))return;app.selObj=null;renderPanel();commit();}
 function selDraw(){const s=app.selObj;if(!s||!String(s).startsWith('d'))return null;return S().draw.find(x=>'d'+x.id===s)||null;}
 function dupDraw(d){const c=JSON.parse(JSON.stringify(d));c.id=app.drawId++;const o=[2,-2];if(c.pts)c.pts=c.pts.map(p=>add(p,o));else{c.a=add(c.a,o);c.b=add(c.b,o);}
   S().draw.push(c);app.selObj='d'+c.id;renderPanel();commit();}
@@ -1819,14 +1998,16 @@ function reverseLaser(src){
 function placeSource(type,w){const st=S();const s={id:app.srcId++,type,x:w[0],y:w[1],ang:0,n:type==='point'?16:7,w:10,c:type==='laser'?SRC_COLORS[1]:type==='beam'?SRC_COLORS[5]:SRC_COLORS[0]};
   st.sources.push(s);app.selObj='u'+s.id;renderPanel();}
 function addExtras(out){
-  const sc=cur(),st=S(),b=bounds(); out.objects=out.objects||[];
+  const sc=cur(),st=S(),b=sc.rayBounds||bounds(); out.objects=out.objects||[];
   if(sc.noOptics||!out.optics) return;
   for(const s of st.sources){
     const d=dirOf(s.ang), starts=[];
     if(s.type==='point'){for(let i=0;i<s.n;i++){const a=s.ang+i*2*Math.PI/s.n;starts.push([[s.x,s.y],dirOf(a)]);}out.prims.push({t:'lamp',x:s.x,y:s.y,c:s.c});}
     else if(s.type==='laser'){starts.push([[s.x,s.y],d]);out.prims.push({t:'laser',x:s.x,y:s.y,dir:d,c:s.c});}
     else{const pp=[-d[1],d[0]];for(const o of lin(-s.w/2,s.w/2,s.n))starts.push([add([s.x,s.y],mul(pp,o)),d]);out.prims.push({t:'beamSrc',x:s.x,y:s.y,ang:s.ang,w:s.w,c:s.c});}
-    for(const [p,dd] of starts) out.prims.push({t:'ray',pts:traceGeneric(p,dd,out.optics,b),c:s.c,w:s.type==='laser'?2:1.4,a:s.type==='point'?0.75:1});
+    if(s.white){const wls=lin(400,700,s.type==='laser'?13:7);
+      for(const [p,dd] of starts) for(const wl of wls) out.prims.push({t:'ray',pts:traceGeneric(p,dd,out.optics,b,30,wl),c:wl2rgb(wl),w:s.type==='laser'?1.6:1.1,a:s.type==='laser'?0.85:0.6});}
+    else for(const [p,dd] of starts) out.prims.push({t:'ray',pts:traceGeneric(p,dd,out.optics,b),c:s.c,w:s.type==='laser'?2:1.4,a:s.type==='point'?0.75:1});
     out.objects.push({id:'u'+s.id,x:s.x,y:s.y,ang:s.ang,label:SRC_NAMES[s.type],move:(x,y)=>{s.x=clamp(x,-1000,1000);s.y=clamp(y,-1000,1000);},rotate:s.type==='point'?null:(a=>{s.ang=a;})});
   }
 }
@@ -2003,10 +2184,10 @@ function drawPrim(p,T){
     if(!p.dash&&p.arrow!==false){ctx.fillStyle=p.c;for(let i=1;i<p.pts.length;i++){const a=p.pts[i-1],c2=p.pts[i],x1=T.X(a[0]),y1=T.Y(a[1]),x2=T.X(c2[0]),y2=T.Y(c2[1]);
       const L=Math.hypot(x2-x1,y2-y1);if(L<60)continue;const tt=i===1?0.5:0.35;drawArrowHead(x1+(x2-x1)*tt,y1+(y2-y1)*tt,Math.atan2(y2-y1,x2-x1),5);}}
     break;}
-  case 'lens':{const prof=lensProfile(p.H,p.convex,p.f),N=30,pts=[];
-    for(let i=0;i<=N;i++){const r=-p.H+2*p.H*i/N;pts.push([p.x+prof(r),r]);}for(let i=N;i>=0;i--){const r=-p.H+2*p.H*i/N;pts.push([p.x-prof(r),r]);}
+  case 'lens':{const prof=lensProfile(p.H,p.convex,p.f),N=30,pts=[],cy=p.y||0,ca=Math.cos(p.ang||0),sa=Math.sin(p.ang||0),W=(u,v)=>[p.x+u*ca-v*sa,cy+u*sa+v*ca];
+    for(let i=0;i<=N;i++){const r=-p.H+2*p.H*i/N;pts.push(W(prof(r),r));}for(let i=N;i>=0;i--){const r=-p.H+2*p.H*i/N;pts.push(W(-prof(r),r));}
     path(pts,T);ctx.closePath();ctx.fillStyle=C.glassFill;ctx.fill();ctx.strokeStyle=C.glassEdge;ctx.lineWidth=1.4;ctx.stroke();
-    if(p.label){ctx.fillStyle=C.text;ctx.font='12px "Noto Sans TC",sans-serif';ctx.textAlign='center';ctx.fillText(p.label,T.X(p.x),T.Y(p.H)-8);}break;}
+    if(p.label){const L=W(0,p.H);ctx.fillStyle=C.text;ctx.font='12px "Noto Sans TC",sans-serif';ctx.textAlign='center';ctx.fillText(p.label,T.X(L[0]),T.Y(L[1])-8);}break;}
   case 'mirror':{path(p.pts,T);ctx.strokeStyle=C.mirror;ctx.lineWidth=3;ctx.lineJoin='round';ctx.stroke();
     ctx.strokeStyle=C.hatch;ctx.lineWidth=1;let acc=0;
     for(let i=1;i<p.pts.length;i++){const a=p.pts[i-1],c2=p.pts[i],seg=len(sub(c2,a));if(seg<1e-6)continue;const dir=mul(sub(c2,a),1/seg);
@@ -2024,6 +2205,13 @@ function drawPrim(p,T){
   case 'blurArrow':{if(p.blur>20)break;ctx.globalCompositeOperation='lighter';ctx.strokeStyle=p.c;
     const lo=Math.max(Math.min(p.y0,p.y1)-p.blur/2,-17),hi=Math.min(Math.max(p.y0,p.y1)+p.blur/2,17);
     ctx.globalAlpha=clamp(3/(p.blur+3),0.12,1);ctx.lineWidth=4;ctx.lineCap='butt';path([[p.x,lo],[p.x,hi]],T);ctx.stroke();break;}
+  case 'arrowPts':{const A=[T.X(p.a[0]),T.Y(p.a[1])],B=[T.X(p.b[0]),T.Y(p.b[1])],L=Math.hypot(B[0]-A[0],B[1]-A[1]);if(L<2)break;
+    const u=[(B[0]-A[0])/L,(B[1]-A[1])/L],hd=Math.min(L*0.4,13),nv=[-u[1],u[0]],E=[B[0]-u[0]*hd,B[1]-u[1]*hd];
+    if(p.virtual){ctx.globalAlpha=0.6;ctx.setLineDash([4,3]);}
+    ctx.strokeStyle=p.c;ctx.lineWidth=3.5;ctx.beginPath();ctx.moveTo(A[0],A[1]);ctx.lineTo(E[0]+u[0]*hd*0.1,E[1]+u[1]*hd*0.1);ctx.stroke();ctx.setLineDash([]);
+    ctx.fillStyle=p.c;ctx.beginPath();ctx.moveTo(B[0],B[1]);ctx.lineTo(E[0]+nv[0]*hd*0.55,E[1]+nv[1]*hd*0.55);ctx.lineTo(E[0]-nv[0]*hd*0.55,E[1]-nv[1]*hd*0.55);ctx.closePath();
+    if(p.virtual){ctx.strokeStyle=p.c;ctx.lineWidth=1.5;ctx.stroke();}else ctx.fill();
+    if(p.label){ctx.globalAlpha=1;ctx.fillStyle=C.text;ctx.font='12px "Noto Sans TC",sans-serif';ctx.textAlign='center';ctx.fillText(p.label,B[0]+u[0]*14,B[1]+u[1]*14+4);}break;}
   case 'arrowObj':{const x=T.X(p.x),y0=T.Y(p.y0),y1=T.Y(p.y0+p.h),dir=Math.sign(p.h)||1,head=Math.min(Math.abs(y1-y0)*0.4,13);
     if(p.selected){ctx.strokeStyle='rgba(255,255,255,0.25)';ctx.lineWidth=12;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(x,y0);ctx.lineTo(x,y1);ctx.stroke();}
     if(p.virtual){ctx.globalAlpha=0.6;ctx.setLineDash([4,3]);}
@@ -2185,8 +2373,8 @@ function build3D(){
     case 'point': mesh(new THREE.SphereGeometry(span*0.005,12,8),new THREE.MeshBasicMaterial({color:hexOnly(p.c)}),[p.x,p.y,0]);break;
     case 'lens':{const prof=lensProfile(p.H,p.convex,p.f),pts=[];for(let i=0;i<=24;i++){const r=p.H*i/24;pts.push(new THREE.Vector2(r,-prof(r)));}
       for(let i=24;i>=0;i--){const r=p.H*i/24;pts.push(new THREE.Vector2(r,prof(r)));}
-      const m=mesh(new THREE.LatheGeometry(pts,48),phong(0x9fd3ff,{transparent:true,opacity:0.32,shininess:120,specular:0xffffff,side:THREE.DoubleSide,depthWrite:false}),[p.x,0,0]);m.rotation.z=-Math.PI/2;
-      const ring=mesh(new THREE.TorusGeometry(p.H+0.3,0.35,8,48),phong(0x5b6676),[p.x,0,0]);ring.rotation.y=Math.PI/2;
+      const m=mesh(new THREE.LatheGeometry(pts,48),phong(0x9fd3ff,{transparent:true,opacity:0.32,shininess:120,specular:0xffffff,side:THREE.DoubleSide,depthWrite:false}),[p.x,p.y||0,0]);m.rotation.z=-Math.PI/2+(p.ang||0);
+      const ring=mesh(new THREE.TorusGeometry(p.H+0.3,0.35,8,48),phong(0x5b6676),[p.x,p.y||0,0]);ring.rotation.y=Math.PI/2;if(p.ang)ring.rotateOnWorldAxis(new THREE.Vector3(0,0,1),p.ang);
       if(p.post!==false) post(p.x,-p.H-0.3);break;}
     case 'mirror':{const back=p.back||1,th=0.7,pts=p.pts;const sh=new THREE.Shape();
       const off=pts.map((q,i)=>{const a=pts[Math.max(0,i-1)],c=pts[Math.min(pts.length-1,i+1)],d=nrm(sub(c,a));return add(q,mul(backN(pts,back,d),th));});
@@ -2214,6 +2402,9 @@ function build3D(){
       if(p.label)sprite(p.label,C.text,p.lx+6,p.ly,dz/2,span*0.02);break;}
     case 'cup':{const g=new THREE.BoxGeometry(p.x1-p.x0,p.y1-p.y0,DZ*0.9);mesh(g,phong(0xbfd7f0,{transparent:true,opacity:0.08,depthWrite:false,side:THREE.DoubleSide}),[(p.x0+p.x1)/2,(p.y0+p.y1)/2,0]);
       T3.root.add(new THREE.LineSegments(new THREE.EdgesGeometry(g),new THREE.LineBasicMaterial({color:0xbfd7f0,transparent:true,opacity:0.5})).translateX((p.x0+p.x1)/2).translateY((p.y0+p.y1)/2));break;}
+    case 'arrowPts':{const col=hexOnly(p.c),L=len(sub(p.b,p.a));if(L<0.2)break;const u=mul(sub(p.b,p.a),1/L),hd=Math.min(L*0.35,3),mat=phong(col,{transparent:!!p.virtual,opacity:p.virtual?0.35:1,emissive:col,emissiveIntensity:p.image?0.35:0.15});
+      const E=sub(p.b,mul(u,hd));if(L>hd)orient(mesh(new THREE.CylinderGeometry(0.35,0.35,L-hd,12),mat),p.a,E);orient(mesh(new THREE.ConeGeometry(hd*0.55,hd,16),mat),E,p.b);
+      if(p.label)sprite(p.label,C.text,p.b[0]+u[0]*span*0.03,p.b[1]+u[1]*span*0.03,0,span*0.02);break;}
     case 'arrowObj':{const col=hexOnly(p.c),h=p.h,hd=Math.min(Math.abs(h)*0.35,3),sg=Math.sign(h)||1,mat=phong(col,{transparent:!!p.virtual,opacity:p.virtual?0.35:1,emissive:col,emissiveIntensity:p.image?0.35:0.15});
       const shaftL=Math.abs(h)-hd;if(shaftL>0)mesh(new THREE.CylinderGeometry(0.35,0.35,shaftL,12),mat,[p.x,p.y0+sg*shaftL/2,0]);
       const cone=mesh(new THREE.ConeGeometry(hd*0.55,hd,16),mat,[p.x,p.y0+h-sg*hd/2,0]);if(sg<0)cone.rotation.z=Math.PI;
@@ -2395,7 +2586,7 @@ window.addEventListener('keydown',e=>{
   if(!els.modal.hidden){if(e.key==='Escape')closeJson();return;}
   if(e.key==='Escape'&&appEl.classList.contains('drawer')){closeDrawer();return;}
   if(e.key==='Escape'){setTool('select');if(app.selObj){app.selObj=null;renderPanel();refresh();}}
-  else if((e.key==='Delete'||e.key==='Backspace')&&(selSource()||selDraw())){e.preventDefault();deleteSel();}
+  else if((e.key==='Delete'||e.key==='Backspace')&&(selSource()||selDraw()||String(app.selObj||'').startsWith('pg'))){e.preventDefault();deleteSel();}
   else if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){e.preventDefault();applyHist(e.shiftKey?1:-1);}
   else if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='y'){e.preventDefault();applyHist(1);}
 });
@@ -2569,6 +2760,7 @@ function taskAfter(st,b){
 }
 function renderTasks(){
   const list=TASKS[cur().id]||[], body=document.getElementById('taskBody'), tk=taskOf();
+  document.getElementById('taskbar').hidden=!list.length;
   const nd=list.filter(t=>app.doneTasks.has(t.id)).length;
   document.getElementById('taskCount').textContent=list.length?`${nd} / ${list.length} 完成`:'';
   document.getElementById('taskActive').textContent=tk?({act:'進行中：',quiz:'確認結論：',done:'完成：'}[app.task.phase])+tk.title:'';
@@ -2762,7 +2954,7 @@ window.addEventListener('hashchange',()=>{const i=fromHash();if(i>=0&&i!==app.id
 const hi=fromHash(); app.idx=hi>=0?hi:SCENES.findIndex(s=>s.id==='lens-image');
 buildToolbar(); loadSnaps(); renderSnaps(); renderTasks(); resize(); renderRail(); renderPanel(); reset3DCamera(); setMode('2d');
 if(document.fonts&&document.fonts.ready) document.fonts.ready.then(()=>{if(app.mode==='2d')draw2D();});
-window.__optics={drawFeedback,eyeAxial,traceGeneric,renderPanel,app,SCENES,setMode,selectScene,refresh,imageOf,S,setTool,toWorld,handlePx,startTask,endTask,chooseTask,submitTask,submitQuiz};window.__TASKS=TASKS;window.__aim=aimRefl;window.__aimR=aimRefr;
+window.__optics={drawFeedback,eyeAxial,traceGeneric,renderPanel,pgAsphK,pgLensGeom,app,SCENES,setMode,selectScene,refresh,imageOf,S,setTool,toWorld,handlePx,startTask,endTask,chooseTask,submitTask,submitQuiz};window.__TASKS=TASKS;window.__aim=aimRefl;window.__aimR=aimRefr;
 })();
 </script>
 
