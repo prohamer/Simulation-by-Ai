@@ -1,4 +1,4 @@
-<title>光學小站V35</title>
+<title>光與影像V36</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -473,7 +473,7 @@ body:not([data-scene="mirror"]) .only-mirror{display:none !important}
         <h3>光線</h3>
         <div class="field not-concave"><div class="flab"><span>每個物體的光線數量<span class="only-mirror note">（只畫鏡中看得到的）</span></span><output id="rOut"></output></div><input type="range" id="rays" min="0" max="30" step="1" aria-label="光線數量"></div>
         <label class="sw only-pinhole"><input type="checkbox" id="blockedChk"><span class="track"></span><span>顯示被箱子擋住的光線</span></label>
-        <div class="btnrow"><button class="btn" id="handBtn">手繪光線</button><button class="btn ghost" id="handClear">清除手繪</button></div>
+        <div class="btnrow"><button class="btn" id="handBtn">手繪光線</button><button class="btn" id="handAdj">調整</button><button class="btn ghost" id="handClear">清除手繪</button></div>
       </section>
 
       <section class="psec cat-pred">
@@ -560,6 +560,7 @@ body:not([data-scene="mirror"]) .only-mirror{display:none !important}
         <li><b>擺動作</b>：小人打開「鎖定位置」後，拖曳手臂、前臂、大腿、小腿就能擺姿勢，也可以按預設姿勢。</li>
         <li><b>打洞、補洞</b>：選「打洞」後點箱子正面開一個孔（最多 3 個）；選「補洞」後點黃色圈把孔補起來。</li>
         <li><b>手繪光線</b>：先點物體上的一點，再點箱子正面。點在黃色圈內，光會穿過小孔；點在其他地方，光會被擋住。</li>
+        <li><b>調整</b>：畫好手繪光線後按「調整」，拖曳兩端的圓點。藍點（起點）只能在物體上滑動；紅點（照射點）拖到箱子外面時，光沒有打到箱子，會沿直線前進（灰色）。</li>
         <li><b>繪圖</b>：右上角筆形圖示打開工具列，長按圖示可看名稱。用「拖移」工具可以搬動畫好的線和形狀，用橡皮擦點一下刪除一整筆。</li>
         <li><b>復原、重做</b>：畫面右上角的箭頭。涵蓋繪圖、手繪光線、打洞補洞、物體的位置和姿勢。</li>
         <li><b>快照</b>：存下設定、視角和筆跡，之後可回到那個畫面，或挑兩張並排比較。快照存在這台裝置的瀏覽器裡。</li>
@@ -572,6 +573,7 @@ body:not([data-scene="mirror"]) .only-mirror{display:none !important}
         <li><b>觀察者看得到</b>：右側列出每個物體的特徵點，在鏡中看得到的打勾。</li>
         <li><b>顯示虛像</b>：鏡子變透明，鏡子後方出現半透明的像，灰色虛線連接每一點和它的像。</li>
         <li><b>手繪光線</b>：先點物體上的一點，再點鏡子。白色虛線是法線，打開「進階」可以看到入射角和反射角。</li>
+        <li><b>調整</b>：按「調整」後拖曳光線兩端的圓點。藍點（起點）只能在物體上滑動；紅點（照射點）沿著鏡面滑動，拖出鏡子外面時，光沒有打到鏡子，會沿直線前進（灰色）。凹面鏡、凸面鏡、透鏡也一樣。</li>
         <li><b>兩面鏡子</b>：打開「進階」後可加第二面鏡子，夾角 90°、60°、45°。</li>
       </ul>
       <h3>凹面鏡場景</h3>
@@ -668,7 +670,7 @@ function syncUid(){uid=1+Math.max(0,...S.objs.map(o=>o.id),...S.holes.map(h=>h.i
 
 let handRays=[];   // {oid, mi, local:[x,y,z]（網格座標）, color, target:{type:'hole',id,z,y}|{type:'wall',z,y}}
 let pending=null;
-let tool=null;     // null | 'hand' | 'punch' | 'patch'
+let tool=null;     // null | 'hand' | 'adj' | 'punch' | 'patch'
 let activeView='overview';
 
 /* ============================================================
@@ -1023,6 +1025,77 @@ function samplePoints(o,n){
   return out;
 }
 function handStart(hr){const r=REG[hr.oid];const m=r&&r.info.meshes[hr.mi];return m?m.localToWorld(V3(...hr.local)):null;}
+/* ---------- 手繪光線「調整」：拖曳起點（只在物體表面）或照射點（在鏡面／透鏡／箱子正面所在平面） ---------- */
+const MISS_M=.3, MISS_COL='#9aa3ab';   // 照射點最多可拖出邊緣 30 cm；沒打到的光畫成灰色直線
+function handEnd(hr){const t=hr.target;if(!t)return null;
+  if(t.type==='hole'){const h=S.holes.find(x=>x.id===t.id);return h?V3(0,AXIS_Y+h.y,h.z):V3(0,AXIS_Y+(t.y||0),t.z||0);}
+  if(t.type==='wall')return V3(0,AXIS_Y+t.y,t.z); return t.p?V3(...t.p):null;}
+function straightEnd(a,b,L){   // 從 a 經過 b 沿直線再走 L，碰到地面就停
+  const d=b.clone().sub(a).normalize(); let len=a.distanceTo(b)+L; if(d.y<-1e-6) len=Math.min(len,(a.y-.002)/-d.y); return a.clone().addScaledVector(d,Math.max(len,a.distanceTo(b)));}
+function missRay(a,b,L,extra){   // 沒打到：整條光畫成灰色直線，被物體等擋住就停
+  let e=straightEnd(a,b,L); const blk=occlude(a,e); if(blk) e=blk; if(extra){const q=extra(a,e);if(q)e=q;}
+  beam(a,e,MISS_COL,.011,.95); dot(a,MISS_COL,.022); dot(b,MISS_COL,.014,.9);
+}
+function boxEntry(a,e){   // 線段 a→e 進入針孔箱（x 0～d）的位置
+  const lo=[0,AXIS_Y-BOX_H/2,-BOX_W/2], hi=[S.d,AXIS_Y+BOX_H/2,BOX_W/2], A=a.toArray(), D=e.clone().sub(a).toArray(); let t0=0,t1=1;
+  for(let i=0;i<3;i++){if(Math.abs(D[i])<1e-9){if(A[i]<lo[i]||A[i]>hi[i])return null;continue;}let u=(lo[i]-A[i])/D[i],v=(hi[i]-A[i])/D[i];if(u>v)[u,v]=[v,u];t0=Math.max(t0,u);t1=Math.min(t1,v);if(t0>t1)return null;}
+  return t0>1e-4?a.clone().lerp(e,t0):null;
+}
+function drawAdjHandles(){
+  if(tool!=='adj') return;
+  handRays.forEach((hr,i)=>{const a=handStart(hr),b=handEnd(hr),on=adjDrag&&adjDrag.i===i;
+    [[a,'a'],[b,'b']].forEach(([p,k])=>{if(!p)return;const act=on&&adjDrag.end===k;const sc=Math.max(1,cam.position.distanceTo(p)*.28);   // 遠看時把手放大，保持在畫面上差不多大
+      const m=dot(p,'#fff',(act?.05:.04)*sc);m.material=adjMat(act?'#ffd23f':'#ffffff',.95);m.renderOrder=30;
+      const c=dot(p,'#fff',.018*sc);c.material=adjMat(k==='a'?'#1f6fd1':'#e2453c',1);c.renderOrder=31;});});
+}
+let adjDrag=null; const ADJ_M={};
+function adjMat(col,op){const k=col+op;return ADJ_M[k]||(ADJ_M[k]=new THREE.MeshBasicMaterial({color:col,transparent:true,opacity:op,depthTest:false,depthWrite:false}));}
+function adjPick(e){   // 找手指附近（螢幕上 34 px 內）最近的把手
+  const r=gl.getBoundingClientRect(); let best=null,bd=34;
+  handRays.forEach((hr,i)=>{[['a',handStart(hr)],['b',handEnd(hr)]].forEach(([k,p])=>{if(!p)return;const v=p.clone().project(cam);if(v.z>1)return;
+    const x=r.left+(v.x+1)/2*r.width,y=r.top+(1-v.y)/2*r.height,d=Math.hypot(x-e.clientX,y-e.clientY);if(d<bd){bd=d;best={i,end:k};}});});
+  return best;
+}
+function adjMove(e){
+  const hr=handRays[adjDrag.i]; if(!hr) return; raycaster.setFromCamera(ndc(e),cam); const ray=raycaster.ray;
+  if(adjDrag.end==='a'){
+    const h=hitObject(e);
+    if(h&&h.object.userData.oid===hr.oid&&h.object.userData.mi!==undefined){
+      hr.mi=h.object.userData.mi; hr.local=h.object.worldToLocal(h.point.clone()).toArray();
+      hr.color='#'+(h.object.material.color?h.object.material.color.getHexString():'ffffff'); adjDrag.edge=false; setHint('拖曳起點：光從物體上的這一點發出。');
+    }else if(!adjDrag.edge){adjDrag.edge=true;setHint('起點只能在這個物體上，已停在邊緣。');}
+  }else{
+    const t=hr.target;
+    if(t.type==='mirror'){
+      const mr=MIRRORS[t.m]||MIRRORS[0], den=ray.direction.dot(mr.n); if(Math.abs(den)<1e-5) return;
+      const k=mr.c.clone().sub(ray.origin).dot(mr.n)/den; if(k<=0) return;
+      const P=ray.at(k,new THREE.Vector3()), u=P.clone().sub(mr.c).dot(mr.u);
+      const uc=clamp(u,-mr.w/2-MISS_M,mr.w/2+MISS_M), yc=clamp(P.y,Math.max(.02,mr.b-MISS_M),mr.b+mr.h+MISS_M);
+      const R=mr.c.clone().addScaledVector(mr.u,uc); R.y=yc; t.p=R.toArray();
+      t.miss=Math.abs(uc)>mr.w/2||yc<mr.b||yc>mr.b+mr.h; if(!t.miss) delete t.miss;
+      const a0=handStart(hr); lastAngle=a0&&!t.miss?reflAngle(a0,R,mr):0;
+      setHint(t.miss?'沒有打到鏡子：光不會反射，沿直線繼續前進（灰色）。':S.adv?`入射角 ${lastAngle.toFixed(0)}°，反射角 ${lastAngle.toFixed(0)}°。`:'拖曳照射點：看反射光怎麼跟著改變。');
+    }else if(t.type==='cc'){
+      if(Math.abs(ray.direction.x)<1e-5) return; const k=(MX()-ray.origin.x)/ray.direction.x; if(k<=0) return;
+      const P=ray.at(k,new THREE.Vector3()), Y=CC().y, A2=CC().A/2, rr=Math.hypot(P.y-Y,P.z);
+      if(rr<=A2){t.p=ccHit(P.y,P.z).toArray();delete t.miss;}
+      else{const q=Math.min(1,(A2+MISS_M)/rr);t.p=V3(MX(),Math.max(.02,Y+(P.y-Y)*q),P.z*q).toArray();t.miss=true;}
+      setHint(t.miss?(isLens()?'沒有通過透鏡：光不會折射，沿直線繼續前進（灰色）。':'沒有打到鏡子：光不會反射，沿直線繼續前進（灰色）。'):isLens()?'拖曳照射點：從同一點出發的光，經過透鏡任何位置都會到同一個像點。':'拖曳照射點：從同一點出發的光，經過鏡面任何位置都會到同一個像點。');
+    }else{   // 針孔箱正面
+      if(Math.abs(ray.direction.x)<1e-4) return; const k=-ray.origin.x/ray.direction.x; if(k<=0) return;
+      const P=ray.at(k,new THREE.Vector3()); let z=P.z,y=P.y-AXIS_Y;
+      if(Math.abs(z)<=BOX_W/2&&Math.abs(y)<=BOX_H/2){
+        const D=S.holeMM/1000, nh=nearestHole(z,y), snap=Math.max(D/2*1.3+.008,.04);
+        hr.target=(nh.h&&nh.d<=snap)?{type:'hole',id:nh.h.id,z:nh.h.z,y:nh.h.y}:{type:'wall',z,y};
+        setHint(hr.target.type==='hole'?'穿過小孔了！看光落在屏幕的哪裡。':'被箱子擋住了，光到不了屏幕。');
+      }else{
+        z=clamp(z,-BOX_W/2-MISS_M,BOX_W/2+MISS_M); y=clamp(y,Math.max(.02-AXIS_Y,-BOX_H/2-MISS_M),BOX_H/2+MISS_M);
+        hr.target={type:'wall',z,y,miss:true}; setHint('沒有打到箱子：光沿直線繼續前進（灰色）。');
+      }
+    }
+  }
+  adjDrag.moved=true; updateRays();
+}
 function updateRays(){
   if(typeof cardTick==='function') queueMicrotask(()=>{try{cardTick();}catch(e){}});   // 手繪光線等不經過 changed() 的操作，也要檢查任務卡過關條件
   dirty=true; disposeLabels(); rayGroup.clear(); refreshObstacles(); scene.updateMatrixWorld();
@@ -1064,6 +1137,7 @@ function updateRays(){
   }
   handRays.forEach(hr=>{
     const a=handStart(hr); if(!a) return; const col=rayColor(hr.color);
+    if(hr.target.miss){missRay(a,V3(0,AXIS_Y+hr.target.y,hr.target.z),1.6,boxEntry);return;}
     const h=hr.target.type==='hole'?holes.find(x=>x.id===hr.target.id):null;
     const aim=h?V3(0,AXIS_Y+h.y,h.z):V3(0,AXIS_Y+hr.target.y,hr.target.z), blk=occlude(a,aim);
     if(blk){   // 手繪光線被物體擋住：畫到擋住的地方，打個紅色叉叉
@@ -1083,6 +1157,7 @@ function updateRays(){
     }
   });
   if(pending){const a=handStart(pending); if(a) dot(a,'#ffffff',.03);}
+  drawAdjHandles();
 }
 const ringWhite=new THREE.MeshBasicMaterial({color:0xffffff,side:THREE.DoubleSide});
 
@@ -1346,6 +1421,7 @@ function updateRaysMirror(){
   handRays.forEach(hr=>{
     if(!hr.target||hr.target.type!=='mirror') return;
     const a=handStart(hr); if(!a) return; const col=rayColor(hr.color), mr=MIRRORS[hr.target.m]||MIRRORS[0], R=V3(...hr.target.p);
+    if(hr.target.miss){missRay(a,R,3);return;}
     const blk=occlude(a,R);
     if(blk){beam(a,blk,col,.012);dot(a,col,.024);const n=.03;beam(blk.clone().add(V3(0,n,n)),blk.clone().add(V3(0,-n,-n)),'#e23b3b',.008);beam(blk.clone().add(V3(0,n,-n)),blk.clone().add(V3(0,-n,n)),'#e23b3b',.008);return;}
     const d=R.clone().sub(a).normalize(), rd=d.clone().sub(mr.n.clone().multiplyScalar(2*d.dot(mr.n)));
@@ -1357,6 +1433,7 @@ function updateRaysMirror(){
     if(S.adv){const ang=reflAngle(a,R,mr).toFixed(0);const lb=textSprite(`入射角 ${ang}°＝反射角 ${ang}°`);lb.position.copy(R).addScaledVector(mr.n,.35).add(V3(0,.25,0));rayGroup.add(lb);}
   });
   if(pending){const a=handStart(pending); if(a) dot(a,'#ffffff',.03);}
+  drawAdjHandles();
   if(S.m.fov) drawFov(E);
   if(!eyeOwner()) dot(E,'#2f6fd1',.02);
 }
@@ -1423,6 +1500,7 @@ function drawTop(){
   });});
   handRays.forEach(hr=>{
     if(!hr.target||hr.target.type!=='mirror')return; const a=handStart(hr); if(!a)return; const mr=MIRRORS[hr.target.m]||MIRRORS[0], R=V3(...hr.target.p);
+    if(hr.target.miss){const e2=straightEnd(a,R,3);c.strokeStyle=MISS_COL;c.lineWidth=2.4*dpr;c.beginPath();c.moveTo(X(a.x),Z(a.z));c.lineTo(X(e2.x),Z(e2.z));c.stroke();return;}
     const d=R.clone().sub(a).normalize(), rd=d.clone().sub(mr.n.clone().multiplyScalar(2*d.dot(mr.n))), end=R.clone().addScaledVector(rd,3);
     c.strokeStyle=rayColor(hr.color); c.lineWidth=2.4*dpr; c.beginPath(); c.moveTo(X(a.x),Z(a.z)); c.lineTo(X(R.x),Z(R.z)); c.lineTo(X(end.x),Z(end.z)); c.stroke();
     c.strokeStyle=S.night?'#fff':'#1c2a35'; c.lineWidth=1*dpr; c.setLineDash([3*dpr,3*dpr]); const nn=R.clone().addScaledVector(mr.n,.6); c.beginPath(); c.moveTo(X(R.x),Z(R.z)); c.lineTo(X(nn.x),Z(nn.z)); c.stroke(); c.setLineDash([]);
@@ -1878,6 +1956,7 @@ function updateRaysConcave(){
   handRays.forEach(hr=>{
     if(!hr.target||hr.target.type!=='cc') return;
     const a=handStart(hr); if(!a) return; const col=rayColor(hr.color), M=V3(...hr.target.p);
+    if(hr.target.miss){missRay(a,M,4,(p,e)=>{if(occCovers(M))return occStop(p,M);return occSeg(p,e)||screenHit(p,e);});return;}
     const blk=occlude(a,M); if(blk){beam(a,blk,col,.012);dot(a,col,.024);return;}
     if(occCovers(M)){const Q=occStop(a,M);beam(a,Q,col,.012);dot(a,col,.024);dot(Q,col,.016);return;}
     {const hf=occSeg(a,M);if(hf){beam(a,hf,col,.012);dot(a,col,.024);dot(hf,col,.016);return;}}
@@ -1891,6 +1970,7 @@ function updateRaysConcave(){
       const lb=textSprite(`入射角 ${ang}°＝反射角 ${ang}°`);lb.position.copy(M).add(V3(-.4,.3,0));rayGroup.add(lb);}
   });
   if(pending){const a=handStart(pending); if(a) dot(a,'#ffffff',.03);}
+  drawAdjHandles();
   if(!eyeOwner()) dot(eyePos(),'#2f6fd1',.02);
   if(CC().fov) drawCurvedFov(eyePos());
   drawCardMarks3D();
@@ -2545,6 +2625,10 @@ function stop(e){e.stopImmediatePropagation();e.preventDefault();}
 function onPointerDown(e){
   if(ink.on) return;
   if(cardToolTap(e)) return;
+  if(tool==='adj'){   // 調整模式：只抓光線兩端的把手，其他地方照常轉動畫面
+    const pk=adjPick(e); if(!pk) return;
+    stop(e); gl.setPointerCapture(e.pointerId); adjDrag={...pk,moved:false,edge:false}; drag={kind:'hadj'}; updateRays(); return;
+  }
   const D=S.holeMM/1000;
   if(tool==='punch'||tool==='patch'){
     const f=frontHit(e);
@@ -2657,6 +2741,7 @@ function onPointerDown(e){
 }
 gl.addEventListener('pointermove',e=>{
   if(drag){
+    if(drag.kind==='hadj'){if(adjDrag)adjMove(e);return;}
     raycaster.setFromCamera(ndc(e),cam);
     if(drag.kind==='screen'){
       // 在面向相機的平面上拖曳：側視時前後上下、俯視時前後左右，都能自由移動
@@ -2713,7 +2798,7 @@ gl.addEventListener('pointermove',e=>{
   if(!ink.on&&tool!=='hand'&&e.pointerType==='mouse'){const h=hitAny(e);gl.style.cursor=h?(selObjLocked(h)?'move':'grab'):'';}
 });
 function selObjLocked(h){if(h.object.userData.lamp||h.object.userData.eye||h.object.userData.screen||h.object.userData.app||h.object.userData.occ)return false;const o=S.objs.find(x=>x.id===h.object.userData.oid);return o&&o.locked&&h.object.userData.joint;}
-const endDrag=()=>{if(drag){const moved=drag.moved;drag=null;gl.style.cursor='';if(moved){renderObjPanel();syncUI();commit();}}};
+const endDrag=()=>{if(drag&&drag.kind==='hadj'){const mv=adjDrag&&adjDrag.moved;drag=null;adjDrag=null;updateRays();if(mv)commit();return;}if(drag){const moved=drag.moved;drag=null;gl.style.cursor='';if(moved){renderObjPanel();syncUI();commit();}}};
 gl.addEventListener('pointerup',endDrag); gl.addEventListener('pointercancel',endDrag);
 
 let hintT=0;
@@ -2722,8 +2807,10 @@ function setTool(t){
   tool=(tool===t)?null:t; pending=null;
   if(tool&&ink.on){ink.on=false;syncInkUI();}
   $('#handBtn').classList.toggle('on',tool==='hand'); $('#handBtn').textContent=tool==='hand'?'結束手繪':'手繪光線';
+  $('#handAdj').classList.toggle('on',tool==='adj'); $('#handAdj').textContent=tool==='adj'?'結束調整':'調整';
   $$('.chips button.tool').forEach(b=>b.classList.toggle('on',b.dataset.tool===tool));
-  setHint(tool==='hand'?(S.scene!=='pinhole'?'手繪光線：先點物體上的一點（例如旗子），再點鏡子。':'手繪光線：先點物體上的一點（例如旗子），當作光的起點。')
+  setHint(tool==='adj'?(S.scene==='pinhole'?'調整：拖曳光線兩端的圓點。藍點是起點，只能在物體上滑動；紅點是照射點，拖到箱子外面時，光沿直線前進（灰色）。':isLens()?'調整：拖曳光線兩端的圓點。藍點是起點，只能在物體上滑動；紅點是照射點，拖出透鏡外面時，光沿直線前進（灰色）。':'調整：拖曳光線兩端的圓點。藍點是起點，只能在物體上滑動；紅點是照射點，拖出鏡子外面時，光沿直線前進（灰色）。')
+    :tool==='hand'?(S.scene!=='pinhole'?'手繪光線：先點物體上的一點（例如旗子），再點鏡子。':'手繪光線：先點物體上的一點（例如旗子），當作光的起點。')
     :tool==='punch'?'打洞：點箱子正面想開孔的位置（最多 3 個孔）。'
     :tool==='patch'?'補洞：點要補起來的黃色圈。'
     :tool==='src'?'點物體上的位置新增光源點，再點一次同一點可移除（最多 8 個）。':'');
@@ -3092,6 +3179,7 @@ $('#views').addEventListener('click',e=>{
   const b=e.target.closest('button[data-view]');if(b)goView(b.dataset.view);});
 $$('[data-collapse]').forEach(b=>b.onclick=()=>{const m=$('#'+b.dataset.collapse);m.classList.toggle('collapsed');b.textContent=m.classList.contains('collapsed')?'展開':'收起';drawSide();drawCloseup();});
 $('#handBtn').onclick=()=>setTool('hand');
+$('#handAdj').onclick=()=>{if(tool!=='adj'&&!handRays.length){toast('先用「手繪光線」畫幾條光線，再來調整');return;}setTool('adj');};
 $('#handClear').onclick=()=>{if(!handRays.length)return;handRays=[];pending=null;updateRays();commit();};
 
 /* ---------- 像的性質 ---------- */
@@ -3329,7 +3417,7 @@ const CARD_CC={no:3,title:'凹面鏡',steps:[
 
 /* ---------- 各任務卡的過關條件、鎖定、工具（附加在步驟上） ---------- */
 const CK={d:()=>objDist(selObj()),scrAt:(tol=.05)=>{if(!isCurved()||!CC().screen)return false;const im=ccImage(objDist(selObj()));return !!im&&im.q>0&&Math.abs(CC().s-im.q)<=tol;},
-  hand:t=>handRays.filter(h=>h.target&&h.target.type===t).length,
+  hand:t=>handRays.filter(h=>h.target&&h.target.type===t&&!h.target.miss).length,
   moved:m=>{if(!CC().screen)return false;m.a=Math.min(m.a??99,CC().s);m.b=Math.max(m.b??-99,CC().s);return m.b-m.a>=1;},
   both:(m,lo,hi)=>{const d=CK.d();if(d>=hi)m.far=1;if(d<=lo)m.near=1;return m.far&&m.near;}};
 CARD_LENS.steps.splice(1,0,
