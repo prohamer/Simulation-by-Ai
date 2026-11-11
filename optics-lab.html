@@ -1,5 +1,5 @@
 <!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
-<title>光學實驗台V8</title>
+<title>光學實驗台V9</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
@@ -321,7 +321,7 @@ button,select,input{font:inherit;color:inherit}
     <strong id="jsonTitle">匯出快照</strong>
     <p class="note-sm" style="margin:0">這個檢視無法直接下載檔案。請複製下面的內容，貼到記事本後存成 .json 檔，之後可用匯入按鈕載入。</p>
     <textarea id="jsonText" spellcheck="false" readonly aria-label="快照 JSON 內容"></textarea>
-    <div class="row"><span class="cap"></span><button class="btn" id="jsonCopy">複製</button><button class="btn primary" id="jsonClose">關閉</button></div>
+    <div class="row"><span class="cap"></span><button class="btn primary" id="jsonSave">下載 JSON 檔</button><button class="btn" id="jsonCopy">複製</button><button class="btn" id="jsonClose">關閉</button></div>
   </div>
 </div>
 <div class="modal" id="helpModal" hidden>
@@ -722,9 +722,9 @@ SCENES.push({id:'curved-mirror',ch:'4-2',name:'凹面鏡與凸面鏡',bounds:[-6
   init:()=>({type:'concave',R:40,src:'parallel',n:7,sx:-20,sy:0,ox:-30,oh:5,r1:true,r2:true,r3:true,showImg:true}),
   controls:st=>[
     {type:'seg',key:'type',label:'面鏡種類',options:[['concave','凹面鏡'],['convex','凸面鏡']]},
-    {type:'seg',key:'src',label:'光源',options:[['parallel','平行光'],['point','點光源'],['object','物體成像']]},
+    {type:'seg',key:'src',label:'光源',options:[['none','關閉'],['parallel','平行光'],['point','點光源'],['object','物體成像']]},
     {type:'slider',key:'R',label:'曲率半徑（焦距 = 半徑 ÷ 2）',min:24,max:60,step:1,unit:'cm'},
-    ...(st.src==='object'?[{type:'slider',key:'ox',label:'物距（物體到鏡面）',min:2,max:200,step:0.5,unit:'cm',get:()=>-st.ox,set:v=>{st.ox=-v}}]:[{type:'slider',key:'n',label:'光線數量',min:3,max:13,step:2}]),
+    ...(st.src==='object'?[{type:'slider',key:'ox',label:'物距（物體到鏡面）',min:2,max:200,step:0.5,unit:'cm',get:()=>-st.ox,set:v=>{st.ox=-v}}]:st.src==='none'?[]:[{type:'slider',key:'n',label:'光線數量',min:3,max:13,step:2}]),
     ...(st.src==='point'?[{type:'buttons',items:[{label:'光源放到焦點',onClick:s=>{s.sx=s.type==='concave'?-s.R/2:-20;s.sy=0;}}]}]:[])],
   build(st,b){
     const P=[], R=st.R, f=R/2, cc=st.type==='concave', H=Math.min(15,R*0.42), Cx=cc?-R:R;
@@ -745,6 +745,10 @@ SCENES.push({id:'curved-mirror',ch:'4-2',name:'凹面鏡與凸面鏡',bounds:[-6
         const div=!cc || (st.src==='point' && -st.sx<f);
         if(div){const tb=(Math.max(f,12)+6-q[0])/(-r[0]); P.push({t:'ray',pts:[q,add(q,mul(r,-Math.min(tb,60)))],c,w:0.9,a:0.45*a,dash:true});}
       }};
+    if(st.src==='none'){
+      info=`<dl class="kv"><dt>焦距 f</dt><dd>${f1(f)} cm</dd></dl><p class="note-sm">光源已關閉。可以用工具列的雷射筆、自訂發光點或平行光源自己做實驗；選取雷射筆後，按「反向射回」可以驗證光路可逆。</p>`;
+      return {prims:P,handles:[],info,optics};
+    }
     if(st.src==='parallel'){
       for(const y of lin(-H*0.9,H*0.9,st.n)) traceTo([b[0]-2,y],[1,0],C.warm);
       info=`<dl class="kv"><dt>焦距 f</dt><dd>${f1(f)} cm</dd><dt>平行光反射後</dt><dd class="t">${cc?'會聚於焦點':'發散'}</dd></dl>
@@ -1636,7 +1640,8 @@ function renderPanel(){
     const cs=[];
     if(src.type==='point') cs.push({type:'slider',key:'n',label:'光線數量',min:4,max:48,step:2});
     if(src.type==='beam'){cs.push({type:'slider',key:'n',label:'光線數量',min:2,max:15,step:1});cs.push({type:'slider',key:'w',label:'光束寬度',min:2,max:30,step:0.5,unit:'cm'});}
-    if(src.type!=='point') cs.push({type:'slider',key:'angDeg',label:'方向',min:-180,max:180,step:1,unit:'°',get:()=>Math.round(src.ang*R2D),set:v=>{src.ang=v*D2R}});
+    if(src.type!=='point') cs.push({type:'slider',key:'angDeg',label:'方向',min:-180,max:180,step:0.1,unit:'°',fmt:v=>(+v).toFixed(1)+'°',get:()=>Math.round(src.ang*R2D*10)/10,set:v=>{src.ang=v*D2R}});
+    if(src.type==='laser') cs.push({type:'buttons',items:[{label:'反向射回（驗證光路可逆）',onClick:()=>reverseLaser(src)}]});
     cs.push({type:'swatches',key:'c',label:'顏色',options:SRC_COLORS});
     cs.push({type:'buttons',items:[{label:'刪除這個光源',onClick:()=>deleteSel()}]});
     for(const c of cs) box.appendChild(makeControl(c,src));
@@ -1800,6 +1805,17 @@ function selDraw(){const s=app.selObj;if(!s||!String(s).startsWith('d'))return n
 function dupDraw(d){const c=JSON.parse(JSON.stringify(d));c.id=app.drawId++;const o=[2,-2];if(c.pts)c.pts=c.pts.map(p=>add(p,o));else{c.a=add(c.a,o);c.b=add(c.b,o);}
   S().draw.push(c);app.selObj='d'+c.id;renderPanel();commit();}
 function newDraw(t,w){const it={id:app.drawId++,t,c:app.color,w:t==='ruler'?1.6:2.4,dash:false};if(t==='pen')it.pts=[w];else{it.a=w;it.b=w;if(t==='line')it.arrow=true;}return it;}
+// light-path reversibility: put a new laser on the last segment of this laser's path, aimed straight back
+function reverseLaser(src){
+  const out=app.out; if(!out||!out.optics){toast('這個場景沒有可以反射或折射的物體');return;}
+  const pts=traceGeneric([src.x,src.y],dirOf(src.ang),out.optics,bounds()); if(pts.length<3){toast('雷射還沒有碰到鏡子或透鏡');return;}
+  const A=pts[pts.length-2],B=pts[pts.length-1],L=len(sub(B,A)); if(L<1){toast('找不到出射光');return;}
+  const u=mul(sub(B,A),1/L),P=add(A,mul(u,Math.min(L*0.6,35))),st=S();
+  const used=st.sources.map(x=>x.c),c=['#5ee0ff','#a6f05a','#ff6fae','#ffe066'].find(x=>!used.includes(x))||'#5ee0ff';
+  const s={id:app.srcId++,type:'laser',x:P[0],y:P[1],ang:Math.atan2(-u[1],-u[0]),n:7,w:10,c};
+  st.sources.push(s); app.selObj='u'+s.id; renderPanel(); commit();
+  toast('已在出射光上放一支反向的雷射筆：看它是不是沿原路回到起點');
+}
 function placeSource(type,w){const st=S();const s={id:app.srcId++,type,x:w[0],y:w[1],ang:0,n:type==='point'?16:7,w:10,c:type==='laser'?SRC_COLORS[1]:type==='beam'?SRC_COLORS[5]:SRC_COLORS[0]};
   st.sources.push(s);app.selObj='u'+s.id;renderPanel();}
 function addExtras(out){
@@ -1867,7 +1883,7 @@ function buildHandles(){
     if(o.move){H.push({x:o.x+g,y:o.y,gz:'x',rel:true,cursor:'ew-resize',o0:()=>({x:o.x,y:o.y}),drag:(dx,dy,s0)=>o.move(s0.x+dx,s0.y)});
       H.push({x:o.x,y:o.y+g,gz:'y',rel:true,cursor:'ns-resize',o0:()=>({x:o.x,y:o.y}),drag:(dx,dy,s0)=>o.move(s0.x,s0.y+dy)});}
     if(o.rotate){const a=o.ang||0;H.push({x:o.x+r*Math.cos(a),y:o.y+r*Math.sin(a),gz:'r',cursor:'grab',o0:()=>({x:o.x,y:o.y}),
-      drag:(wx,wy,s0,ev)=>{let ang=Math.atan2(wy-s0.y,wx-s0.x);const stp=(ev&&ev.shiftKey?15:1)*D2R;ang=Math.round(ang/stp)*stp;o.rotate(ang);}});}
+      drag:(wx,wy,s0,ev)=>{let ang=Math.atan2(wy-s0.y,wx-s0.x);const stp=(ev&&ev.shiftKey?15:0.1)*D2R;ang=Math.round(ang/stp)*stp;o.rotate(ang);}});}
   }
   const d=selDraw();
   if(d&&d.t!=='pen') for(const key of ['a','b']) H.push({x:d[key][0],y:d[key][1],dh:true,cursor:'crosshair',drag:(wx,wy)=>{d[key]=[wx,wy];}});
@@ -2432,11 +2448,21 @@ async function exportSnaps(list,name){
   const data=JSON.stringify({format:'optics-lab-snapshots',version:1,app:'光學實驗台',exported:new Date().toISOString(),snaps:list});
   if(DL){try{await DL.save({filename:name,data});toast('已匯出 '+list.length+' 個快照');return;}
     catch(err){const c=err&&err.code;if(c==='declined')return;if(c==='rate_limited'){toast('上一個儲存視窗還沒關閉，請稍後再試');return;}}}
+  app.jsonName=name; document.getElementById('jsonSave').hidden=false;
   document.getElementById('jsonTitle').textContent='匯出快照：'+name;
   const ta=document.getElementById('jsonText');ta.value=data;document.getElementById('jsonCopy').textContent='複製';
   els.modal.hidden=false;ta.focus();ta.select();
 }
 function closeJson(){els.modal.hidden=true;}
+// save the JSON as a real .json file: downloads capability → share sheet (iPad) → browser download
+document.getElementById('jsonSave').onclick=async()=>{
+  const data=document.getElementById('jsonText').value, name=app.jsonName||'optics-lab-snapshots.json';
+  if(DL){try{await DL.save({filename:name,data});toast('已下載 '+name);closeJson();return;}catch(err){const c=err&&err.code;if(c==='declined')return;if(c==='rate_limited'){toast('上一個儲存視窗還沒關閉，請稍後再試');return;}}}
+  try{const f=new File([data],name,{type:'application/json'});
+    if(navigator.canShare&&navigator.canShare({files:[f]})){await navigator.share({files:[f],title:name});closeJson();return;}}catch(err){if(err&&err.name==='AbortError')return;}
+  try{const url=URL.createObjectURL(new Blob([data],{type:'application/json'})),a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),4000);toast('已下載 '+name+'；若沒有出現檔案，請改用「複製」');}
+  catch(err){toast('這個檢視不允許直接下載，請改用「複製」');}
+};
 document.getElementById('jsonClose').onclick=closeJson;
 els.modal.addEventListener('click',e=>{if(e.target===els.modal)closeJson();});
 document.getElementById('jsonCopy').onclick=()=>{const ta=document.getElementById('jsonText'),bt=document.getElementById('jsonCopy');
@@ -2736,7 +2762,7 @@ window.addEventListener('hashchange',()=>{const i=fromHash();if(i>=0&&i!==app.id
 const hi=fromHash(); app.idx=hi>=0?hi:SCENES.findIndex(s=>s.id==='lens-image');
 buildToolbar(); loadSnaps(); renderSnaps(); renderTasks(); resize(); renderRail(); renderPanel(); reset3DCamera(); setMode('2d');
 if(document.fonts&&document.fonts.ready) document.fonts.ready.then(()=>{if(app.mode==='2d')draw2D();});
-window.__optics={drawFeedback,eyeAxial,app,SCENES,setMode,selectScene,refresh,imageOf,S,setTool,toWorld,handlePx,startTask,endTask,chooseTask,submitTask,submitQuiz};window.__TASKS=TASKS;window.__aim=aimRefl;window.__aimR=aimRefr;
+window.__optics={drawFeedback,eyeAxial,traceGeneric,renderPanel,app,SCENES,setMode,selectScene,refresh,imageOf,S,setTool,toWorld,handlePx,startTask,endTask,chooseTask,submitTask,submitQuiz};window.__TASKS=TASKS;window.__aim=aimRefl;window.__aimR=aimRefr;
 })();
 </script>
 
