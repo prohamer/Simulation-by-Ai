@@ -1,5 +1,5 @@
 <!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
-<title>光學實驗台V10</title>
+<title>光學實驗台V11</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
@@ -1305,8 +1305,9 @@ const PG_TYPES={
   screen:{name:'紙屏',def:{L:24}},
   block:{name:'擋板',def:{L:10}},
   pinhole:{name:'針孔板',def:{L:24,holes:1,hole:1,gap:4}},
-  object:{name:'箭頭物體',def:{h:6,rays:true,n:7,c:'#ffb347'}}};
-const PG_GROUPS=[['面鏡',['pmirror','ccmirror','cvmirror']],['透鏡',['cxlens','cclens']],['介質',['rect','semi','prism']],['物體與屏幕',['object','screen','pinhole','block']]];
+  object:{name:'箭頭物體',def:{h:6,rays:true,n:7,c:'#ffb347'}},
+  camera:{name:'相機（凸凹透鏡組）',def:{g:6,af:true}}};
+const PG_GROUPS=[['面鏡',['pmirror','ccmirror','cvmirror']],['透鏡',['cxlens','cclens']],['介質',['rect','semi','prism']],['物體與屏幕',['object','screen','pinhole','block']],['儀器',['camera']]];
 const PG_DISP={water:0.0031,glass:0.0042,diamond:0.018,custom:0.0042};
 const PG_IMG=['pmirror','ccmirror','cvmirror','cxlens','cclens'];
 // one-tap set-ups: elements + custom light sources
@@ -1320,7 +1321,8 @@ const PG_TPL={
   newton:{name:'反射式望遠鏡（牛頓式）',els:[{type:'ccmirror',x:30,y:0,ang:0,f:25,H:9},{type:'pmirror',x:12,y:0,ang:45,L:9},{type:'block',x:8.4,y:0,ang:0,L:6.6},
     {type:'cxlens',x:12,y:12,ang:90,f:5,H:3,ideal:true}],
     src:[{type:'beam',x:-30,y:0,ang:0,n:9,w:14,c:'#f4f7ff'}]},
-  camera:{name:'照相機成像',els:[{type:'object',x:-30,y:0,ang:0,h:6,rays:true,n:7,c:'#ffb347'},{type:'cxlens',x:0,y:0,ang:0,f:10,H:9,ideal:true},{type:'screen',x:15,y:0,ang:0,L:24}],src:[]},
+  camera:{name:'照相機（凸凹透鏡組、自動對焦）',els:[{type:'object',x:-40,y:0,ang:0,h:6,rays:true,n:7,c:'#ffb347'},{type:'camera',x:-5,y:0,ang:0,g:6,af:true}],src:[]},
+  simple:{name:'凸透鏡成像',els:[{type:'object',x:-30,y:0,ang:0,h:6,rays:true,n:7,c:'#ffb347'},{type:'cxlens',x:0,y:0,ang:0,f:10,H:9,ideal:true},{type:'screen',x:15,y:0,ang:0,L:24}],src:[]},
   dispersion:{name:'三稜鏡色散',els:[{type:'prism',x:0,y:0,ang:0,s:18,A:60,mat:'glass',n:1.5},{type:'screen',x:40,y:-14,ang:20,L:30}],
     src:[{type:'laser',x:-40,y:-12,ang:20,n:7,w:10,c:'#f4f7ff',white:true}],strong:true},
   tir:{name:'全反射',els:[{type:'semi',x:0,y:0,ang:0,R:14,mat:'glass',n:1.5}],
@@ -1334,6 +1336,16 @@ function pgLensGeom(cv,f,H0,n,K){
   // outward-agnostic surface normal at a local point (null on the flat rim)
   const nrmL=L=>{if(Math.abs(L[1])>H-1e-3)return null;const sd=Math.sign(L[0])||1;return nrm([1,-sd*dxr(L[1])]);};
   return {H,loc,nrmL};}
+const CAM={f1:5,f2:-12,d:2,S:12,gMin:1,gMax:6.6,H1:3.2,H2:2.8,body:[0.3,13.5],bh:4.6,sh:3};
+// image of a local point (x0<g) through the two thin lenses; returns local [x,y]
+function camImage(g,x0,y0){
+  const u1=g-x0; if(Math.abs(u1-CAM.f1)<1e-6) return null; const v1=1/(1/CAM.f1-1/u1), y1=y0*(-v1/u1);
+  const u2=CAM.d-v1; if(Math.abs(u2)<1e-9) return [g+CAM.d,y1]; if(Math.abs(1/CAM.f2-1/u2)<1e-12) return null;
+  const v2=1/(1/CAM.f2-1/u2); return [g+CAM.d+v2, y1*(-v2/u2)];}
+// lens-group position that puts the image of a point at distance x0 on the sensor
+function camFocus(x0){const h=g=>{const I=camImage(g,x0,0);return I?I[0]-CAM.S:1e3;};
+  let lo=CAM.gMin,hi=CAM.gMax,flo=h(lo);if(flo*h(hi)>0) return Math.abs(flo)<Math.abs(h(hi))?lo:hi;
+  for(let i=0;i<50;i++){const m=(lo+hi)/2,fm=h(m);if((fm>0)===(flo>0)){lo=m;flo=fm;}else hi=m;}return (lo+hi)/2;}
 const PG_ASPH={};
 // conic constant that makes parallel light along the axis meet at one point (minimal spherical aberration)
 function pgAsphK(cv,f,H,n){
@@ -1377,6 +1389,9 @@ SCENES.push({id:'playground',ch:'自由',name:'自由組合實驗台',bounds:[-6
       cs.push({type:'slider',key:'pgang',label:'旋轉角度',min:-180,max:180,step:0.5,fmt:v=>(+v).toFixed(1)+'°',get:()=>e.ang,set:v=>{e.ang=v;}});
       if(T==='pmirror'||T==='screen'||T==='block'||T==='pinhole') cs.push(P('L','長度',2,60,0.5,'cm'));
       if(T==='pinhole'){cs.push({type:'seg',key:'pgholes',label:'孔數',options:[[1,'1 個'],[2,'2 個'],[3,'3 個']],get:()=>e.holes,set:v=>{e.holes=v;}});cs.push(P('hole','孔徑',0.2,10,0.1,'cm'));if(e.holes>1)cs.push(P('gap','孔的間距',1,10,0.5,'cm'));}
+      if(T==='camera'){cs.push({type:'seg',key:'pgaf',label:'對焦方式',options:[[true,'自動對焦'],[false,'手動對焦']],get:()=>!!e.af,set:v=>{e.af=v;}});
+        if(!e.af) cs.push({type:'slider',key:'pgg',label:'對焦環：鏡頭組前後移動',min:CAM.gMin,max:CAM.gMax,step:0.05,fmt:v=>(+v-CAM.gMin).toFixed(2)+' cm',get:()=>e.g,set:v=>{e.g=v;}});
+        else cs.push({type:'note',text:'自動對焦：鏡頭組會自己前後移動，讓最近的箭頭物體清楚成像在感光元件上。'});}
       if(T==='object'){cs.push(P('h','高度',1,15,0.5,'cm'));cs.push({type:'toggle',key:'pgrays',label:'從頂端發出光線',get:()=>e.rays,set:v=>{e.rays=v;}});if(e.rays)cs.push(P('n','光線數量',3,15,2));
         cs.push({type:'swatches',key:'pgc',label:'顏色',options:OBJ_COLORS,get:()=>e.c,set:v=>{e.c=v;}});}
       if(T==='ccmirror'||T==='cvmirror'||T==='cxlens'||T==='cclens'){cs.push(P('f','焦距 f',3,40,0.5,'cm'));cs.push(P('H','半高（口徑的一半）',2,20,0.5,'cm'));}
@@ -1431,17 +1446,31 @@ SCENES.push({id:'playground',ch:'自由',name:'自由組合實驗台',bounds:[-6
         for(const hc of hs){const lo=hc-e.hole/2,hi=hc+e.hole/2,ns=[];for(const [s0,s1] of segs){if(hi<=s0||lo>=s1){ns.push([s0,s1]);continue;}if(lo>s0)ns.push([s0,lo]);if(hi<s1)ns.push([hi,s1]);}segs=ns;}
         for(const [s0,s1] of segs){const pts=[W([0,s0]),W([0,s1])];P.push({t:'stick',pts,c:C.plate});optics.push({kind:'absorb',pts});}}
       else if(T==='object'){P.push({t:'arrowPts',a:[e.x,e.y],b:W([0,e.h]),c:e.c,label:'物體'});}
+      else if(T==='camera'){
+        // auto focus: aim at the nearest arrow object in front of the camera, move the lens group smoothly
+        let tgt=null,bd=1e9;for(const o of st.els){if(o.type!=='object')continue;const L=rot2(sub([o.x,o.y],[e.x,e.y]),-a);if(L[0]<CAM.body[0]-1&&Math.abs(L[1])<20&&-L[0]<bd){bd=-L[0];tgt=o;}}
+        e._tx=tgt?rot2(sub([tgt.x,tgt.y],[e.x,e.y]),-a)[0]:-1e5;
+        if(e.af){const gT=camFocus(e._tx);if(Math.abs(e.g-gT)>0.003){e.g+=clamp(gT-e.g,-0.06,0.06);if(!app.pgAF)app.pgAF=requestAnimationFrame(()=>{app.pgAF=0;refresh();});}}
+        const [b0,b1]=CAM.body,bh=CAM.bh,g=e.g;
+        const walls=[[[b0,CAM.H1+0.3],[b0,bh]],[[b0,-CAM.H1-0.3],[b0,-bh]],[[b0,bh],[b1,bh]],[[b0,-bh],[b1,-bh]],[[b1,bh],[b1,-bh]]];
+        for(const w of walls){const pts=w.map(W);P.push({t:'line',pts,c:'#8b97a8',w:2.2});optics.push({kind:'absorb',pts});}
+        P.push({t:'lens',x:W([g,0])[0],y:W([g,0])[1],ang:a,H:CAM.H1,convex:true,f:CAM.f1,post:false});
+        P.push({t:'lens',x:W([g+CAM.d,0])[0],y:W([g+CAM.d,0])[1],ang:a,H:CAM.H2,convex:false,f:-CAM.f2,post:false});
+        optics.push({kind:'lensR',c:W([g,0]),ang:a,H:CAM.H1,f:CAM.f1},{kind:'lensR',c:W([g+CAM.d,0]),ang:a,H:CAM.H2,f:CAM.f2});
+        const S0=W([CAM.S,-CAM.sh]),S1=W([CAM.S,CAM.sh]);P.push({t:'line',pts:[S0,S1],c:'#7ee0a0',w:3});optics.push({kind:'absorb',pts:[S0,S1]});
+        const lb=W([(b0+b1)/2,bh+2]);P.push({t:'label',x:lb[0],y:lb[1],text:'相機'+(e.af?'（自動對焦）':'（手動對焦）'),c:C.dim,size:12});
+        const sl=W([CAM.S,-CAM.sh-1.8]);P.push({t:'label',x:sl[0],y:sl[1],text:'感光元件',c:'#7ee0a0',size:11});}
       objects.push({id,x:e.x,y:e.y,ang:a,label:PG_TYPES[T].name,move:(x,y)=>{e.x=Math.round(x*10)/10;e.y=Math.round(y*10)/10;},rotate:r=>{e.ang=Math.round(r*R2D*10)/10;}});
     }
     // arrow objects: rays from the tip (real tracing) and, with exactly one lens or mirror and no media, its image
-    const imgEls=st.els.filter(x=>PG_IMG.includes(x.type)), media=st.els.some(x=>['rect','semi','prism'].includes(x.type)||((x.type==='cxlens'||x.type==='cclens')&&!x.ideal));
+    const imgEls=st.els.filter(x=>PG_IMG.includes(x.type)), media=st.els.some(x=>['rect','semi','prism','camera'].includes(x.type)||((x.type==='cxlens'||x.type==='cclens')&&!x.ideal));
     let imgNote='';
     for(const o of st.els.filter(x=>x.type==='object')){
       const a=o.ang*D2R, base=[o.x,o.y], tip=add(base,rot2([0,o.h],a));
       if(o.rays){const others=st.els.filter(x=>x.type!=='object');let tg=null,bd=1e9;
         for(const x of others){const d=len(sub([x.x,x.y],tip));if(d<bd){bd=d;tg=x;}}
         let dirs;
-        if(tg){const half=(tg.H||tg.L/2||tg.h/2||tg.R||tg.s/2||6)*0.9,ta=tg.ang*D2R;dirs=lin(-half,half,o.n).map(y=>nrm(sub(add([tg.x,tg.y],rot2([0,y],ta)),tip)));}
+        if(tg){const ta=tg.ang*D2R,cam=tg.type==='camera',half=cam?CAM.H1*0.9:(tg.H||tg.L/2||tg.h/2||tg.R||tg.s/2||6)*0.9,cc=cam?add([tg.x,tg.y],rot2([tg.g,0],ta)):[tg.x,tg.y];dirs=lin(-half,half,o.n).map(y=>nrm(sub(add(cc,rot2([0,y],ta)),tip)));}
         else dirs=lin(-20,20,o.n).map(dg=>dirOf(a-Math.PI/2+Math.PI/2+dg*D2R));
         for(const d of dirs) P.push({t:'ray',pts:traceGeneric(tip,d,optics,this.rayBounds),c:o.c,w:1.2,a:0.8});}
       if(imgEls.length===1&&!media){const el=imgEls[0],i1=pgImage(el,base),i2=pgImage(el,tip);
@@ -1451,13 +1480,28 @@ SCENES.push({id:'playground',ch:'自由',name:'自由組合實驗台',bounds:[-6
     if(!st.els.length&&!(st.sources||[]).length){
       P.push({t:'label',x:0,y:4,text:'空白實驗台：從右側「＋ 新增」放入面鏡、透鏡、介質、紙屏或擋板',c:C.dim,size:14});
       P.push({t:'label',x:0,y:-1,text:'光源在左側工具列（雷射筆、發光點、平行光源），每種元件都可以放好幾個',c:C.dim,size:13});}
+    let sv=null, camInfo='';
+    const cam=st.els.find(x=>x.type==='camera');
+    if(cam){const a=cam.ang*D2R,Lc=q=>rot2(sub(q,[cam.x,cam.y]),-a),items=[];let worst=0;
+      for(const o of st.els.filter(x=>x.type==='object')){const base=Lc([o.x,o.y]),tip=Lc(add([o.x,o.y],rot2([0,o.h],o.ang*D2R)));if(base[0]>=CAM.body[0]-1)continue;
+        const ib=camImage(cam.g,base[0],base[1]),it=camImage(cam.g,tip[0],tip[1]);if(!ib||!it)continue;
+        // blur = spread of real rays from the tip where they land on the sensor
+        const tw=add([o.x,o.y],rot2([0,o.h],o.ang*D2R)),ys=[];
+        for(const y of lin(-CAM.H1*0.9,CAM.H1*0.9,9)){const pts=traceGeneric(tw,nrm(sub(add([cam.x,cam.y],rot2([cam.g,y],a)),tw)),optics,this.rayBounds,12);const end=Lc(pts[pts.length-1]);if(Math.abs(end[0]-CAM.S)<0.05)ys.push(end[1]);}
+        const spread=ys.length>1?Math.max(...ys)-Math.min(...ys):CAM.sh;worst=Math.max(worst,spread);
+        // image size on the sensor: scale the ideal image by distance from the rear lens (defocused images keep roughly that size)
+        const sc2=(CAM.S-cam.g-CAM.d)/(ib[0]-cam.g-CAM.d||1e-9);
+        items.push({y0:ib[1]*sc2, y1:it[1]*sc2, c:o.c, blur:spread});}
+      sv={kind:'arrows',title:'相機拍到的畫面',range:CAM.sh,items};
+      const ok=worst<0.08, dist=cam._tx>-1e4?f1(-cam._tx)+' cm':'無限遠';
+      camInfo=`<dt>相機對焦</dt><dd class="t">${cam.af?'自動':'手動'}</dd><dt>最近物體距離</dt><dd>${dist}</dd><dt>畫面</dt><dd class="t">${items.length?(ok?'清楚':'模糊'):'沒有拍到物體'}</dd>`;}
     const e=pgSel(st);
-    const info=`<dl class="kv"><dt>元件數</dt><dd>${st.els.length}</dd><dt>光源數</dt><dd>${(st.sources||[]).length}</dd>${e&&e.mat?`<dt>折射率</dt><dd>${pgN(e).toFixed(2)}</dd>`:''}</dl>
+    const info=`<dl class="kv">${camInfo}<dt>元件數</dt><dd>${st.els.length}</dd><dt>光源數</dt><dd>${(st.sources||[]).length}</dd>${e&&e.mat?`<dt>折射率</dt><dd>${pgN(e).toFixed(2)}</dd>`:''}</dl>
       <p class="note-sm">點元件中央的圓點可以選取：拖曳移動，用旋轉控制把手或右側滑桿轉方向，按 Delete 刪除。光源在左側工具列。</p>
       <p class="note-sm">${imgNote||'多個元件串在一起時，光線用真實的反射、折射計算（含全反射與色散）。'}</p>
       ${e&&(e.type==='cxlens'||e.type==='cclens')?(e.ideal?'<p class="note-sm">理想透鏡：假設沒有厚度，光只在透鏡中央折射一次，平行主軸的光準確通過焦點（課本畫法）。</p>':(e.surf==='asph'?'<p class="note-sm">非球面透鏡：表面的彎曲程度從中央往邊緣慢慢改變，讓邊緣的光也聚在同一點，消除球面像差（相機鏡頭、高度數眼鏡常用）。它是針對沿主軸射入的平行光設計的，斜射或近處的光仍會有一點偏差。</p>':'<p class="note-sm">球面透鏡：光進入和離開透鏡各折射一次。因為有厚度，實際會聚的位置和標示的 F 會差一點；靠近邊緣的光會聚得比較近（球面像差）。</p>')):''}
       <p class="note-sm">白光：選取左側工具列放的光源，在右側勾選「白光」，遇到三稜鏡或介質就會分出顏色。</p>`;
-    return {prims:P,handles:[],objects,optics,info};
+    return {prims:P,handles:[],objects,optics,info,sv};
   },
   notes:['自由組合各種光學元件，觀察光線怎麼反射、折射。','試試看：用兩面平面鏡做潛望鏡、用兩個凸透鏡做望遠鏡、讓雷射在玻璃磚裡全反射。']
 });
