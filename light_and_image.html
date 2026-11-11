@@ -1,4 +1,4 @@
-<title>光與影像V36</title>
+<title>光與影像V37</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -658,7 +658,7 @@ function imgX(q){return isLens()?q:-q;}   // 像的 x：面鏡的實像在鏡前
 function lensHalf(r){const a=CC().A/2,sag=a*a/(2*Math.abs(fEff()))*.5,e=.008;return fEff()>0?e+sag*(1-(r/a)*(r/a)):e+sag*(r/a)*(r/a);}   // 透鏡半厚度（凸透鏡中間厚）
 function fEff(){const c=CC();return c.flat?-1e5:c.f;}   // 實際計算用的焦距（平面鏡＝焦距無限大）
 const DEF_CC={f:.6,A:.6,y:1.0,img:true,prin:false,cust:false,tri:true,eyeRay:false,par:false,bulb:false,screen:false,s:1.2,sy:1.0,sz:0,sr:.5,sAuto:true,yaw:0,pitch:0,src:'feat',pts:[]};
-const DEF_M={x:0,w:.8,h:1.6,b:.2,ghost:false,ext:true,fov:false,two:false,ang:90}, DEF_EYE={x:-2.4,z:.7,y:1.5,att:0};
+const DEF_M={x:0,w:.8,h:1.6,b:.2,ghost:false,ext:true,fov:false,two:false,ang:90,guide:false}, DEF_EYE={x:-2.4,z:.7,y:1.5,att:0};
 function pMin(){return S.scene==='mirror'?-12:isCurved()?.25:S.scene==='eye'?.12:1;}
 // 距離限制：針孔 1～8 m；平面鏡可放在鏡前或鏡後（負值＝鏡後），但不能貼著鏡子
 function clampP(p){const mx=MX();if(isCurved())return clamp(p,.25-mx,12-mx);if(S.scene==='eye')return clamp(p,.12,12);if(S.scene!=='mirror')return clamp(p,1,12);p=clamp(p,-12-mx,12-mx);if(Math.abs(p+mx)<.4)p=(p+mx>=0?.4:-.4)-mx;return p;}
@@ -1409,6 +1409,17 @@ function updateRaysMirror(){
     beam(pt.p,v.R,col,rad); beam(v.R,E,col,rad); if(pt.feature) dot(v.R,col,.014);
     if(S.m.ext) dashed(v.R,v.Pi,col,rad*.8,.8);
   });
+  if(S.m.guide){   // 全身鏡任務：頭頂、腳的光若還沒打到鏡子，用灰色虛線和紅圈標出「需要在鏡面哪裡反射」
+    const own=eyeOwner(), mr=MIRRORS[0];
+    if(own&&mr){const fs=REG[own.id].info.feats;[[fs[1],'頭頂'],[fs[2],'腳']].forEach(([f,nm])=>{
+      if(!f) return; const P=featWorld(f); if(seeFeature(E,P)) return;
+      const Pi=P.clone().applyMatrix4(mr.R), d=Pi.clone().sub(E), den=d.dot(mr.n); if(Math.abs(den)<1e-6) return;
+      const R=E.clone().addScaledVector(d,mr.c.clone().sub(E).dot(mr.n)/den);
+      dashed(P,R,'#7d868f',.009); dashed(R,E,'#7d868f',.007,.8);
+      const ring=new THREE.Mesh(new THREE.RingGeometry(.03,.045,24).rotateY(-Math.PI/2),bmat('#e2453c',1)); ring.position.copy(R).addScaledVector(mr.n,.01); ring.layers.set(1); rayGroup.add(ring);
+      const lb=textSprite(nm+'的反射點'); lb.scale.multiplyScalar(.55); lb.position.copy(R).addScaledVector(mr.n,.2).add(V3(0,nm==='腳'?-.08:.08,0)); rayGroup.add(lb);
+    });}
+  }
   if(S.m.ghost){   // 像距 = 物距：每個特徵點和它的像用垂直鏡面的灰色虛線相連
     const mr=MIRRORS[0];
     S.objs.forEach(o=>{const r=REG[o.id];if(!r)return;r.info.feats.forEach(f=>{const P=featWorld(f),Pi=P.clone().applyMatrix4(mr.R);if(P.x<MX()){dashed(P,Pi,'#8a96a3',.004,.9);dot(Pi,rayColor(f.color),.018,.85);}});});
@@ -3284,7 +3295,7 @@ const CARD_PIN={no:1,title:'針孔相機',steps:[
 let CARD=CARD_PIN;
 let cardI=0; const cardPick={}, cardShown={};
 const CARD_MIR={no:2,title:'鏡子裡的我',steps:[
-  {title:'鏡中人舉哪一隻手？',setup:{reset:true,m:{w:.8,h:1.6,b:.2,ghost:false,ext:true,fov:false,two:false},eye:{att:0,x:-2.4,z:.7,y:1.5},mrays:3,night:false,view:'overview'},
+  {title:'鏡中人舉哪一隻手？',setup:{reset:true,m:{w:.8,h:1.6,b:.2,ghost:false,ext:true,fov:false,two:false,guide:false},eye:{att:0,x:-2.4,z:.7,y:1.5},mrays:3,night:false,view:'overview'},
    todo:'小人右手舉著黃色旗子，面向鏡子。先不要看鏡子！',
    q:'鏡中的小人，舉旗的是「他自己的」哪一隻手？',opts:['他的右手','他的左手'],ans:1,
    ex:'旗子在本人的右邊，鏡中的旗子也在同一邊，鏡子並沒有把左右對調。但鏡中人是面向我們站著的，從他自己的角度看，那一邊是他的左手。真正被鏡子反過來的是「前後」：本人面向鏡子，鏡中人面向本人。按「觀察者視角」或看右下角小視窗確認。',after:'observer'},
@@ -3300,15 +3311,15 @@ const CARD_MIR={no:2,title:'鏡子裡的我',steps:[
    todo:'按「手繪光線」：先點旗子，再點鏡子上任一點。白色虛線是法線（和鏡面垂直的線）。多畫幾條，點在鏡子的不同位置。',
    q:'入射光和法線的夾角（入射角），和反射光和法線的夾角（反射角）有什麼關係？把答案寫在學習單上。',
    ex:'入射角等於反射角，而且入射光、反射光、法線都在同一個平面上。打開「進階」可以看到角度。把反射光往回延長（虛線），每一條都會通過旗子的像，所以我們看起來像是光從鏡子後面的像發出來的。'},
-  {title:'全身鏡要多長？',setup:{m:{w:.6,h:.5,b:.9,ghost:false,fov:false,two:false},eye:{att:'first'},mrays:3,view:'observer'},
-   todo:'觀察者已改成小人自己的眼睛。小人身高 1.71 m（腳底到頭頂），眼睛離地 1.56 m；鏡子只有 50 cm。調整「鏡子高度」和「下緣離地」（每次可調 1 cm），直到右側「觀察者在鏡中看得到」的頭頂和腳都打勾，再試著把鏡子縮到最短。',
+  {title:'全身鏡要多長？',setup:{m:{w:.6,h:.5,b:.9,ghost:false,fov:false,two:false,guide:true},eye:{att:'first'},mrays:3,view:'side'},
+   todo:'觀察者已改成小人自己的眼睛（身高 1.71 m，眼睛離地 1.56 m），鏡子只有 50 cm。從兩個地方觀察：①側視圖的光徑：從頭頂、腳發出的光要先打到鏡子，再反射進眼睛。還沒打到鏡子時，灰色虛線和紅圈會標出它需要在哪裡反射；②右下小視窗：小人在鏡中看到的自己。調整「鏡子高度」和「下緣離地」（每次 1 cm），讓頭頂和腳的光都能反射進眼睛，再把鏡子縮到最短。',
    q:'要從鏡中看到自己的全身，鏡子最短要多長？',opts:['身高的 1/4','身高的 1/2','和身高一樣'],ans:1,
-   ex:'頭頂的光在「眼睛和頭頂的中間高度」反射，腳的光在「眼睛和腳的中間高度」反射，所以鏡子只要身高的一半，而且和人站多遠無關。試試把小人往後拉，看看是不是仍然看得到全身。'},
-  {title:'兩面鏡子',setup:{adv:true,objP:1.2,m:{two:true,ang:90,ghost:false,w:1.8,h:1.6,b:.2,fov:false},eye:{att:0,x:-2.6,z:-2,y:1.5},view:'observer'},
+   ex:'頭頂的光在「眼睛和頭頂的中間高度」反射，腳的光在「眼睛和腳的中間高度」反射，鏡子只要涵蓋這兩個反射點之間就夠了，所以只要身高的一半，而且和人站多遠無關。試試把小人往後拉，看看是不是仍然看得到全身。'},
+  {title:'兩面鏡子',setup:{adv:true,objP:1.2,m:{guide:false,two:true,ang:90,ghost:false,w:1.8,h:1.6,b:.2,fov:false},eye:{att:0,x:-2.6,z:-2,y:1.5},view:'observer'},
    todo:'已打開「進階」，加上第二面鏡子，兩面夾 90°，每面寬 1.8 m。觀察者站在斜前方。先預測，再從觀察者的眼睛數數鏡子裡有幾個人。',
    q:'兩面鏡子夾 90° 時，觀察者會看到幾個像？',opts:['2 個','3 個','4 個'],ans:1,
    ex:'可以看到 3 個像：兩面鏡子各一個，還有一個在牆角，是光在兩面鏡子各反射一次形成的（它的左右和平常的鏡中像相反）。打開「顯示虛像」再切到上視圖，可以看到 3 個像的位置。夾角 60° 有 5 個、45° 有 7 個，像的個數 ＝ 360° ÷ 夾角 − 1。'},
-  {title:'鏡子太窄時',setup:{objP:1.2,m:{two:true,ang:90,ghost:false,w:.8,h:1.6,b:.2,fov:false},eye:{att:0,x:-2.4,z:-1,y:1.5},view:'observer'},
+  {title:'鏡子太窄時',setup:{objP:1.2,m:{guide:false,two:true,ang:90,ghost:false,w:.8,h:1.6,b:.2,fov:false},eye:{att:0,x:-2.4,z:-1,y:1.5},view:'observer'},
    todo:'同樣夾 90°，但鏡子縮成 80 cm 寬，觀察者換到小人的左後方。從觀察者的眼睛看，側邊那面鏡子裡的像不見了。先回答問題，再加寬鏡子或移動觀察者，直到把它找回來。',
    q:'像的位置是由物體和鏡子決定的。這時候看不到側邊鏡子裡的像，原因是什麼？',opts:['那個像消失了，鏡子太窄就不會成像','像還在原處，但它的反射光沒有進到觀察者的眼睛','鏡子太窄，光碰到鏡子不會反射'],ans:1,
    ex:'像的位置只和物體、鏡面所在的平面有關，所以像一直都在。要看到像，從物體出發的光必須真的打到鏡子上，反射後進入眼睛；也就是眼睛和像的連線要穿過鏡面。鏡子太窄時，這條連線落在鏡子外面，就看不到。加寬鏡子或換個位置看，像就出現了。這也是上一題要用寬鏡子的原因。'}
@@ -3431,8 +3442,8 @@ CARD_LENS.steps.splice(1,0,
 const STEPX={
   pinhole:[{},{chk:[['畫出至少 2 條穿過小孔的手繪光線',()=>CK.hand('hole')>=2]]},{chk:[['箱子深度拉到 90 cm 以上',()=>S.d>=.9]]},{chk:[['孔徑拉到 40 mm 以上',()=>S.holeMM>=40]]},{},{}],
   mirror:[{},{},{chk:[['小人站在離鏡子 2.9～3.1 m',()=>Math.abs(CK.d()-3)<=.1]]},{chk:[['畫出至少 3 條手繪反射光線',()=>CK.hand('mirror')>=3]]},
-    {chk:[['右側「頭頂」和「腳」都打勾（看得到全身）',()=>{const own=eyeOwner();if(!own)return false;const E=eyePos(),fs=REG[own.id].info.feats;return !!seeFeature(E,featWorld(fs[1]))&&!!seeFeature(E,featWorld(fs[2]));}],
-      ['同時鏡子縮短到 0.88 m 以下（身高的一半約 0.86 m）',()=>{const own=eyeOwner();if(!own)return false;const E=eyePos(),fs=REG[own.id].info.feats,H=featWorld(fs[1]).y-featWorld(fs[2]).y;return !!seeFeature(E,featWorld(fs[1]))&&!!seeFeature(E,featWorld(fs[2]))&&S.m.h<=H/2+.02;}]]},{},
+    {chk:[['頭頂和腳的光都經鏡子反射進入眼睛（鏡中看得到全身）',()=>{const own=eyeOwner();if(!own)return false;const E=eyePos(),fs=REG[own.id].info.feats;return !!seeFeature(E,featWorld(fs[1]))&&!!seeFeature(E,featWorld(fs[2]));}],
+      ['仍看得到全身，同時把鏡子縮到最短（只留兩個反射點之間）',()=>{const own=eyeOwner();if(!own)return false;const E=eyePos(),fs=REG[own.id].info.feats;return !!seeFeature(E,featWorld(fs[1]))&&!!seeFeature(E,featWorld(fs[2]))&&S.m.h<=.885;}]]},{},
     {chk:[['觀察者看到側邊鏡子裡的像（加寬鏡子或移動觀察者都可以）',()=>{if(MIRRORS.length<2)return false;const o=S.objs.find(o=>o.type==='person');if(!o)return false;const r=REG[o.id];r.root.updateMatrixWorld(true);const c=new THREE.Box3().setFromObject(r.root).getCenter(new THREE.Vector3());c.y=1.1;return imagesSeen(eyePos(),c).single[1];}]]}],
   concave:[{},{},{chk:[['屏幕放在像最清楚的位置（誤差 5 cm 內）',()=>CK.scrAt()]]},{chk:[['蠟燭在 F 和 C 之間',()=>{const d=CK.d(),f=fEff();return d>f&&d<2*f;}],['屏幕放在像最清楚的位置',()=>CK.scrAt()]]},
     {chk:[['蠟燭在 F 以內',()=>CK.d()<fEff()]]},{chk:[['屏幕前後移動超過 1 m',m=>CK.moved(m)]]}],
@@ -3975,6 +3986,6 @@ applyLock();
 // 保險：整個頁面不應該捲動（只有側欄、說明、任務卡可以捲），萬一被捲動就立刻拉回來
 addEventListener('scroll',()=>{if(scrollX||scrollY)scrollTo(0,0);},{passive:true});
 document.addEventListener('scroll',e=>{const t=e.target;if(t&&t.nodeType===1&&(t===document.body||t.classList.contains('main')||t.classList.contains('app'))&&(t.scrollTop||t.scrollLeft)){t.scrollTop=0;t.scrollLeft=0;}},true);
-window.__lab={imagesSeen,eyePos,S,cam,REG,rayGroup,imgGroup,switchScene,updateRays,get MIRRORS(){return MIRRORS;},get hand(){return handRays;},get hist(){return hist;},goView,applySetup,takeSnap,makeShot,undo,redo};
+window.__lab={imagesSeen,eyePos,seeFeature,featWorld,eyeOwner,buildMirror,S,cam,REG,rayGroup,imgGroup,switchScene,updateRays,get MIRRORS(){return MIRRORS;},get hand(){return handRays;},get hist(){return hist;},goView,applySetup,takeSnap,makeShot,undo,redo};
 })();
 </script>
