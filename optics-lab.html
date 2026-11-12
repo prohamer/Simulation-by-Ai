@@ -1,5 +1,5 @@
 <!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
-<title>光學實驗台V11</title>
+<title>光學實驗台V12</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
@@ -684,14 +684,58 @@ SCENES.push({id:'reflection',ch:'4-2',name:'光的反射定律',bounds:[-40,40,-
 });
 
 /* ---------- 4-2 平面鏡成像 ---------- */
+// adjustable mirror: bend −1 … 1 (convex … plane … concave); |bend| = 1 gives f = CM_FMIN
+const CM_FMIN=12;
+function cmGeom(st){
+  if(st.type!=='adjust') return {R:st.R,f:st.R/2,cc:st.type==='concave',plane:false};
+  const bd=st.bend??0, plane=Math.abs(bd)<0.005, f=plane?1e6:CM_FMIN/Math.abs(bd);
+  return {R:2*f,f,cc:bd>0,plane};}
+const bendGeom=bd=>{const plane=Math.abs(bd)<0.005,f=plane?1e6:CM_FMIN/Math.abs(bd);return {f,cc:bd>0,plane,fs:plane?-1e6:(bd>0?f:-f),ps:bd>0?-1:1,k:plane?0:1/(4*f)};};
+const bendFmt=v=>Math.abs(v)<0.005?'平面鏡':(v>0?'凹面 f = ':'凸面 f = ')+f1(CM_FMIN/Math.abs(v))+' cm';
+function pmCurved(st,b){
+  const P=[], M=16, {ox,oy,h,ex,ey}=st, E=[ex,ey], G=bendGeom(st.bend), sag=y=>G.ps*G.k*y*y, u=-ox;
+  P.push({t:'axis',x0:b[0],x1:b[1]});
+  P.push({t:'mirror',pts:lin(-M,M,41).map(y=>[sag(y),y]),back:1});
+  P.push({t:'mark',x:G.cc?-G.f:G.f,y:0,label:G.cc?'F':'F（虛焦點）'});
+  const img=imageOf(u,G.fs), Ix=img.inf?null:-img.v, im=y=>img.m*y;
+  P.push({t:'arrowObj',x:ox,y0:oy,h,c:C.obj,c0:C.base,label:'物體'});
+  if(st.showImg&&!img.inf&&Math.abs(img.v)<400){const y0=im(oy),y1=im(oy+h);P.push({t:'arrowObj',x:Ix,y0,h:y1-y0,c:C.obj,c0:C.base,virtual:!img.real,image:true,label:img.real?'像（實像）':'像（虛像）'});}
+  const hitX=y=>sag(y);
+  const ray=(py,yy,c,w,a)=>{const tip=[ox,py],R=[hitX(yy),yy];if(img.inf){P.push({t:'ray',pts:[tip,R,toEdge(R,nrm(sub(R,tip)),b)],c,w,a});return;}
+    const I=[Ix,im(py)],d=img.real?nrm(sub(I,R)):nrm(sub(R,I));P.push({t:'ray',pts:[tip,R,toEdge(R,d,b)],c,w,a});
+    if(st.showImg&&!img.real)P.push({t:'ray',pts:[R,I],c,w:0.8,a:0.35,dash:true});};
+  let seen=0,tried=0;
+  if(st.eyeOn&&!img.inf) for(const [py,c,show] of [[oy+h,C.obj,st.showTop],[oy,C.base,st.showBot]]){
+    if(!show) continue; tried++;
+    const I=[Ix,im(py)], t=(0-ex)/(I[0]-ex), ry=ey+t*(I[1]-ey);
+    if(Math.abs(ry)<=M&&(img.real?ex<Ix-0.5:true)){seen++;P.push({t:'ray',pts:[[ox,py],[hitX(ry),ry],E],c,w:1.7});if(st.showImg&&!img.real)P.push({t:'ray',pts:[[hitX(ry),ry],I],c,w:1.1,a:0.7,dash:true});}}
+  const fanFrom=[];
+  if(st.fan&&st.showTop) fanFrom.push([oy+h,C.obj]);
+  if(!st.eyeOn){if(st.showTop)fanFrom.push([oy+h,C.obj]);if(st.showBot)fanFrom.push([oy,C.base]);}
+  for(const [py,c] of fanFrom) for(const yy of lin(-M+1,M-1,7)) ray(py,yy,c,1,0.45);
+  if(st.eyeOn) P.push({t:'eye',x:ex,y:ey,dir:nrm(sub([0,(ey+oy)/2],E))});
+  const H=[{x:ox,y:oy,cursor:'move',drag:(x,y)=>{st.ox=clamp(Math.round(x*2)/2,-300,-2);st.oy=clamp(Math.round(y*2)/2,-15,15-st.h)}},
+    {x:ox,y:oy+h,cursor:'ns-resize',drag:(x,y)=>{st.h=clamp(Math.round((y-st.oy)*2)/2,2,Math.min(14,16-st.oy))}}];
+  if(st.eyeOn) H.push({x:ex,y:ey,cursor:'move',drag:(x,y)=>{st.ex=clamp(x,-300,-3);st.ey=clamp(y,-100,100)}});
+  const kn=G.cc?'凹面鏡':'凸面鏡', hide=!st.showImg;
+  const info=`<dl class="kv"><dt>目前是</dt><dd class="t">${kn}（f = ${f1(G.f)} cm）</dd><dt>物距</dt><dd>${f1(u)} cm</dd>
+    <dt>像距</dt><dd>${hide?'？':img.inf?'—（不成像）':f1(Math.abs(img.v))+' cm（'+(img.real?'鏡前':'鏡後')+'）'}</dd>
+    <dt>像高 ÷ 物高</dt><dd>${hide?'？':img.inf?'—':f2(Math.abs(img.m))+' 倍'}</dd><dt>像的性質</dt><dd class="t">${hide?'？':img.inf?'不成像':propsText(img)}</dd></dl>
+    ${st.eyeOn&&tried&&seen<tried?'<p><span class="pill warn">眼睛目前無法看到完整的像</span></p>':''}
+    <p class="note-sm">把「鏡面彎曲」拖回中間就是平面鏡。和平面鏡比一比：像的大小、正倒、位置怎麼改變？</p>`;
+  return {prims:P,handles:H,optics:[{kind:'parab',s:G.ps,k:G.k,H:M}],meta:{seen,tried},info};
+}
 SCENES.push({id:'plane-mirror',ch:'4-2',name:'平面鏡成像',bounds:[-44,44,-20,20],
   tools:{top:'showTop',bottom:'showBot',image:'showImg',eye:'eyeOn'},
   init:()=>({ox:-18,oy:-6,h:8,ex:-30,ey:9,fan:false,showTop:true,showBot:true,showImg:true,eyeOn:true}),
   controls:()=>[
     {type:'slider',key:'ox',label:'物距（物體到鏡面）',min:2,max:100,step:0.5,unit:'cm',get:()=>-S().ox,set:v=>{S().ox=-v}},
     {type:'slider',key:'h',label:'物體高度',min:2,max:14,step:0.5,unit:'cm'},
-    {type:'toggle',key:'fan',label:'顯示物體頂端發出的更多光線'}],
+    {type:'toggle',key:'fan',label:'顯示物體頂端發出的更多光線'},
+    {type:'seg',key:'mtype',label:'鏡子',options:[['plane','平面鏡'],['adjust','可調曲面鏡']],get:()=>S().mtype||'plane',set:v=>{S().mtype=v;}},
+    ...(S().mtype==='adjust'?[{type:'slider',key:'bend',label:'鏡面彎曲（往左：凸面　中間：平面　往右：凹面）',min:-1,max:1,step:0.02,get:()=>S().bend??0,set:v=>{S().bend=v;},fmt:bendFmt}]:[])],
   build(st,b){
+    if(st.mtype==='adjust'&&Math.abs(st.bend??0)>=0.005) return pmCurved(st,b);
     const P=[], M=16, {ox,oy,h,ex,ey}=st, E=[ex,ey];
     P.push({t:'mirror',pts:[[0,-M],[0,M]],back:1});
     P.push({t:'arrowObj',x:ox,y0:oy,h,c:C.obj,c0:C.base,label:'物體'});
@@ -729,20 +773,23 @@ SCENES.push({id:'curved-mirror',ch:'4-2',name:'凹面鏡與凸面鏡',bounds:[-6
   tools:st=>st.src==='object'?{r1:'r1',r2:'r2',r3:'r3',image:'showImg'}:{},
   init:()=>({type:'concave',R:40,src:'parallel',n:7,sx:-20,sy:0,ox:-30,oh:5,r1:true,r2:true,r3:true,showImg:true}),
   controls:st=>[
-    {type:'seg',key:'type',label:'面鏡種類',options:[['concave','凹面鏡'],['convex','凸面鏡']]},
+    {type:'seg',key:'type',label:'面鏡種類',options:[['concave','凹面鏡'],['convex','凸面鏡'],['adjust','可調曲面鏡']]},
     {type:'seg',key:'src',label:'光源',options:[['none','關閉'],['parallel','平行光'],['point','點光源'],['object','物體成像']]},
-    {type:'slider',key:'R',label:'曲率半徑（焦距 = 半徑 ÷ 2）',min:24,max:60,step:1,unit:'cm'},
+    ...(st.type==='adjust'?[{type:'slider',key:'bend',label:'鏡面彎曲（往左：凸面鏡　中間：平面鏡　往右：凹面鏡）',min:-1,max:1,step:0.02,get:()=>st.bend??0,set:v=>{st.bend=v;},
+        fmt:bendFmt}]
+      :[{type:'slider',key:'R',label:'曲率半徑（焦距 = 半徑 ÷ 2）',min:24,max:60,step:1,unit:'cm'}]),
     ...(st.src==='object'?[{type:'slider',key:'ox',label:'物距（物體到鏡面）',min:2,max:200,step:0.5,unit:'cm',get:()=>-st.ox,set:v=>{st.ox=-v}}]:st.src==='none'?[]:[{type:'slider',key:'n',label:'光線數量',min:3,max:13,step:2}]),
-    ...(st.src==='point'?[{type:'buttons',items:[{label:'光源放到焦點',onClick:s=>{s.sx=s.type==='concave'?-s.R/2:-20;s.sy=0;}}]}]:[])],
+    ...(st.src==='point'?[{type:'buttons',items:[{label:'光源放到焦點',onClick:s=>{const g=cmGeom(s);s.sx=g.cc&&!g.plane?-g.f:-20;s.sy=0;}}]}]:[])],
   build(st,b){
-    const P=[], R=st.R, f=R/2, cc=st.type==='concave', H=Math.min(15,R*0.42), Cx=cc?-R:R;
+    const G=cmGeom(st), P=[], R=G.R, f=G.f, cc=G.cc, plane=G.plane, H=Math.min(15,R*0.42), Cx=cc?-R:R;
     const pk=1/(4*f), ps=cc?-1:1, sag=y=>ps*pk*y*y;
     const arc=lin(-H,H,41).map(y=>[sag(y),y]);
     const optics=[{kind:'parab',s:ps,k:pk,H}];
     P.push({t:'axis',x0:b[0],x1:b[1]});
     P.push({t:'mirror',pts:arc,back:1});
     const Fx=cc?-f:f;
-    P.push({t:'mark',x:Fx,y:0,label:cc?'F':'F（虛焦點）'});
+    if(!plane) P.push({t:'mark',x:Fx,y:0,label:cc?'F':'F（虛焦點）'});
+    const kn=plane?'平面鏡':cc?'凹面鏡':'凸面鏡', fT=plane?'∞（平面鏡）':f1(f)+' cm', kRow=st.type==='adjust'?`<dt>目前是</dt><dd class="t">${kn}</dd>`:'';
     if(Cx>b[0]&&Cx<b[1]) P.push({t:'mark',x:Cx,y:0,label:'C',dimmed:true});
     let info='';
     const hit=(p,d)=>{const t=parabHit(p,d,ps,pk,H); return t==null?null:add(p,mul(d,t));};
@@ -754,13 +801,13 @@ SCENES.push({id:'curved-mirror',ch:'4-2',name:'凹面鏡與凸面鏡',bounds:[-6
         if(div){const tb=(Math.max(f,12)+6-q[0])/(-r[0]); P.push({t:'ray',pts:[q,add(q,mul(r,-Math.min(tb,60)))],c,w:0.9,a:0.45*a,dash:true});}
       }};
     if(st.src==='none'){
-      info=`<dl class="kv"><dt>焦距 f</dt><dd>${f1(f)} cm</dd></dl><p class="note-sm">光源已關閉。可以用工具列的雷射筆、自訂發光點或平行光源自己做實驗；選取雷射筆後，按「反向射回」可以驗證光路可逆。</p>`;
+      info=`<dl class="kv">${kRow}<dt>焦距 f</dt><dd>${fT}</dd></dl><p class="note-sm">光源已關閉。可以用工具列的雷射筆、自訂發光點或平行光源自己做實驗；選取雷射筆後，按「反向射回」可以驗證光路可逆。</p>`;
       return {prims:P,handles:[],info,optics};
     }
     if(st.src==='parallel'){
       for(const y of lin(-H*0.9,H*0.9,st.n)) traceTo([b[0]-2,y],[1,0],C.warm);
-      info=`<dl class="kv"><dt>焦距 f</dt><dd>${f1(f)} cm</dd><dt>平行光反射後</dt><dd class="t">${cc?'會聚於焦點':'發散'}</dd></dl>
-        <p class="note-sm">${cc?'凹面鏡能把平行光會聚到焦點（太陽灶、衛星天線）。':'凸面鏡使平行光發散，反射光的延長線（虛線）交於鏡後的虛焦點。'}</p>`;
+      info=`<dl class="kv">${kRow}<dt>焦距 f</dt><dd>${fT}</dd><dt>平行光反射後</dt><dd class="t">${plane?'仍是平行光':cc?'會聚於焦點':'發散'}</dd></dl>
+        <p class="note-sm">${plane?'平面鏡把平行光反射後仍是平行光，不會會聚也不會發散。':cc?'凹面鏡能把平行光會聚到焦點（太陽灶、衛星天線）。':'凸面鏡使平行光發散，反射光的延長線（虛線）交於鏡後的虛焦點。'}</p>`;
       return {prims:P,handles:[],info,optics};
     }
     if(st.src==='point'){
@@ -768,7 +815,7 @@ SCENES.push({id:'curved-mirror',ch:'4-2',name:'凹面鏡與凸面鏡',bounds:[-6
       for(const y of lin(-H*0.92,H*0.92,st.n)){const tg=[sag(y),y]; traceTo(S,nrm(sub(tg,S)),'#ffe066');}
       P.push({t:'lamp',x:S[0],y:S[1]});
       const u=-st.sx;
-      info=`<dl class="kv"><dt>焦距 f</dt><dd>${f1(f)} cm</dd><dt>光源到鏡面</dt><dd>${f1(u)} cm</dd></dl>
+      info=`<dl class="kv">${kRow}<dt>焦距 f</dt><dd>${fT}</dd><dt>光源到鏡面</dt><dd>${f1(u)} cm</dd></dl>
         <p class="note-sm">${cc?(Math.abs(u-f)<0.6&&Math.abs(st.sy)<0.5?'光源在焦點上，反射光成為平行光，手電筒和車燈就是這樣設計的。':'拖曳光源到焦點 F，看看反射光有什麼變化。'):'凸面鏡讓反射光散開，看到的範圍較廣，常用於道路轉角反射鏡。'}</p>`;
       return {prims:P,handles:[{x:S[0],y:S[1],cursor:'move',drag:(x,y)=>{st.sx=clamp(x,-300,-3);st.sy=clamp(y,-H,H);
         if(Math.abs(st.sx+f)<0.8&&Math.abs(st.sy)<0.8&&cc){st.sx=-f;st.sy=0;}}}],info,optics};
@@ -782,18 +829,18 @@ SCENES.push({id:'curved-mirror',ch:'4-2',name:'凹面鏡與凸面鏡',bounds:[-6
       const I=[img.x,img.y];
       if(img.real){P.push({t:'ray',pts:[P0,Hp,toEdge(Hp,nrm(sub(I,Hp)),b)],c,w:1.7});}
       else{P.push({t:'ray',pts:[P0,Hp,toEdge(Hp,nrm(sub(Hp,I)),b)],c,w:1.7});P.push({t:'ray',pts:[Hp,back||I],c,w:1.1,a:0.7,dash:true});}};
-    if(st.r1) mirrorRay(st.oh,'#ffd166',cc?null:[f,0]);
+    if(st.r1) mirrorRay(st.oh,'#ffd166',cc||plane?null:[f,0]);
     if(st.r2) mirrorRay(0,'#7ee0a0',null);
-    if(st.r3){mirrorRay(yF,'#ff8fb8',null);
+    if(st.r3&&!plane){mirrorRay(yF,'#ff8fb8',null);
       if(cc&&u<f) P.push({t:'ray',pts:[[-f,0],P0],c:'#ff8fb8',w:1,a:0.5,dash:true});
       if(!cc) P.push({t:'ray',pts:[[sx(yF),yF],[f,0]],c:'#ff8fb8',w:1,a:0.5,dash:true});}
     P.push({t:'arrowObj',x:st.ox,y0:0,h:st.oh,c:C.obj,label:'物體'});
     if(st.showImg&&!img.inf&&Math.abs(img.v)<2000) P.push({t:'arrowObj',x:img.x,y0:0,h:img.y,c:C.obj,virtual:!img.real,image:true,label:img.real?'實像':'虛像'});
     const hide=!st.showImg;
-    info=`<dl class="kv"><dt>物體位置</dt><dd class="t">${cc?zoneName(u,f,'mirror'):'鏡前任意位置'}</dd><dt>物距</dt><dd>${f1(u)} cm</dd>
+    info=`<dl class="kv">${kRow}<dt>物體位置</dt><dd class="t">${cc?zoneName(u,f,'mirror'):'鏡前任意位置'}</dd><dt>物距</dt><dd>${f1(u)} cm</dd>
       <dt>像距</dt><dd>${hide?'？':img.inf?'—':f1(Math.abs(img.v))+' cm（'+(img.real?'鏡前':'鏡後')+'）'}</dd>
       <dt>放大率</dt><dd>${hide?'？':img.inf?'—':f2(Math.abs(img.m))+' 倍'}</dd><dt>像的性質</dt><dd class="t">${hide?'？':propsText(img)}</dd></dl>
-      <p class="note-sm">${cc?'黃線：平行主軸 → 反射後通過焦點；綠線：射向鏡面中心 → 對稱反射；粉紅線：通過焦點 → 反射後平行主軸。':'凸面鏡永遠成正立、縮小的虛像。'}</p>`;
+      <p class="note-sm">${plane?'平面鏡成正立、等大的虛像，像到鏡面的距離等於物體到鏡面的距離。':cc?'黃線：平行主軸 → 反射後通過焦點；綠線：射向鏡面中心 → 對稱反射；粉紅線：通過焦點 → 反射後平行主軸。':'凸面鏡永遠成正立、縮小的虛像。'}</p>${st.type==='adjust'?'<p class="note-sm">拖動「鏡面彎曲」滑桿：從凹面鏡慢慢變平、再變成凸面鏡，觀察光線和像怎麼改變。</p>':''}`;
     return {prims:P,handles:[{x:st.ox,y:0,cursor:'ew-resize',drag:x=>{let v=clamp(Math.round(x*2)/2,-300,-2);if(cc){if(Math.abs(-v-f)<0.8)v=-f;if(Math.abs(-v-2*f)<0.8)v=-2*f;}st.ox=v;}},
       {x:st.ox,y:st.oh,cursor:'ns-resize',drag:(x,y)=>{st.oh=clamp(Math.round(y*2)/2,1,12)}}],info,optics};
   },
@@ -1297,6 +1344,7 @@ const PG_TYPES={
   pmirror:{name:'平面鏡',def:{L:16}},
   ccmirror:{name:'凹面鏡',def:{f:12,H:8}},
   cvmirror:{name:'凸面鏡',def:{f:12,H:8}},
+  admirror:{name:'可調曲面鏡',def:{bend:0,H:8}},
   cxlens:{name:'凸透鏡',def:{f:12,H:8,ideal:false,surf:'sph',mat:'glass',n:1.5}},
   cclens:{name:'凹透鏡',def:{f:12,H:8,ideal:false,surf:'sph',mat:'glass',n:1.5}},
   rect:{name:'長方形玻璃磚',def:{w:20,h:8,mat:'glass',n:1.5}},
@@ -1307,9 +1355,9 @@ const PG_TYPES={
   pinhole:{name:'針孔板',def:{L:24,holes:1,hole:1,gap:4}},
   object:{name:'箭頭物體',def:{h:6,rays:true,n:7,c:'#ffb347'}},
   camera:{name:'相機（凸凹透鏡組）',def:{g:6,af:true}}};
-const PG_GROUPS=[['面鏡',['pmirror','ccmirror','cvmirror']],['透鏡',['cxlens','cclens']],['介質',['rect','semi','prism']],['物體與屏幕',['object','screen','pinhole','block']],['儀器',['camera']]];
+const PG_GROUPS=[['面鏡',['pmirror','ccmirror','cvmirror','admirror']],['透鏡',['cxlens','cclens']],['介質',['rect','semi','prism']],['物體與屏幕',['object','screen','pinhole','block']],['儀器',['camera']]];
 const PG_DISP={water:0.0031,glass:0.0042,diamond:0.018,custom:0.0042};
-const PG_IMG=['pmirror','ccmirror','cvmirror','cxlens','cclens'];
+const PG_IMG=['pmirror','ccmirror','cvmirror','admirror','cxlens','cclens'];
 // one-tap set-ups: elements + custom light sources
 const PG_TPL={
   periscope:{name:'潛望鏡',els:[{type:'pmirror',x:-10,y:0,ang:-45,L:12},{type:'pmirror',x:-10,y:24,ang:-45,L:12},{type:'screen',x:30,y:24,ang:0,L:16}],
@@ -1363,7 +1411,8 @@ function pgTemplate(st,k){const T=PG_TPL[k];st.els=[];st.nextEl=1;
 // thin-lens / mirror image of a world point through one element (null if none)
 function pgImage(el,P){
   const a=el.ang*D2R,c=[el.x,el.y],L=rot2(sub(P,c),-a),W=q=>add(c,rot2(q,a));
-  if(el.type==='pmirror'){return {p:W([-L[0],L[1]]),real:false};}
+  if(el.type==='pmirror'||(el.type==='admirror'&&bendGeom(el.bend).plane)){return {p:W([-L[0],L[1]]),real:false};}
+  if(el.type==='admirror'){if(L[0]>=-1e-6)return null;const G=bendGeom(el.bend),u=-L[0];if(Math.abs(u-G.fs)<1e-6)return {inf:true};const v=1/(1/G.fs-1/u);return {p:W([-v,L[1]*(-v/u)]),real:v>0};}
   const lens=el.type==='cxlens'||el.type==='cclens';
   if(!lens&&L[0]>=-1e-6) return null;
   const side=lens?(Math.sign(L[0])||-1):-1, u=side*L[0], fs=(el.type==='cxlens'||el.type==='ccmirror')?el.f:-el.f;
@@ -1395,6 +1444,7 @@ SCENES.push({id:'playground',ch:'自由',name:'自由組合實驗台',bounds:[-6
       if(T==='object'){cs.push(P('h','高度',1,15,0.5,'cm'));cs.push({type:'toggle',key:'pgrays',label:'從頂端發出光線',get:()=>e.rays,set:v=>{e.rays=v;}});if(e.rays)cs.push(P('n','光線數量',3,15,2));
         cs.push({type:'swatches',key:'pgc',label:'顏色',options:OBJ_COLORS,get:()=>e.c,set:v=>{e.c=v;}});}
       if(T==='ccmirror'||T==='cvmirror'||T==='cxlens'||T==='cclens'){cs.push(P('f','焦距 f',3,40,0.5,'cm'));cs.push(P('H','半高（口徑的一半）',2,20,0.5,'cm'));}
+      if(T==='admirror'){cs.push({type:'slider',key:'pgbend',label:'鏡面彎曲（往左：凸面　中間：平面　往右：凹面）',min:-1,max:1,step:0.02,get:()=>e.bend,set:v=>{e.bend=v;},fmt:bendFmt});cs.push(P('H','半高（口徑的一半）',2,20,0.5,'cm'));}
       if(T==='rect'){cs.push(P('w','寬',2,60,0.5,'cm'));cs.push(P('h','高',2,40,0.5,'cm'));}
       if(T==='semi') cs.push(P('R','半徑',3,30,0.5,'cm'));
       if(T==='prism'){cs.push(P('s','邊長',4,40,0.5,'cm'));cs.push(P('A','頂角',20,120,1,'°'));}
@@ -1418,6 +1468,10 @@ SCENES.push({id:'playground',ch:'自由',name:'自由組合實驗台',bounds:[-6
     for(const e of st.els){
       const a=e.ang*D2R, W=q=>add([e.x,e.y],rot2(q,a)), id='pg'+e.id, T=e.type;
       if(T==='pmirror'){const pts=[W([0,-e.L/2]),W([0,e.L/2])];P.push({t:'mirror',pts,back:1});optics.push({kind:'mirror',pts});}
+      else if(T==='admirror'){const G=bendGeom(e.bend),pts=lin(-e.H,e.H,41).map(y=>W([G.ps*G.k*y*y,y]));
+        P.push({t:'mirror',pts,back:1});
+        if(G.plane) optics.push({kind:'mirror',pts:[W([0,-e.H]),W([0,e.H])]});
+        else{optics.push({kind:'parabR',c:[e.x,e.y],ang:a,s:G.ps,k:G.k,H:e.H});if(st.showF){const F=W([G.cc?-G.f:G.f,0]);P.push({t:'mark',x:F[0],y:F[1],label:G.cc?'F':'F（虛）',dimmed:!G.cc});}}}
       else if(T==='ccmirror'||T==='cvmirror'){const cc=T==='ccmirror',ps=cc?-1:1,k=1/(4*e.f),pts=lin(-e.H,e.H,41).map(y=>W([ps*k*y*y,y]));
         P.push({t:'mirror',pts,back:1});optics.push({kind:'parabR',c:[e.x,e.y],ang:a,s:ps,k,H:e.H});
         if(st.showF){const F=W([cc?-e.f:e.f,0]);P.push({t:'mark',x:F[0],y:F[1],label:cc?'F':'F（虛）',dimmed:!cc});}}
@@ -1604,13 +1658,13 @@ reflection:[
 'plane-mirror':[
   {id:'pm-1',title:'看到完整的像',goal:'拖曳眼睛，找到能同時看到像的頂端與底端（兩條光線都進入眼睛）的位置。',
     hints:['反射光要先打在鏡面範圍內，才進得了眼睛。','試著把眼睛移到和物體差不多高的地方。'],
-    setup:st=>{st.eyeOn=true;st.showTop=true;st.showBot=true;st.ex=-40;st.ey=18;st.ox=-30;st.oy=8;st.h=7;},
+    setup:st=>{st.mtype='plane';st.eyeOn=true;st.showTop=true;st.showBot=true;st.ex=-40;st.ey=18;st.ox=-30;st.oy=8;st.h=7;},
     check:({out})=>out.meta&&out.meta.tried===2&&out.meta.seen===2,
     quiz:{q:'眼睛要看到完整的像，下列何者正確？（可複選）',opts:['物體各點的反射光都要進入眼睛','反射點要落在鏡面範圍內','像是反射光真的會聚而成','虛線是反射光的反向延長線'],ans:[0,1,3]},
     explain:'鏡子要夠大、位置要對，物體各點的反射光才能進入眼睛。'},
   {id:'pm-2',title:'預測像的位置',goal:'成像已暫時隱藏。把白色的「預測像」拖到你認為像會出現的位置（可先用量尺量物距），再按「送出答案」。',lock:['image'],submit:true,
     hints:['先用量尺量出物體到鏡面的距離。'],
-    setup:(st,data)=>{st.ox=-14;st.oy=-8;st.h=7;data.px=24;data.py=0;},
+    setup:(st,data)=>{st.mtype='plane';st.ox=-14;st.oy=-8;st.h=7;data.px=24;data.py=0;},
     extra:(st,data)=>({prims:[{t:'arrowObj',x:data.px,y0:data.py,h:st.h,c:'#ffffff',virtual:true,image:true,label:'預測像'}],
       handles:[{x:data.px,y:data.py,cursor:'move',drag:(x,y)=>{data.px=Math.round(clamp(x,1,42)*2)/2;data.py=Math.round(clamp(y,-18,18-st.h)*2)/2;}}]}),
     check:({st,data})=>Math.abs(data.px+st.ox)<=1&&Math.abs(data.py-st.oy)<=1,wrong:'位置還不對。像距和物距有什麼關係？高度呢？',
