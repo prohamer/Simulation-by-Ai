@@ -1,0 +1,1549 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>功與能：2D/3D 物理模擬與兩階段診斷測驗</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Three.js for 2D/3D Simulation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
+
+    <style>
+        body {
+            font-family: 'Noto Sans TC', 'Inter', sans-serif;
+            background-color: #0f172a;
+            color: #f8fafc;
+            overflow-x: hidden;
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1e293b;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #475569;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #64748b;
+        }
+
+        /* 3D Viewport Container */
+        #canvas-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            min-height: 340px;
+            background: radial-gradient(circle at center, #1e293b 0%, #0f172a 100%);
+            overflow: hidden;
+            touch-action: none;
+        }
+
+        /* Option Button Transitions */
+        .quiz-option-btn {
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .quiz-option-btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+        }
+        .quiz-option-btn:active:not(:disabled) {
+            transform: translateY(0px);
+        }
+
+        /* Pulse animation for active indicators */
+        @keyframes subtle-pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.75; transform: scale(1.04); }
+        }
+        .animate-subtle-pulse {
+            animation: subtle-pulse 2s infinite ease-in-out;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between">
+
+    <!-- Top Header & Progress Bar -->
+    <header class="bg-slate-900/90 backdrop-blur-md border-b border-slate-800 sticky top-0 z-30 px-4 py-3">
+        <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3">
+            <!-- Title & Subtitle -->
+            <div class="flex items-center gap-3 flex-wrap">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-cyan-500 flex items-center justify-center shadow-lg shadow-indigo-500/20">
+                    <i class="fa-solid fa-car-side text-white text-lg"></i>
+                </div>
+                <div>
+                    <h1 class="text-lg md:text-xl font-black tracking-tight text-white flex items-center gap-2">
+                        功與能：2D/3D 物理模擬測驗
+                        <span class="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                            最近10題對8題過關
+                        </span>
+                    </h1>
+                    <p class="text-xs text-slate-400">觀察車輛運動狀態、外力方向與 v-t 圖，完成兩階段正負功判斷</p>
+                </div>
+            </div>
+
+            <!-- Student Info & Timer & Recent 10 Tracker -->
+            <div class="flex items-center gap-3 flex-wrap">
+                <!-- Student Info Input (Synced with Pass Modal) -->
+                <div class="flex items-center bg-slate-800/90 border border-slate-700 focus-within:border-indigo-400 rounded-xl px-3 py-1.5 text-xs transition">
+                    <i class="fa-solid fa-user-graduate text-indigo-400 mr-2"></i>
+                    <input id="student-name-input" type="text" placeholder="輸入班級座號姓名 (過關亦可補填)" 
+                        class="bg-transparent text-white placeholder-slate-400 focus:outline-none w-44 sm:w-52 font-medium" />
+                </div>
+
+                <!-- Elapsed Timer -->
+                <div class="flex items-center gap-2 bg-slate-800/90 border border-slate-700 rounded-xl px-3.5 py-1.5">
+                    <i class="fa-regular fa-clock text-cyan-400 text-sm"></i>
+                    <span class="text-xs text-slate-400">耗時</span>
+                    <span id="timer-display" class="font-mono font-bold text-sm text-cyan-300">00:00</span>
+                </div>
+
+                <!-- Restart Button -->
+                <button id="btn-reset-quiz" class="bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 rounded-xl px-3 py-1.5 text-xs font-semibold transition flex items-center gap-1.5">
+                    <i class="fa-solid fa-rotate-right"></i>
+                    <span>重新計時</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Sliding Window 10-Question Progress Bar -->
+        <div class="max-w-7xl mx-auto mt-2.5 pt-2.5 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-2">
+            <div class="flex items-center gap-2">
+                <span class="text-xs font-bold text-slate-300">
+                    <i class="fa-solid fa-bullseye text-emerald-400 mr-1"></i>最近 10 題過關進度：
+                </span>
+                <div id="sliding-window-slots" class="flex items-center gap-1.5">
+                    <!-- 10 slots dynamically generated -->
+                </div>
+            </div>
+            <div class="flex items-center gap-4 text-xs">
+                <span class="text-slate-400">最近 10 題答對：<strong id="recent-correct-count" class="text-emerald-400 text-sm">0</strong> / 8 題過關</span>
+                <span class="text-slate-400 hidden sm:inline">|</span>
+                <span class="text-slate-400">累計作答：<strong id="total-answered-count" class="text-white">0</strong> 題（總答對 <strong id="total-correct-count" class="text-cyan-400">0</strong> 題）</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Interactive Workspace -->
+    <main class="max-w-7xl w-full mx-auto flex-1 p-4 grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch">
+        
+        <!-- Left Column: 2D/3D Viewport + V-t Graph (7 cols on large screens) -->
+        <div class="lg:col-span-7 flex flex-col gap-4">
+            
+            <!-- 3D / 2D Simulation Card -->
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl flex flex-col flex-1 min-h-[380px]">
+                <!-- Three.js Canvas Container -->
+                <div id="canvas-container" class="flex-1 relative">
+                    <!-- Top-Left Floating 2D/3D View Switch Icon Buttons -->
+                    <div class="absolute top-3 left-3 z-20 flex items-center gap-1.5 bg-slate-900/85 backdrop-blur-md border border-slate-700/80 p-1.5 rounded-2xl shadow-lg">
+                        <button id="view-3d" title="3D 立體自由視角 (可拖曳旋轉/縮放)" aria-label="3D 立體自由視角"
+                            class="view-btn w-10 h-10 rounded-xl bg-indigo-600 text-white shadow-md shadow-indigo-500/30 transition flex flex-col items-center justify-center gap-0.5">
+                            <i class="fa-solid fa-cube text-sm"></i>
+                            <span class="text-[9px] font-black leading-none">3D</span>
+                        </button>
+                        <button id="view-2d-side" title="2D 側視圖 (觀察上下/前後)" aria-label="2D 側視圖"
+                            class="view-btn w-10 h-10 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-slate-300 hover:text-white transition flex flex-col items-center justify-center gap-0.5">
+                            <i class="fa-solid fa-car-side text-sm"></i>
+                            <span class="text-[9px] font-bold leading-none">2D側</span>
+                        </button>
+                        <button id="view-2d-top" title="2D 俯視圖 (觀察側推/圓周)" aria-label="2D 俯視圖"
+                            class="view-btn w-10 h-10 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-slate-300 hover:text-white transition flex flex-col items-center justify-center gap-0.5">
+                            <i class="fa-regular fa-compass text-sm"></i>
+                            <span class="text-[9px] font-bold leading-none">2D俯</span>
+                        </button>
+                        <span id="camera-hint" class="text-[11px] text-slate-400 px-2 hidden sm:inline pointer-events-none">
+                            <i class="fa-solid fa-hand-pointer mr-1 text-indigo-400"></i>拖曳旋轉
+                        </span>
+                    </div>
+
+                    <!-- Top-Right Fixed Scenario & Vector Labels -->
+                    <div class="absolute top-3 right-3 z-20 flex flex-col items-end gap-1.5 pointer-events-none">
+                        <div class="bg-slate-900/85 backdrop-blur-md border border-slate-700 rounded-xl px-3.5 py-1.5 text-right shadow-lg">
+                            <div class="text-[11px] text-slate-400">目前車輛情境</div>
+                            <div id="canvas-scenario-badge" class="text-xs sm:text-sm font-black text-amber-300">載入中...</div>
+                        </div>
+                        <div id="label-velocity" class="px-3 py-1 rounded-full font-bold text-xs shadow-lg bg-emerald-500/95 text-slate-950 border border-emerald-300 flex items-center gap-1.5">
+                            <span class="w-2.5 h-2.5 rounded-full bg-slate-950 inline-block"></span>
+                            <span>綠色箭頭：位移/運動方向 (v)</span>
+                        </div>
+                        <div id="label-force" class="px-3 py-1 rounded-full font-bold text-xs shadow-lg bg-rose-500/95 text-white border border-rose-300 flex items-center gap-1.5">
+                            <span class="w-2.5 h-2.5 rounded-full bg-white inline-block"></span>
+                            <span>紅色箭頭：外力方向 (F)</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Synchronized V-t Graph Card -->
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl">
+                <div class="flex items-center justify-between mb-2">
+                    <div class="flex items-center gap-2">
+                        <span class="w-2.5 h-2.5 rounded-full bg-cyan-400"></span>
+                        <h2 class="text-sm font-bold text-white">同步速率-時間關係圖 (v-t 圖)</h2>
+                    </div>
+                    <span id="vt-status-label" class="text-xs font-semibold px-2.5 py-0.5 rounded-md bg-cyan-500/15 text-cyan-300 border border-cyan-500/30">
+                        v = 0 m/s
+                    </span>
+                </div>
+                <div class="w-full h-36 bg-slate-950/90 rounded-xl border border-slate-800 p-2 relative">
+                    <canvas id="vt-canvas" class="w-full h-full block"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Column: Two-Stage Quiz & Diagnostic Feedback (5 cols on large screens) -->
+        <div class="lg:col-span-5 flex flex-col gap-4">
+            
+            <!-- Question & Two-Stage Selection Card -->
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl flex-1 flex flex-col justify-between">
+                <div>
+                    <!-- Question Header -->
+                    <div class="flex items-center justify-between gap-2 mb-3">
+                        <span id="question-number-badge" class="text-xs font-extrabold uppercase tracking-wider px-3 py-1 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                            第 1 題
+                        </span>
+                        <span class="text-xs text-slate-400">兩階段皆答對才算該題得分</span>
+                    </div>
+
+                    <!-- Scenario Prompt Box -->
+                    <div class="bg-slate-800/80 border border-slate-700/80 rounded-xl p-4 mb-5">
+                        <div class="text-xs text-slate-400 mb-1 font-medium">題目情境描述：</div>
+                        <p id="question-prompt" class="text-base md:text-lg font-bold text-white leading-relaxed">
+                            載入題目中...
+                        </p>
+                        <div class="mt-2.5 pt-2.5 border-t border-slate-700/60 flex flex-wrap gap-2 text-xs">
+                            <span class="px-2.5 py-1 rounded-lg bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-semibold">
+                                <i class="fa-solid fa-gauge-high mr-1"></i>運動狀態：<span id="tag-motion">--</span>
+                            </span>
+                            <span class="px-2.5 py-1 rounded-lg bg-rose-500/15 text-rose-300 border border-rose-500/30 font-semibold">
+                                <i class="fa-solid fa-hand-fist mr-1"></i>外力方向：<span id="tag-force">--</span>
+                            </span>
+                        </div>
+                    </div>
+
+                    <!-- Stage 1 Selection -->
+                    <div class="mb-5">
+                        <div class="flex items-center justify-between mb-2.5">
+                            <label class="text-sm font-extrabold text-amber-300 flex items-center gap-2">
+                                <span class="w-6 h-6 rounded-full bg-amber-400 text-slate-950 font-black text-xs flex items-center justify-center">1</span>
+                                第一階段：判斷「外力 F」與「位移 Δx」的關係
+                            </label>
+                            <span id="stage1-status" class="text-xs text-slate-400">請選擇一項</span>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2.5" id="stage1-options">
+                            <button type="button" data-val="力與位移同向" class="quiz-option-btn stage1-btn bg-slate-800 hover:bg-slate-750 border-2 border-slate-700 rounded-xl p-3 text-left flex items-center gap-2.5">
+                                <div class="w-8 h-8 rounded-lg bg-slate-700 flex items-center justify-center text-emerald-400 shrink-0">
+                                    <i class="fa-solid fa-arrows-turn-to-dots"></i>
+                                </div>
+                                <div>
+                                    <div class="text-sm font-bold text-white">力與位移同向</div>
+                                    <div class="text-[11px] text-slate-400">夾角 0° (方向一致)</div>
+                                </div>
+                            </button>
+
+                            <button type="button" data-val="力與位移反向" class="quiz-option-btn stage1-btn bg-slate-800 hover:bg-slate-750 border-2 border-slate-700 rounded-xl p-3 text-left flex items-center gap-2.5">
+                                <div class="w-8 h-8 rounded-lg bg-slate-700 flex items-center justify-center text-rose-400 shrink-0">
+                                    <i class="fa-solid fa-arrows-left-right"></i>
+                                </div>
+                                <div>
+                                    <div class="text-sm font-bold text-white">力與位移反向</div>
+                                    <div class="text-[11px] text-slate-400">夾角 180° (方向相反)</div>
+                                </div>
+                            </button>
+
+                            <button type="button" data-val="力與位移垂直" class="quiz-option-btn stage1-btn bg-slate-800 hover:bg-slate-750 border-2 border-slate-700 rounded-xl p-3 text-left flex items-center gap-2.5">
+                                <div class="w-8 h-8 rounded-lg bg-slate-700 flex items-center justify-center text-amber-400 shrink-0">
+                                    <i class="fa-solid fa-border-top-left"></i>
+                                </div>
+                                <div>
+                                    <div class="text-sm font-bold text-white">力與位移垂直</div>
+                                    <div class="text-[11px] text-slate-400">夾角 90° (互相垂直)</div>
+                                </div>
+                            </button>
+
+                            <button type="button" data-val="無位移" class="quiz-option-btn stage1-btn bg-slate-800 hover:bg-slate-750 border-2 border-slate-700 rounded-xl p-3 text-left flex items-center gap-2.5">
+                                <div class="w-8 h-8 rounded-lg bg-slate-700 flex items-center justify-center text-slate-300 shrink-0">
+                                    <i class="fa-solid fa-ban"></i>
+                                </div>
+                                <div>
+                                    <div class="text-sm font-bold text-white">無位移</div>
+                                    <div class="text-[11px] text-slate-400">Δx = 0 (車子靜止)</div>
+                                </div>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Stage 2 Selection -->
+                    <div class="mb-5">
+                        <div class="flex items-center justify-between mb-2.5">
+                            <label class="text-sm font-extrabold text-cyan-300 flex items-center gap-2">
+                                <span class="w-6 h-6 rounded-full bg-cyan-400 text-slate-950 font-black text-xs flex items-center justify-center">2</span>
+                                第二階段：此「指定外力 F」對車子做什麼功？
+                            </label>
+                            <span id="stage2-status" class="text-xs text-slate-400">請選擇一項</span>
+                        </div>
+                        <div class="grid grid-cols-3 gap-2.5" id="stage2-options">
+                            <button type="button" data-val="正功" class="quiz-option-btn stage2-btn bg-slate-800 hover:bg-slate-750 border-2 border-slate-700 rounded-xl p-3 text-center flex flex-col items-center justify-center gap-1">
+                                <i class="fa-solid fa-circle-plus text-emerald-400 text-lg"></i>
+                                <span class="text-sm font-bold text-white">做正功</span>
+                                <span class="text-[11px] text-slate-400">W > 0</span>
+                            </button>
+
+                            <button type="button" data-val="負功" class="quiz-option-btn stage2-btn bg-slate-800 hover:bg-slate-750 border-2 border-slate-700 rounded-xl p-3 text-center flex flex-col items-center justify-center gap-1">
+                                <i class="fa-solid fa-circle-minus text-rose-400 text-lg"></i>
+                                <span class="text-sm font-bold text-white">做負功</span>
+                                <span class="text-[11px] text-slate-400">W < 0</span>
+                            </button>
+
+                            <button type="button" data-val="不做功" class="quiz-option-btn stage2-btn bg-slate-800 hover:bg-slate-750 border-2 border-slate-700 rounded-xl p-3 text-center flex flex-col items-center justify-center gap-1">
+                                <i class="fa-regular fa-circle text-amber-400 text-lg"></i>
+                                <span class="text-sm font-bold text-white">不做功</span>
+                                <span class="text-[11px] text-slate-400">W = 0</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Diagnostic Feedback Box (Hidden until submitted) -->
+                    <div id="feedback-box" class="hidden rounded-xl p-4 mb-4 border text-sm">
+                        <div id="feedback-title" class="font-black text-base mb-1 flex items-center gap-2"></div>
+                        <p id="feedback-detail" class="text-slate-200 text-xs leading-relaxed"></p>
+                    </div>
+                </div>
+
+                <!-- Action Buttons (Submit / Next) -->
+                <div class="pt-2 flex items-center gap-3">
+                    <button id="btn-submit" disabled class="w-full py-3.5 px-5 rounded-xl font-black text-sm bg-gradient-to-r from-indigo-600 to-cyan-600 hover:from-indigo-500 hover:to-cyan-500 text-white shadow-lg shadow-indigo-600/30 disabled:opacity-40 disabled:pointer-events-none transition flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-paper-plane"></i>
+                        <span>確認送出答案</span>
+                    </button>
+
+                    <button id="btn-next" class="hidden w-full py-3.5 px-5 rounded-xl font-black text-sm bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-lg shadow-emerald-600/30 transition flex items-center justify-center gap-2">
+                        <span>下一題</span>
+                        <i class="fa-solid fa-arrow-right"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Pass / Completion Certificate Modal -->
+    <div id="pass-modal" class="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md hidden items-center justify-center p-4 overflow-y-auto">
+        <div class="bg-slate-900 border-2 border-emerald-500/60 rounded-3xl max-w-2xl w-full p-6 md:p-8 shadow-2xl shadow-emerald-500/20 my-8">
+            <!-- Top Badge & Direct Student Name Input -->
+            <div class="flex flex-col items-center text-center mb-6">
+                <div class="w-16 h-16 rounded-2xl bg-gradient-to-br from-emerald-400 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-500/30 mb-3 animate-subtle-pulse">
+                    <i class="fa-solid fa-trophy text-slate-950 text-3xl"></i>
+                </div>
+                <span class="text-xs font-extrabold uppercase tracking-widest px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 mb-2">
+                    MASTERY ACHIEVED • 測驗過關證明
+                </span>
+                <h2 class="text-2xl md:text-3xl font-black text-white">恭喜過關！功與能概念精熟</h2>
+
+                <!-- Editable Student Name Box inside Certificate Modal -->
+                <div class="mt-4 w-full max-w-md bg-slate-800/90 border-2 border-indigo-500/50 focus-within:border-emerald-400 rounded-2xl px-4 py-2.5 flex items-center gap-3 shadow-inner transition">
+                    <div class="w-8 h-8 rounded-xl bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center text-indigo-300 shrink-0">
+                        <i class="fa-solid fa-user-pen text-sm"></i>
+                    </div>
+                    <div class="flex-1 text-left">
+                        <label for="cert-student-name-input" class="block text-[11px] font-bold text-indigo-300">
+                            測驗學生（可在此直接輸入或補填後截圖）
+                        </label>
+                        <input id="cert-student-name-input" type="text" placeholder="請點此輸入班級、座號、姓名..."
+                            class="w-full bg-transparent text-white font-black text-sm md:text-base placeholder-slate-500 focus:outline-none mt-0.5" />
+                    </div>
+                </div>
+            </div>
+
+            <!-- Key Completion Metrics (Timestamp, Elapsed Time, Accuracy) -->
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
+                <div class="bg-slate-800/90 border border-slate-700 rounded-2xl p-4 text-center">
+                    <div class="text-xs text-slate-400 mb-1"><i class="fa-regular fa-calendar-check text-emerald-400 mr-1"></i>完成年月日時分秒</div>
+                    <div id="cert-timestamp" class="text-xs md:text-sm font-mono font-bold text-white leading-snug">--</div>
+                </div>
+                <div class="bg-slate-800/90 border border-slate-700 rounded-2xl p-4 text-center">
+                    <div class="text-xs text-slate-400 mb-1"><i class="fa-solid fa-stopwatch text-cyan-400 mr-1"></i>過關總耗時</div>
+                    <div id="cert-duration" class="text-lg font-mono font-black text-cyan-300">--</div>
+                </div>
+                <div class="bg-slate-800/90 border border-slate-700 rounded-2xl p-4 text-center">
+                    <div class="text-xs text-slate-400 mb-1"><i class="fa-solid fa-chart-pie text-amber-400 mr-1"></i>最近 10 題表現</div>
+                    <div id="cert-recent-score" class="text-lg font-black text-emerald-400">--</div>
+                </div>
+            </div>
+
+            <!-- Overall Practice Status Breakdown -->
+            <div class="bg-slate-800/50 border border-slate-700/80 rounded-2xl p-4 mb-6">
+                <h3 class="text-xs font-bold uppercase tracking-wider text-slate-300 mb-3 flex items-center gap-2">
+                    <i class="fa-solid fa-clipboard-list text-indigo-400"></i> 練習狀況與診斷明細
+                </h3>
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center mb-4">
+                    <div class="bg-slate-900/80 rounded-xl p-2.5 border border-slate-800">
+                        <div class="text-[11px] text-slate-400">總作答題數</div>
+                        <div id="cert-total-q" class="text-base font-black text-white">0 題</div>
+                    </div>
+                    <div class="bg-slate-900/80 rounded-xl p-2.5 border border-slate-800">
+                        <div class="text-[11px] text-slate-400">累計全對題數</div>
+                        <div id="cert-total-correct" class="text-base font-black text-emerald-400">0 題</div>
+                    </div>
+                    <div class="bg-slate-900/80 rounded-xl p-2.5 border border-slate-800">
+                        <div class="text-[11px] text-slate-400">階段一(方向)正確率</div>
+                        <div id="cert-s1-rate" class="text-base font-black text-amber-300">0%</div>
+                    </div>
+                    <div class="bg-slate-900/80 rounded-xl p-2.5 border border-slate-800">
+                        <div class="text-[11px] text-slate-400">階段二(做功)正確率</div>
+                        <div id="cert-s2-rate" class="text-base font-black text-cyan-300">0%</div>
+                    </div>
+                </div>
+
+                <!-- Recent 10 Questions History Table -->
+                <div class="max-h-48 overflow-y-auto rounded-xl border border-slate-700/70">
+                    <table class="w-full text-left text-xs">
+                        <thead class="bg-slate-900 text-slate-400 sticky top-0">
+                            <tr>
+                                <th class="py-2 px-3">#</th>
+                                <th class="py-2 px-3">情境 (運動 / 外力)</th>
+                                <th class="py-2 px-3">階段一：力與位移</th>
+                                <th class="py-2 px-3">階段二：做功</th>
+                                <th class="py-2 px-3 text-center">結果</th>
+                            </tr>
+                        </thead>
+                        <tbody id="cert-history-tbody" class="divide-y divide-slate-800 bg-slate-900/40 text-slate-200">
+                            <!-- Populated via JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Modal Actions -->
+            <div class="flex flex-wrap items-center justify-end gap-3">
+                <button id="btn-keep-practicing" class="px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs border border-slate-700 transition">
+                    關閉視窗繼續練習
+                </button>
+                <button id="btn-restart-from-modal" class="px-5 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-cyan-600 hover:from-indigo-500 hover:to-cyan-500 text-white font-bold text-xs shadow-lg transition flex items-center gap-2">
+                    <i class="fa-solid fa-rotate"></i> 重新開始新挑戰
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        /********************************************************************
+         * 1. PHYSICS SCENARIO DATA & QUESTION GENERATOR
+         ********************************************************************/
+        const MOTION_STATES = {
+            stationary: {
+                id: 'stationary',
+                name: '靜止',
+                vtLabel: 'v = 0 m/s (靜止不動)',
+                desc: '一台車停在路面上保持「靜止」狀態'
+            },
+            constant_linear: {
+                id: 'constant_linear',
+                name: '等速直線運動',
+                vtLabel: 'v = 10 m/s (等速度直線前進)',
+                desc: '一台車沿筆直道路向前做「等速直線運動」'
+            },
+            accelerated_linear: {
+                id: 'accelerated_linear',
+                name: '直線加速運動',
+                vtLabel: 'v 隨時間均勻增加 (直線加速前進)',
+                desc: '一台車沿筆直道路向前做「直線加速運動」（愈跑愈快）'
+            },
+            circular: {
+                id: 'circular',
+                name: '等速率圓周運動',
+                vtLabel: '速率 v = 10 m/s (繞圓周等速率行駛)',
+                desc: '一台車沿著圓形軌道做「等速率圓周運動」（瞬時運動方向為軌道切線向前）'
+            }
+        };
+
+        const FORCE_DIRECTIONS = {
+            forward: {
+                id: 'forward',
+                name: '向車頭前方推拉',
+                desc: '同時受到一個「向車頭前方（順著前進方向）」的作用力 F'
+            },
+            backward: {
+                id: 'backward',
+                name: '向車尾後方拉扯',
+                desc: '同時受到一個「向車尾後方（逆著前進方向）」的阻力或拉力 F'
+            },
+            upward: {
+                id: 'upward',
+                name: '垂直地面向上拉提',
+                desc: '同時受到一個「垂直地面向上」的支撐力或上提外力 F'
+            },
+            downward: {
+                id: 'downward',
+                name: '垂直地面向下壓',
+                desc: '同時受到一個「垂直地面向下」的下壓力或重力 F'
+            },
+            sideways: {
+                id: 'sideways',
+                name: '從車身側邊水平推動',
+                desc: '同時受到一個「從車身側邊水平推動（垂直於車頭前進方向／指向圓心）」的側向外力 F'
+            }
+        };
+
+        /**
+         * Evaluates the physical truth for any (motionState, forceDirection) pair.
+         */
+        function getPhysicsSolution(motionKey, forceKey) {
+            if (motionKey === 'stationary') {
+                return {
+                    stage1: '無位移',
+                    stage2: '不做功',
+                    explanation: `因為車子保持「靜止」（由 v-t 圖可見 v = 0），位移 Δx = 0。根據功的定義 W = F × Δx，即使有「${FORCE_DIRECTIONS[forceKey].name}」的外力作用，只要沒有位移，該外力就「不做功」（W = 0）。`
+                };
+            }
+
+            // Moving states: constant_linear, accelerated_linear, circular
+            if (forceKey === 'forward') {
+                return {
+                    stage1: '力與位移同向',
+                    stage2: '正功',
+                    explanation: `車子正在進行「${MOTION_STATES[motionKey].name}」，瞬時位移方向朝車頭前方；而外力 F 也是「${FORCE_DIRECTIONS[forceKey].name}」，因此「力與位移同向」（夾角 0°），此力對車子做「正功」（W > 0）。`
+                };
+            }
+            if (forceKey === 'backward') {
+                return {
+                    stage1: '力與位移反向',
+                    stage2: '負功',
+                    explanation: `車子正在進行「${MOTION_STATES[motionKey].name}」，瞬時位移方向朝車頭前方；但外力 F 為「${FORCE_DIRECTIONS[forceKey].name}」，因此「力與位移反向」（夾角 180°），此力對車子做「負功」（W < 0）。`
+                };
+            }
+            // upward, downward, sideways are all 90 degrees perpendicular to forward tangential velocity
+            let angleReason = '';
+            if (forceKey === 'upward' || forceKey === 'downward') {
+                angleReason = '車子在水平地面上前進（水平位移），而外力沿著鉛直方向（向上或向下），兩者夾角為 90° 互相垂直';
+            } else if (motionKey === 'circular') {
+                angleReason = '車子繞圓周運動時，瞬時位移方向為圓周切線方向，而側邊推力（向心力）指向圓心，切線與半徑夾角恆為 90° 互相垂直';
+            } else {
+                angleReason = '車子沿直線向前行駛，而外力從車身正側邊水平推入，兩者夾角為 90° 互相垂直';
+            }
+
+            return {
+                stage1: '力與位移垂直',
+                stage2: '不做功',
+                explanation: `${angleReason}。因為「力與位移垂直」，外力在位移方向上的分量為 0，故此力對車子「不做功」（W = 0）。`
+            };
+        }
+
+        // Build full deck of 20 combinations & shuffle
+        let questionDeck = [];
+        function buildShuffledDeck() {
+            const motionKeys = Object.keys(MOTION_STATES);
+            const forceKeys = Object.keys(FORCE_DIRECTIONS);
+            const pool = [];
+            for (const m of motionKeys) {
+                for (const f of forceKeys) {
+                    pool.push({ motionKey: m, forceKey: f });
+                }
+            }
+            // Fisher-Yates shuffle
+            for (let i = pool.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [pool[i], pool[j]] = [pool[j], pool[i]];
+            }
+            return pool;
+        }
+
+        /********************************************************************
+         * 2. QUIZ STATE & SLIDING WINDOW TRACKER
+         ********************************************************************/
+        let quizState = {
+            currentQuestionIndex: 0,
+            currentScenario: null,
+            selectedStage1: null,
+            selectedStage2: null,
+            isSubmitted: false,
+            history: [],
+            startTimeMs: Date.now(),
+            elapsedSeconds: 0,
+            hasPassedModalShown: false
+        };
+
+        let timerInterval = null;
+
+        function startTimer() {
+            if (timerInterval) clearInterval(timerInterval);
+            quizState.startTimeMs = Date.now();
+            quizState.elapsedSeconds = 0;
+            updateTimerUI();
+            timerInterval = setInterval(() => {
+                quizState.elapsedSeconds = Math.floor((Date.now() - quizState.startTimeMs) / 1000);
+                updateTimerUI();
+            }, 1000);
+        }
+
+        function updateTimerUI() {
+            const mins = String(Math.floor(quizState.elapsedSeconds / 60)).padStart(2, '0');
+            const secs = String(quizState.elapsedSeconds % 60).padStart(2, '0');
+            document.getElementById('timer-display').textContent = `${mins}:${secs}`;
+        }
+
+        function formatDurationText(totalSeconds) {
+            const m = Math.floor(totalSeconds / 60);
+            const s = totalSeconds % 60;
+            return m > 0 ? `${m} 分 ${s} 秒` : `${s} 秒`;
+        }
+
+        function formatFullTimestamp(dateObj) {
+            const Y = dateObj.getFullYear();
+            const M = String(dateObj.getMonth() + 1).padStart(2, '0');
+            const D = String(dateObj.getDate()).padStart(2, '0');
+            const h = String(dateObj.getHours()).padStart(2, '0');
+            const m = String(dateObj.getMinutes()).padStart(2, '0');
+            const s = String(dateObj.getSeconds()).padStart(2, '0');
+            return `${Y}年${M}月${D}日 ${h}時${m}分${s}秒`;
+        }
+
+        function renderSlidingWindowUI() {
+            const container = document.getElementById('sliding-window-slots');
+            container.innerHTML = '';
+            const recent10 = quizState.history.slice(-10);
+
+            for (let i = 0; i < 10; i++) {
+                const slot = document.createElement('div');
+                slot.className = 'w-6 h-6 rounded-lg flex items-center justify-center text-xs font-bold border transition-all';
+                if (i < recent10.length) {
+                    const item = recent10[i];
+                    if (item.isCorrect) {
+                        slot.className += ' bg-emerald-500/25 border-emerald-400 text-emerald-300 shadow-sm shadow-emerald-500/20';
+                        slot.innerHTML = '<i class="fa-solid fa-check"></i>';
+                        slot.title = `第 ${item.qNum} 題：答對`;
+                    } else {
+                        slot.className += ' bg-rose-500/25 border-rose-400 text-rose-300';
+                        slot.innerHTML = '<i class="fa-solid fa-xmark"></i>';
+                        slot.title = `第 ${item.qNum} 題：答錯`;
+                    }
+                } else {
+                    slot.className += ' bg-slate-800 border-slate-700 text-slate-600';
+                    slot.textContent = i + 1;
+                }
+                container.appendChild(slot);
+            }
+
+            const recentCorrect = recent10.filter(h => h.isCorrect).length;
+            const totalCorrect = quizState.history.filter(h => h.isCorrect).length;
+
+            document.getElementById('recent-correct-count').textContent = recentCorrect;
+            document.getElementById('total-answered-count').textContent = quizState.history.length;
+            document.getElementById('total-correct-count').textContent = totalCorrect;
+        }
+
+        /********************************************************************
+         * 3. THREE.JS 2D/3D SIMULATION ENGINE
+         ********************************************************************/
+        let scene, camera, renderer;
+        let carGroup, wheels = [];
+        let straightRoadGroup, circularRoadGroup;
+        let velocityArrowGroup, forceArrowGroup, rightAngleIndicator;
+        let currentCameraMode = '3D'; // '3D', '2D-SIDE', '2D-TOP'
+
+        // Orbit control variables for 3D mode
+        let orbitAngles = { theta: Math.PI / 4, phi: Math.PI / 3.2, radius: 13 };
+        let isDragging = false;
+        let prevPointer = { x: 0, y: 0 };
+
+        // Animation cycle time: 0 to 5 seconds repeating
+        const CYCLE_DURATION = 5.0;
+        let simClock = new THREE.Clock();
+        let cycleTime = 0;
+
+        function initThreeScene() {
+            const container = document.getElementById('canvas-container');
+            const w = container.clientWidth;
+            const h = container.clientHeight;
+
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x0f172a);
+
+            camera = new THREE.PerspectiveCamera(45, w / h, 0.1, 200);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(w, h);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.shadowMap.enabled = true;
+            container.appendChild(renderer.domElement);
+
+            // Lights
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.75);
+            scene.add(ambientLight);
+
+            const dirLight = new THREE.DirectionalLight(0xffffff, 0.9);
+            dirLight.position.set(15, 25, 15);
+            dirLight.castShadow = true;
+            scene.add(dirLight);
+
+            // Build Environments
+            buildStraightRoad();
+            buildCircularTrack();
+
+            // Build Car & Vector Arrows
+            buildCarModel();
+            buildVectorArrows();
+
+            // Setup Mouse & Touch Camera Orbit Controls
+            setupViewportInteractions(renderer.domElement);
+
+            window.addEventListener('resize', onWindowResize);
+        }
+
+        function buildStraightRoad() {
+            straightRoadGroup = new THREE.Group();
+
+            // Ground Grid
+            const grid = new THREE.GridHelper(80, 40, 0x334155, 0x1e293b);
+            grid.position.y = -0.02;
+            straightRoadGroup.add(grid);
+
+            // Asphalt Strip along X axis
+            const roadGeo = new THREE.PlaneGeometry(80, 5);
+            const roadMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.9 });
+            const roadMesh = new THREE.Mesh(roadGeo, roadMat);
+            roadMesh.rotation.x = -Math.PI / 2;
+            straightRoadGroup.add(roadMesh);
+
+            // Dashed Center Line & Side Borders
+            const borderGeo = new THREE.PlaneGeometry(80, 0.12);
+            const borderMat = new THREE.MeshBasicMaterial({ color: 0x64748b });
+            const leftBorder = new THREE.Mesh(borderGeo, borderMat);
+            leftBorder.rotation.x = -Math.PI / 2;
+            leftBorder.position.set(0, 0.01, -2.4);
+            straightRoadGroup.add(leftBorder);
+
+            const rightBorder = leftBorder.clone();
+            rightBorder.position.set(0, 0.01, 2.4);
+            straightRoadGroup.add(rightBorder);
+
+            const dashMat = new THREE.MeshBasicMaterial({ color: 0xfbbf24 });
+            for (let x = -36; x <= 36; x += 4) {
+                const dash = new THREE.Mesh(new THREE.PlaneGeometry(2, 0.15), dashMat);
+                dash.rotation.x = -Math.PI / 2;
+                dash.position.set(x, 0.01, 0);
+                straightRoadGroup.add(dash);
+            }
+
+            scene.add(straightRoadGroup);
+        }
+
+        function buildCircularTrack() {
+            circularRoadGroup = new THREE.Group();
+
+            const grid = new THREE.GridHelper(60, 30, 0x334155, 0x1e293b);
+            grid.position.y = -0.02;
+            circularRoadGroup.add(grid);
+
+            // Circular Ring Road (Radius 8m center)
+            const ringGeo = new THREE.RingGeometry(5.8, 10.2, 64);
+            const ringMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, side: THREE.DoubleSide });
+            const ringMesh = new THREE.Mesh(ringGeo, ringMat);
+            ringMesh.rotation.x = -Math.PI / 2;
+            circularRoadGroup.add(ringMesh);
+
+            // Center dashed yellow ring
+            const centerLineGeo = new THREE.RingGeometry(7.92, 8.08, 64);
+            const centerLineMat = new THREE.MeshBasicMaterial({ color: 0xfbbf24, side: THREE.DoubleSide });
+            const centerLine = new THREE.Mesh(centerLineGeo, centerLineMat);
+            centerLine.rotation.x = -Math.PI / 2;
+            centerLine.position.y = 0.01;
+            circularRoadGroup.add(centerLine);
+
+            // Center Axis Beacon
+            const centerPole = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.15, 0.15, 0.6, 16),
+                new THREE.MeshStandardMaterial({ color: 0x38bdf8 })
+            );
+            centerPole.position.set(0, 0.3, 0);
+            circularRoadGroup.add(centerPole);
+
+            circularRoadGroup.visible = false;
+            scene.add(circularRoadGroup);
+        }
+
+        function buildCarModel() {
+            carGroup = new THREE.Group();
+
+            // Lower Chassis (points along +X in local space)
+            const bodyGeo = new THREE.BoxGeometry(2.8, 0.65, 1.45);
+            const bodyMat = new THREE.MeshStandardMaterial({ color: 0x3b82f6, roughness: 0.3, metalness: 0.2 });
+            const bodyMesh = new THREE.Mesh(bodyGeo, bodyMat);
+            bodyMesh.position.y = 0.6;
+            carGroup.add(bodyMesh);
+
+            // Cabin (Top roof at y = 1.18 + 0.55/2 = 1.455)
+            const cabinGeo = new THREE.BoxGeometry(1.5, 0.55, 1.25);
+            const cabinMat = new THREE.MeshStandardMaterial({ color: 0x93c5fd, roughness: 0.2 });
+            const cabinMesh = new THREE.Mesh(cabinGeo, cabinMat);
+            cabinMesh.position.set(-0.15, 1.18, 0);
+            carGroup.add(cabinMesh);
+
+            // Headlights (+X front)
+            const lightGeo = new THREE.BoxGeometry(0.1, 0.2, 0.3);
+            const headLightMat = new THREE.MeshBasicMaterial({ color: 0xfef08a });
+            const hl1 = new THREE.Mesh(lightGeo, headLightMat);
+            hl1.position.set(1.41, 0.65, 0.45);
+            const hl2 = hl1.clone();
+            hl2.position.z = -0.45;
+            carGroup.add(hl1, hl2);
+
+            // Taillights (-X back)
+            const tailLightMat = new THREE.MeshBasicMaterial({ color: 0xef4444 });
+            const tl1 = new THREE.Mesh(lightGeo, tailLightMat);
+            tl1.position.set(-1.41, 0.65, 0.45);
+            const tl2 = tl1.clone();
+            tl2.position.z = -0.45;
+            carGroup.add(tl1, tl2);
+
+            // 4 Wheels
+            const wheelGeo = new THREE.CylinderGeometry(0.36, 0.36, 0.26, 20);
+            wheelGeo.rotateX(Math.PI / 2);
+            const wheelMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.8 });
+            const rimMat = new THREE.MeshBasicMaterial({ color: 0x94a3b8 });
+
+            const wheelPositions = [
+                [0.85, 0.36, 0.78],
+                [0.85, 0.36, -0.78],
+                [-0.85, 0.36, 0.78],
+                [-0.85, 0.36, -0.78]
+            ];
+
+            wheels = [];
+            wheelPositions.forEach(pos => {
+                const wGroup = new THREE.Group();
+                const tire = new THREE.Mesh(wheelGeo, wheelMat);
+                const spoke = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.08, 0.28), rimMat);
+                wGroup.add(tire, spoke);
+                wGroup.position.set(...pos);
+                carGroup.add(wGroup);
+                wheels.push(wGroup);
+            });
+
+            scene.add(carGroup);
+        }
+
+        /**
+         * Creates thick 3D arrows for Velocity (green) and External Force (red) attached to carGroup
+         */
+        function createCustomArrow(colorHex, length = 2.6) {
+            const group = new THREE.Group();
+            const shaftLen = length - 0.65;
+            const shaftGeo = new THREE.CylinderGeometry(0.09, 0.09, shaftLen, 16);
+            shaftGeo.translate(0, shaftLen / 2, 0);
+            const mat = new THREE.MeshStandardMaterial({
+                color: colorHex,
+                emissive: colorHex,
+                emissiveIntensity: 0.35,
+                roughness: 0.2
+            });
+            const shaft = new THREE.Mesh(shaftGeo, mat);
+
+            const headGeo = new THREE.ConeGeometry(0.26, 0.65, 20);
+            headGeo.translate(0, shaftLen + 0.32, 0);
+            const head = new THREE.Mesh(headGeo, mat);
+
+            const tipAnchor = new THREE.Object3D();
+            tipAnchor.position.set(0, length + 0.25, 0);
+            tipAnchor.name = 'tipAnchor';
+
+            group.add(shaft, head, tipAnchor);
+            return group;
+        }
+
+        function buildVectorArrows() {
+            // 綠色位移/運動方向箭頭 (預設在 Group 內沿 +Y 延伸，透過 rotation.z = -Math.PI/2 轉向車頭 +X)
+            velocityArrowGroup = createCustomArrow(0x10b981, 2.8);
+            velocityArrowGroup.position.set(1.45, 0.75, 0);
+            velocityArrowGroup.rotation.z = -Math.PI / 2; // 指向 +X (車頭前方)
+            carGroup.add(velocityArrowGroup);
+
+            // 紅色外力方向箭頭 (長度 2.6，確保尖端與柄身都在車體外清晰可見)
+            forceArrowGroup = createCustomArrow(0xf43f5e, 2.6);
+            carGroup.add(forceArrowGroup);
+
+            // 90度垂直符號 (Amber yellow) + 半透明方塊面，讓3D與2D視角都清楚可見
+            rightAngleIndicator = new THREE.Group();
+            const bracketMat = new THREE.LineBasicMaterial({ color: 0xfbbf24, linewidth: 3 });
+            const pts = [
+                new THREE.Vector3(0.55, 0, 0),
+                new THREE.Vector3(0.55, 0.55, 0),
+                new THREE.Vector3(0, 0.55, 0)
+            ];
+            const bracketGeo = new THREE.BufferGeometry().setFromPoints(pts);
+            const bracketLine = new THREE.Line(bracketGeo, bracketMat);
+
+            const squareGeo = new THREE.PlaneGeometry(0.55, 0.55);
+            squareGeo.translate(0.275, 0.275, 0);
+            const squareMat = new THREE.MeshBasicMaterial({
+                color: 0xfbbf24,
+                transparent: true,
+                opacity: 0.28,
+                side: THREE.DoubleSide
+            });
+            const bracketPlane = new THREE.Mesh(squareGeo, squareMat);
+
+            rightAngleIndicator.add(bracketLine, bracketPlane);
+            rightAngleIndicator.visible = false;
+            carGroup.add(rightAngleIndicator);
+        }
+
+        function configureVectorsForScenario(motionKey, forceKey) {
+            // 切換直線道路或圓形軌道
+            const isCircular = (motionKey === 'circular');
+            straightRoadGroup.visible = !isCircular;
+            circularRoadGroup.visible = isCircular;
+
+            // 靜止時隱藏綠色運動方向箭頭
+            velocityArrowGroup.visible = (motionKey !== 'stationary');
+            velocityArrowGroup.position.set(1.45, 0.75, 0);
+
+            // 重置紅色外力箭頭與垂直符號
+            // 車體座標系：+X = 車頭前方, -X = 車尾後方, +Y = 垂直向上, -Y = 垂直向下, -Z = 車身左側(圓心方向)
+            // 車頂最高處為 y = 1.46，車頭前端 x = 1.4，車尾後端 x = -1.4，車身側邊 z = ±0.73
+            forceArrowGroup.position.set(0, 1.5, 0);
+            forceArrowGroup.rotation.set(0, 0, 0);
+            rightAngleIndicator.visible = false;
+            rightAngleIndicator.rotation.set(0, 0, 0);
+
+            const FORCE_LEN = 2.6; // 對應 createCustomArrow(0xf43f5e, 2.6) 的長度
+
+            if (forceKey === 'forward') {
+                // 向車頭前方推拉：與綠色速度箭頭上下平行排列在車頭前方，清楚對比「同向」
+                forceArrowGroup.position.set(1.45, 1.25, 0);
+                forceArrowGroup.rotation.z = -Math.PI / 2; // 指向 +X
+            } else if (forceKey === 'backward') {
+                // 向車尾後方拉扯：從車尾後方 (-1.45) 朝 -X 拉出，完全不會埋入車廂
+                forceArrowGroup.position.set(-1.45, 0.95, 0);
+                forceArrowGroup.rotation.z = Math.PI / 2; // 指向 -X
+            } else if (forceKey === 'upward') {
+                // 垂直地面向上拉提：從車頂表面 (y = 1.5) 朝上 (+Y) 拉起
+                forceArrowGroup.position.set(0, 1.5, 0);
+                forceArrowGroup.rotation.set(0, 0, 0); // 指向 +Y
+                if (motionKey !== 'stationary') {
+                    velocityArrowGroup.position.set(0, 1.5, 0);
+                    rightAngleIndicator.visible = true;
+                    rightAngleIndicator.position.set(0, 1.5, 0);
+                    rightAngleIndicator.rotation.set(0, 0, 0); // +X 與 +Y 夾角
+                }
+            } else if (forceKey === 'downward') {
+                // 垂直地面向下壓：讓箭頭從空中 (y = 1.55 + FORCE_LEN = 4.15) 朝下 (-Y) 指到車頂表面 (y = 1.55)
+                // 整支紅色箭頭與圓錐尖端完整懸在車頂正上方，完全不會埋進車子裡！
+                const roofTopY = 1.55;
+                forceArrowGroup.position.set(0, roofTopY + FORCE_LEN, 0);
+                forceArrowGroup.rotation.z = Math.PI; // 指向 -Y (向下壓在車頂上)
+                if (motionKey !== 'stationary') {
+                    velocityArrowGroup.position.set(0, roofTopY, 0);
+                    rightAngleIndicator.visible = true;
+                    rightAngleIndicator.position.set(0, roofTopY, 0);
+                    rightAngleIndicator.rotation.set(0, 0, 0); // 標示車頂水平方向(+X)與鉛直外力(+Y方向延伸線)垂直
+                }
+            } else if (forceKey === 'sideways') {
+                // 從車身側邊水平推動：從車身側邊朝 -Z (圓心/側向) 推出
+                forceArrowGroup.position.set(0, 1.0, -0.75);
+                forceArrowGroup.rotation.x = -Math.PI / 2; // 指向 -Z
+                if (motionKey !== 'stationary') {
+                    velocityArrowGroup.position.set(0, 1.0, -0.75);
+                    rightAngleIndicator.visible = true;
+                    rightAngleIndicator.position.set(0, 1.0, -0.75);
+                    rightAngleIndicator.rotation.set(-Math.PI / 2, 0, 0); // +X 與 -Z 水平垂直夾角
+                }
+            }
+        }
+
+        function updateSimulationFrame(dt) {
+            if (!quizState.currentScenario) return;
+            const { motionKey } = quizState.currentScenario;
+
+            cycleTime = (cycleTime + dt) % CYCLE_DURATION;
+            const progress = cycleTime / CYCLE_DURATION; // 0.0 -> 1.0
+
+            // Update Car Position & Rotation based on Motion State
+            if (motionKey === 'stationary') {
+                carGroup.position.set(0, 0, 0);
+                carGroup.rotation.set(0, 0, 0);
+            } else if (motionKey === 'constant_linear') {
+                const x = -12 + progress * 24;
+                carGroup.position.set(x, 0, 0);
+                carGroup.rotation.set(0, 0, 0);
+                wheels.forEach(w => { w.rotation.z -= dt * 7; });
+                velocityArrowGroup.scale.set(1, 1, 1);
+            } else if (motionKey === 'accelerated_linear') {
+                const x = -14 + Math.pow(progress, 2) * 28;
+                carGroup.position.set(x, 0, 0);
+                carGroup.rotation.set(0, 0, 0);
+                const speedFactor = 2 + progress * 14;
+                wheels.forEach(w => { w.rotation.z -= dt * speedFactor; });
+                const vScale = 0.65 + progress * 0.6;
+                velocityArrowGroup.scale.set(1, vScale, 1);
+            } else if (motionKey === 'circular') {
+                const R = 8.0;
+                const angle = progress * Math.PI * 2;
+                const x = Math.cos(angle) * R;
+                const z = -Math.sin(angle) * R;
+                carGroup.position.set(x, 0, z);
+                carGroup.rotation.set(0, angle + Math.PI / 2, 0);
+                wheels.forEach(w => { w.rotation.z -= dt * 7; });
+                velocityArrowGroup.scale.set(1, 1, 1);
+            }
+
+            // Subtle pulse on Force Arrow width
+            const pulse = 1 + 0.06 * Math.sin(cycleTime * 8);
+            forceArrowGroup.scale.set(pulse, 1, pulse);
+
+            // Update Camera Position relative to Car
+            updateCameraTransform();
+
+            // Update Top-Right Status Badges
+            updateFloatingLabels();
+
+            // Render Synchronized V-t Graph
+            drawVtGraph(motionKey, progress);
+        }
+
+        function updateCameraTransform() {
+            const targetPos = carGroup.position.clone();
+            // 若為向上或向下外力，將攝影機注視中心稍微提高，確保車頂上方的箭頭完整入鏡
+            const isVerticalForce = quizState.currentScenario &&
+                (quizState.currentScenario.forceKey === 'downward' || quizState.currentScenario.forceKey === 'upward');
+            targetPos.y += isVerticalForce ? 1.5 : 0.9;
+
+            if (currentCameraMode === '3D') {
+                const offsetX = orbitAngles.radius * Math.sin(orbitAngles.phi) * Math.cos(orbitAngles.theta);
+                const offsetY = orbitAngles.radius * Math.cos(orbitAngles.phi);
+                const offsetZ = orbitAngles.radius * Math.sin(orbitAngles.phi) * Math.sin(orbitAngles.theta);
+
+                camera.position.set(
+                    targetPos.x + offsetX,
+                    Math.max(1.2, targetPos.y + offsetY),
+                    targetPos.z + offsetZ
+                );
+                camera.up.set(0, 1, 0);
+                camera.lookAt(targetPos);
+            } else if (currentCameraMode === '2D-SIDE') {
+                // 側視圖稍微拉遠 (12.5)，完整容納車頂上方垂直箭頭
+                const sideOffset = new THREE.Vector3(0, 0.4, 12.5);
+                sideOffset.applyAxisAngle(new THREE.Vector3(0, 1, 0), carGroup.rotation.y);
+                camera.position.copy(targetPos).add(sideOffset);
+                camera.up.set(0, 1, 0);
+                camera.lookAt(targetPos);
+            } else if (currentCameraMode === '2D-TOP') {
+                camera.position.set(targetPos.x, targetPos.y + 13.5, targetPos.z + 0.01);
+                camera.up.set(0, 0, -1);
+                camera.lookAt(targetPos);
+            }
+        }
+
+        function updateFloatingLabels() {
+            const vLabel = document.getElementById('label-velocity');
+            const fLabel = document.getElementById('label-force');
+            if (!vLabel || !fLabel || !quizState.currentScenario) return;
+
+            const { forceKey } = quizState.currentScenario;
+
+            if (velocityArrowGroup.visible) {
+                vLabel.className = 'px-3 py-1 rounded-full font-bold text-xs shadow-lg bg-emerald-500/95 text-slate-950 border border-emerald-300 flex items-center gap-1.5';
+                vLabel.innerHTML = '<i class="fa-solid fa-location-arrow"></i><span>綠色箭頭：位移/運動方向 (v)</span>';
+            } else {
+                vLabel.className = 'px-3 py-1 rounded-full font-bold text-xs shadow-lg bg-slate-800/95 text-slate-300 border border-slate-600 flex items-center gap-1.5';
+                vLabel.innerHTML = '<i class="fa-solid fa-ban text-amber-400"></i><span>無綠色箭頭：靜止 (v = 0, 無位移)</span>';
+            }
+
+            fLabel.innerHTML = `<i class="fa-solid fa-bolt"></i><span>紅色箭頭：外力 (F) — ${FORCE_DIRECTIONS[forceKey].name}</span>`;
+        }
+
+        function setupViewportInteractions(domElement) {
+            domElement.addEventListener('mousedown', e => {
+                if (currentCameraMode !== '3D') return;
+                isDragging = true;
+                prevPointer = { x: e.clientX, y: e.clientY };
+            });
+
+            window.addEventListener('mousemove', e => {
+                if (!isDragging || currentCameraMode !== '3D') return;
+                const dx = e.clientX - prevPointer.x;
+                const dy = e.clientY - prevPointer.y;
+                prevPointer = { x: e.clientX, y: e.clientY };
+
+                orbitAngles.theta += dx * 0.008;
+                orbitAngles.phi = Math.max(0.2, Math.min(Math.PI / 2 - 0.08, orbitAngles.phi - dy * 0.008));
+            });
+
+            window.addEventListener('mouseup', () => { isDragging = false; });
+
+            domElement.addEventListener('touchstart', e => {
+                if (currentCameraMode !== '3D' || e.touches.length !== 1) return;
+                isDragging = true;
+                prevPointer = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+            }, { passive: true });
+
+            domElement.addEventListener('touchmove', e => {
+                if (!isDragging || currentCameraMode !== '3D' || e.touches.length !== 1) return;
+                const dx = e.touches[0].clientX - prevPointer.x;
+                const dy = e.touches[0].clientY - prevPointer.y;
+                prevPointer = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+
+                orbitAngles.theta += dx * 0.008;
+                orbitAngles.phi = Math.max(0.2, Math.min(Math.PI / 2 - 0.08, orbitAngles.phi - dy * 0.008));
+            }, { passive: true });
+
+            domElement.addEventListener('touchend', () => { isDragging = false; });
+
+            domElement.addEventListener('wheel', e => {
+                e.preventDefault();
+                orbitAngles.radius = Math.max(7, Math.min(24, orbitAngles.radius + e.deltaY * 0.01));
+            }, { passive: false });
+        }
+
+        function onWindowResize() {
+            const container = document.getElementById('canvas-container');
+            if (!container || !renderer) return;
+            const w = container.clientWidth;
+            const h = container.clientHeight;
+            camera.aspect = w / h;
+            camera.updateProjectionMatrix();
+            renderer.setSize(w, h);
+        }
+
+        /********************************************************************
+         * 4. SYNCHRONIZED V-T GRAPH ENGINE (HTML5 CANVAS)
+         ********************************************************************/
+        function drawVtGraph(motionKey, progress) {
+            const canvas = document.getElementById('vt-canvas');
+            if (!canvas) return;
+            const rect = canvas.parentElement.getBoundingClientRect();
+            const dpr = window.devicePixelRatio || 1;
+            if (canvas.width !== Math.floor(rect.width * dpr) || canvas.height !== Math.floor(rect.height * dpr)) {
+                canvas.width = Math.floor(rect.width * dpr);
+                canvas.height = Math.floor(rect.height * dpr);
+            }
+
+            const ctx = canvas.getContext('2d');
+            ctx.save();
+            ctx.scale(dpr, dpr);
+
+            const W = rect.width;
+            const H = rect.height;
+            ctx.clearRect(0, 0, W, H);
+
+            const padL = 48, padR = 24, padT = 16, padB = 26;
+            const plotW = W - padL - padR;
+            const plotH = H - padT - padB;
+
+            // Grid Lines
+            ctx.strokeStyle = '#1e293b';
+            ctx.lineWidth = 1;
+            for (let i = 0; i <= 4; i++) {
+                const y = padT + (plotH / 4) * i;
+                ctx.beginPath();
+                ctx.moveTo(padL, y);
+                ctx.lineTo(padL + plotW, y);
+                ctx.stroke();
+            }
+            for (let i = 0; i <= 5; i++) {
+                const x = padL + (plotW / 5) * i;
+                ctx.beginPath();
+                ctx.moveTo(x, padT);
+                ctx.lineTo(x, padT + plotH);
+                ctx.stroke();
+            }
+
+            // Axes
+            ctx.strokeStyle = '#64748b';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(padL, padT);
+            ctx.lineTo(padL, padT + plotH);
+            ctx.lineTo(padL + plotW, padT + plotH);
+            ctx.stroke();
+
+            // Labels
+            ctx.fillStyle = '#94a3b8';
+            ctx.font = '600 11px Inter, Noto Sans TC, sans-serif';
+            ctx.textAlign = 'right';
+            ctx.fillText('20', padL - 6, padT + 4);
+            ctx.fillText('10', padL - 6, padT + plotH / 2 + 4);
+            ctx.fillText('0', padL - 6, padT + plotH + 4);
+            ctx.fillText('v(m/s)', padL - 4, padT - 4);
+
+            ctx.textAlign = 'center';
+            for (let t = 0; t <= 5; t++) {
+                const x = padL + (plotW / 5) * t;
+                ctx.fillText(`${t}s`, x, padT + plotH + 16);
+            }
+
+            // Plot Function v(progress)
+            const getV = (p) => {
+                if (motionKey === 'stationary') return 0;
+                if (motionKey === 'constant_linear' || motionKey === 'circular') return 10;
+                if (motionKey === 'accelerated_linear') return 2 + p * 16;
+                return 0;
+            };
+
+            const mapX = (p) => padL + p * plotW;
+            const mapY = (v) => padT + plotH - (v / 20) * plotH;
+
+            // Shaded area under curve up to current progress
+            ctx.fillStyle = 'rgba(34, 211, 238, 0.14)';
+            ctx.beginPath();
+            ctx.moveTo(mapX(0), mapY(0));
+            ctx.lineTo(mapX(0), mapY(getV(0)));
+            ctx.lineTo(mapX(progress), mapY(getV(progress)));
+            ctx.lineTo(mapX(progress), mapY(0));
+            ctx.closePath();
+            ctx.fill();
+
+            // Full V-t Curve Line
+            ctx.strokeStyle = '#22d3ee';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(mapX(0), mapY(getV(0)));
+            ctx.lineTo(mapX(1), mapY(getV(1)));
+            ctx.stroke();
+
+            // Live Moving Marker Dot
+            const curX = mapX(progress);
+            const curY = mapY(getV(progress));
+
+            ctx.fillStyle = '#f8fafc';
+            ctx.beginPath();
+            ctx.arc(curX, curY, 5.5, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.strokeStyle = '#0ea5e9';
+            ctx.lineWidth = 2.5;
+            ctx.stroke();
+
+            ctx.restore();
+        }
+
+        /********************************************************************
+         * 5. QUIZ FLOW & INTERACTION LOGIC
+         ********************************************************************/
+        function loadNextQuestion() {
+            if (questionDeck.length === 0) {
+                questionDeck = buildShuffledDeck();
+            }
+
+            const nextPair = questionDeck.pop();
+            const solution = getPhysicsSolution(nextPair.motionKey, nextPair.forceKey);
+
+            quizState.currentQuestionIndex++;
+            quizState.currentScenario = {
+                motionKey: nextPair.motionKey,
+                forceKey: nextPair.forceKey,
+                solution
+            };
+            quizState.selectedStage1 = null;
+            quizState.selectedStage2 = null;
+            quizState.isSubmitted = false;
+            cycleTime = 0;
+
+            // Update UI Texts
+            const mInfo = MOTION_STATES[nextPair.motionKey];
+            const fInfo = FORCE_DIRECTIONS[nextPair.forceKey];
+
+            document.getElementById('question-number-badge').textContent = `第 ${quizState.currentQuestionIndex} 題`;
+            document.getElementById('question-prompt').textContent = `${mInfo.desc}，${fInfo.desc}。請問在此瞬間：`;
+            document.getElementById('tag-motion').textContent = mInfo.name;
+            document.getElementById('tag-force').textContent = fInfo.name;
+            document.getElementById('canvas-scenario-badge').textContent = `${mInfo.name} ＋ ${fInfo.name}`;
+            document.getElementById('vt-status-label').textContent = mInfo.vtLabel;
+
+            // Reset Option Buttons
+            document.querySelectorAll('.stage1-btn, .stage2-btn').forEach(btn => {
+                btn.disabled = false;
+                btn.className = btn.className
+                    .replace(/border-amber-400|border-cyan-400|border-emerald-500|border-rose-500|bg-amber-500\/20|bg-cyan-500\/20|bg-emerald-500\/20|bg-rose-500\/20/g, '')
+                    .trim();
+                if (!btn.className.includes('border-slate-700')) {
+                    btn.classList.add('border-slate-700', 'bg-slate-800');
+                }
+            });
+
+            document.getElementById('stage1-status').textContent = '請選擇一項';
+            document.getElementById('stage2-status').textContent = '請選擇一項';
+            document.getElementById('feedback-box').classList.add('hidden');
+            document.getElementById('btn-submit').classList.remove('hidden');
+            document.getElementById('btn-submit').disabled = true;
+            document.getElementById('btn-next').classList.add('hidden');
+
+            // Update 3D Scene Vectors
+            configureVectorsForScenario(nextPair.motionKey, nextPair.forceKey);
+        }
+
+        function handleOptionSelect(stage, value, clickedBtn) {
+            if (quizState.isSubmitted) return;
+
+            if (stage === 1) {
+                quizState.selectedStage1 = value;
+                document.getElementById('stage1-status').textContent = `已選：${value}`;
+                document.querySelectorAll('.stage1-btn').forEach(btn => {
+                    btn.classList.remove('border-amber-400', 'bg-amber-500/20');
+                    btn.classList.add('border-slate-700', 'bg-slate-800');
+                });
+                clickedBtn.classList.remove('border-slate-700', 'bg-slate-800');
+                clickedBtn.classList.add('border-amber-400', 'bg-amber-500/20');
+            } else {
+                quizState.selectedStage2 = value;
+                document.getElementById('stage2-status').textContent = `已選：${value}`;
+                document.querySelectorAll('.stage2-btn').forEach(btn => {
+                    btn.classList.remove('border-cyan-400', 'bg-cyan-500/20');
+                    btn.classList.add('border-slate-700', 'bg-slate-800');
+                });
+                clickedBtn.classList.remove('border-slate-700', 'bg-slate-800');
+                clickedBtn.classList.add('border-cyan-400', 'bg-cyan-500/20');
+            }
+
+            document.getElementById('btn-submit').disabled = !(quizState.selectedStage1 && quizState.selectedStage2);
+        }
+
+        function submitCurrentAnswer() {
+            if (quizState.isSubmitted || !quizState.selectedStage1 || !quizState.selectedStage2) return;
+            quizState.isSubmitted = true;
+
+            const { motionKey, forceKey, solution } = quizState.currentScenario;
+            const s1Correct = (quizState.selectedStage1 === solution.stage1);
+            const s2Correct = (quizState.selectedStage2 === solution.stage2);
+            const isBothCorrect = s1Correct && s2Correct;
+
+            // Highlight Stage 1 & Stage 2 Buttons with Correct/Incorrect styles
+            document.querySelectorAll('.stage1-btn').forEach(btn => {
+                btn.disabled = true;
+                const val = btn.getAttribute('data-val');
+                btn.classList.remove('border-amber-400', 'bg-amber-500/20', 'border-slate-700');
+                if (val === solution.stage1) {
+                    btn.classList.add('border-emerald-500', 'bg-emerald-500/20');
+                } else if (val === quizState.selectedStage1 && !s1Correct) {
+                    btn.classList.add('border-rose-500', 'bg-rose-500/20');
+                } else {
+                    btn.classList.add('border-slate-700');
+                }
+            });
+
+            document.querySelectorAll('.stage2-btn').forEach(btn => {
+                btn.disabled = true;
+                const val = btn.getAttribute('data-val');
+                btn.classList.remove('border-cyan-400', 'bg-cyan-500/20', 'border-slate-700');
+                if (val === solution.stage2) {
+                    btn.classList.add('border-emerald-500', 'bg-emerald-500/20');
+                } else if (val === quizState.selectedStage2 && !s2Correct) {
+                    btn.classList.add('border-rose-500', 'bg-rose-500/20');
+                } else {
+                    btn.classList.add('border-slate-700');
+                }
+            });
+
+            // Record in history
+            quizState.history.push({
+                qNum: quizState.currentQuestionIndex,
+                motionName: MOTION_STATES[motionKey].name,
+                forceName: FORCE_DIRECTIONS[forceKey].name,
+                userS1: quizState.selectedStage1,
+                userS2: quizState.selectedStage2,
+                ansS1: solution.stage1,
+                ansS2: solution.stage2,
+                s1Correct,
+                s2Correct,
+                isCorrect: isBothCorrect
+            });
+
+            renderSlidingWindowUI();
+
+            // Show Diagnostic Feedback Box
+            const fbBox = document.getElementById('feedback-box');
+            const fbTitle = document.getElementById('feedback-title');
+            const fbDetail = document.getElementById('feedback-detail');
+            fbBox.classList.remove('hidden', 'bg-emerald-950/60', 'border-emerald-500/50', 'bg-rose-950/60', 'border-rose-500/50');
+
+            if (isBothCorrect) {
+                fbBox.classList.add('bg-emerald-950/60', 'border-emerald-500/50');
+                fbTitle.className = 'font-black text-base mb-1 flex items-center gap-2 text-emerald-400';
+                fbTitle.innerHTML = `<i class="fa-solid fa-circle-check"></i> 兩階段皆正確！（${solution.stage1} → ${solution.stage2}）`;
+            } else {
+                fbBox.classList.add('bg-rose-950/60', 'border-rose-500/50');
+                fbTitle.className = 'font-black text-base mb-1 flex items-center gap-2 text-rose-400';
+                let errPart = [];
+                if (!s1Correct) errPart.push(`第一階段應為「${solution.stage1}」`);
+                if (!s2Correct) errPart.push(`第二階段應為「${solution.stage2}」`);
+                fbTitle.innerHTML = `<i class="fa-solid fa-circle-xmark"></i> 答錯了：${errPart.join('；')}`;
+            }
+            fbDetail.textContent = solution.explanation;
+
+            document.getElementById('btn-submit').classList.add('hidden');
+            document.getElementById('btn-next').classList.remove('hidden');
+
+            // Check Mastery Pass Condition: At least 8 correct within the most recent 10 questions
+            const recent10 = quizState.history.slice(-10);
+            const recentCorrectCount = recent10.filter(h => h.isCorrect).length;
+            if (recentCorrectCount >= 8 && !quizState.hasPassedModalShown) {
+                quizState.hasPassedModalShown = true;
+                setTimeout(() => {
+                    showPassCertificateModal();
+                }, 650);
+            }
+        }
+
+        function showPassCertificateModal() {
+            const now = new Date();
+            const topNameInput = document.getElementById('student-name-input');
+            const certNameInput = document.getElementById('cert-student-name-input');
+
+            // Sync current student name into the certificate input box
+            certNameInput.value = topNameInput.value;
+
+            document.getElementById('cert-timestamp').textContent = formatFullTimestamp(now);
+            document.getElementById('cert-duration').textContent = formatDurationText(quizState.elapsedSeconds);
+
+            const recent10 = quizState.history.slice(-10);
+            const recentCorrect = recent10.filter(h => h.isCorrect).length;
+            document.getElementById('cert-recent-score').textContent = `最近 ${recent10.length} 題對 ${recentCorrect} 題`;
+
+            const totalQ = quizState.history.length;
+            const totalCorrect = quizState.history.filter(h => h.isCorrect).length;
+            const s1CorrectCount = quizState.history.filter(h => h.s1Correct).length;
+            const s2CorrectCount = quizState.history.filter(h => h.s2Correct).length;
+
+            document.getElementById('cert-total-q').textContent = `${totalQ} 題`;
+            document.getElementById('cert-total-correct').textContent = `${totalCorrect} 題 (${Math.round((totalCorrect / totalQ) * 100)}%)`;
+            document.getElementById('cert-s1-rate').textContent = `${Math.round((s1CorrectCount / totalQ) * 100)}%`;
+            document.getElementById('cert-s2-rate').textContent = `${Math.round((s2CorrectCount / totalQ) * 100)}%`;
+
+            // Populate recent 10 table
+            const tbody = document.getElementById('cert-history-tbody');
+            tbody.innerHTML = '';
+            recent10.forEach(item => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="py-2 px-3 font-mono text-slate-400">#${item.qNum}</td>
+                    <td class="py-2 px-3 font-medium">${item.motionName} ＋ ${item.forceName}</td>
+                    <td class="py-2 px-3 ${item.s1Correct ? 'text-emerald-300' : 'text-rose-400'}">${item.userS1}</td>
+                    <td class="py-2 px-3 ${item.s2Correct ? 'text-emerald-300' : 'text-rose-400'}">${item.userS2}</td>
+                    <td class="py-2 px-3 text-center font-bold ${item.isCorrect ? 'text-emerald-400' : 'text-rose-400'}">
+                        ${item.isCorrect ? '✔ 通過' : '✘ 錯誤'}
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            const modal = document.getElementById('pass-modal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+
+            // If student hasn't entered their name yet, focus the input inside the certificate modal for convenience
+            if (!certNameInput.value.trim()) {
+                setTimeout(() => certNameInput.focus(), 100);
+            }
+        }
+
+        function resetEntireQuiz() {
+            questionDeck = buildShuffledDeck();
+            quizState = {
+                currentQuestionIndex: 0,
+                currentScenario: null,
+                selectedStage1: null,
+                selectedStage2: null,
+                isSubmitted: false,
+                history: [],
+                startTimeMs: Date.now(),
+                elapsedSeconds: 0,
+                hasPassedModalShown: false
+            };
+
+            const modal = document.getElementById('pass-modal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+
+            startTimer();
+            renderSlidingWindowUI();
+            loadNextQuestion();
+        }
+
+        function setCameraMode(mode) {
+            currentCameraMode = mode;
+            const btn3d = document.getElementById('view-3d');
+            const btnSide = document.getElementById('view-2d-side');
+            const btnTop = document.getElementById('view-2d-top');
+            const hint = document.getElementById('camera-hint');
+
+            const inactiveClass = 'view-btn w-10 h-10 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-slate-300 hover:text-white transition flex flex-col items-center justify-center gap-0.5';
+            const activeClass = 'view-btn w-10 h-10 rounded-xl bg-indigo-600 text-white shadow-md shadow-indigo-500/30 transition flex flex-col items-center justify-center gap-0.5';
+
+            [btn3d, btnSide, btnTop].forEach(b => {
+                b.className = inactiveClass;
+            });
+
+            if (mode === '3D') {
+                btn3d.className = activeClass;
+                hint.style.display = '';
+            } else if (mode === '2D-SIDE') {
+                btnSide.className = activeClass;
+                hint.style.display = 'none';
+            } else if (mode === '2D-TOP') {
+                btnTop.className = activeClass;
+                hint.style.display = 'none';
+            }
+        }
+
+        /********************************************************************
+         * 6. INITIALIZATION & ANIMATION LOOP
+         ********************************************************************/
+        function animateLoop() {
+            requestAnimationFrame(animateLoop);
+            const dt = Math.min(simClock.getDelta(), 0.1);
+            updateSimulationFrame(dt);
+            renderer.render(scene, camera);
+        }
+
+        window.onload = function () {
+            initThreeScene();
+
+            // Two-way sync between header student name input and pass modal student name input
+            const topNameInput = document.getElementById('student-name-input');
+            const certNameInput = document.getElementById('cert-student-name-input');
+
+            topNameInput.addEventListener('input', () => {
+                certNameInput.value = topNameInput.value;
+            });
+            certNameInput.addEventListener('input', () => {
+                topNameInput.value = certNameInput.value;
+            });
+
+            // Bind View Mode Buttons
+            document.getElementById('view-3d').addEventListener('click', () => setCameraMode('3D'));
+            document.getElementById('view-2d-side').addEventListener('click', () => setCameraMode('2D-SIDE'));
+            document.getElementById('view-2d-top').addEventListener('click', () => setCameraMode('2D-TOP'));
+
+            // Bind Quiz Stage 1 & Stage 2 Option Buttons
+            document.querySelectorAll('.stage1-btn').forEach(btn => {
+                btn.addEventListener('click', () => handleOptionSelect(1, btn.getAttribute('data-val'), btn));
+            });
+            document.querySelectorAll('.stage2-btn').forEach(btn => {
+                btn.addEventListener('click', () => handleOptionSelect(2, btn.getAttribute('data-val'), btn));
+            });
+
+            // Bind Action Buttons
+            document.getElementById('btn-submit').addEventListener('click', submitCurrentAnswer);
+            document.getElementById('btn-next').addEventListener('click', loadNextQuestion);
+            document.getElementById('btn-reset-quiz').addEventListener('click', resetEntireQuiz);
+            document.getElementById('btn-restart-from-modal').addEventListener('click', resetEntireQuiz);
+            document.getElementById('btn-keep-practicing').addEventListener('click', () => {
+                const modal = document.getElementById('pass-modal');
+                modal.classList.add('hidden');
+                modal.classList.remove('flex');
+            });
+
+            // Start Quiz & Animation
+            resetEntireQuiz();
+            animateLoop();
+        };
+    </script>
+</body>
+</html>
