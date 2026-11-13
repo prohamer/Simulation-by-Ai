@@ -12,12 +12,16 @@
   html, body {
     margin: 0;
     height: 100%;
+    height: 100dvh;
     background: #020617;
     color: #e2e8f0;
     font-family: 'Inter', 'Noto Sans TC', system-ui, sans-serif;
     overflow: hidden;
+    overscroll-behavior: none;
     user-select: none;
     -webkit-user-select: none;
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
   }
 
   /* 自訂捲軸 */
@@ -26,11 +30,16 @@
   ::-webkit-scrollbar-thumb { background: rgba(100, 116, 139, 0.45); border-radius: 9999px; }
   ::-webkit-scrollbar-thumb:hover { background: rgba(148, 163, 184, 0.7); }
 
+  /* 隱藏頂部橫向捲軸但保留手機端滑動能力 */
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
   #canvas-wrap {
     position: relative;
     flex: 1;
     height: 100%;
     overflow: hidden;
+    touch-action: none;
     background: radial-gradient(circle at center, #0f172a 0%, #020617 100%);
   }
 
@@ -39,6 +48,29 @@
     height: 100%;
     display: block;
     touch-action: none;
+  }
+
+  /* 手機與平板直向時：側欄改為浮動抽屜，不擠壓畫布 */
+  @media (max-width: 900px) {
+    #page-sidebar {
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      z-index: 45;
+      box-shadow: 16px 0 40px rgba(0, 0, 0, 0.65);
+    }
+  }
+
+  /* 觸控裝置加大嵌入視窗縮放拉柄 */
+  @media (pointer: coarse) {
+    .embed-resize-handle {
+      width: 28px !important;
+      height: 28px !important;
+    }
+    .embed-header {
+      height: 36px !important;
+    }
   }
 
   /* 拖放圖片覆蓋層動畫 */
@@ -147,12 +179,12 @@
   }
 </style>
 </head>
-<body class="flex flex-col h-screen w-screen overflow-hidden">
+<body class="flex flex-col h-screen w-screen overflow-hidden" style="height: 100dvh;">
 
 <!-- ================= 頂部主功能列 ================= -->
-<header class="h-14 bg-slate-900/95 border-b border-slate-800 px-3 flex items-center justify-between gap-2 z-40 shrink-0">
+<header class="h-14 bg-slate-900/95 border-b border-slate-800 px-2 sm:px-3 flex items-center justify-between gap-1.5 z-40 shrink-0 overflow-x-auto no-scrollbar">
   <!-- 左側：品牌與側欄開關 -->
-  <div class="flex items-center gap-2">
+  <div class="flex items-center gap-1.5 shrink-0">
     <button id="btn-toggle-sidebar" type="button" class="p-2 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-200 border border-slate-700/60 transition flex items-center gap-1.5 text-xs font-medium" title="切換頁面管理側欄">
       <svg class="w-4 h-4 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <rect x="3" y="3" width="18" height="18" rx="2"/>
@@ -162,50 +194,60 @@
       <span id="page-count-pill" class="px-1.5 py-0.2 bg-cyan-500/20 text-cyan-300 rounded-full text-[11px] font-semibold">1</span>
     </button>
 
-    <div class="flex items-center gap-2 pl-1">
+    <div class="hidden lg:flex items-center gap-2 pl-1">
       <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-400 to-blue-600 flex items-center justify-center text-slate-950 font-bold shadow-md shadow-cyan-500/20">
         <svg class="w-5 h-5" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M3.5 16.5l.9-3.6 9-9a1.5 1.5 0 012.1 0l1.1 1.1a1.5 1.5 0 010 2.1l-9 9z"/>
           <path d="M12 5.4l2.6 2.6"/>
         </svg>
       </div>
-      <div class="hidden md:block">
+      <div class="hidden xl:block">
         <h1 class="text-sm font-bold tracking-tight text-white leading-tight">SketchLayer Studio</h1>
         <p class="text-[11px] text-slate-400 leading-tight">多頁圖片、互動模擬與向量白板標註工具</p>
       </div>
     </div>
   </div>
 
-  <!-- 中間：圖片匯入、剪貼簿貼上、嵌入模擬網頁、頁面新增與背景設定 -->
-  <div class="flex items-center gap-1.5 flex-wrap">
+  <!-- 中間：圖片匯入、拍照、剪貼簿貼上、嵌入模擬網頁、頁面新增 -->
+  <div class="flex items-center gap-1.5 shrink-0">
     <input id="file-input" type="file" accept="image/*" multiple class="hidden">
+    <!-- 專供 iPad / 手機直接呼叫相機拍攝考卷或實驗 -->
+    <input id="camera-input" type="file" accept="image/*" capture="environment" class="hidden">
 
-    <button id="btn-upload-img" type="button" class="h-9 px-3 rounded-lg bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-300 border border-cyan-500/30 flex items-center gap-1.5 text-xs font-semibold transition shadow-sm" title="從電腦上傳一張或多張圖片（支援直接拖放檔案至畫布）">
-      <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <button id="btn-upload-img" type="button" class="h-9 px-2.5 sm:px-3 rounded-lg bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-300 border border-cyan-500/30 flex items-center gap-1.5 text-xs font-semibold transition shadow-sm" title="從裝置相簿或電腦上傳圖片">
+      <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <rect x="3" y="3" width="18" height="18" rx="2"/>
         <circle cx="8.5" cy="8.5" r="1.5"/>
         <path d="M21 15l-5-5L5 21"/>
       </svg>
-      <span>上傳圖片</span>
+      <span class="hidden sm:inline">上傳圖片</span>
+      <span class="sm:hidden">相簿</span>
     </button>
 
-    <button id="btn-paste-img" type="button" class="h-9 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 flex items-center gap-1.5 text-xs font-medium transition" title="從剪貼簿貼上圖片（快捷鍵 Ctrl+V）">
-      <svg class="w-4 h-4 text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <!-- iPad / 手機實體拍照按鈕 -->
+    <button id="btn-camera-img" type="button" class="sm:hidden h-9 px-2.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 flex items-center gap-1 text-xs font-semibold transition" title="使用手機或 iPad 相機直接拍下考卷或講義">
+      <span>📷 拍照</span>
+    </button>
+
+    <button id="btn-paste-img" type="button" class="h-9 px-2.5 sm:px-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 flex items-center gap-1.5 text-xs font-medium transition" title="從剪貼簿貼上圖片（快捷鍵 Ctrl+V）">
+      <svg class="w-4 h-4 text-amber-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/>
         <rect x="8" y="2" width="8" height="4" rx="1"/>
       </svg>
-      <span>貼上圖片</span>
+      <span class="hidden md:inline">貼上圖片</span>
+      <span class="md:hidden">貼上</span>
       <kbd class="hidden lg:inline-block text-[10px] px-1 py-0.5 bg-slate-900 text-slate-400 rounded border border-slate-700">Ctrl+V</kbd>
     </button>
 
     <!-- 嵌入互動網頁 (PhET / JavaLab / GitHub / YouTube) -->
-    <button id="btn-open-embed" type="button" class="h-9 px-3 rounded-lg bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-500/35 flex items-center gap-1.5 text-xs font-semibold transition shadow-sm" title="嵌入 PhET、JavaLab、GitHub 網頁模擬或 YouTube 影片，可邊操作邊標註">
-      <svg class="w-4 h-4 text-indigo-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <button id="btn-open-embed" type="button" class="h-9 px-2.5 sm:px-3 rounded-lg bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-500/35 flex items-center gap-1.5 text-xs font-semibold transition shadow-sm" title="嵌入 PhET、JavaLab、GitHub 網頁模擬或 YouTube 影片，可邊操作邊標註">
+      <svg class="w-4 h-4 text-indigo-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <circle cx="12" cy="12" r="10"/>
         <line x1="2" y1="12" x2="22" y2="12"/>
         <path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/>
       </svg>
-      <span>嵌入網頁/模擬</span>
+      <span class="hidden md:inline">嵌入網頁/模擬</span>
+      <span class="md:hidden">模擬器</span>
     </button>
 
     <!-- 貼上模式切換：貼在當前頁 vs 貼為新頁面 -->
@@ -216,8 +258,8 @@
 
     <div class="h-5 w-px bg-slate-800 mx-0.5 hidden sm:block"></div>
 
-    <button id="btn-add-page-top" type="button" class="h-9 px-3 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 flex items-center gap-1 text-xs font-semibold transition" title="新增空白頁面">
-      <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+    <button id="btn-add-page-top" type="button" class="h-9 px-2.5 sm:px-3 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 flex items-center gap-1 text-xs font-semibold transition" title="新增空白頁面">
+      <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
         <path d="M12 5v14M5 12h14"/>
       </svg>
       <span class="hidden sm:inline">新增頁面</span>
@@ -225,17 +267,7 @@
   </div>
 
   <!-- 右側：匯出 SVG / PNG / PDF 與專案存取 -->
-  <div class="flex items-center gap-1.5">
-    <div class="flex items-center bg-slate-800/90 p-0.5 rounded-lg border border-slate-700/80">
-      <button id="btn-export-png" type="button" class="px-2.5 py-1.5 rounded-md hover:bg-slate-700 text-xs font-semibold text-slate-200 flex items-center gap-1 transition" title="匯出當前頁面為高解析度 PNG 圖片">
-        <svg class="w-3.5 h-3.5 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/>
-        </svg>
-        <span>PNG</span>
-      </button>
-
-      <button id="btn-export-svg" type="button" class="px-2.5 py-1.5 rounded-md hover:bg-slate-700 text-xs font-semibold text-amber-300 flex items-center gap-1 transition" title="匯出當前頁面為可無損縮放的 SVG 向量檔">
-        <svg class="w-3.5 h-3.5 text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+  <div class="flex items-center gap-1.5 shrink-0">
           <polygon points="12 2 2 7 12 12 22 7 12 2"/>
           <polyline points="2 17 12 22 22 17"/>
           <polyline points="2 12 12 17 22 12"/>
@@ -363,6 +395,8 @@
 
   <!-- 中央畫布宿主區 -->
   <main id="canvas-wrap">
+    <!-- 手機/平板展開左側頁面抽屜時的半透明遮罩 -->
+    <div id="sidebar-backdrop" class="hidden fixed inset-0 bg-black/50 z-30 md:hidden"></div>
     <canvas id="cv"></canvas>
     <!-- 嵌入式互動網頁圖層（與世界座標同步縮放平移） -->
     <div id="embed-layer"></div>
@@ -406,32 +440,44 @@
     </div>
 
     <!-- 底部浮動視角與狀態控制列 -->
-    <div class="absolute right-3 bottom-3 z-30 flex items-center gap-1.5 bg-slate-900/90 border border-slate-700/80 rounded-xl px-2.5 py-1.5 shadow-xl backdrop-blur-md text-xs">
+    <div class="absolute right-2 sm:right-3 bottom-2 sm:bottom-3 z-30 flex items-center gap-1 sm:gap-1.5 bg-slate-900/90 border border-slate-700/80 rounded-xl px-2 py-1.5 shadow-xl backdrop-blur-md text-xs max-w-[calc(100vw-16px)] overflow-x-auto no-scrollbar">
       <!-- 解鎖所有底圖按鈕（當頁面有鎖定圖片時顯示） -->
-      <button id="btn-unlock-all" type="button" class="hidden px-2 py-1 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/30 hover:bg-amber-500/30 font-medium mr-1" title="點擊解鎖本頁所有已鎖定的底圖與嵌入視窗">
-        🔒 已鎖定底層 (點此解鎖)
+      <button id="btn-unlock-all" type="button" class="hidden px-2 py-1 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/30 hover:bg-amber-500/30 font-medium shrink-0" title="點擊解鎖本頁所有已鎖定的底圖與嵌入視窗">
+        🔒 解鎖底層
       </button>
 
-      <label class="flex items-center gap-1 text-slate-300 cursor-pointer px-1.5 py-0.5 rounded hover:bg-slate-800" title="直線、箭頭與描點吸附網格及圖片端點">
+      <!-- 快速上下頁切換（iPad / 手機收合側欄時超好用） -->
+      <div class="flex items-center bg-slate-800/90 rounded-lg border border-slate-700/70 px-0.5 shrink-0">
+        <button id="btn-prev-page" type="button" class="w-6 h-6 rounded hover:bg-slate-700 text-slate-300 flex items-center justify-center font-bold" title="上一頁">‹</button>
+        <span id="lbl-quick-page" class="px-1.5 font-mono text-[11px] text-cyan-300">1/1</span>
+        <button id="btn-next-page" type="button" class="w-6 h-6 rounded hover:bg-slate-700 text-slate-300 flex items-center justify-center font-bold" title="下一頁">›</button>
+      </div>
+
+      <!-- iPad / 觸控筆「筆寫手移」防誤觸模式切換 -->
+      <button id="btn-pen-only" type="button" class="px-2 py-1 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 font-medium flex items-center gap-1 shrink-0 transition" title="切換「筆寫手移（防手掌誤觸）」：開啟後僅觸控筆可畫圖，單指觸控自動平移畫面">
+        <span id="lbl-pen-only">✋ 手指可畫</span>
+      </button>
+
+      <label class="hidden sm:flex items-center gap-1 text-slate-300 cursor-pointer px-1.5 py-0.5 rounded hover:bg-slate-800 shrink-0" title="直線、箭頭與描點吸附網格及圖片端點">
         <input id="chk-grid-snap" type="checkbox" class="rounded bg-slate-800 border-slate-600 text-cyan-500 focus:ring-0">
         <span>吸附</span>
       </label>
 
-      <div class="h-4 w-px bg-slate-700"></div>
+      <div class="h-4 w-px bg-slate-700 shrink-0"></div>
 
-      <button id="btn-zoom-out" type="button" class="w-6 h-6 rounded hover:bg-slate-800 text-slate-300 flex items-center justify-center font-bold" title="縮小視角">−</button>
-      <button id="btn-zoom-reset" type="button" class="px-2 py-0.5 rounded hover:bg-slate-800 text-slate-200 font-mono text-[11px]" title="點擊適應視窗大小">100%</button>
-      <button id="btn-zoom-in" type="button" class="w-6 h-6 rounded hover:bg-slate-800 text-slate-300 flex items-center justify-center font-bold" title="放大視角">+</button>
-      <button id="btn-zoom-fit" type="button" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium" title="置中並完整顯示當前頁面">適應視窗</button>
+      <button id="btn-zoom-out" type="button" class="w-6 h-6 rounded hover:bg-slate-800 text-slate-300 flex items-center justify-center font-bold shrink-0" title="縮小視角">−</button>
+      <button id="btn-zoom-reset" type="button" class="px-1.5 py-0.5 rounded hover:bg-slate-800 text-slate-200 font-mono text-[11px] shrink-0" title="點擊適應視窗大小">100%</button>
+      <button id="btn-zoom-in" type="button" class="w-6 h-6 rounded hover:bg-slate-800 text-slate-300 flex items-center justify-center font-bold shrink-0" title="放大視角">+</button>
+      <button id="btn-zoom-fit" type="button" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium shrink-0" title="置中並完整顯示當前頁面">適應</button>
 
-      <div class="h-4 w-px bg-slate-700"></div>
+      <div class="h-4 w-px bg-slate-700 shrink-0"></div>
 
       <!-- 沉浸模式與全螢幕快速按鈕（在隱藏頂部導覽列時仍能隨時操作） -->
-      <button id="btn-zen-mode" type="button" class="px-2 py-1 rounded hover:bg-slate-800 text-slate-300 font-medium flex items-center gap-1" title="切換沉浸無邊框模式：隱藏頂部列與側邊欄（快捷鍵 Shift+F）">
+      <button id="btn-zen-mode" type="button" class="px-2 py-1 rounded hover:bg-slate-800 text-slate-300 font-medium flex items-center gap-1 shrink-0" title="切換沉浸無邊框模式：隱藏頂部列與側邊欄（快捷鍵 Shift+F）">
         <span id="lbl-zen-mode">沉浸</span>
       </button>
-      <button id="btn-fullscreen-bottom" type="button" class="px-2 py-1 rounded bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-300 border border-cyan-500/30 font-semibold flex items-center gap-1" title="切換全螢幕（快捷鍵 F）">
-        <span id="lbl-fullscreen-bottom">全螢幕 (F)</span>
+      <button id="btn-fullscreen-bottom" type="button" class="px-2 py-1 rounded bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-300 border border-cyan-500/30 font-semibold flex items-center gap-1 shrink-0" title="切換全螢幕（快捷鍵 F）">
+        <span id="lbl-fullscreen-bottom">全螢幕</span>
       </button>
     </div>
 
@@ -1715,27 +1761,27 @@
         }
         if (vid) {
           return {
-            embedUrl: `https://www.youtube.com/embed/${vid}?rel=0&playsinline=1`,
-            title: 'YouTube 影片',
-            note: '已自動轉換為 YouTube 嵌入播放器格式'
-          };
-        }
-      }
-
-      // 2. GitHub 原始碼倉庫 HTML 連結自動轉為 GitHub Pages 或 githack 預覽
-      if (host === 'github.com') {
-        const parts = u.pathname.split('/').filter(Boolean);
-        if (parts.length >= 4 && parts[2] === 'blob') {
-          const [user, repo, , branch, ...filePath] = parts;
-          const pathJoined = filePath.join('/');
-          return {
-            embedUrl: `https://raw.githack.com/${user}/${repo}/${branch}/${pathJoined}`,
-            title: `GitHub: ${repo}/${filePath[filePath.length - 1]}`,
-            note: '已將 GitHub 倉庫檔案轉換為可執行的網頁預覽連結'
-          };
-        }
-        if (parts.length === 2) {
-          const [user, repo] = parts;
+        setTool, get tool() { return st.tool; },
+        expand, collapse, toggle: () => (st.collapsed ? expand() : collapse()), get collapsed() { return st.collapsed; },
+        undo, redo, clear, setVisible, get visible() { return st.visible; },
+        get items() { return clone(st.items); },
+        toJSON: () => clone(st.items),
+        load(items, { resetHistory = true } = {}) {
+          commitText();
+          st.items = Array.isArray(items) ? clone(items) : []; fixIds(); st.selId = null;
+          if (resetHistory) st.hist = { stack: [JSON.stringify(st.items)], idx: 0 };
+          refreshUI(); render();
+        },
+        clearSelection() { if (st.selId != null) { st.selId = null; refreshUI(); render(); } },
+        setGridSnap(v) { opt.gridSnap = !!v; },
+        setPenOnly(v) { st.sawPen = !!v; },
+        get penOnly() { return st.sawPen; },
+        toast,
+        redraw: render, exportPNG, downloadPNG,
+        drawTo: (c, customOpts = {}) => drawAll(c, Object.assign({ selection: false }, customOpts)),
+        setStyle(s) { Object.assign(st.style, s); refreshUI(); },
+        get overlayCanvas() { return overlay; },
+        destroy() {
           return {
             embedUrl: `https://${user}.github.io/${repo}/`,
             title: `GitHub Pages: ${user}/${repo}`,
@@ -2231,9 +2277,10 @@
   function hitImageHandle(sx, sy, im) {
     if (!im || im.locked) return null;
     const h = getImageHandlesScreen(im);
-    if (Math.hypot(sx - h.rot.x, sy - h.rot.y) < 12) return 'rot';
+    const tol = matchMedia('(pointer:coarse)').matches ? 22 : 12;
+    if (Math.hypot(sx - h.rot.x, sy - h.rot.y) < tol) return 'rot';
     for (const k of ['br', 'tr', 'bl', 'tl']) {
-      if (Math.hypot(sx - h[k].x, sy - h[k].y) < 12) return k;
+      if (Math.hypot(sx - h[k].x, sy - h[k].y) < tol) return k;
     }
     return null;
   }
@@ -2250,13 +2297,35 @@
     return null;
   }
 
+  // 宿主畫布多指觸控狀態（支援在選取模式或工具列收合時雙指捏合縮放與平移）
+  const hostTouches = new Map();
+  let hostPinch = null;
+
   cv.addEventListener('pointerdown', e => {
     const r = cv.getBoundingClientRect();
     const sx = e.clientX - r.left, sy = e.clientY - r.top;
-    cv.setPointerCapture(e.pointerId);
+    try { cv.setPointerCapture(e.pointerId); } catch (err) {}
+
+    // 若偵測到 Apple Pencil 觸控筆，自動同步更新「筆寫手移」狀態列
+    if (e.pointerType === 'pen') {
+      syncPenOnlyButtonUI(true);
+    }
+
+    if (e.pointerType === 'touch') {
+      hostTouches.set(e.pointerId, { x: sx, y: sy });
+      if (hostTouches.size >= 2) {
+        hostDrag = null;
+        const [a, b] = [...hostTouches.values()];
+        hostPinch = {
+          d: Math.hypot(a.x - b.x, a.y - b.y) || 1,
+          mid: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }
+        };
+        return;
+      }
+    }
 
     if (e.button === 1 || e.button === 2 || spacePressed) {
-      hostDrag = { type: 'pan', sx, sy, cx: view.cx, cy: view.cy };
+      hostDrag = { type: 'pan', posId: e.pointerId, sx, sy, cx: view.cx, cy: view.cy };
       cv.style.cursor = 'grabbing';
       return;
     }
@@ -2267,6 +2336,7 @@
       const w = toWorld(sx, sy);
       hostDrag = {
         type: handle === 'rot' ? 'img-rot' : 'img-resize',
+        posId: e.pointerId,
         handle,
         im: curIm,
         startW: w,
@@ -2282,6 +2352,7 @@
       const w = toWorld(sx, sy);
       hostDrag = {
         type: 'img-move',
+        posId: e.pointerId,
         im: hitIm,
         startW: w,
         origX: hitIm.x,
@@ -2292,14 +2363,29 @@
     }
 
     selectedImgId = null;
-    hostDrag = { type: 'pan', sx, sy, cx: view.cx, cy: view.cy };
+    hostDrag = { type: 'pan', posId: e.pointerId, sx, sy, cx: view.cx, cy: view.cy };
     draw();
   });
 
   cv.addEventListener('pointermove', e => {
-    if (!hostDrag) return;
     const r = cv.getBoundingClientRect();
     const sx = e.clientX - r.left, sy = e.clientY - r.top;
+
+    if (e.pointerType === 'touch' && hostTouches.has(e.pointerId)) {
+      hostTouches.set(e.pointerId, { x: sx, y: sy });
+      if (hostPinch && hostTouches.size >= 2) {
+        const [a, b] = [...hostTouches.values()];
+        const d = Math.hypot(a.x - b.x, a.y - b.y) || 1;
+        const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+        view.cx -= (mid.x - hostPinch.mid.x) / view.scale;
+        view.cy -= (mid.y - hostPinch.mid.y) / view.scale;
+        zoomAt(d / hostPinch.d, mid.x, mid.y);
+        hostPinch = { d, mid };
+        return;
+      }
+    }
+
+    if (!hostDrag || (hostDrag.posId != null && e.pointerId !== hostDrag.posId)) return;
 
     if (hostDrag.type === 'pan') {
       view.cx = hostDrag.cx - (sx - hostDrag.sx) / view.scale;
@@ -2339,58 +2425,18 @@
     }
   });
 
-  cv.addEventListener('pointerup', () => {
-    hostDrag = null;
-    if (!spacePressed) cv.style.cursor = '';
-  });
-
-  cv.addEventListener('wheel', e => {
-    e.preventDefault();
-    const r = cv.getBoundingClientRect();
-    zoomAt(Math.exp(-e.deltaY * 0.0014), e.clientX - r.left, e.clientY - r.top);
-  }, { passive: false });
-
-  /* ---------------- 全螢幕 (F) 與沉浸教學模式 (Shift+F) ---------------- */
-  function isFullscreenActive() {
-    return !!(document.fullscreenElement || document.webkitFullscreenElement);
-  }
-
-  function updateFullscreenUI() {
-    const fs = isFullscreenActive();
-    const zen = document.body.classList.contains('zen-mode');
-    document.getElementById('icon-fs-enter').classList.toggle('hidden', fs);
-    document.getElementById('icon-fs-exit').classList.toggle('hidden', !fs);
-    document.getElementById('lbl-fullscreen-top').textContent = fs ? '退出全螢幕' : '全螢幕';
-    document.getElementById('lbl-fullscreen-bottom').textContent = fs ? '退出全螢幕 (F)' : '全螢幕 (F)';
-    const zenBtn = document.getElementById('btn-zen-mode');
-    if (zenBtn) {
-      zenBtn.className = zen
-        ? 'px-2 py-1 rounded bg-amber-500/25 text-amber-300 border border-amber-500/40 font-semibold flex items-center gap-1'
-        : 'px-2 py-1 rounded hover:bg-slate-800 text-slate-300 font-medium flex items-center gap-1';
-      document.getElementById('lbl-zen-mode').textContent = zen ? '退出沉浸 (Shift+F)' : '沉浸';
+  function onHostPointerUp(e) {
+    if (e.pointerType === 'touch') {
+      hostTouches.delete(e.pointerId);
+      if (hostTouches.size < 2) hostPinch = null;
     }
-    setTimeout(() => {
-      resize();
-      fitPageToView();
-    }, 60);
+    if (hostDrag && (hostDrag.posId == null || e.pointerId === hostDrag.posId)) {
+      hostDrag = null;
+    }
+    if (!spacePressed) cv.style.cursor = '';
   }
-
-  function toggleZenMode(forceState) {
-    const next = typeof forceState === 'boolean' ? forceState : !document.body.classList.contains('zen-mode');
-    document.body.classList.toggle('zen-mode', next);
-    updateFullscreenUI();
-    sk && sk.toast(next ? '✨ 已開啟「沉浸滿版模式」（按 Shift+F 可恢復導覽列）' : '已恢復顯示頂部導覽與側邊欄');
-  }
-
-  async function toggleFullscreen(withZen = false) {
-    try {
-      if (!isFullscreenActive()) {
-        const el = document.documentElement;
-        const req = el.requestFullscreen || el.webkitRequestFullscreen;
-        if (req) {
-          await req.call(el);
-          if (withZen) document.body.classList.add('zen-mode');
-          sk && sk.toast('🖥️ 已進入全螢幕（按 F 或 Esc 退出，按 Shift+F 可隱藏四周面板）');
+  cv.addEventListener('pointerup', onHostPointerUp);
+  cv.addEventListener('pointercancel', onHostPointerUp);
         } else {
           // 若在受限的 iFrame 預覽環境中，自動切換為沉浸滿版模式
           toggleZenMode();
@@ -2594,432 +2640,14 @@
     fileInput.value = '';
   };
 
-  const dropOverlay = document.getElementById('drop-overlay');
-  let dragCounter = 0;
-  window.addEventListener('dragenter', e => {
-    if (e.dataTransfer && Array.from(e.dataTransfer.types).includes('Files')) {
-      e.preventDefault();
-      dragCounter++;
-      dropOverlay.classList.add('active');
-    }
-  });
-  window.addEventListener('dragover', e => {
-    if (e.dataTransfer && Array.from(e.dataTransfer.types).includes('Files')) {
-      e.preventDefault();
-    }
-  });
-  window.addEventListener('dragleave', e => {
-    dragCounter = Math.max(0, dragCounter - 1);
-    if (dragCounter === 0) dropOverlay.classList.remove('active');
-  });
-  window.addEventListener('drop', e => {
-    e.preventDefault();
-    dragCounter = 0;
-    dropOverlay.classList.remove('active');
-    if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) {
-      handleImageFiles(e.dataTransfer.files);
-    }
-  });
-
-  /* ---------------- 圖片浮動控制列按鈕動作 ---------------- */
-  document.getElementById('btn-img-lock').onclick = () => {
-    const im = getSelectedImage();
-    if (!im) return;
-    im.locked = !im.locked;
-    if (im.locked) {
-      selectedImgId = null;
-      sk && sk.toast('已鎖定為底圖！現在可安心在上方畫筆標註');
-    }
-    draw();
-  };
-
-  document.getElementById('btn-unlock-all').onclick = () => {
-    const p = curPage();
-    if (!p) return;
-    p.images.forEach(im => { im.locked = false; });
-    if (p.embeds) p.embeds.forEach(em => { em.locked = false; });
-    if (p.images.length) selectedImgId = p.images[p.images.length - 1].id;
-    if (sk) sk.setTool('select');
-    draw();
-    sk && sk.toast('已解鎖本頁所有底圖與嵌入視窗，可拖曳調整位置或大小');
-  };
-
-  /* ---------------- 嵌入互動網頁 (PhET / JavaLab / GitHub / YouTube) 邏輯 ---------------- */
-  const embedModal = document.getElementById('embed-modal');
-  const inpEmbedUrl = document.getElementById('inp-embed-url');
-  const embedUrlHint = document.getElementById('embed-url-hint');
-
-  document.getElementById('btn-open-embed').onclick = () => {
-    embedModal.classList.remove('hidden');
-    setTimeout(() => inpEmbedUrl.focus(), 30);
-  };
-  document.getElementById('btn-close-embed-modal').onclick = () => embedModal.classList.add('hidden');
-  document.getElementById('btn-cancel-embed').onclick = () => embedModal.classList.add('hidden');
-
-  inpEmbedUrl.addEventListener('input', () => {
-    const info = normalizeEmbedURL(inpEmbedUrl.value);
-    if (info) {
-      embedUrlHint.textContent = `✅ ${info.note} → ${info.embedUrl}`;
-      embedUrlHint.className = 'text-[11px] text-emerald-400 mt-1.5 leading-relaxed truncate';
-    } else {
-      embedUrlHint.textContent = '💡 系統會自動轉換 YouTube 觀看連結與 GitHub .html 原始碼網址為可互動嵌入格式。';
-      embedUrlHint.className = 'text-[11px] text-slate-400 mt-1.5 leading-relaxed';
-    }
-  });
-
-  document.querySelectorAll('.preset-embed-btn').forEach(btn => {
-    btn.onclick = () => {
-      inpEmbedUrl.value = btn.dataset.presetUrl;
-      inpEmbedUrl.dispatchEvent(new Event('input'));
-    };
-  });
-
-  function insertWebEmbed(rawUrl) {
-    const info = normalizeEmbedURL(rawUrl);
-    if (!info) {
-      sk && sk.toast('請輸入有效的網址 (https://...)');
-      return;
-    }
-    const fillPage = document.getElementById('chk-embed-fill').checked;
-    const asNewPage = document.getElementById('chk-embed-new-page').checked;
-
-    if (asNewPage) {
-      saveCurrentPageAnnotations();
-      const newP = createPageObj({
-        title: info.title,
-        width: 1280,
-        height: 720,
-        bgStyle: 'chalkboard'
-      });
-      pages.push(newP);
-      curPageIdx = pages.length - 1;
-      if (sk) sk.load([], { resetHistory: true });
-    }
-
-    const p = curPage();
-    if (!p.embeds) p.embeds = [];
-    const pad = fillPage ? 0 : 80;
-    p.embeds.push({
-      id: nextEmbedId++,
-      url: info.embedUrl,
-      rawUrl,
-      title: info.title,
-      x: pad,
-      y: pad,
-      w: p.width - pad * 2,
-      h: p.height - pad * 2,
-      locked: fillPage
-    });
-
-    embedModal.classList.add('hidden');
-    fitPageToView();
-    setEmbedInteractionMode(true);
-    renderPageSidebar();
-    sk && sk.toast(`已嵌入「${info.title}」！目前可直接操作模擬，點選畫筆即可在上方標註`);
-  }
-
-  document.getElementById('btn-confirm-embed').onclick = () => insertWebEmbed(inpEmbedUrl.value);
-  inpEmbedUrl.addEventListener('keydown', e => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      insertWebEmbed(inpEmbedUrl.value);
-    }
-  });
-
-  document.getElementById('btn-mode-interact').onclick = () => {
-    setEmbedInteractionMode(true);
-    sk && sk.toast('已切換為「🎮 操作模式」：可直接操作網頁模擬或影片（標註仍保留在畫面上）');
-  };
-  document.getElementById('btn-mode-draw').onclick = () => {
-    setEmbedInteractionMode(false);
-    if (sk && sk.collapsed) sk.expand();
-    if (sk && sk.tool === 'select') sk.setTool('pen');
-    sk && sk.toast('已切換為「✏️ 標註模式」：可直接在模擬畫面上方畫記！');
-  };
-
-  document.getElementById('btn-capture-screen').onclick = async () => {
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
-      sk && sk.toast('您的瀏覽器環境不支援螢幕擷取 API，請使用系統截圖後按 Ctrl+V 貼上');
-      return;
-    }
-    try {
-      sk && sk.toast('請在彈出視窗中選擇「此分頁 (This Tab)」以擷取模擬器畫面...');
-      const stream = await navigator.mediaDevices.getDisplayMedia({
-        video: { displaySurface: 'browser' },
-        preferCurrentTab: true
-      });
-      const track = stream.getVideoTracks()[0];
-      const video = document.createElement('video');
-      video.srcObject = stream;
-      await video.play();
-
-      await new Promise(r => requestAnimationFrame(r));
-
-      const rect = cv.getBoundingClientRect();
-      const tl = toScreen(0, 0);
-      const p = curPage();
-      const br = toScreen(p.width, p.height);
-
-      const scaleX = video.videoWidth / window.innerWidth;
-      const scaleY = video.videoHeight / window.innerHeight;
-
-      const sx = Math.max(0, (rect.left + tl.x) * scaleX);
-      const sy = Math.max(0, (rect.top + tl.y) * scaleY);
-      const sw = Math.min(video.videoWidth - sx, (br.x - tl.x) * scaleX);
-      const sh = Math.min(video.videoHeight - sy, (br.y - tl.y) * scaleY);
-
-      const capCanvas = document.createElement('canvas');
-      capCanvas.width = p.width;
-      capCanvas.height = p.height;
-      const capCtx = capCanvas.getContext('2d');
-      capCtx.drawImage(video, sx, sy, sw, sh, 0, 0, p.width, p.height);
-
-      track.stop();
-
-      const dataUrl = capCanvas.toDataURL('image/png');
-      await addImageFromDataURL(dataUrl, { asNewPage: false, lockByDefault: true, label: '模擬器擷取畫面' });
-      const lastIm = p.images[p.images.length - 1];
-      if (lastIm) {
-        lastIm.x = 0; lastIm.y = 0; lastIm.w = p.width; lastIm.h = p.height; lastIm.locked = true;
-      }
-      setEmbedInteractionMode(false);
-      draw();
-      renderPageSidebar();
-      sk && sk.toast('📸 已將目前畫面轉為底圖！現在匯出 PNG / PDF 將完整包含此畫面');
-    } catch (err) {
-      console.warn('Screen capture cancelled or disallowed:', err);
-      sk && sk.toast('若無法直接擷取，可使用系統截圖 (Win+Shift+S / ⌘+Shift+4) 後按 Ctrl+V 貼上！');
-    }
-  };
-
-  document.getElementById('btn-img-fit').onclick = () => {
-    const im = getSelectedImage();
-    const p = curPage();
-    if (!im || !p) return;
-    const pad = 24;
-    const availW = p.width - pad * 2;
-    const availH = p.height - pad * 2;
-    const k = Math.min(availW / im.w, availH / im.h);
-    im.w = Math.round(im.w * k);
-    im.h = Math.round(im.h * k);
-    im.x = Math.round((p.width - im.w) / 2);
-    im.y = Math.round((p.height - im.h) / 2);
-    im.rotation = 0;
-    draw();
-  };
-
-  document.getElementById('btn-img-page-match').onclick = () => {
-    const im = getSelectedImage();
-    const p = curPage();
-    if (!im || !p) return;
-    p.width = Math.max(400, Math.round(im.w));
-    p.height = Math.max(300, Math.round(im.h));
-    im.x = 0;
-    im.y = 0;
-    im.rotation = 0;
-    im.locked = true;
-    selectedImgId = null;
-    syncPageSettingsUI();
-    fitPageToView();
-    renderPageSidebar();
-    sk && sk.toast(`頁面尺寸已調整為 ${p.width} × ${p.height} 並鎖定底圖`);
-  };
-
-  document.getElementById('btn-img-front').onclick = () => {
-    const im = getSelectedImage();
-    const p = curPage();
-    if (!im || !p) return;
-    p.images = p.images.filter(x => x !== im);
-    p.images.push(im);
-    draw();
-  };
-
-  function deleteSelectedImage() {
-    const im = getSelectedImage();
-    const p = curPage();
-    if (!im || !p) return;
-    p.images = p.images.filter(x => x !== im);
-    selectedImgId = null;
-    draw();
-    renderPageSidebar();
-    sk && sk.toast('已刪除圖片');
-  }
-  document.getElementById('btn-img-del').onclick = deleteSelectedImage;
-
-  /* ---------------- 圖片裁切 (Crop) 與智慧去背 (Smart BG Removal) 引擎 ---------------- */
-  const imgEditModal = document.getElementById('img-edit-modal');
-  const editCv = document.getElementById('img-edit-cv');
-  const editCtx = editCv.getContext('2d');
-
-  const editState = {
-    mode: 'crop',          // 'crop' | 'bg'
-    targetIm: null,
-    sourceCanvas: null,    // 原始像素畫布 (進入編輯器時的圖片)
-    previewCanvas: null,   // 去背預覽結果畫布
-    imgW: 0,
-    imgH: 0,
-    // 裁切範圍 (圖片像素座標 0..imgW, 0..imgH)
-    crop: { x: 0, y: 0, w: 100, h: 100 },
-    cropRatio: 0,          // 0 = 自由比例
-    cropDrag: null,
-    // 智慧去背狀態
-    bgMode: 'flood',       // 'flood' | 'luma' | 'color'
-    sampleRGB: [255, 255, 255],
-    tolerance: 32,
-    invertInk: false
-  };
-
-  function detectCornerBackgroundRGB(imgData) {
-    const { data, width, height } = imgData;
-    const coords = [
-      [2, 2], [width - 3, 2], [2, height - 3], [width - 3, height - 3],
-      [Math.floor(width / 2), 2], [Math.floor(width / 2), height - 3]
-    ];
-    let r = 0, g = 0, b = 0, cnt = 0;
-    for (const [cx, cy] of coords) {
-      const x = Math.max(0, Math.min(width - 1, cx));
-      const y = Math.max(0, Math.min(height - 1, cy));
-      const idx = (y * width + x) * 4;
-      if (data[idx + 3] > 128) {
-        r += data[idx]; g += data[idx + 1]; b += data[idx + 2];
-        cnt++;
-      }
-    }
-    if (!cnt) return [255, 255, 255];
-    return [Math.round(r / cnt), Math.round(g / cnt), Math.round(b / cnt)];
-  }
-
-  function openImageEditor(mode = 'crop') {
-    const im = getSelectedImage();
-    if (!im || !im.imgEl) return;
-    editState.targetIm = im;
-    editState.imgW = im.imgEl.naturalWidth || im.w;
-    editState.imgH = im.imgEl.naturalHeight || im.h;
-
-    const srcCv = document.createElement('canvas');
-    srcCv.width = editState.imgW;
-    srcCv.height = editState.imgH;
-    srcCv.getContext('2d').drawImage(im.imgEl, 0, 0, editState.imgW, editState.imgH);
-    editState.sourceCanvas = srcCv;
-
-    const prevCv = document.createElement('canvas');
-    prevCv.width = editState.imgW;
-    prevCv.height = editState.imgH;
-    prevCv.getContext('2d').drawImage(srcCv, 0, 0);
-    editState.previewCanvas = prevCv;
-
-    // 預設裁切框（內縮 8% 讓使用者一眼看懂可拖拉，也可點全選）
-    const padX = Math.round(editState.imgW * 0.06);
-    const padY = Math.round(editState.imgH * 0.06);
-    editState.crop = {
-      x: padX,
-      y: padY,
-      w: Math.max(20, editState.imgW - padX * 2),
-      h: Math.max(20, editState.imgH - padY * 2)
-    };
-    editState.cropRatio = 0;
-
-    // 自動偵測四角背景色
-    const imgData = srcCv.getContext('2d').getImageData(0, 0, editState.imgW, editState.imgH);
-    editState.sampleRGB = detectCornerBackgroundRGB(imgData);
-    updateSwatchUI();
-
-    imgEditModal.classList.remove('hidden');
-    switchEditorTab(mode);
-  }
-
-  function updateSwatchUI() {
-    const [r, g, b] = editState.sampleRGB;
-    document.getElementById('bg-sample-swatch').style.background = `rgb(${r},${g},${b})`;
-  }
-
-  function switchEditorTab(mode) {
-    editState.mode = mode;
-    const isCrop = mode === 'crop';
-    document.getElementById('tab-edit-crop').className = isCrop
-      ? 'px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 bg-cyan-500 text-slate-950 shadow'
-      : 'px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 bg-slate-800 text-slate-300 hover:text-white';
-    document.getElementById('tab-edit-bg').className = !isCrop
-      ? 'px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 bg-purple-500 text-white shadow'
-      : 'px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 bg-slate-800 text-slate-300 hover:text-white';
-
-    document.getElementById('panel-edit-crop').classList.toggle('hidden', !isCrop);
-    document.getElementById('panel-edit-bg').classList.toggle('hidden', isCrop);
-
-    if (!isCrop) {
-      runSmartBackgroundRemovalPreview();
-    } else {
-      renderImageEditorCanvas();
-    }
-  }
-
-  function renderImageEditorCanvas() {
-    if (!editState.sourceCanvas) return;
-    const iw = editState.imgW, ih = editState.imgH;
-    if (editCv.width !== iw || editCv.height !== ih) {
-      editCv.width = iw;
-      editCv.height = ih;
-    }
-    editCtx.clearRect(0, 0, iw, ih);
-
-    if (editState.mode === 'bg') {
-      editCtx.drawImage(editState.previewCanvas, 0, 0);
-      document.getElementById('img-edit-dim-info').textContent = `原始尺寸：${iw} × ${ih} px`;
-      return;
-    }
-
-    // 裁切模式：繪製原圖 + 暗角遮罩 + 裁切框與九宮格輔助線
-    editCtx.drawImage(editState.sourceCanvas, 0, 0);
-    const { x, y, w, h } = editState.crop;
-
-    editCtx.save();
-    editCtx.fillStyle = 'rgba(2, 6, 23, 0.62)';
-    editCtx.fillRect(0, 0, iw, y);
-    editCtx.fillRect(0, y + h, iw, ih - (y + h));
-    editCtx.fillRect(0, y, x, h);
-    editCtx.fillRect(x + w, y, iw - (x + w), h);
-
-    // 裁切框邊線與三分格線
-    const lineScale = Math.max(1, Math.min(iw, ih) / 500);
-    editCtx.strokeStyle = '#22d3ee';
-    editCtx.lineWidth = 2.2 * lineScale;
-    editCtx.strokeRect(x, y, w, h);
-
-    editCtx.strokeStyle = 'rgba(255, 255, 255, 0.32)';
-    editCtx.lineWidth = 1 * lineScale;
-    editCtx.beginPath();
-    editCtx.moveTo(x + w / 3, y); editCtx.lineTo(x + w / 3, y + h);
-    editCtx.moveTo(x + (w * 2) / 3, y); editCtx.lineTo(x + (w * 2) / 3, y + h);
-    editCtx.moveTo(x, y + h / 3); editCtx.lineTo(x + w, y + h / 3);
-    editCtx.moveTo(x, y + (h * 2) / 3); editCtx.lineTo(x + w, y + (h * 2) / 3);
-    editCtx.stroke();
-
-    // 繪製 8 個控制點
-    const hs = 7 * lineScale;
-    const pts = getCropHandles(editState.crop);
-    editCtx.fillStyle = '#06b6d4';
-    editCtx.strokeStyle = '#0f172a';
-    editCtx.lineWidth = 2 * lineScale;
-    for (const k of Object.keys(pts)) {
-      const p = pts[k];
-      editCtx.fillRect(p.x - hs, p.y - hs, hs * 2, hs * 2);
-      editCtx.strokeRect(p.x - hs, p.y - hs, hs * 2, hs * 2);
-    }
-    editCtx.restore();
-
-    document.getElementById('img-edit-dim-info').textContent = `裁切尺寸：${Math.round(w)} × ${Math.round(h)} px`;
-  }
-
-  function getCropHandles(c) {
-    return {
-      tl: { x: c.x, y: c.y },
-      tm: { x: c.x + c.w / 2, y: c.y },
-      tr: { x: c.x + c.w, y: c.y },
-      mr: { x: c.x + c.w, y: c.y + c.h / 2 },
-      br: { x: c.x + c.w, y: c.y + c.h },
-      bm: { x: c.x + c.w / 2, y: c.y + c.h },
-      bl: { x: c.x, y: c.y + c.h },
-      ml: { x: c.x, y: c.y + c.h / 2 }
+  // iPad / 手機直接呼叫相機拍照匯入
+  const cameraInput = document.getElementById('camera-input');
+  const btnCameraImg = document.getElementById('btn-camera-img');
+  if (btnCameraImg && cameraInput) {
+    btnCameraImg.onclick = () => cameraInput.click();
+    cameraInput.onchange = e => {
+      handleImageFiles(e.target.files);
+      cameraInput.value = '';
     };
   }
 
@@ -3411,6 +3039,8 @@
       selSize.value = sizeKey;
     }
     document.getElementById('page-count-pill').textContent = String(pages.length);
+    const quickLbl = document.getElementById('lbl-quick-page');
+    if (quickLbl) quickLbl.textContent = `${curPageIdx + 1}/${pages.length}`;
   }
 
   function renderThumbnailToCanvas(page, thumbCv) {
@@ -3454,7 +3084,11 @@
       const card = document.createElement('div');
       card.dataset.pageIdx = idx;
       card.className = `page-card group relative rounded-xl p-2 bg-slate-800/70 border border-slate-700/80 cursor-pointer hover:bg-slate-800 ${idx === curPageIdx ? 'active' : ''}`;
-      card.onclick = () => switchToPage(idx, false);
+      card.onclick = () => {
+        switchToPage(idx, false);
+        // 在手機/小尺寸平板點擊頁面後自動收起浮動抽屜
+        if (window.innerWidth <= 900) toggleSidebarDrawer(false);
+      };
 
       const header = document.createElement('div');
       header.className = 'flex items-center justify-between mb-1.5 px-0.5 text-[11px]';
@@ -3514,53 +3148,53 @@
   };
 
   document.getElementById('btn-del-page').onclick = () => {
-    if (pages.length <= 1) {
-      const p = curPage();
-      p.images = [];
-      p.embeds = [];
-      p.annotations = [];
-      sk && sk.load([], { resetHistory: true });
-      draw();
-      renderPageSidebar();
-      sk && sk.toast('已重置頁面內容');
-      return;
-    }
-    pages.splice(curPageIdx, 1);
-    const nextIdx = Math.min(curPageIdx, pages.length - 1);
-    curPageIdx = nextIdx;
-    const p = curPage();
-    sk && sk.load(p.annotations || [], { resetHistory: true });
-    syncPageSettingsUI();
-    draw();
-    renderPageSidebar();
-    sk && sk.toast('已刪除頁面');
-  };
-
-  document.getElementById('sel-bg-style').onchange = e => {
-    const p = curPage();
-    if (!p) return;
-    p.bgStyle = e.target.value;
-    draw();
-    renderPageSidebar();
-  };
-
-  document.getElementById('sel-page-size').onchange = e => {
-    const p = curPage();
-    if (!p) return;
-    const [w, h] = e.target.value.split('x').map(Number);
-    if (w && h) {
-      p.width = w;
-      p.height = h;
-      syncPageSettingsUI();
-      fitPageToView();
-      renderPageSidebar();
-    }
-  };
-
-  document.getElementById('btn-toggle-sidebar').onclick = () => {
+  function toggleSidebarDrawer(forceShow) {
     const sb = document.getElementById('page-sidebar');
-    sb.classList.toggle('hidden');
+    const backdrop = document.getElementById('sidebar-backdrop');
+    const isHidden = sb.classList.contains('hidden');
+    const show = typeof forceShow === 'boolean' ? forceShow : isHidden;
+    sb.classList.toggle('hidden', !show);
+    if (backdrop) {
+      backdrop.classList.toggle('hidden', !(show && window.innerWidth <= 900));
+    }
     setTimeout(resize, 50);
+  }
+
+  document.getElementById('btn-toggle-sidebar').onclick = () => toggleSidebarDrawer();
+  document.getElementById('sidebar-backdrop').onclick = () => toggleSidebarDrawer(false);
+
+  // 底部快速上下頁切換按鈕
+  document.getElementById('btn-prev-page').onclick = () => {
+    if (curPageIdx > 0) switchToPage(curPageIdx - 1, false);
+    else sk && sk.toast('已經是第 1 頁');
+  };
+  document.getElementById('btn-next-page').onclick = () => {
+    if (curPageIdx < pages.length - 1) switchToPage(curPageIdx + 1, false);
+    else addNewBlankPage();
+  };
+
+  // iPad 觸控筆「筆寫手移（防手掌誤觸）」切換按鈕
+  function syncPenOnlyButtonUI(active) {
+    const btn = document.getElementById('btn-pen-only');
+    const lbl = document.getElementById('lbl-pen-only');
+    if (!btn || !lbl) return;
+    if (active) {
+      btn.className = 'px-2 py-1 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-semibold flex items-center gap-1 shrink-0 transition';
+      lbl.textContent = '🖊️ 筆寫手移';
+    } else {
+      btn.className = 'px-2 py-1 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 font-medium flex items-center gap-1 shrink-0 transition';
+      lbl.textContent = '✋ 手指可畫';
+    }
+  }
+
+  document.getElementById('btn-pen-only').onclick = () => {
+    if (!sk) return;
+    const next = !sk.penOnly;
+    sk.setPenOnly(next);
+    syncPenOnlyButtonUI(next);
+    sk.toast(next
+      ? '🖊️ 已開啟「筆寫手移」：僅觸控筆可畫記，單指觸控自動平移白板！'
+      : '✋ 已切換為「手指可畫」：手指與觸控筆皆可畫記（雙指可縮放平移）');
   };
 
   document.getElementById('btn-zoom-in').onclick = () => zoomAt(1.25, W / 2, Hh / 2);
@@ -4109,6 +3743,11 @@
 
     sk.load([], { resetHistory: true });
     window.sk = sk;
+
+    // 在手機或直向平板 (<900px) 預設收起左側頁面欄，最大化白板繪圖空間
+    if (window.innerWidth <= 900) {
+      toggleSidebarDrawer(false);
+    }
 
     window.addEventListener('resize', resize);
     resize();
