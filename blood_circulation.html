@@ -1,0 +1,1596 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>血液循環 3D 模型</title>
+<style>
+/* 版面：寬螢幕（iPad 橫向、大屏）左側 3D、右側操作面板；手機改為上下排列。單一深色主題讓血色最清楚 */
+:root{
+  color-scheme: dark;
+  --bg-0:#0a0f15;
+  --bg-1:#17222e;
+  --panel:#111a24;
+  --line:#2a3847;
+  --ink:#e8eef4;
+  --ink-dim:#93a4b5;
+  --oxy:#e5433f;
+  --deoxy:#3b78e7;
+  --accent:#f2c14e;
+  --font: "PingFang TC","Noto Sans TC","Microsoft JhengHei","Heiti TC",system-ui,sans-serif;
+  --fs:14px; --tap:40px; --lab:12px;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg-0);color:var(--ink);font-family:var(--font);font-size:var(--fs);display:flex;flex-direction:column;overflow:hidden;-webkit-text-size-adjust:100%}
+#main{flex:1 1 auto;min-width:0;min-height:0;display:flex;flex-direction:column}
+#ecg{flex:0 0 auto;display:block;width:100%;height:100px;background:#0b1219;border-top:1px solid var(--line)}
+#ecg[hidden]{display:none}
+#stage{position:relative;flex:1 1 auto;min-height:0;min-width:0;background:radial-gradient(120% 90% at 50% 38%,var(--bg-1) 0%,var(--bg-0) 78%)}
+#stage canvas{display:block;width:100%;height:100%;touch-action:none}
+#labels{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.lab{position:absolute;left:0;top:0;white-space:nowrap;font-size:var(--lab);line-height:1;padding:.35em .6em;border-radius:999px;background:rgba(10,15,21,.72);border:1px solid rgba(255,255,255,.16);color:var(--ink);will-change:transform}
+.lead{position:absolute;left:0;top:0;height:1px;background:rgba(255,255,255,.55);transform-origin:0 50%;will-change:transform}
+.dot{position:absolute;left:-2.5px;top:-2.5px;width:5px;height:5px;border-radius:50%;background:#fff;will-change:transform}
+#legend{position:absolute;left:12px;top:calc(var(--tap) + 20px);display:flex;flex-direction:column;gap:5px;font-size:calc(var(--fs) - 2px);color:var(--ink-dim);pointer-events:none}
+#legend b{color:var(--ink);font-size:var(--fs);font-weight:600;letter-spacing:.02em}
+.key{display:flex;align-items:center;gap:6px}
+.sw{width:18px;height:6px;border-radius:3px}
+#loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--ink-dim)}
+#bar{flex:0 0 auto;background:var(--panel);border-top:1px solid var(--line);padding:8px 12px calc(8px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:8px}
+.row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+button{font:inherit;color:var(--ink);background:#1b2734;border:1px solid var(--line);border-radius:10px;min-height:var(--tap);padding:0 .9em;cursor:pointer}
+button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button[aria-pressed="true"]{background:#2b3d51;border-color:#5d7791}
+.seg{display:flex}
+.seg button{border-radius:0;margin-left:-1px}
+.seg button:first-child{border-radius:10px 0 0 10px;margin-left:0}
+.seg button:last-child{border-radius:0 10px 10px 0}
+#cap{margin:0;line-height:1.45;min-height:2.9em}
+#cap b{color:var(--accent);margin-right:.5em}
+#steps{list-style:none;margin:0;padding:0;display:flex;gap:6px}
+#steps button{display:flex;align-items:center;gap:.6em;padding:0;min-width:var(--tap);justify-content:center;text-align:left}
+#steps .n{font-variant-numeric:tabular-nums;font-weight:600}
+#steps .t{display:none}
+#steps button[aria-current="true"]{background:var(--accent);border-color:var(--accent);color:#1b1404}
+.grow{flex:1 1 140px;display:flex;align-items:center;gap:8px;min-width:0}
+label{color:var(--ink-dim);white-space:nowrap}
+input[type=range]{flex:1 1 auto;min-width:60px;accent-color:var(--accent);height:28px}
+#bpmv{font-variant-numeric:tabular-nums;min-width:5.2em;text-align:right}
+#bar{max-height:56%;overflow-y:auto}
+#tabs{display:flex;position:sticky;top:-8px;z-index:2;background:var(--panel);padding:8px 0 4px;margin:-8px 0 -4px}
+#tabs button{flex:1;border-radius:0;margin-left:-1px;min-height:36px}
+#tabs button:first-child{border-radius:10px 0 0 10px;margin-left:0}
+#tabs button:last-child{border-radius:0 10px 10px 0}
+/* 區塊：依類型分色，可收合；寬螢幕可拖出面板 */
+.blk{--c:#93a4b5;border:1px solid var(--line);border-left:4px solid var(--c);border-radius:10px;background:var(--panel);background:color-mix(in srgb,var(--c) 7%,var(--panel))}
+.blk[data-cat=cyc]{--c:#f2c14e}.blk[data-cat=path]{--c:#ff8f7d}.blk[data-cat=probe]{--c:#6fe3a1}.blk[data-cat=view]{--c:#8fb8ff}
+.blk>header{display:flex;align-items:center;gap:2px;padding:0 6px 0 2px}
+.blk .grip,.blk .ttl,.blk .rst,.stub button{background:none;border:0;min-height:38px}
+.blk .grip{display:none;cursor:grab;touch-action:none;color:var(--ink-dim);padding:0 8px;font-size:1.1em;letter-spacing:-.1em}
+.blk .ttl{flex:1;text-align:left;color:var(--c);font-weight:600;padding:0 6px;display:flex;align-items:center;gap:.5em}
+.blk .ttl::after{content:"";width:.5em;height:.5em;border-right:2px solid currentColor;border-bottom:2px solid currentColor;transform:rotate(45deg);margin-left:auto;margin-right:.3em;transition:transform .15s}
+.blk.closed .ttl::after{transform:rotate(-45deg)}
+.blk .rst{color:var(--ink);border:1px solid var(--line);border-radius:8px;min-height:30px;padding:0 .7em;font-size:calc(var(--fs) - 2px)}
+.blk .bd{display:flex;flex-direction:column;gap:8px;padding:2px 10px 10px}
+.blk.closed .bd{display:none}
+.blk.float{position:fixed;z-index:20;margin:0;background:var(--panel);box-shadow:0 12px 34px rgba(0,0,0,.55);max-height:90%;overflow-y:auto}
+.blk.float .grip{cursor:grabbing}
+.stub{display:flex;align-items:center;justify-content:space-between;border:1px dashed var(--line);border-radius:10px;padding:0 6px 0 12px;color:var(--ink-dim);font-size:calc(var(--fs) - 2px)}
+.stub button{color:var(--ink);white-space:nowrap;flex:0 0 auto}
+#bar>.blk{display:none}
+#bar>.blk.on{display:block}
+/* 探測器直條圖 */
+#pleg{display:flex;flex-wrap:wrap;gap:6px}
+#pleg:empty,#pchart:empty,#pvals:empty{display:none}
+.chip{display:inline-flex;align-items:center;gap:.2em;border:1px solid var(--line);border-radius:999px;padding:2px 4px 2px 3px;font-size:calc(var(--fs) - 2px)}
+.chip button{min-height:26px;padding:0 .5em;border-radius:999px;font-size:calc(var(--fs) - 3px)}
+#pchart{display:flex;gap:8px;align-items:flex-end;padding-top:1.4em}
+.pg{flex:1 1 0;min-width:0;display:flex;flex-direction:column;gap:4px}
+.bars{position:relative;height:120px;display:flex;align-items:stretch;gap:3px;border-bottom:1px solid #4a5b6c}
+#pchart.teach .bars{background:linear-gradient(to top,transparent calc(40% - 1px),rgba(255,255,255,.14) 40%,transparent calc(40% + 1px)),linear-gradient(to top,transparent calc(70% - 1px),rgba(255,255,255,.14) 70%,transparent calc(70% + 1px))}
+.b{position:relative;flex:1 1 0;min-width:0}
+.b i{position:absolute;left:10%;right:10%;bottom:0;height:0;border-radius:3px 3px 0 0;min-height:2px;transition:height .25s}
+.b .v{position:absolute;left:-4px;right:-4px;text-align:center;font-size:calc(var(--fs) - 4px);line-height:1;transition:bottom .25s}
+.gl{text-align:center;font-size:calc(var(--fs) - 4px);color:var(--ink-dim);line-height:1.25;min-height:2.5em}
+#pvals{display:flex;flex-direction:column;gap:2px;font-variant-numeric:tabular-nums;font-size:calc(var(--fs) - 3px)}
+#pvals div{display:flex;gap:8px}
+#pvals span{flex:1 1 0;text-align:center}
+/* 說明 */
+#helpBtn{position:absolute;left:12px;top:10px;z-index:3;border-radius:999px;display:flex;align-items:center;gap:.4em;padding:0 .9em 0 .7em;background:#1b2734}
+#helpBtn b{display:inline-flex;width:1.5em;height:1.5em;border-radius:50%;background:var(--accent);color:#1b1404;align-items:center;justify-content:center}
+#help{position:fixed;inset:0;z-index:50;background:rgba(5,8,12,.74);display:flex;align-items:center;justify-content:center;padding:12px}
+#help[hidden]{display:none}
+.hbox{width:min(780px,100%);max-height:100%;background:var(--panel);border:1px solid var(--line);border-radius:14px;display:flex;flex-direction:column;overflow:hidden}
+.hbox>header{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.hbox>header .seg{flex:1 1 auto}
+.hbody{overflow-y:auto;padding:6px 18px 18px;line-height:1.65}
+.hbody section[hidden]{display:none}
+.hbody h3{margin:1.1em 0 .3em;font-size:1em;color:var(--accent)}
+.hbody p{margin:.3em 0;max-width:38em}
+.hbody ul{margin:.2em 0;padding-left:1.25em;max-width:38em}
+.hbody li{margin:.15em 0}
+#vnote:empty,#pnote:empty{display:none}
+#pdesc,#jstat{margin:0;line-height:1.5;color:var(--ink-dim)}
+#jstat{color:var(--ink)}
+#jstat:empty,#jlog:empty,#route:empty{display:none}
+#route{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:4px 2px;align-items:center}
+#route li{display:flex;align-items:center;gap:.3em;padding:.2em .55em;border-radius:999px;border:1px solid var(--line);font-size:calc(var(--fs) - 1px)}
+#route li{position:relative}
+#route li+li{margin-left:1.15em}
+#route li+li::before{content:"→";position:absolute;left:-1.15em;color:var(--ink-dim)}
+#route li.has{border-color:var(--accent)}
+#route .c{font-variant-numeric:tabular-nums;font-weight:600;color:var(--accent);min-width:1.1em;text-align:center}
+#route .c:empty{display:none}
+#jlog{margin:0;padding-left:1.2em;line-height:1.6}
+#jrow[hidden]{display:none}
+#ptab{border-collapse:collapse;width:100%;table-layout:fixed;font-size:calc(var(--fs) - 2px)}
+#ptab th,#ptab td{padding:5px 4px;text-align:left;vertical-align:top;font-weight:400;border-top:1px solid var(--line)}
+#ptab thead th{border-top:0;line-height:1.3}
+#ptab th:first-child{width:4.6em;color:var(--ink-dim)}
+#ptab .x{min-height:26px;padding:0 .5em;font-size:calc(var(--fs) - 3px);margin-top:3px}
+#ptab .v{font-variant-numeric:tabular-nums}
+.bar{height:8px;background:#22303e;border-radius:4px;overflow:hidden;margin:4px 0 3px}
+.bar i{display:block;height:100%;background:var(--accent);border-radius:4px}
+.bdg{display:inline-flex;width:1.5em;height:1.5em;border-radius:50%;align-items:center;justify-content:center;font-weight:700;color:#10161d;margin-right:.25em}
+.pb{position:absolute;left:0;top:0;width:24px;height:24px;margin:-12px 0 0 -12px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#10161d;border:2px solid #10161d;box-shadow:0 0 0 2px rgba(255,255,255,.7);will-change:transform}
+#pstat,#dstat{margin:0;line-height:1.5;color:var(--ink-dim)}
+#pstat:empty,#dstat:empty{display:none}
+.wrapseg{display:flex;flex-wrap:wrap;gap:6px}
+.wrapseg button{min-height:calc(var(--tap) - 6px)}
+.sub{color:var(--ink-dim);font-size:calc(var(--fs) - 2px)}
+#stage.placing canvas{cursor:crosshair}
+#hint{display:none;font-size:calc(var(--fs) - 2px);color:var(--ink-dim);margin:0;line-height:1.5}
+@media (min-width:860px){
+  :root{--fs:17px;--tap:48px;--lab:15px}
+  body{flex-direction:row}
+  #bar{width:360px;height:100%;max-height:none;border-top:0;border-left:1px solid var(--line);padding:14px 12px;gap:10px;overflow-y:auto}
+  #tabs{display:none}
+  #bar>.blk{display:block}
+  .blk .grip{display:block}
+  .bars{height:150px}
+  #helpBtn{left:18px;top:16px}
+  .grow{flex-basis:100%}
+  #steps{flex-direction:column}
+  #steps button{justify-content:flex-start;padding:0 .8em;width:100%}
+  #steps .t{display:inline}
+  #hint{display:block}
+  #legend{left:18px;top:calc(var(--tap) + 28px)}
+  #ecg{height:150px}
+}
+@media (min-width:1500px){:root{--fs:20px;--tap:56px;--lab:18px} #bar{width:440px}}
+</style>
+</head>
+<body>
+<div id="main">
+<div id="stage">
+  <div id="labels"></div>
+  <div id="pbs" style="position:absolute;inset:0;pointer-events:none;overflow:hidden"></div>
+  <button id="helpBtn" aria-haspopup="dialog"><b>?</b>說明</button>
+  <div id="legend">
+    <b>血液循環</b>
+    <span class="key"><span class="sw" id="sw1" style="background:var(--oxy)"></span><span id="lg1">充氧血</span></span>
+    <span class="key"><span class="sw" id="sw2" style="background:var(--deoxy)"></span><span id="lg2">缺氧血</span></span>
+    <span class="key"><span class="sw" style="background:#f3f0ff;width:10px;height:10px;border-radius:50%;margin:0 4px"></span>白血球</span>
+    <span class="key"><span class="sw" style="background:#f7e2a0;width:6px;height:6px;border-radius:2px;margin:0 6px"></span>血小板</span>
+  </div>
+  <div id="loading">建立模型中…</div>
+</div>
+<canvas id="ecg" hidden aria-label="心電圖"></canvas>
+</div>
+<div id="bar">
+  <div id="tabs">
+    <button data-t="cyc" aria-pressed="true">心跳</button>
+    <button data-t="path" aria-pressed="false">路徑</button>
+    <button data-t="probe" aria-pressed="false">探測</button>
+    <button data-t="view" aria-pressed="false">顯示</button>
+  </div>
+  <section class="blk on" data-cat="cyc" data-id="cycle" data-title="心動週期">
+    <p id="cap"><b id="capT"></b><span id="capD"></span></p>
+    <div class="row">
+      <button id="back" aria-label="上一步">◀ 上一步</button>
+      <button id="play" aria-pressed="true">暫停</button>
+      <button id="fwd" aria-label="下一步">下一步 ▶</button>
+    </div>
+    <ol id="steps"></ol>
+  </section>
+  <section class="blk on" data-cat="cyc" data-id="signal" data-title="速度、心電圖、心音">
+    <div class="row">
+      <button id="ecgBtn" aria-pressed="false">心電圖</button>
+      <button id="sndBtn" aria-pressed="false">心音</button>
+      <div class="seg" role="group" aria-label="播放速度">
+        <button id="s1" aria-pressed="false">1×</button>
+        <button id="s2" aria-pressed="true">½</button>
+        <button id="s4" aria-pressed="false">¼</button>
+      </div>
+    </div>
+    <div class="row">
+      <div class="grow">
+        <label for="bpm">心跳</label>
+        <input id="bpm" type="range" min="40" max="140" step="1" value="72">
+        <span id="bpmv">72 次/分</span>
+      </div>
+    </div>
+  </section>
+  <section class="blk" data-cat="path" data-id="route" data-title="循環路徑">
+    <div class="seg" role="group" aria-label="顯示的循環">
+      <button id="hAll" aria-pressed="true">全部</button>
+      <button id="hSys" aria-pressed="false">體循環</button>
+      <button id="hPul" aria-pressed="false">肺循環</button>
+    </div>
+    <p id="pdesc"></p>
+    <ol id="route"></ol>
+  </section>
+  <section class="blk" data-cat="path" data-id="journey" data-title="血球旅程">
+    <div class="row">
+      <button id="jSys">完成一次體循環</button>
+      <button id="jPul">完成一次肺循環</button>
+    </div>
+    <div class="row" id="jrow" hidden>
+      <button id="follow" aria-pressed="false">跟隨一顆</button>
+      <button id="jEnd">結束旅程</button>
+    </div>
+    <p id="jstat" aria-live="polite"></p>
+    <ul id="jlog"></ul>
+  </section>
+  <section class="blk" data-cat="probe" data-id="probe" data-title="探測器：物質含量比較">
+    <div class="row">
+      <button id="pAdd" aria-pressed="false">＋ 放置探測器</button>
+      <button id="pClr">全部移除</button>
+    </div>
+    <div class="row"><span class="sub">快速比較</span>
+      <button id="pLiver">肝</button><button id="pKidney">腎</button><button id="pLung">肺</button>
+    </div>
+    <p id="pstat" aria-live="polite"></p>
+    <div id="pleg"></div>
+    <div id="pchart"></div>
+    <div id="pvals"></div>
+    <p id="pnote" class="sub" style="margin:0;line-height:1.5"></p>
+  </section>
+  <section class="blk" data-cat="probe" data-id="color" data-title="血球上色與注射">
+    <div class="wrapseg" id="cby" role="group" aria-label="血球上色依據"></div>
+    <div class="row">
+      <button id="inj">靜脈注射藥物</button>
+    </div>
+    <p id="dstat" aria-live="polite"></p>
+  </section>
+  <section class="blk" data-cat="view" data-id="view" data-title="視角與顯示">
+    <div class="row">
+      <div class="seg" role="group" aria-label="視角">
+        <button id="vAll" aria-pressed="true">全身</button>
+        <button id="vHeart" aria-pressed="false">心臟</button>
+        <button id="vLeg" aria-pressed="false">下肢靜脈</button>
+      </div>
+    </div>
+    <div class="row">
+      <button id="labBtn" aria-pressed="true">標示</button>
+      <button id="lymBtn" aria-pressed="false">淋巴循環</button>
+      <div class="seg" role="group" aria-label="模式">
+        <button id="mTeach" aria-pressed="true">教學</button>
+        <button id="mReal" aria-pressed="false">擬真</button>
+      </div>
+    </div>
+    <p id="vnote" class="sub" style="margin:0;line-height:1.5;white-space:pre-line"></p>
+  </section>
+</div>
+
+<div id="help" hidden role="dialog" aria-modal="true" aria-label="說明">
+  <div class="hbox">
+    <header>
+      <div class="seg" role="group" aria-label="說明內容">
+        <button data-h="use" aria-pressed="true">使用說明</button>
+        <button data-h="look" aria-pressed="false">觀察重點</button>
+        <button data-h="why" aria-pressed="false">學理說明</button>
+      </div>
+      <button id="helpX">關閉</button>
+    </header>
+    <div class="hbody">
+      <section data-h="use">
+        <h3>轉動與縮放</h3>
+        <ul><li>單指拖曳旋轉模型；雙指開合縮放，雙指拖曳平移。用滑鼠時，滾輪縮放、右鍵拖曳平移。</li>
+        <li>「視角與顯示」可以直接跳到全身、心臟或下肢靜脈。面對人體觀察，所以右心在畫面左側。</li></ul>
+        <h3>心動週期</h3>
+        <ul><li>「暫停／播放」控制動畫；「下一步」會播放到下一個階段後停住，「上一步」退回上一個階段。</li>
+        <li>點 1 到 5 的編號可以直接前往那一步。速度有 1×、½、¼ 三種，心跳可調 40 到 140 次/分。</li>
+        <li>「心電圖」在模型下方顯示波形。「心音」開啟後會聽到兩聲心音；平板若開著靜音模式可能聽不到。</li></ul>
+        <h3>循環路徑與血球旅程</h3>
+        <ul><li>選「體循環」或「肺循環」，另一條路徑會變暗，並列出沿途站名。</li>
+        <li>「完成一次體循環／肺循環」會標記 24 顆紅血球（帶光暈）從心室出發，全部回到心房後自動暫停並統計各路線。</li>
+        <li>旅程中按「跟隨一顆」，鏡頭會跟著白色圓環標出的那一顆。</li></ul>
+        <h3>探測器</h3>
+        <ul><li>按「放置探測器」，再點模型上的血管；最多放 4 個。「快速比較」會一次放好肝、腎或肺的進出血管。</li>
+        <li>直條圖把每種物質分成一組，組內每根長條代表一個探測器（顏色與編號相同）。</li>
+        <li>「血球上色」可改成依某種物質上色：愈亮代表愈多。「靜脈注射藥物」會從上半身的靜脈注入藥物。</li></ul>
+        <h3>面板</h3>
+        <ul><li>點區塊標題可以收合或展開。</li>
+        <li>寬螢幕上，按住標題左邊的把手拖曳，可以把區塊移到畫面上任何位置；按「還原」放回原處。</li>
+        <li>「教學」模式用國中課本的名稱，物質變化刻意放大；「擬真」模式改用接近真實的數值與名稱。</li></ul>
+      </section>
+      <section data-h="look" hidden>
+        <h3>心臟與瓣膜</h3>
+        <ul><li>四個腔室中，哪一個的壁最厚？它要把血送到哪裡？</li>
+        <li>房室瓣和半月瓣會同時打開嗎？用「下一步」一格一格看。</li>
+        <li>哪一步四片瓣膜全部關閉？這時心室裡的血往哪裡去？</li></ul>
+        <h3>心電圖與心音</h3>
+        <ul><li>第一聲和第二聲心音，各發生在心動週期的哪一步？是哪一種瓣膜關閉？</li>
+        <li>把心跳調快，心電圖的哪一段縮短得最多？</li></ul>
+        <h3>動脈、微血管、靜脈</h3>
+        <ul><li>動脈裡的血球有疏有密，這個疏密往哪個方向移動？離心臟愈遠有什麼變化？</li>
+        <li>紅血球在微血管裡怎麼排列？血的顏色在哪一段改變？</li>
+        <li>切到「下肢靜脈」：肌肉收縮時，哪一片瓣膜打開、哪一片關閉？放鬆時呢？</li></ul>
+        <h3>體循環與肺循環</h3>
+        <ul><li>同時從左心室出發的血球，會同時回到右心房嗎？哪一條路線最快、哪一條最慢？</li>
+        <li>肺動脈裡流的是充氧血還是缺氧血？肺靜脈呢？</li>
+        <li>有血球連續經過兩個微血管網才回到心臟嗎？它走的是哪一條路？</li></ul>
+        <h3>物質的變化</h3>
+        <ul><li>用「快速比較：肺」，比較肺動脈與肺靜脈的氧和二氧化碳。</li>
+        <li>用「快速比較：肝」，比較肝門靜脈與肝靜脈的氨和尿素。氨去了哪裡？</li>
+        <li>用「快速比較：腎」，比較腎動脈與腎靜脈的尿素。</li>
+        <li>注射藥物後，藥物最先到達心臟的哪個腔室？到達全身之前一定會先經過哪個器官？</li></ul>
+        <h3>血液與淋巴</h3>
+        <ul><li>拉近看血液：除了紅血球，還看得到哪兩種成分？數量和大小有什麼不同？</li>
+        <li>開啟「淋巴循環」：淡黃色液滴從哪裡出來？最後去了哪兩個地方？</li>
+        <li>淋巴管裡有紅血球嗎？白血球是怎麼進去的？淋巴最後流回哪裡？</li></ul>
+      </section>
+      <section data-h="why" hidden>
+        <h3>心臟</h3>
+        <p>心臟有兩個心房、兩個心室。心房收集流回心臟的血液，心室把血液送出去。左心室要把血送到全身，所以壁最厚；右心室只送到肺。</p>
+        <p>瓣膜只能朝一個方向打開。房室瓣在心房與心室之間，半月瓣在心室與動脈之間，兩者輪流開關，血液才不會倒流。心音是瓣膜關閉的聲音：第一聲是房室瓣，第二聲是半月瓣。</p>
+        <h3>心動週期</h3>
+        <p>心房先收縮，把血液擠進心室；接著心室收縮，房室瓣關閉、半月瓣打開，血液射入動脈；然後心臟舒張，半月瓣關閉、房室瓣打開，血液再流入心室。心電圖記錄的是引發這些收縮的電訊號，所以波形比收縮本身早一點出現。</p>
+        <h3>三種血管</h3>
+        <ul><li>動脈把血液帶離心臟，管壁厚而有彈性。心室每次射血都讓動脈壁鼓起，這個起伏沿動脈傳出去就是脈搏。</li>
+        <li>微血管的管壁只有一層細胞，紅血球幾乎要排成一列才能通過。氧、養分、二氧化碳和廢物都在這裡交換。</li>
+        <li>靜脈把血液帶回心臟，管壁較薄。四肢的靜脈裡有瓣膜，配合周圍肌肉的擠壓，血液才能逆著重力流回心臟。</li></ul>
+        <h3>體循環與肺循環</h3>
+        <p>體循環：左心室 → 主動脈 → 小動脈 → 全身微血管 → 小靜脈 → 上、下大靜脈 → 右心房。血液把氧送給細胞，帶走二氧化碳。</p>
+        <p>肺循環：右心室 → 肺動脈 → 肺部微血管 → 肺靜脈 → 左心房。血液在肺排出二氧化碳、換回氧。所以肺動脈裡是缺氧血，肺靜脈裡是充氧血，和其他動脈、靜脈相反。</p>
+        <h3>血液的組成</h3>
+        <ul><li>血漿：淡黃色的液體，運送養分、廢物等物質。</li>
+        <li>紅血球：雙凹圓盤狀，負責運送氧。</li>
+        <li>白血球：比紅血球大、數量少得多，負責防禦，能穿出微血管進入組織。</li>
+        <li>血小板：不規則的小碎片，幫助血液凝固。</li></ul>
+        <h3>肝、腎與含氮廢物</h3>
+        <p>細胞分解蛋白質會產生氨，腸道也會產生大量的氨。氨有毒，由血液送到肝，轉變成毒性較低的尿素；尿素再由血液送到腎，隨尿液排出。胃腸的血液不直接回心臟，而是先經肝門靜脈送到肝，所以肝門靜脈的氨特別多，肝靜脈的氨很少、尿素較多。</p>
+        <h3>淋巴循環</h3>
+        <p>血漿的一部分會從微血管滲出，成為細胞之間的組織液。組織液一部分回到微血管，一部分進入末端封閉的微淋巴管，成為淋巴。淋巴沿淋巴管流動，經過淋巴結，最後匯入靜脈、回到血液。淋巴管也有瓣膜，所以只朝一個方向流。</p>
+        <h3>這個模型和真實人體不同的地方</h3>
+        <ul><li>血球相對於血管被放大了很多；白血球的數量也比實際多。</li>
+        <li>脈搏波的傳遞被放慢，真實的脈搏幾乎瞬間傳到手腕。</li>
+        <li>心跳次數反映的是模型裡的路程長短，不是真實的循環時間。</li>
+        <li>教學模式的物質變化被放大；真實情況下，血液流過器官一次的變化小得多，可切到擬真模式比較。</li>
+        <li>心臟是示意的正面剖面；肺靜脈實際上左右各兩條；胸管實際位在心臟後方。</li></ul>
+      </section>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+(function(){
+'use strict';
+const V3 = THREE.Vector3;
+const ZC = 0.04;                      // 心臟剖面位置（前半切除）
+const clamp=(x,a,b)=>x<a?a:(x>b?b:x);
+const ss=(a,b,x)=>{const t=clamp((x-a)/(b-a),0,1);return t*t*(3-2*t)};
+const lerp=(a,b,t)=>a+(b-a)*t;
+function rng(seed){let a=seed>>>0;return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+
+/* ================= 心臟：隱式曲面 ================= */
+function ell(px,py,pz,cx,cy,cz,rx,ry,rz){
+  const x=(px-cx)/rx,y=(py-cy)/ry,z=(pz-cz)/rz;
+  const k0=Math.sqrt(x*x+y*y+z*z);
+  const x1=x/rx,y1=y/ry,z1=z/rz;
+  const k1=Math.sqrt(x1*x1+y1*y1+z1*z1);
+  return k1<1e-9?-Math.min(rx,ry,rz):k0*(k0-1)/k1;
+}
+function cap(px,py,pz,ax,ay,az,bx,by,bz,r){
+  const pax=px-ax,pay=py-ay,paz=pz-az,bax=bx-ax,bay=by-ay,baz=bz-az;
+  const h=clamp((pax*bax+pay*bay+paz*baz)/(bax*bax+bay*bay+baz*baz),0,1);
+  const dx=pax-bax*h,dy=pay-bay*h,dz=paz-baz*h;
+  return Math.sqrt(dx*dx+dy*dy+dz*dz)-r;
+}
+function cone(px,py,pz,a,b,ra,rb){
+  const pax=px-a[0],pay=py-a[1],paz=pz-a[2],bax=b[0]-a[0],bay=b[1]-a[1],baz=b[2]-a[2];
+  const h=clamp((pax*bax+pay*bay+paz*baz)/(bax*bax+bay*bay+baz*baz),0,1);
+  const dx=pax-bax*h,dy=pay-bay*h,dz=paz-baz*h;
+  return Math.sqrt(dx*dx+dy*dy+dz*dz)-(ra+(rb-ra)*h);
+}
+function smin(a,b,k){const h=Math.max(k-Math.abs(a-b),0)/k;return Math.min(a,b)-h*h*k*0.25}
+
+// 肺動脈圓錐路徑、主動脈根部
+const CON=[[-0.42,-0.1,0],[-0.34,0.4,0.02],[-0.2,0.75,0.3],[0.1,1.1,0.48],[0.2,1.22,0.5]];
+const PAP=[ // 乳頭肌：基部→尖端
+  {a:[-1.0,-0.8,-0.12],b:[-0.82,-0.52,-0.08],side:'R'},
+  {a:[-0.2,-0.8,-0.12],b:[-0.42,-0.55,-0.08],side:'R'},
+  {a:[0.86,-0.9,-0.12],b:[0.72,-0.6,-0.08],side:'L'},
+  {a:[0.18,-0.9,-0.12],b:[0.36,-0.62,-0.08],side:'L'}];
+const F={cavR:0,cavL:0,cut:0,pap:0,ledge:0};
+function heart(x,y,z){
+  const k=0.12;
+  let o=ell(x,y,z, 0.35,-0.45,0, 0.85,1.2,0.8);                 // 左心室外壁
+  o=smin(o,ell(x,y,z,-0.5,-0.45,0, 0.7,0.92,0.62),k);           // 右心室外壁
+  o=smin(o,ell(x,y,z,-0.85,0.72,0, 0.56,0.52,0.55),k);          // 右心房
+  o=smin(o,ell(x,y,z,0.8,0.72,-0.05, 0.55,0.47,0.55),k);        // 左心房
+  o=smin(o,cap(x,y,z,0.3,0,0,-0.05,0.95,-0.03,0.25),k);         // 主動脈根部
+  o=smin(o,cap(x,y,z,-0.9,0.9,0,-0.95,1.4,0,0.2),0.08);         // 上大靜脈入口
+  o=smin(o,cap(x,y,z,-0.95,0.62,0,-1.3,0.4,-0.05,0.2),0.08);    // 下大靜脈入口
+  o=smin(o,cap(x,y,z,-1.3,0.4,-0.05,-1.5,0.0,-0.1,0.2),0.08);
+  o=smin(o,cap(x,y,z,0.8,0.72,-0.05,1.5,0.95,-0.05,0.17),0.08); // 左肺靜脈入口
+  o=smin(o,cap(x,y,z,0.8,0.72,-0.05,0.2,0.9,-0.7,0.17),0.08);   // 右肺靜脈入口
+  let con=1e9;
+  for(let i=0;i<3;i++){const a=CON[i],b=CON[i+1];con=Math.min(con,cap(x,y,z,a[0],a[1],a[2],b[0],b[1],b[2],0.22))}
+  o=smin(o,con,0.06);
+  const cut=z-ZC;
+  const conUp=Math.max(con,0.56-y);                              // 圓錐上段不切開
+  let solid=Math.min(Math.max(o,cut),conUp);
+  // 右側腔室
+  let cR=ell(x,y,z,-0.58,-0.5,0, 0.47,0.62,0.42);
+  cR=smin(cR,ell(x,y,z,-0.85,0.72,0, 0.42,0.38,0.42),0.05);
+  cR=smin(cR,cap(x,y,z,-0.84,0.5,0,-0.8,0.0,0,0.18),0.05);
+  cR=smin(cR,cap(x,y,z,-0.9,0.9,0,-0.95,1.62,0,0.13),0.05);
+  cR=smin(cR,cap(x,y,z,-0.95,0.62,0,-1.3,0.4,-0.05,0.13),0.05);
+  cR=smin(cR,cap(x,y,z,-1.3,0.4,-0.05,-1.56,-0.25,-0.1,0.13),0.05);
+  for(let i=0;i<4;i++){const a=CON[i],b=CON[i+1];cR=smin(cR,cap(x,y,z,a[0],a[1],a[2],b[0],b[1],b[2],0.14),0.04)}
+  // 左側腔室
+  let cL=ell(x,y,z,0.5,-0.55,0, 0.4,0.72,0.4);
+  cL=smin(cL,ell(x,y,z,0.8,0.72,-0.05, 0.41,0.33,0.41),0.05);
+  cL=smin(cL,cap(x,y,z,0.7,0.5,0,0.66,0.0,0,0.17),0.05);
+  cL=smin(cL,cap(x,y,z,0.32,-0.1,0,-0.05,0.95,-0.03,0.16),0.05);
+  cL=smin(cL,cap(x,y,z,-0.05,0.95,-0.03,-0.1,1.3,-0.03,0.16),0.05);
+  cL=smin(cL,cap(x,y,z,0.8,0.72,-0.05,1.7,1.0,-0.05,0.11),0.05);
+  cL=smin(cL,cap(x,y,z,0.8,0.72,-0.05,0.08,0.93,-0.8,0.11),0.05);
+  let d=Math.max(solid,-Math.min(cR,cL));
+  let pp=1e9;
+  for(let i=0;i<4;i++){const a=PAP[i].a,b=PAP[i].b;pp=Math.min(pp,cone(x,y,z,a,b,0.13,0.045))}
+  d=smin(d,pp,0.09);
+  F.cavR=cR;F.cavL=cL;F.cut=cut;F.pap=pp;F.ledge=(z>ZC+0.01)?Math.abs(y-0.56):1;
+  return d;
+}
+
+function surfaceNets(f,mn,mx,h){
+  const nx=Math.ceil((mx[0]-mn[0])/h)+1,ny=Math.ceil((mx[1]-mn[1])/h)+1,nz=Math.ceil((mx[2]-mn[2])/h)+1;
+  const vals=new Float32Array(nx*ny*nz);
+  let q=0;
+  for(let k=0;k<nz;k++){const z=mn[2]+k*h;for(let j=0;j<ny;j++){const y=mn[1]+j*h;for(let i=0;i<nx;i++){vals[q++]=f(mn[0]+i*h,y,z)}}}
+  const idx=new Int32Array(nx*ny*nz).fill(-1);
+  const pos=[];const sx=1,sy=nx,sz=nx*ny;
+  const cOff=[0,sx,sy,sx+sy,sz,sx+sz,sy+sz,sx+sy+sz];
+  const cXYZ=[[0,0,0],[1,0,0],[0,1,0],[1,1,0],[0,0,1],[1,0,1],[0,1,1],[1,1,1]];
+  const edges=[[0,1],[2,3],[4,5],[6,7],[0,2],[1,3],[4,6],[5,7],[0,4],[1,5],[2,6],[3,7]];
+  let count=0;
+  for(let k=0;k<nz-1;k++)for(let j=0;j<ny-1;j++)for(let i=0;i<nx-1;i++){
+    const c=i+nx*j+sz*k;let mask=0;
+    for(let m=0;m<8;m++)if(vals[c+cOff[m]]<0)mask|=1<<m;
+    if(mask===0||mask===255)continue;
+    let ax=0,ay=0,az=0,n=0;
+    for(let e=0;e<12;e++){const a=edges[e][0],b=edges[e][1];
+      const va=vals[c+cOff[a]],vb=vals[c+cOff[b]];
+      if((va<0)!==(vb<0)){const t=va/(va-vb);
+        ax+=cXYZ[a][0]+(cXYZ[b][0]-cXYZ[a][0])*t;ay+=cXYZ[a][1]+(cXYZ[b][1]-cXYZ[a][1])*t;az+=cXYZ[a][2]+(cXYZ[b][2]-cXYZ[a][2])*t;n++}}
+    pos.push(mn[0]+(i+ax/n)*h,mn[1]+(j+ay/n)*h,mn[2]+(k+az/n)*h);idx[c]=count++;
+  }
+  const ind=[];
+  const st=[sx,sy,sz];
+  for(let k=1;k<nz-1;k++)for(let j=1;j<ny-1;j++)for(let i=1;i<nx-1;i++){
+    const c=i+nx*j+sz*k;const s0=vals[c]<0;
+    for(let a=0;a<3;a++){
+      if((vals[c+st[a]]<0)===s0)continue;
+      const u=st[(a+1)%3],v=st[(a+2)%3];
+      const q0=idx[c],q1=idx[c-u],q2=idx[c-u-v],q3=idx[c-v];
+      if(q0<0||q1<0||q2<0||q3<0)continue;
+      if(s0){ind.push(q0,q1,q2,q0,q2,q3)}else{ind.push(q0,q2,q1,q0,q3,q2)}
+    }
+  }
+  return {pos:new Float32Array(pos),ind:new Uint32Array(ind)};
+}
+
+function srgb(hex){return new THREE.Color(hex).convertSRGBToLinear()}
+const HC2={outer:srgb(0xa64f49),cut:srgb(0xd98f84),endoR:srgb(0x8a2f3a),endoL:srgb(0xb53a3c),papR:srgb(0xa24a52),papL:srgb(0xc65552)};
+const HC={outer:srgb(0xb9584f),cut:srgb(0xe09a8c),endoR:srgb(0x4a66b4),endoL:srgb(0xb7343a),papR:srgb(0x6c84c8),papL:srgb(0xcf5a5a)};
+
+function buildHeartGeometry(){
+  const h=0.026;
+  const m=surfaceNets(heart,[-1.9,-1.8,-0.98],[1.85,1.78,0.82],h);
+  const n=m.pos.length/3,nor=new Float32Array(n*3),col=new Float32Array(n*3),col2=new Float32Array(n*3);
+  const e=0.012;
+  for(let i=0;i<n;i++){
+    const x=m.pos[i*3],y=m.pos[i*3+1],z=m.pos[i*3+2];
+    let gx=heart(x+e,y,z)-heart(x-e,y,z),gy=heart(x,y+e,z)-heart(x,y-e,z),gz=heart(x,y,z+e)-heart(x,y,z-e);
+    const l=Math.hypot(gx,gy,gz)||1;nor[i*3]=gx/l;nor[i*3+1]=gy/l;nor[i*3+2]=gz/l;
+    heart(x,y,z);
+    const tR=Math.abs(F.cavR),tL=Math.abs(F.cavL),tC=Math.min(Math.abs(F.cut),F.ledge),th=0.02;
+    let c='outer';
+    const nzv=nor[i*3+2],nyv=nor[i*3+1];
+    const onCut=(Math.abs(F.cut)<0.03&&nzv>0.55)||(F.ledge<0.03&&nyv<-0.55);
+    if(onCut)c='cut';
+    else if(F.pap<0.03)c=(x<0?'papR':'papL');
+    else if(tR<0.03&&tR<=tL)c='endoR';
+    else if(tL<0.03)c='endoL';
+    const c1=HC[c],c2=HC2[c];col[i*3]=c1.r;col[i*3+1]=c1.g;col[i*3+2]=c1.b;col2[i*3]=c2.r;col2[i*3+1]=c2.g;col2[i*3+2]=c2.b;
+  }
+  // 以法線修正三角形方向
+  const ind=m.ind,p=m.pos;
+  for(let t=0;t<ind.length;t+=3){
+    const a=ind[t]*3,b=ind[t+1]*3,c=ind[t+2]*3;
+    const ux=p[b]-p[a],uy=p[b+1]-p[a+1],uz=p[b+2]-p[a+2],vx=p[c]-p[a],vy=p[c+1]-p[a+1],vz=p[c+2]-p[a+2];
+    const nx=uy*vz-uz*vy,ny=uz*vx-ux*vz,nz=ux*vy-uy*vx;
+    if(nx*(nor[a]+nor[b]+nor[c])+ny*(nor[a+1]+nor[b+1]+nor[c+1])+nz*(nor[a+2]+nor[b+2]+nor[c+2])<0){const tmp=ind[t+1];ind[t+1]=ind[t+2];ind[t+2]=tmp}
+  }
+  const g=new THREE.BufferGeometry();
+  g.setAttribute('position',new THREE.BufferAttribute(m.pos,3));
+  g.setAttribute('normal',new THREE.BufferAttribute(nor,3));
+  g.setAttribute('color',new THREE.BufferAttribute(col,3));
+  g.setIndex(new THREE.BufferAttribute(ind,1));
+  g.userData={teach:g.attributes.color,real:new THREE.BufferAttribute(col2,3)};
+  return g;
+}
+
+/* 心搏變形：著色器與 JS 共用同一公式 */
+const beatU={uV:{value:0},uA:{value:0}};
+const BEAT_GLSL=`
+uniform float uV; uniform float uA;
+vec3 beat(vec3 p){
+  float wV=1.0-smoothstep(-0.15,0.35,p.y);
+  p.xz=mix(p.xz,vec2(-0.03,0.0),wV*uV*0.13);
+  p.y+=wV*uV*0.09*(0.15-p.y);
+  float wA=smoothstep(0.3,0.6,p.y)*smoothstep(0.3,0.55,abs(p.x))*(1.0-smoothstep(1.0,1.3,p.y));
+  vec3 c=vec3(p.x<0.0?-0.85:0.8,0.72,0.0);
+  p=mix(p,c,wA*uA*0.09);
+  return p;
+}`;
+function beat(p){
+  const uV=beatU.uV.value,uA=beatU.uA.value;
+  const wV=1-ss(-0.15,0.35,p.y);
+  p.x=lerp(p.x,-0.03,wV*uV*0.13);p.z=lerp(p.z,0,wV*uV*0.13);
+  p.y+=wV*uV*0.09*(0.15-p.y);
+  const wA=ss(0.3,0.6,p.y)*ss(0.3,0.55,Math.abs(p.x))*(1-ss(1.0,1.3,p.y));
+  const k=wA*uA*0.09;
+  p.x=lerp(p.x,p.x<0?-0.85:0.8,k);p.y=lerp(p.y,0.72,k);p.z=lerp(p.z,0,k);
+  return p;
+}
+
+/* ================= 血管幾何 ================= */
+const WAVE=16; // 脈搏波每個心動週期前進的距離
+function E(x){const p=x-Math.floor(x);return ss(0.19,0.25,p)-ss(0.38,0.5,p)}
+let acc={pos:[],nor:[],oxy:[],pul:[],circ:[],idx:[],count:0};let curCirc=0; // 0 體循環 1 肺循環
+function perp(T){const r=Math.abs(T.z)<0.9?new V3(0,0,1):new V3(1,0,0);return new V3().crossVectors(T,r).normalize()}
+function frames(curve,u0,u1,n){
+  const out=[];let N=null,prevT=null;
+  for(let i=0;i<=n;i++){
+    const u=u0+(u1-u0)*i/n;const P=curve.getPointAt(u),T=curve.getTangentAt(u).normalize();
+    if(!N)N=perp(T);else{const ax=new V3().crossVectors(prevT,T);const s=ax.length();if(s>1e-6){ax.multiplyScalar(1/s);N.applyAxisAngle(ax,Math.atan2(s,prevT.dot(T)))}}
+    const B=new V3().crossVectors(T,N).normalize();N.crossVectors(B,T).normalize();
+    out.push({P,N:N.clone(),B,T});prevT=T;
+  }
+  return out;
+}
+function tube(curve,u0,u1,rFn,oFn,pd,radial){
+  const len=curve.getLength()*(u1-u0);const n=Math.max(3,Math.ceil(len/0.07));
+  const fr=frames(curve,u0,u1,n);const base=acc.count;
+  for(let i=0;i<=n;i++){
+    const f=fr[i],t=i/n,r=rFn(t),ox=oFn(t),pv=Array.isArray(pd)?lerp(pd[0],pd[1],t):-1;
+    for(let j=0;j<radial;j++){
+      const a=2*Math.PI*j/radial,ca=Math.cos(a),sa=Math.sin(a);
+      const nx=f.N.x*ca+f.B.x*sa,ny=f.N.y*ca+f.B.y*sa,nz=f.N.z*ca+f.B.z*sa;
+      acc.pos.push(f.P.x+nx*r,f.P.y+ny*r,f.P.z+nz*r);acc.nor.push(nx,ny,nz);acc.oxy.push(ox);acc.pul.push(pv);acc.circ.push(curCirc);
+    }
+  }
+  for(let i=0;i<n;i++)for(let j=0;j<radial;j++){
+    const a=base+i*radial+j,b=base+i*radial+(j+1)%radial,c=a+radial,d=b+radial;
+    acc.idx.push(a,b,c,b,d,c);
+  }
+  acc.count+=(n+1)*radial;
+}
+const _sg={};
+function ball(p,r,o,pulse,detail){
+  const key=detail||8;const g=_sg[key]||(_sg[key]=new THREE.SphereGeometry(1,key,Math.max(4,key-2)));
+  const P=g.attributes.position.array,I=g.index.array,base=acc.count;const pv=pulse>0?pulse:-1;
+  for(let i=0;i<P.length;i+=3){acc.pos.push(p.x+P[i]*r,p.y+P[i+1]*r,p.z+P[i+2]*r);acc.nor.push(P[i],P[i+1],P[i+2]);acc.oxy.push(o);acc.pul.push(pv);acc.circ.push(curCirc)}
+  for(let i=0;i<I.length;i++)acc.idx.push(base+I[i]);
+  acc.count+=P.length/3;
+}
+function crv(pts){const c=new THREE.CatmullRomCurve3(pts.map(p=>new V3(p[0],p[1],p[2])),false,'centripetal');c.arcLengthDivisions=500;return c}
+function uAt(curve,p){let best=0,bd=1e9;const q=new V3(p[0],p[1],p[2]);for(let i=0;i<=600;i++){const d=curve.getPointAt(i/600).distanceToSquared(q);if(d<bd){bd=d;best=i/600}}return best}
+
+/* ================= 血流路徑（有向圖） ================= */
+const segs={};const segList=[];
+function flow(name,curve,u0,u1,o){
+  const len=curve.getLength()*(u1-u0);const K=Math.max(2,Math.ceil(len/0.06))+1;
+  const fr=frames(curve,u0,u1,K-1);
+  const P=new Float32Array(K*3),N=new Float32Array(K*3),B=new Float32Array(K*3);
+  for(let i=0;i<K;i++){const f=fr[i];P.set([f.P.x,f.P.y,f.P.z],i*3);N.set([f.N.x,f.N.y,f.N.z],i*3);B.set([f.B.x,f.B.y,f.B.z],i*3)}
+  const s=Object.assign({name,len,K,P,N,B,r0:0.1,r1:0.1,rMid:0,oxy0:1,oxy1:1,kind:'artery',next:[],w:null,heart:false,d0:0,id:segList.length},o);
+  segs[name]=s;segList.push(s);return s;
+}
+
+function makeBed(name,o){
+  curCirc=name.indexOf('lung')===0?1:0;
+  const R=rng(o.seed||7);const C=new V3(...o.c),U=new V3(...o.U),W=new V3(...o.W);
+  const depth=o.depth||0.25,n=o.n||7;
+  const at=(su,sw,sz)=>new V3().copy(C).addScaledVector(U,su).addScaledVector(W,sw).add(new V3(0,0,sz));
+  const ven=[];
+  for(let j=0;j<n;j++){const s=lerp(-0.86,0.86,j/(n-1));ven.push({s,p:at(0.72+(R()-0.5)*0.1,s,(R()-0.5)*depth*1.4)})}
+  const outP=new V3(...o.out.p),rO=o.out.r,oo=o.out.oxy;
+  const entries=[];
+  // 小靜脈匯入靜脈
+  ven.forEach((v,j)=>{
+    const mid=new V3().lerpVectors(v.p,outP,0.5).addScaledVector(U,0.18/Math.max(U.length(),1e-6)*U.length());
+    const c=new THREE.CatmullRomCurve3([v.p,mid,outP],false,'centripetal');
+    tube(c,0,1,t=>lerp(0.034,rO*0.62,t*t),()=>oo,0,7);ball(v.p,0.036,oo,0,6);
+    flow(name+'_v'+j,c,0,1,{r0:0.03,r1:rO*0.6,oxy0:oo,oxy1:oo,kind:'venule',next:[o.next]});
+  });
+  ball(outP,rO,oo,0,10);
+  let ci=0;
+  o.inputs.forEach((inp,k)=>{
+    const inP=new V3(...inp.p),m=inp.n||n,s0=inp.s?inp.s[0]:-0.86,s1=inp.s?inp.s[1]:0.86;const list=[];
+    ball(inP,inp.r,inp.oxy,inp.dist,10);
+    for(let i=0;i<m;i++){
+      const s=m>1?lerp(s0,s1,i/(m-1)):(s0+s1)/2;
+      const a=at(-0.72+(R()-0.5)*0.1,s,(R()-0.5)*depth*1.4);
+      const mid=new V3().lerpVectors(inP,a,0.5).addScaledVector(U,-0.18);
+      const c=new THREE.CatmullRomCurve3([inP,mid,a],false,'centripetal');
+      const al=c.getLength(),pul=inp.dist>=0;tube(c,0,1,t=>lerp(inp.r*0.62,0.034,Math.sqrt(t)),()=>inp.oxy,pul?[inp.dist,inp.dist+al]:0,7);ball(a,0.036,inp.oxy,pul?inp.dist+al:-1,6);
+      const nm=name+'_a'+k+'_'+i;const next=[];
+      // 每條小動脈分出數條微血管，連到鄰近的小靜脈
+      const order=ven.map((v,j)=>({j,d:Math.abs(v.s-s)+R()*0.12})).sort((x,y)=>x.d-y.d).slice(0,o.fan||3);
+      order.forEach(q=>{
+        const v=ven[q.j];
+        const p1=new V3().lerpVectors(a,v.p,0.33).addScaledVector(W,(R()-0.5)*0.3).add(new V3(0,0,(R()-0.5)*depth*2));
+        const p2=new V3().lerpVectors(a,v.p,0.67).addScaledVector(W,(R()-0.5)*0.3).add(new V3(0,0,(R()-0.5)*depth*2));
+        const cc=new THREE.CatmullRomCurve3([a,p1,p2,v.p],false,'centripetal');
+        tube(cc,0,1,()=>0.021,t=>lerp(inp.oxy,oo,ss(0.15,0.85,t)),0,5);
+        const cn=name+'_c'+(ci++);
+        flow(cn,cc,0,1,{r0:0.018,r1:0.018,oxy0:inp.oxy,oxy1:oo,kind:'cap',next:[name+'_v'+q.j]});
+        next.push(cn);
+      });
+      flow(nm,c,0,1,{r0:inp.r*0.6,r1:0.03,oxy0:inp.oxy,oxy1:inp.oxy,kind:'arteriole',next,d0:inp.dist,steady:!(inp.dist>=0)});
+      list.push(nm);
+    }
+    entries.push(list);
+  });
+  return entries;
+}
+
+/* 主要血管：畫出管壁並登錄血流段 */
+function vessel(name,pts,o){
+  const c=crv(pts);const d0=o.draw0!=null?o.draw0:0,d1=o.draw1!=null?o.draw1:1;
+  const rF=o.rF||(()=>o.r);
+  const L=c.getLength();const pd=o.kind==='artery'?[(o.d0||0)+L*d0,(o.d0||0)+L*d1]:0;
+  tube(c,d0,d1,t=>rF(lerp(d0,d1,t)),()=>o.oxy,pd,o.radial||14);
+  ball(c.getPointAt(d0),rF(d0),o.oxy,0,12);ball(c.getPointAt(d1),rF(d1),o.oxy,0,12);
+  return {c,rF,L};
+}
+
+function buildCirculation(){
+  const RED=1,BLUE=0,PORTAL=0.28;
+  const len=pts=>crv(pts).getLength();
+  /* ---- 先定出主要動脈的路徑，算出各處離心臟的距離（脈搏波延遲用） ---- */
+  const aoPts=[[0.18,0.3,-0.01],[0.0,0.8,-0.03],[-0.2,1.7,-0.05],[-0.05,2.25,-0.2],[0.3,2.42,-0.42],[1.0,2.15,-0.8],[1.5,1.4,-0.95],[1.72,0.2,-0.85],[1.76,-1.2,-0.5],[1.76,-2.0,-0.25],[1.76,-2.75,-0.15],[1.76,-4.35,-0.05],[1.74,-5.6,0],[1.7,-7.0,0],[1.4,-7.85,0],[1.02,-8.2,0]];
+  const aoC=crv(aoPts),Lao=aoC.getLength();
+  const uDraw=uAt(aoC,[-0.06,1.02,-0.03]),uH=uAt(aoC,aoPts[4]),uHe=uAt(aoC,aoPts[9]),uMe=uAt(aoC,aoPts[10]),uRe=uAt(aoC,aoPts[11]),uLeg=uAt(aoC,aoPts[12]);
+  const headPts=[aoPts[4],[0.55,3.0,-0.3],[0.9,3.75,-0.1],[1.0,4.4,0]];
+  const hepPts=[aoPts[9],[1.25,-1.93,0.0],[0.7,-1.98,0.08],[0.2,-2.15,0.1]];
+  const mesPts=[aoPts[10],[1.62,-3.15,0.0],[1.38,-3.4,0.08]];
+  const renPts=[aoPts[11],[1.35,-4.5,0],[0.86,-4.55,0]];
+  const ptPts=[[-0.36,0.28,0.015],[-0.34,0.4,0.02],[-0.2,0.75,0.3],[0.1,1.1,0.48],[0.35,1.4,0.3],[0.45,1.58,0.05]];
+  const lpaPts=[ptPts[5],[1.2,1.82,0.1],[2.0,2.5,0.05],[2.6,3.1,0]];
+  const rpaPts=[ptPts[5],[0.1,1.64,-0.45],[-0.6,1.72,-0.5],[-1.5,2.1,-0.3],[-2.1,2.6,-0.1],[-2.6,3.1,0]];
+  const ptC=crv(ptPts),Lpt=ptC.getLength();
+  const D={head:uH*Lao+len(headPts),hep:uHe*Lao+len(hepPts),mes:uMe*Lao+len(mesPts),ren:uRe*Lao+len(renPts),lower:Lao,lungL:Lpt+len(lpaPts),lungR:Lpt+len(rpaPts)};
+
+  /* ---- 微血管床 ---- */
+  const lungL=makeBed('lungL',{seed:11,c:[3.35,2.1,0],U:[0,-1.0,0],W:[0.78,0,0],depth:0.38,n:9,fan:3,inputs:[{p:[2.6,3.1,0],r:0.14,oxy:BLUE,dist:D.lungL}],out:{p:[2.6,1.15,0],r:0.12,oxy:RED},next:'lpv'});
+  const lungR=makeBed('lungR',{seed:23,c:[-3.35,2.1,0],U:[0,-1.0,0],W:[-0.78,0,0],depth:0.38,n:9,fan:3,inputs:[{p:[-2.6,3.1,0],r:0.14,oxy:BLUE,dist:D.lungR}],out:{p:[-2.6,1.15,0],r:0.12,oxy:RED},next:'rpv'});
+  const head=makeBed('head',{seed:5,c:[0,4.8,0],U:[-0.72,0,0],W:[0,0.55,0],depth:0.3,n:8,inputs:[{p:[1.0,4.4,0],r:0.11,oxy:RED,dist:D.head}],out:{p:[-1.0,4.4,0],r:0.13,oxy:BLUE},next:'svc'});
+  const liver=makeBed('liver',{seed:31,c:[-0.55,-2.55,0.1],U:[-0.6,0,0],W:[0,0.45,0],depth:0.25,n:7,inputs:[{p:[0.2,-2.15,0.1],r:0.075,oxy:RED,n:3,s:[0.2,0.86],dist:D.hep},{p:[0.15,-2.88,0.1],r:0.09,oxy:PORTAL,n:4,s:[-0.86,0.05],dist:-1}],out:{p:[-1.25,-2.5,0.02],r:0.1,oxy:BLUE},next:'hepv'});
+  const gut=makeBed('gut',{seed:41,c:[0.78,-3.4,0.1],U:[-0.5,0,0],W:[0,0.42,0],depth:0.25,n:6,inputs:[{p:[1.38,-3.4,0.08],r:0.085,oxy:RED,dist:D.mes}],out:{p:[0.16,-3.36,0.1],r:0.09,oxy:PORTAL},next:'portal'});
+  const kidney=makeBed('kidney',{seed:53,c:[0,-4.6,0],U:[-0.62,0,0],W:[0,0.4,0],depth:0.25,n:7,inputs:[{p:[0.86,-4.55,0],r:0.085,oxy:RED,dist:D.ren}],out:{p:[-0.86,-4.55,0],r:0.09,oxy:BLUE},next:'renv'});
+  const lower=makeBed('lower',{seed:67,c:[0,-8.3,0],U:[-0.75,0,0],W:[0,0.62,0],depth:0.3,n:9,inputs:[{p:[1.02,-8.2,0],r:0.125,oxy:RED,dist:D.lower}],out:{p:[-1.02,-8.2,0],r:0.13,oxy:BLUE},next:'legV'});
+
+  /* ---- 主動脈與分支 ---- */
+  curCirc=0;
+  const aoR=u=>lerp(0.215,0.125,Math.pow(u,0.8));
+  vessel('aorta',aoPts,{rF:aoR,oxy:RED,kind:'artery',draw0:uDraw,radial:16,d0:0});
+  const A=(n,u0,u1,next,w)=>flow(n,aoC,u0,u1,{r0:aoR(u0),r1:aoR(u1),oxy0:RED,oxy1:RED,kind:'artery',next,w,d0:u0*Lao});
+  A('ao1',0,uH,['headA','ao2'],[0.26,0.74]);
+  A('ao2',uH,uHe,['hepA','ao3'],[0.13,0.87]);
+  A('ao3',uHe,uMe,['mesA','ao4'],[0.24,0.76]);
+  A('ao4',uMe,uRe,['renA','ao5'],[0.38,0.62]);
+  A('ao5',uRe,uLeg,['legA']);A('legA',uLeg,1,lower[0]);
+  const br=(name,pts,r,oxy,kind,next,d0)=>{const v=vessel(name,pts,{r,oxy,kind,radial:12,d0});flow(name,v.c,0,1,{r0:r,r1:r,oxy0:oxy,oxy1:oxy,kind,next,d0:d0||0});return v};
+  br('headA',headPts,0.11,RED,'artery',head[0],uH*Lao);
+  br('hepA',hepPts,0.075,RED,'artery',liver[0],uHe*Lao);
+  br('mesA',mesPts,0.085,RED,'artery',gut[0],uMe*Lao);
+  br('renA',renPts,0.085,RED,'artery',kidney[0],uRe*Lao);
+  br('portal',[[0.16,-3.36,0.1],[-0.02,-3.12,0.1],[0.15,-2.88,0.1]],0.09,PORTAL,'vein',liver[1]);
+
+  /* ---- 大靜脈 ---- */
+  const ivcPts=[[-1.02,-8.2,0],[-1.4,-7.85,0],[-1.7,-7.0,0],[-1.74,-5.6,0],[-1.76,-4.35,-0.05],[-1.76,-2.3,-0.1],[-1.72,-1.2,-0.12],[-1.56,-0.2,-0.1],[-1.3,0.4,-0.05],[-0.95,0.64,0]];
+  const ivcC=crv(ivcPts);const ivR=u=>lerp(0.13,0.17,u);
+  const uIv=uAt(ivcC,[-1.52,-0.05,-0.1]),uLv=uAt(ivcC,ivcPts[3]),uRv=uAt(ivcC,ivcPts[4]),uHv=uAt(ivcC,ivcPts[5]);
+  tube(ivcC,0,uIv,t=>ivR(t*uIv),()=>BLUE,0,14);ball(ivcC.getPointAt(uIv),ivR(uIv),BLUE,0,12);
+  const Vn=(n,u0,u1,next)=>flow(n,ivcC,u0,u1,{r0:ivR(u0),r1:ivR(u1),oxy0:BLUE,oxy1:BLUE,kind:'vein',next});
+  Vn('legV',0,uLv,['ivc1']).kind='legvein';Vn('ivc1',uLv,uRv,['ivc2']);
+  // 下肢靜脈的兩片瓣膜（下大靜脈本身沒有瓣膜）
+  [VA,VB].forEach((t,i)=>{const sg=segs.legV,k=Math.round(t*(sg.K-1))*3,P=sg.P;
+    VALVES.push({name:'vv'+i,type:'vv',idx:i,c:[P[k],P[k+1],P[k+2]],d:[P[k+3]-P[k-3],P[k+4]-P[k-2],P[k+5]-P[k-1]],r:lerp(sg.r0,sg.r1,t)*1.05,L:0.2,n:2,rot:0});});Vn('ivc2',uRv,uHv,['ivc3']);Vn('ivc3',uHv,1,['ra']);
+  br('renv',[[-0.86,-4.55,0],[-1.35,-4.5,0],ivcPts[4]],0.09,BLUE,'vein',['ivc2']);
+  br('hepv',[[-1.25,-2.5,0.02],[-1.52,-2.42,-0.05],ivcPts[5]],0.1,BLUE,'vein',['ivc3']);
+  const svcPts=[[-1.0,4.4,0],[-0.98,3.6,0],[-0.95,2.4,0],[-0.95,1.5,0],[-0.93,1.2,0],[-0.88,0.8,0]];
+  const svcC=crv(svcPts);const uSv=uAt(svcC,[-0.94,1.28,0]);
+  tube(svcC,0,uSv,t=>lerp(0.13,0.165,t),()=>BLUE,0,14);ball(svcC.getPointAt(uSv),0.165,BLUE,0,12);
+  flow('svc',svcC,0,1,{r0:0.13,r1:0.15,oxy0:BLUE,oxy1:BLUE,kind:'vein',next:['ra']});
+
+  /* ---- 肺循環 ---- */
+  curCirc=1;
+  const uPt=uAt(ptC,ptPts[3]);
+  tube(ptC,uPt,1,()=>0.19,()=>BLUE,[uPt*Lpt,Lpt],14);ball(ptC.getPointAt(uPt),0.19,BLUE,0,12);ball(ptC.getPointAt(1),0.19,BLUE,Lpt,12);
+  const uCl=uAt(ptC,[-0.3,0.55,0.12]);
+  flow('ptLow',ptC,0,uCl,{r0:0.13,r1:0.13,oxy0:BLUE,oxy1:BLUE,kind:'artery',next:['pt'],heart:true,d0:0});
+  flow('pt',ptC,uCl,1,{r0:0.13,r1:0.17,oxy0:BLUE,oxy1:BLUE,kind:'artery',next:['lpa','rpa'],d0:uCl*Lpt});
+  br('lpa',lpaPts,0.14,BLUE,'artery',lungL[0],Lpt);
+  br('rpa',rpaPts,0.14,BLUE,'artery',lungR[0],Lpt);
+  const lpvPts=[[2.6,1.15,0],[2.0,1.02,-0.02],[1.5,0.95,-0.05],[0.8,0.72,-0.05]];
+  const lpvC=crv(lpvPts);const uLp=uAt(lpvC,[1.42,0.93,-0.05]);
+  tube(lpvC,0,uLp,()=>0.12,()=>RED,0,12);ball(lpvC.getPointAt(uLp),0.12,RED,0,10);
+  flow('lpv',lpvC,0,1,{r0:0.11,r1:0.1,oxy0:RED,oxy1:RED,kind:'vein',next:['la']});
+  const rpvPts=[[-2.6,1.15,0],[-1.9,1.2,-0.45],[-1.0,1.1,-0.8],[-0.3,0.98,-0.86],[0.2,0.9,-0.7],[0.8,0.72,-0.05]];
+  const rpvC=crv(rpvPts);const uRp=uAt(rpvC,[0.26,0.88,-0.64]);
+  tube(rpvC,0,uRp,()=>0.12,()=>RED,0,12);ball(rpvC.getPointAt(uRp),0.12,RED,0,10);
+  flow('rpv',rpvC,0,1,{r0:0.11,r1:0.1,oxy0:RED,oxy1:RED,kind:'vein',next:['la']});
+
+  /* ---- 心臟腔室內的血流 ---- */
+  const H=(n,pts,o)=>flow(n,crv(pts),0,1,Object.assign({heart:true},o));
+  H('ra',[[-0.9,0.74,0],[-0.84,0.45,0],[-0.81,0.16,0]],{r0:0.26,r1:0.13,rMid:0.3,oxy0:BLUE,oxy1:BLUE,kind:'atrium',next:['rvIn']});
+  H('rvIn',[[-0.81,0.16,0],[-0.74,-0.35,0],[-0.64,-0.8,0]],{r0:0.13,r1:0.2,rMid:0.28,oxy0:BLUE,oxy1:BLUE,kind:'vin',next:['rvOut'],pool:0});
+  H('rvOut',[[-0.64,-0.8,0],[-0.47,-0.45,0],[-0.42,-0.05,0],[-0.36,0.28,0.015]],{r0:0.2,r1:0.12,rMid:0.24,oxy0:BLUE,oxy1:BLUE,kind:'vout',next:['ptLow'],pool:0});
+  H('la',[[0.82,0.74,-0.05],[0.72,0.45,0],[0.67,0.16,0]],{r0:0.24,r1:0.13,rMid:0.28,oxy0:RED,oxy1:RED,kind:'atrium',next:['lvIn']});
+  H('lvIn',[[0.67,0.16,0],[0.62,-0.4,0],[0.55,-0.92,0]],{r0:0.13,r1:0.2,rMid:0.27,oxy0:RED,oxy1:RED,kind:'vin',next:['lvOut'],pool:1});
+  H('lvOut',[[0.55,-0.92,0],[0.4,-0.5,0],[0.32,-0.1,0],[0.18,0.3,-0.01]],{r0:0.2,r1:0.13,rMid:0.22,oxy0:RED,oxy1:RED,kind:'vout',next:['ao1'],pool:1});
+  segs.ao1.heartTo=uDraw/uH; // 主動脈根部仍在剖面內
+  tagSegs();
+}
+/* 每段血流標上：所屬循環、路徑站別、位置名稱 */
+const VA=0.5,VB=0.92; // 下肢靜脈兩片瓣膜在該段的位置
+const GID={};let GN=0,gSum,gCnt;
+const BED={head:'上半身',liver:'肝',gut:'胃腸',kidney:'腎',lower:'下半身',lungL:'左肺',lungR:'右肺'};
+function tagSegs(){
+  const T={ra:[0,6,'右心房'],rvIn:[1,0,'右心室'],rvOut:[1,0,'右心室'],ptLow:[1,1,'肺動脈'],pt:[1,1,'肺動脈'],lpa:[1,1,'左肺動脈'],rpa:[1,1,'右肺動脈'],lpv:[1,3,'左肺靜脈'],rpv:[1,3,'右肺靜脈'],la:[1,4,'左心房'],
+    lvIn:[0,0,'左心室'],lvOut:[0,0,'左心室'],ao1:[0,1,'主動脈'],ao2:[0,1,'主動脈'],ao3:[0,1,'主動脈'],ao4:[0,1,'主動脈'],ao5:[0,1,'主動脈'],headA:[0,1,'往上半身的動脈'],hepA:[0,1,'肝動脈'],mesA:[0,1,'往胃腸的動脈'],renA:[0,1,'腎動脈'],legA:[0,1,'下肢動脈'],legV:[0,5,'下肢靜脈'],
+    portal:[0,3,'肝門靜脈'],renv:[0,5,'腎靜脈'],hepv:[0,5,'肝靜脈'],ivc1:[0,5,'下大靜脈'],ivc2:[0,5,'下大靜脈'],ivc3:[0,5,'下大靜脈'],svc:[0,5,'上大靜脈']};
+  segList.forEach(s=>{
+    const m=s.name.match(/^(head|liver|gut|kidney|lower|lungL|lungR)_(a|c|v)/);
+    if(m){const pul=m[1].indexOf('lung')===0,k=m[2];s.bed=m[1];s.circ=pul?1:0;
+      s.stn=pul?(k==='a'?1:k==='c'?2:3):(s.steady?3:k==='a'?2:k==='c'?3:4);
+      s.loc=BED[m[1]]+(k==='a'?'的小動脈':k==='c'?'的微血管':'的小靜脈');}
+    else{const t=T[s.name];s.circ=t[0];s.stn=t[1];s.loc=t[2]}
+    const key=s.bed?s.bed+'_'+s.kind+(s.steady?'p':''):s.name;
+    if(!(key in GID)){GID[key]=GN++}s.gid=GID[key];
+    s.ch={ra:0,rvIn:1,rvOut:1,la:2,lvIn:3,lvOut:3}[s.name];
+  });
+  gSum=new Float32Array(GN*5);gCnt=new Float32Array(GN);
+}
+
+/* ================= 瓣膜 ================= */
+const VALVES=[
+  {name:'tri',type:'av',c:[-0.81,0.14,0],d:[0.08,-1,0],r:0.18,L:0.27,n:3,rot:Math.PI/2,paps:[0,1]},
+  {name:'mit',type:'av',c:[0.67,0.16,0],d:[-0.08,-1,0],r:0.17,L:0.28,n:2,rot:0,paps:[2,3]},
+  {name:'aov',type:'sl',c:[0.179,0.3,-0.011],d:[-0.332,0.943,-0.027],r:0.165,L:0.16,n:3,rot:Math.PI/2},
+  {name:'pv',type:'sl',c:[-0.359,0.28,0.015],d:[0.158,0.987,0.039],r:0.145,L:0.14,n:3,rot:Math.PI/2}];
+const NU=9,NS=6;
+function leafletPoint(v,i,u,s,open,out){
+  const dth=2*Math.PI/v.n,th=v.rot+i*dth+(u-0.5)*(dth-0.1);
+  const Lt=v.L*(0.5+0.5*Math.sin(Math.PI*u));
+  let kc,ko,ac,ao;
+  if(v.type==='av'){kc=0.96;ko=0.3;ac=0.5;ao=1}else{kc=0.97;ko=0.1;ac=0.55;ao=1}
+  const rho=1-Math.pow(s,0.85)*lerp(kc,ko,open),ax=s*Lt*lerp(ac,ao,open);
+  const ct=Math.cos(th)*v.r*rho,st=Math.sin(th)*v.r*rho;
+  out.set(v.c[0]+v.e1.x*ct+v.e2.x*st+v.dn.x*ax,v.c[1]+v.e1.y*ct+v.e2.y*st+v.dn.y*ax,v.c[2]+v.e1.z*ct+v.e2.z*st+v.dn.z*ax);
+  return out;
+}
+
+/* ================= 場景 ================= */
+const stage=document.getElementById('stage');
+const renderer=new THREE.WebGLRenderer({antialias:true,alpha:true,powerPreference:'high-performance'});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
+renderer.outputEncoding=THREE.sRGBEncoding;renderer.localClippingEnabled=true;
+stage.insertBefore(renderer.domElement,stage.firstChild);
+const scene=new THREE.Scene();
+const camera=new THREE.PerspectiveCamera(32,1,0.1,200);
+const controls=new THREE.OrbitControls(camera,renderer.domElement);
+controls.enableDamping=true;controls.dampingFactor=0.08;controls.minDistance=2.2;controls.maxDistance=70;controls.rotateSpeed=0.7;
+scene.add(new THREE.HemisphereLight(0xffffff,0x39485a,0.85));
+const key=new THREE.DirectionalLight(0xffffff,0.85);key.position.set(3,5,9);scene.add(key);
+const rim=new THREE.DirectionalLight(0x9fc0ff,0.35);rim.position.set(-6,-2,-5);scene.add(rim);
+
+const VIEWS={all:{t:new V3(0,-1.8,0),hw:4.75,hh:7.75},leg:{t:new V3(-1.72,-6.5,0),hw:1.5,hh:1.9},heart:{t:new V3(-0.05,0.05,0),hw:1.95,hh:2.25}};
+function viewDist(v){const tf=Math.tan(camera.fov*Math.PI/360);return Math.max(v.hh/tf,v.hw/(tf*camera.aspect))}
+let tween=null;
+function goView(name,instant){
+  const v=VIEWS[name];const d=viewDist(v);const to=new V3(v.t.x,v.t.y,v.t.z+d);
+  if(instant){camera.position.copy(to);controls.target.copy(v.t);controls.update();return}
+  tween={p0:camera.position.clone(),t0:controls.target.clone(),p1:to,t1:v.t.clone(),k:0};
+}
+function resize(){
+  const w=stage.clientWidth,h=stage.clientHeight;if(!w||!h)return;
+  renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix();
+}
+
+let lymph=null,pltMesh,wbcMesh;const muscles=[],wbcs=[];
+const RBC_R=0.02,PLT_R=0.008,WBC_R=0.034;
+let heartMesh,valveObjs=[],chordMesh,chordDefs=[],partMesh,parts=[],haloMesh,leadMesh;const NTAG=24;
+const clipPlanes=[new THREE.Plane(new V3(0,0,-1),ZC)];
+
+function build(){
+  buildCirculation();
+  /* 心臟 */
+  const hg=buildHeartGeometry();
+  const hm=new THREE.MeshPhysicalMaterial({vertexColors:true,roughness:0.46,metalness:0,clearcoat:0.45,clearcoatRoughness:0.35});
+  hm.onBeforeCompile=sh=>{sh.uniforms.uV=beatU.uV;sh.uniforms.uA=beatU.uA;
+    sh.vertexShader=sh.vertexShader.replace('#include <common>','#include <common>\n'+BEAT_GLSL).replace('#include <begin_vertex>','vec3 transformed=beat(position);')};
+  heartMesh=new THREE.Mesh(hg,hm);scene.add(heartMesh);
+
+  /* 瓣膜、瓣環、腱索 */
+  const leafMatH=new THREE.MeshStandardMaterial({color:srgb(0xf3e6cd),roughness:0.55,side:THREE.DoubleSide,clippingPlanes:clipPlanes});
+  const tmp=new V3();
+  const leafMat2=new THREE.MeshStandardMaterial({color:srgb(0xf3e6cd),roughness:0.55,side:THREE.DoubleSide});
+  VALVES.forEach(v=>{
+    const leafMat=v.type==='vv'?leafMat2:leafMatH;
+    v.dn=new V3(...v.d).normalize();v.e1=new V3(v.dn.y,-v.dn.x,0).normalize();v.e2=new V3().crossVectors(v.dn,v.e1).normalize();
+    const g=new THREE.BufferGeometry();const nv=v.n*NU*NS;
+    g.setAttribute('position',new THREE.BufferAttribute(new Float32Array(nv*3),3));
+    const idx=[];
+    for(let i=0;i<v.n;i++)for(let a=0;a<NU-1;a++)for(let b=0;b<NS-1;b++){const o=i*NU*NS,p=o+a*NS+b;idx.push(p,p+NS,p+1,p+1,p+NS,p+NS+1)}
+    g.setIndex(idx);
+    const mesh=new THREE.Mesh(g,leafMat);mesh.frustumCulled=false;scene.add(mesh);
+    const ring=new THREE.Mesh(new THREE.TorusGeometry(v.r,0.02,6,28),leafMat);
+    ring.quaternion.setFromUnitVectors(new V3(0,0,1),v.dn);scene.add(ring);
+    valveObjs.push({v,mesh,ring});
+    if(v.type==='av'){
+      for(let i=0;i<v.n;i++)[0.28,0.5,0.72].forEach(u=>{
+        leafletPoint(v,i,u,1,1,tmp);
+        if(tmp.z>ZC-0.03)return;
+        let best=v.paps[0],bd=1e9;v.paps.forEach(pi=>{const b=PAP[pi].b;const d=Math.hypot(tmp.x-b[0],tmp.y-b[1],tmp.z-b[2]);if(d<bd){bd=d;best=pi}});
+        chordDefs.push({v,i,u,pap:best});
+      });
+    }
+  });
+  const cg=new THREE.CylinderGeometry(1,1,1,5,1,true);cg.translate(0,0.5,0);
+  chordMesh=new THREE.InstancedMesh(cg,new THREE.MeshStandardMaterial({color:srgb(0xf7efdc),roughness:0.6}),chordDefs.length);
+  chordMesh.frustumCulled=false;scene.add(chordMesh);
+
+  /* 血管 */
+  const vg=new THREE.BufferGeometry();
+  vg.setAttribute('position',new THREE.Float32BufferAttribute(acc.pos,3));
+  vg.setAttribute('normal',new THREE.Float32BufferAttribute(acc.nor,3));
+  vg.setAttribute('aOxy',new THREE.Float32BufferAttribute(acc.oxy,1));
+  vg.setAttribute('aP',new THREE.Float32BufferAttribute(acc.pul,1));
+  vg.setAttribute('aCirc',new THREE.Float32BufferAttribute(acc.circ,1));
+  vg.setIndex(acc.idx);
+  const vsh=`attribute float aP;attribute float aOxy;attribute float aCirc;uniform float uHi;uniform float uMono;varying float vDim;uniform float uPh;uniform vec3 uOx;uniform vec3 uDe;uniform vec3 uTint;uniform float uUseTint;
+    varying vec3 vN;varying vec3 vC;varying vec3 vP;
+    float E(float x){float p=fract(x);return smoothstep(0.19,0.25,p)-smoothstep(0.38,0.5,p);}
+    void main(){float pw=aP<0.0?0.0:E(uPh-aP/${WAVE.toFixed(1)});vec3 p=position+normal*pw*0.018;vec4 mv=modelViewMatrix*vec4(p,1.0);vP=mv.xyz;vN=normalMatrix*normal;
+      vC=mix(mix(mix(uDe,uOx,aOxy),vec3(0.36,0.42,0.5),uMono),uTint,uUseTint);vDim=(uHi<-0.5||abs(aCirc-uHi)<0.5)?1.0:0.0;gl_Position=projectionMatrix*mv;}`;
+  const fsh=`uniform float uA0;uniform float uA1;uniform float uFp;uniform float uSp;varying float vDim;varying vec3 vN;varying vec3 vC;varying vec3 vP;
+    void main(){vec3 n=normalize(vN);vec3 v=normalize(-vP);vec3 l=normalize(vec3(0.3,0.5,0.8));
+      float fr=pow(1.0-abs(dot(n,v)),uFp);float dif=0.62+0.38*max(dot(n,l),0.0);
+      float sp=pow(max(dot(reflect(-l,n),v),0.0),36.0)*uSp;
+      vec3 c=vC*dif+sp+fr*0.12;float g=dot(c,vec3(0.3,0.5,0.2));c=mix(vec3(g)*0.45+vec3(0.03,0.04,0.06),c,vDim);
+      gl_FragColor=vec4(c,clamp(mix(uA0,uA1,fr)+sp,0.0,1.0)*mix(0.3,1.0,vDim));}`;
+  const U=o=>Object.assign({uMono:VU.uMono,uHi:VU.uHi,uPh:VU.uPh,uOx:VU.uOx,uDe:VU.uDe,uTint:{value:new THREE.Color(0)},uUseTint:{value:0}},o);
+  const vesselMat=new THREE.ShaderMaterial({vertexShader:vsh,fragmentShader:fsh,transparent:true,depthWrite:false,depthFunc:THREE.LessEqualDepth,uniforms:U({uA0:{value:0.3},uA1:{value:0.95},uFp:{value:1.6},uSp:{value:0.55}})});
+  const preMat=new THREE.ShaderMaterial({vertexShader:vsh,fragmentShader:'void main(){gl_FragColor=vec4(0.0);}',transparent:true,colorWrite:false,depthWrite:true,uniforms:U({})});
+  const pre=new THREE.Mesh(vg,preMat);pre.renderOrder=5;scene.add(pre);
+  const vm=new THREE.Mesh(vg,vesselMat);vm.renderOrder=6;scene.add(vm);
+
+  /* 器官外形（半透明） */
+  const organ=(c,r,hex,shape,circ)=>{
+    const g=new THREE.SphereGeometry(1,40,28);const P=g.attributes.position;
+    for(let i=0;i<P.count;i++){let x=P.getX(i),y=P.getY(i),z=P.getZ(i);if(shape)[x,y,z]=shape(x,y,z);P.setXYZ(i,c[0]+x*r[0],c[1]+y*r[1],c[2]+z*r[2])}
+    g.computeVertexNormals();
+    g.setAttribute('aOxy',new THREE.BufferAttribute(new Float32Array(P.count),1));g.setAttribute('aP',new THREE.BufferAttribute(new Float32Array(P.count).fill(-1),1));g.setAttribute('aCirc',new THREE.BufferAttribute(new Float32Array(P.count).fill(circ||0),1));
+    const m=new THREE.Mesh(g,new THREE.ShaderMaterial({vertexShader:vsh,fragmentShader:fsh,transparent:true,depthWrite:false,uniforms:U({uTint:{value:new THREE.Color(hex)},uUseTint:{value:1},uA0:{value:0.1},uA1:{value:0.62},uFp:{value:1.15},uSp:{value:0.08}})}));
+    m.renderOrder=8;scene.add(m);
+  };
+  const lungShape=sx=>(x,y,z)=>{const t=1-0.34*Math.pow(Math.max(y,0),1.6);const med=x*sx<0?0.72:1;return[x*t*med,y,z*t]};
+  organ([3.38,2.1,0],[1.12,1.5,0.62],0xf2a0a8,lungShape(1),1);
+  organ([-3.38,2.1,0],[1.12,1.5,0.62],0xf2a0a8,lungShape(-1),1);
+  organ([-0.55,-2.52,0.1],[0.9,0.6,0.42],0xb9683c,(x,y,z)=>[x,y*(1-0.3*Math.max(-x,0)),z]);
+  organ([0.78,-3.4,0.1],[0.74,0.56,0.42],0xe9b48a);
+  organ([0,-4.6,0],[0.9,0.52,0.4],0xc0504a,(x,y,z)=>[x,y+0.22*(x*x-0.5)*(y>0?0.3:1),z]);
+
+  /* 下肢骨骼肌：收縮時擠壓靜脈 */
+  [[-2.12,-6.35,0.0],[-1.34,-6.35,0.0]].forEach(c=>{
+    const m=new THREE.Mesh(new THREE.SphereGeometry(1,24,18),new THREE.MeshStandardMaterial({color:srgb(0xa3443f),roughness:0.6}));
+    m.position.set(c[0],c[1],c[2]);m.userData.x0=c[0];scene.add(m);muscles.push(m)});
+
+  /* 淋巴系統：微淋巴管（盲端）→ 淋巴管 → 淋巴結 → 胸管 → 匯入靜脈 */
+  {
+    const g=new THREE.Group();g.visible=false;scene.add(g);
+    const main=acc;acc={pos:[],nor:[],oxy:[],pul:[],circ:[],idx:[],count:0};curCirc=0;
+    const paths=[],spawn=[],byBed={};
+    const LP=(pts,r0,r1,next,blind)=>{const c=crv(pts),L=c.getLength();
+      tube(c,0,1,t=>lerp(r0,r1,t)*(1-0.32*Math.pow(Math.abs(Math.cos(t*L*5.5)),10)),()=>0,0,8);
+      ball(c.getPointAt(0),r0,0,0,8);ball(c.getPointAt(1),r1,0,0,8);
+      const n=Math.ceil(L/0.08)+1,S=new Float32Array(n*3);for(let i=0;i<n;i++){const p=c.getPointAt(i/(n-1));S[i*3]=p.x;S[i*3+1]=p.y;S[i*3+2]=p.z}
+      paths.push({S,n,L,next});if(blind){spawn.push(paths.length-1);(byBed[blind]=byBed[blind]||[]).push(paths.length-1)}return paths.length-1};
+    const J3=[1.2,3.7,0.4],J2=[0.95,-3.95,0.55],M1=[0.15,-7.5,0.45];
+    const d3=LP([J3,[0.5,3.95,0.45],[-0.4,3.9,0.3],[-0.98,3.75,0.05]],0.06,0.06,-1);
+    const d2=LP([J2,[1.6,-3.3,0.5],[2.15,-2.4,0.45],[2.2,-1.5,0.45],[2.2,0.0,0.45],[2.15,0.9,0.5],[1.9,1.9,0.5],[1.6,2.9,0.45],J3],0.055,0.06,d3);
+    const d1=LP([M1,[0.3,-6.6,0.5],[0.35,-5.9,0.5],[0.45,-5.25,0.55],[0.6,-4.6,0.62],J2],0.05,0.055,d2);
+    [[[-0.45,-8.15,0.4],[-0.2,-7.8,0.42],M1],[[0.05,-8.5,0.4],[0.08,-8.0,0.42],M1],[[0.55,-8.1,0.4],[0.4,-7.75,0.42],M1]].forEach(p=>LP(p,0.028,0.045,d1,'lower'));
+    [[[0.5,-3.25,0.5],[0.7,-3.65,0.52],J2],[[1.05,-3.5,0.5],[1.05,-3.75,0.52],J2]].forEach(p=>LP(p,0.028,0.045,d2,'gut'));
+    [[[0.4,5.1,0.4],[0.8,4.75,0.4],[1.1,4.2,0.4],J3],[[0.75,4.55,0.4],[1.0,4.3,0.4],[1.15,4.0,0.4],J3]].forEach(p=>LP(p,0.028,0.045,d3,'head'));
+    const lg=new THREE.BufferGeometry();
+    lg.setAttribute('position',new THREE.Float32BufferAttribute(acc.pos,3));lg.setAttribute('normal',new THREE.Float32BufferAttribute(acc.nor,3));
+    lg.setAttribute('aOxy',new THREE.Float32BufferAttribute(acc.oxy,1));lg.setAttribute('aP',new THREE.Float32BufferAttribute(acc.pul,1));lg.setAttribute('aCirc',new THREE.Float32BufferAttribute(acc.circ,1));
+    lg.setIndex(acc.idx);acc=main;
+    const lm=new THREE.Mesh(lg,new THREE.ShaderMaterial({vertexShader:vsh,fragmentShader:fsh,transparent:true,depthWrite:false,uniforms:U({uHi:{value:-1},uTint:{value:new THREE.Color(0x7ddc8f)},uUseTint:{value:1},uA0:{value:0.6},uA1:{value:1.0},uFp:{value:1.4},uSp:{value:0.3}})}));
+    lm.renderOrder=7;g.add(lm);
+    [[0.35,-5.9,0.5],[2.2,-1.5,0.45],[2.2,0.0,0.45],[1.6,2.9,0.45]].forEach(c=>{const n=new THREE.Mesh(new THREE.SphereGeometry(1,18,14),new THREE.MeshStandardMaterial({color:srgb(0x9bd67c),roughness:0.5}));n.scale.set(0.13,0.2,0.12);n.position.set(c[0],c[1],c[2]);g.add(n)});
+    // 淋巴液與組織液用同一種淡黃色小液滴，表示它們是同一批液體
+    const dropMat=new THREE.MeshBasicMaterial({color:0xffe9a8,transparent:true,opacity:0.9});
+    const NL=150,pm=new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1,1),dropMat,NL);pm.frustumCulled=false;g.add(pm);
+    const R2=rng(7),cells=[];for(let i=0;i<NL;i++)cells.push({p:Math.floor(R2()*paths.length),t:R2()});
+    const caps={};Object.keys(byBed).forEach(b=>{caps[b]=segList.filter(q=>q.bed===b&&q.kind==='cap')});
+    const ND=270,dm=new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1,1),dropMat,ND);dm.frustumCulled=false;g.add(dm);
+    const drops=[];Object.keys(byBed).forEach(b=>{for(let i=0;i<ND/3;i++)drops.push({bed:b,age:0,dur:0,p0:new V3(),p1:new V3(),p2:new V3(),init:true})});
+    lymph={g,paths,spawn,cells,pm,lastT:0,byBed,caps,drops,dm};
+  }
+
+  /* 血球：大小一律與微血管中相同，不隨血管粗細改變 */
+  const prof=[];for(let i=0;i<=6;i++){const th=Math.PI*i/6,r=Math.sin(th);prof.push(new THREE.Vector2(Math.max(r,1e-4),-0.5*Math.cos(th)*(0.207+2.003*r*r-1.123*r*r*r*r)))}
+  const rbc=new THREE.LatheGeometry(prof,8);rbc.computeVertexNormals();
+  const NR=window.innerWidth<700?4800:9600,NPL=Math.round(NR/20),NW=Math.round(NR/64),NP=NR+NPL+NW;
+  const mk=(geo,mat,n,col)=>{const m=new THREE.InstancedMesh(geo,mat,n);m.frustumCulled=false;m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    if(col){m.instanceColor=new THREE.InstancedBufferAttribute(new Float32Array(n*3),3);m.instanceColor.setUsage(THREE.DynamicDrawUsage)}
+    const A=m.instanceMatrix.array;for(let i=0;i<n;i++)A[i*16+15]=1;scene.add(m);return m};
+  partMesh=mk(rbc,new THREE.MeshLambertMaterial({color:0xffffff,side:THREE.DoubleSide}),NR,true);
+  // 血小板：不規則的小碎片
+  const pg=new THREE.IcosahedronGeometry(1,0),pp=pg.attributes.position;
+  for(let i=0;i<pp.count;i++){const x=pp.getX(i),y=pp.getY(i),z=pp.getZ(i),f=1+0.45*Math.sin(x*7.1+y*3.3+z*5.7);pp.setXYZ(i,x*f,y*f*0.5,z*f)}
+  pg.computeVertexNormals();
+  pltMesh=mk(pg,new THREE.MeshLambertMaterial({color:srgb(0xf7e2a0)}),NPL,false);
+  // 白血球：較大的球形，表面略有起伏
+  const wg=new THREE.SphereGeometry(1,14,10),wp=wg.attributes.position;
+  for(let i=0;i<wp.count;i++){const x=wp.getX(i),y=wp.getY(i),z=wp.getZ(i),f=1+0.07*Math.sin(x*9)*Math.sin(y*8+1)*Math.sin(z*7.5+2);wp.setXYZ(i,x*f,y*f,z*f)}
+  wg.computeVertexNormals();
+  wbcMesh=mk(wg,new THREE.MeshLambertMaterial({color:srgb(0xf3f0ff)}),NW,false);
+  setExchange();
+  haloMesh=new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1,2),new THREE.MeshBasicMaterial({color:0xffd75e,transparent:true,opacity:0.3,depthTest:false,depthWrite:false,blending:THREE.AdditiveBlending}),NTAG);
+  haloMesh.frustumCulled=false;haloMesh.renderOrder=10;haloMesh.count=0;scene.add(haloMesh);
+  leadMesh=new THREE.Mesh(new THREE.TorusGeometry(1,0.09,8,40),new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:0.95,depthTest:false,depthWrite:false}));
+  leadMesh.renderOrder=11;leadMesh.visible=false;scene.add(leadMesh);
+  const R=rng(99);const wsum=[];let tot=0;
+  segList.forEach(s=>{const sp={artery:1.5,arteriole:1,cap:0.34,venule:0.8,vein:1.25,atrium:0.5,vin:0.5,vout:0.6}[s.kind];tot+=s.len/sp*(s.kind==='cap'?0.75:1.6);wsum.push(tot)});
+  for(let i=0;i<NP;i++){
+    const x=R()*tot;let a=0,b=wsum.length-1;while(a<b){const m=(a+b)>>1;if(wsum[m]<x)a=m+1;else b=m}
+    const ang=R()*6.283,rad=Math.sqrt(R()),a0=R()*6.283;
+    parts.push({s:segList[a],t:R(),ox:Math.cos(ang)*rad,oy:Math.sin(ang)*rad,u:R(),ca:Math.cos(a0),sa:Math.sin(a0),b0:R()*6.283,w:1.2+R()*2.6,tag:0,route:'',x:0,y:0,z:0,o2:0,co2:0,nh3:0.2,urea:0.5,drug:0,ty:i<NR?0:i<NR+NPL?1:2,li:i<NR?i:i<NR+NPL?i-NR:i-NR-NPL,ly:null});
+  }
+  parts.forEach(p=>{if(p.ty===2)wbcs.push(p)});
+}
+
+/* ================= 心動週期 ================= */
+const VU={uMono:{value:0},uHi:{value:-1},uPh:{value:0},uOx:{value:new THREE.Color()},uDe:{value:new THREE.Color()}};
+const PAL={
+  teach:{ox:0xe03a3a,de:0x2f6ee6,pOx:0xff5148,pDe:0x4f9bff,cssOx:'#e5433f',cssDe:'#3b78e7'},
+  real:{ox:0xdc3434,de:0x7e1f3c,pOx:0xff4b40,pDe:0xa02440,cssOx:'#e5433f',cssDe:'#8f2745'}};
+const PR=new THREE.Color(),PB=new THREE.Color();
+const STOPS=[0.08,0.185,0.32,0.5,0.75];
+const CAPS={
+  teach:[['心房收縮','心房收縮，把血液擠進心室。'],['心室開始收縮','房室瓣關閉，血液不會流回心房。'],['心室射血','半月瓣打開，血液進入主動脈與肺動脈。'],['心室開始舒張','半月瓣關閉，血液不會流回心室。'],['心室充血','房室瓣打開，血液由心房流入心室。']],
+  real:[['心房收縮期','心房收縮，補足心室最後約二到三成的血量。'],['等容收縮期','房室瓣關閉、半月瓣未開，心室壓力急速上升。'],['心室射血期','心室壓超過動脈壓，半月瓣打開，血液射出。'],['等容舒張期','半月瓣關閉、房室瓣未開，心室壓力下降。'],['心室充盈期','心室壓低於心房壓，房室瓣打開，血液流入心室。']]};
+const st={playing:true,bpm:72,rate:0.5,phase:0.6,labels:true,mode:'teach',target:null,atStop:-1,t:0,cyc:0,hi:-1,ecg:false,sound:false,colorBy:'blood',injUntil:-1,drugOn:false,drugMax:0,drugRef:0.01,placing:false,lymph:false};
+const cyc={uA:0,uV:0,av:1,sl:0,m:0}; // m：下肢骨骼肌收縮程度
+function cycle(ph){
+  const bump=(a,b,c,x)=>x<=a||x>=c?0:(x<b?ss(a,b,x):1-ss(b,c,x));
+  cyc.uA=bump(0.0,0.07,0.17,ph);
+  cyc.uV=bump(0.16,0.31,0.57,ph);
+  cyc.av=1-(ss(0.145,0.175,ph)-ss(0.5,0.56,ph));
+  cyc.sl=ss(0.19,0.225,ph)-ss(0.43,0.47,ph);
+}
+function capIndex(ph){return ph<0.15?0:ph<0.2?1:ph<0.46?2:ph<0.55?3:4}
+const _p=new V3(),_q=new V3(),_m=new THREE.Matrix4(),_qt=new THREE.Quaternion(),_sc=new V3(),_up=new V3(0,1,0);
+/* 流速：動脈帶著由心臟向外傳遞的脈搏波（疏密），愈遠愈平穩；微血管與靜脈穩定流動 */
+function speed(s,p){
+  const t=p.t;
+  switch(s.kind){
+    case 'artery':{const d=s.d0+t*s.len,k=clamp(0.12+d*0.035,0,0.6);return 1.5*((1-k)*4.5*E(st.phase-d/WAVE)+k)}
+    case 'arteriole':{if(s.steady)return 0.8;const d=s.d0+t*s.len;return 0.95*(0.3*4.5*E(st.phase-d/WAVE)+0.7)}
+    case 'cap':return 0.34;
+    case 'venule':return lerp(0.5,1.25,t*t);
+    case 'vein':return 1.25;
+    case 'legvein':{const m=cyc.m;return t<VA?0.3+0.9*(1-m):t<VB?0.7*(1-m)+3*m:3*m-0.3*(1-m)}
+    case 'atrium':{const tr=0.1+0.65*p.u;return (t<tr?2*(tr-t)+0.05:0)+1.3*cyc.av*(1+1.5*cyc.uA)}
+    case 'vin':return ((p.u>0.5&&t>p.u-0.2&&!p.tag)?0.03:0.08+2.2*cyc.av)+5*cyc.sl;
+    case 'vout':{const tr=0.05+0.5*p.u;if(cyc.sl>0.02)return 6.5*cyc.sl+(t<tr?2*(tr-t):0);return t<tr?2*(tr-t)+0.05:(t>0.6?-1.5*(t-tr):0)}
+  }
+  return 1;
+}
+function pick(s,r){
+  if(s.next.length===1)return segs[s.next[0]];
+  if(s.w){let a=0;for(let i=0;i<s.w.length;i++){a+=s.w[i];if(r<a)return segs[s.next[i]]}return segs[s.next[s.next.length-1]]}
+  return segs[s.next[Math.floor(r*s.next.length)%s.next.length]];
+}
+/* ================= 物質模型 =================
+   每顆血球帶五個 0–1 的相對量；流過各器官微血管時依規則改變，在心臟腔室內混合。
+   教學模式刻意誇大單次通過的變化；擬真模式接近生理值（顯示時換算成單位）。 */
+const SUB=['o2','co2','nh3','urea','drug'];
+const f2R=f=>-Math.log(1-f);
+const to=(k,target,f)=>({k,type:0,a:target,R:f2R(f)}),mul=(k,keep)=>({k,type:1,R:-Math.log(keep)}),add=(k,amt)=>({k,type:2,a:amt});
+const EX={
+  teach:{lung:[to('o2',1,.98),to('co2',.1,.95)],
+    tissue:[to('o2',.25,.9),to('co2',.9,.9),to('nh3',.7,.5)],
+    gut:[to('o2',.25,.9),to('co2',.9,.9),to('nh3',1,.9)],
+    liver:[to('o2',.25,.9),to('co2',.9,.9),to('nh3',.05,.95),to('urea',.9,.8),mul('drug',.65)],
+    kidney:[to('o2',.25,.9),to('co2',.9,.9),to('urea',.1,.8),mul('drug',.65)]},
+  real:{lung:[to('o2',1,.98),to('co2',.2,.95)],
+    tissue:[to('o2',.39,.95),to('co2',.8,.95)],
+    gut:[to('o2',.39,.95),to('co2',.8,.95),to('nh3',.8,.9)],
+    liver:[to('o2',.39,.95),to('co2',.8,.95),to('nh3',.1,.85),add('urea',.037),mul('drug',.85)],
+    kidney:[to('o2',.39,.95),to('co2',.8,.95),mul('urea',.9),mul('drug',.9)]}};
+const SUBNAME={teach:{o2:'氧',co2:'二氧化碳',nh3:'氨',urea:'尿素',drug:'藥物'},real:{o2:'血氧飽和度',co2:'二氧化碳分壓',nh3:'氨',urea:'尿素',drug:'藥物（混勻時為 100%）'}};
+const REALFMT={o2:v=>Math.round(60+38*v)+' %',co2:v=>Math.round(38+10*v)+' mmHg',nh3:v=>Math.round(200*v)+' µmol/L',urea:v=>(10*v).toFixed(1)+' mmol/L',drug:v=>Math.round(100*v/st.drugRef)+' %'};
+function setExchange(){
+  const E=EX[st.mode];
+  segList.forEach(s=>{if(s.kind!=='cap')return;const b=s.bed;s.ex=E[b.indexOf('lung')===0?'lung':(b==='head'||b==='lower')?'tissue':b]});
+}
+function initSubstances(){
+  const E=EX[st.mode];
+  parts.forEach(p=>{const art=p.s.oxy0>0.9;p.o2=art?1:E.tissue[0].a;p.co2=art?E.lung[1].a:E.tissue[1].a;p.nh3=st.mode==='teach'?0.35:0.12;p.urea=0.5;p.drug=0});
+}
+const chAvg=new Float32Array(20),chSum=new Float32Array(20),chCnt=new Float32Array(4);
+/* 半月瓣出口計量：射血期間依流速均勻放行，讓動脈內血球連續分布，每次心搏約射出心室血量的六成 */
+const quota=[0,0],pool=[0,0];
+function moveParticles(k){
+  const vr=1.5*(0.88*4.5*E(st.phase)+0.12);
+  for(let i=0;i<2;i++)quota[i]=cyc.sl>0.02?Math.min(quota[i]+pool[i]*0.6/1.25*vr*k,pool[i]*0.3+4):0;
+  let n0=0,n1=0;
+  chSum.fill(0);chCnt.fill(0);
+  const mixA=Math.min(1,5*k),inj=st.cyc<st.injUntil;
+  for(let i=0;i<parts.length;i++){
+    const p=parts[i];if(p.ly)continue;let s=p.s;
+    const dp=speed(s,p)*k/s.len,t0=p.t;
+    p.t+=dp;
+    if(p.ty===2&&st.lymph&&s.kind==='cap'&&t0<0.5&&p.t>=0.5&&lymph.byBed[s.bed]&&Math.random()<0.25){leaveBlood(p,s);continue}
+    if(s.kind==='legvein'){ // 瓣膜只許血液往心臟方向通過
+      if(t0<VA){if(cyc.m>0.25&&p.t>VA-0.006)p.t=Math.max(t0,VA-0.006-0.05*p.u)}
+      else if(t0<VB){if(cyc.m<0.25&&p.t>VB-0.006)p.t=Math.max(Math.min(t0,VB-0.006),VB-0.006-0.05*p.u)}
+      else if(dp<0){const lim=VB+0.006+0.04*p.u;if(p.t<lim)p.t=Math.min(t0,lim)} // 倒流的血液被瓣膜擋住
+    }
+    if(s.ex){const ex=s.ex;for(let j=0;j<ex.length;j++){const e=ex[j];
+      if(e.type===0)p[e.k]+=(e.a-p[e.k])*(1-Math.exp(-e.R*dp));else if(e.type===1)p[e.k]*=Math.exp(-e.R*dp);else p[e.k]+=e.a*dp}}
+    else if(s.ch!==undefined){const c=s.ch*5;chCnt[s.ch]++;
+      for(let j=0;j<5;j++){const key=SUB[j];chSum[c+j]+=p[key];p[key]+=(chAvg[c+j]-p[key])*mixA}}
+    else if(inj&&s.name==='svc'&&p.t>0.05&&p.t<0.3)p.drug=1;
+    let guard=0;
+    while(p.t>=1&&guard++<4){
+      if(s.kind==='vout'){if(p.tag||quota[s.pool]>=1)quota[s.pool]-=1;else{p.t=0.999-0.1*p.u;break}}
+      const nx=pick(s,Math.random());p.t=(p.t-1)*s.len/nx.len;s=nx;if(p.tag)onHop(p,nx)}
+    if(p.t>=1)p.t=0.999;p.s=s;
+    if(s.pool===0)n0++;else if(s.pool===1)n1++;
+  }
+  pool[0]=n0;pool[1]=n1;
+  for(let c=0;c<4;c++)if(chCnt[c]>0)for(let j=0;j<5;j++)chAvg[c*5+j]=chSum[c*5+j]/chCnt[c];
+}
+function drawParticles(){
+  const M=partMesh.instanceMatrix.array,C=partMesh.instanceColor.array,MP=pltMesh.instanceMatrix.array,MW=wbcMesh.instanceMatrix.array,T=st.t,HM=haloMesh.instanceMatrix.array,hi=st.hi,lead=jr&&jr.follow?jr.leader:null,cby=st.colorBy==='blood'?null:st.colorBy;let nh=0;
+  for(let i=0;i<parts.length;i++){
+    const p=parts[i],s=p.s,ty=p.ty;
+    let x,y,z,nx=1,ny=0,nz=0,bx=0,by=1,bz=0,inCap=false;
+    if(p.ly){x=p.ly.x;y=p.ly.y;z=p.ly.z}
+    else{
+      const f=p.t*(s.K-1),i0=Math.min(Math.floor(f),s.K-2),w=f-i0,a=i0*3,b=a+3;
+      const P=s.P,N=s.N,B=s.B;
+      let r=lerp(s.r0,s.r1,p.t);if(s.rMid)r+=(s.rMid-(s.r0+s.r1)/2)*Math.sin(Math.PI*p.t);
+      const rr=r*(s.heart?0.7:0.62),ox=p.ox*rr,oy=p.oy*rr;
+      nx=lerp(N[a],N[b],w);ny=lerp(N[a+1],N[b+1],w);nz=lerp(N[a+2],N[b+2],w);bx=lerp(B[a],B[b],w);by=lerp(B[a+1],B[b+1],w);bz=lerp(B[a+2],B[b+2],w);
+      x=lerp(P[a],P[b],w)+nx*ox+bx*oy;y=lerp(P[a+1],P[b+1],w)+ny*ox+by*oy;z=lerp(P[a+2],P[b+2],w)+nz*ox+bz*oy;
+      if(s.heart||(s.heartTo&&p.t<s.heartTo)){
+        const lim=ZC-0.045;if(z>lim)z=2*lim-z;
+        _p.set(x,y,z);beat(_p);x=_p.x;y=_p.y;z=_p.z;
+      }
+      inCap=s.kind==='cap';
+    }
+    if(ty===2){ // 白血球：在微血管裡被擠成長條
+      const o=p.li*16;
+      if(inCap){const a=0.02,b=0.056;MW[o]=nx*a;MW[o+1]=ny*a;MW[o+2]=nz*a;MW[o+4]=bx*a;MW[o+5]=by*a;MW[o+6]=bz*a;MW[o+8]=(ny*bz-nz*by)*b;MW[o+9]=(nz*bx-nx*bz)*b;MW[o+10]=(nx*by-ny*bx)*b}
+      else{MW[o]=WBC_R;MW[o+1]=0;MW[o+2]=0;MW[o+4]=0;MW[o+5]=WBC_R;MW[o+6]=0;MW[o+8]=0;MW[o+9]=0;MW[o+10]=WBC_R}
+      MW[o+12]=x;MW[o+13]=y;MW[o+14]=z;continue;
+    }
+    const A=ty===0?M:MP,sz=ty===0?RBC_R:PLT_R,o=p.li*16,be=p.b0+p.w*T,c=Math.cos(be)*sz,sn=Math.sin(be)*sz;
+    A[o]=p.ca*sz;A[o+1]=p.sa*sz;A[o+2]=0;
+    A[o+4]=-p.sa*c;A[o+5]=p.ca*c;A[o+6]=sn;
+    A[o+8]=p.sa*sn;A[o+9]=-p.ca*sn;A[o+10]=c;
+    A[o+12]=x;A[o+13]=y;A[o+14]=z;
+    if(ty!==0)continue;
+    const dim=hi>=0&&s.circ!==hi;
+    if(p.tag){p.x=x;p.y=y;p.z=z;const h=nh*16;HM[h]=HM[h+5]=HM[h+10]=(p===lead?0.14:0.09);HM[h+12]=x;HM[h+13]=y;HM[h+14]=z;HM[h+15]=1;nh++}
+    const ox2=lerp(s.oxy0,s.oxy1,inCap?ss(0.15,0.85,p.t):p.t);
+    let cr=lerp(PB.r,PR.r,ox2),cg=lerp(PB.g,PR.g,ox2),cb=lerp(PB.b,PR.b,ox2);
+    if(cby){const v=clamp(cby==='drug'?p.drug/(2*st.drugRef):p[cby],0,1),v2=v*v;cr=0.03+0.97*v;cg=0.045+0.6*v2+0.12*v;cb=0.09+0.1*v2}
+    if(dim&&!p.tag){const g=(cr+cg+cb)*0.07;cr=g+0.012;cg=g+0.016;cb=g+0.024}
+    const q=p.li*3;C[q]=cr;C[q+1]=cg;C[q+2]=cb;
+  }
+  partMesh.instanceMatrix.needsUpdate=true;partMesh.instanceColor.needsUpdate=true;pltMesh.instanceMatrix.needsUpdate=true;wbcMesh.instanceMatrix.needsUpdate=true;
+  haloMesh.count=nh;haloMesh.instanceMatrix.needsUpdate=true;
+  if(lead&&lead.tag){leadMesh.visible=true;leadMesh.position.set(lead.x,lead.y,lead.z);leadMesh.quaternion.copy(camera.quaternion);const k=0.2+0.03*Math.sin(performance.now()/160);leadMesh.scale.set(k,k,k)}else leadMesh.visible=false;
+}
+function updateValves(){
+  valveObjs.forEach(o=>{
+    const v=o.v,vv=v.type==='vv',mo=ss(0.15,0.3,cyc.m),open=v.type==='av'?cyc.av:vv?(v.idx===0?1-mo:mo):cyc.sl;v.open=open;
+    const A=o.mesh.geometry.attributes.position.array;let q=0;
+    for(let i=0;i<v.n;i++)for(let a=0;a<NU;a++)for(let b=0;b<NS;b++){
+      leafletPoint(v,i,a/(NU-1),b/(NS-1),open,_p);if(!vv)beat(_p);A[q++]=_p.x;A[q++]=_p.y;A[q++]=_p.z}
+    o.mesh.geometry.attributes.position.needsUpdate=true;o.mesh.geometry.computeVertexNormals();
+    _p.set(v.c[0],v.c[1],v.c[2]);if(!vv)beat(_p);o.ring.position.copy(_p);
+  });
+  chordDefs.forEach((c,i)=>{
+    leafletPoint(c.v,c.i,c.u,1,c.v.open,_p);beat(_p);
+    const b=PAP[c.pap].b;_q.set(b[0],b[1]+0.05,b[2]);beat(_q);
+    const d=_p.clone().sub(_q);const L=d.length();
+    _qt.setFromUnitVectors(_up,d.multiplyScalar(1/L));_sc.set(0.007,L,0.007);
+    _m.compose(_q,_qt,_sc);chordMesh.setMatrixAt(i,_m);
+  });
+  chordMesh.instanceMatrix.needsUpdate=true;
+}
+
+/* 時間推進與步進：每經過一個關鍵格就存下血球位置，供「上一步」還原 */
+const hist=[];
+function snap(k){
+  const ids=new Uint16Array(parts.length),ts=new Float32Array(parts.length);
+  for(let i=0;i<parts.length;i++){ids[i]=parts[i].s.id;ts[i]=parts[i].t}
+  hist.push({k,ids,ts,t:st.t});if(hist.length>40)hist.shift();
+}
+function restore(h){for(let i=0;i<parts.length;i++){parts[i].s=segList[h.ids[i]];parts[i].t=h.ts[i]}st.t=h.t;st.phase=STOPS[h.k];st.atStop=h.k}
+function tick(dph){ // dph：本次要前進的心動週期比例；回傳是否抵達步進目標
+  if(dph<=0)return false;
+  let hit=-1;
+  for(let k=0;k<STOPS.length;k++){const rem=((STOPS[k]-st.phase)%1+1)%1;if(rem>1e-6&&rem<=dph){if(st.target===k){hit=k;dph=rem;break}if(hit<0)hit=k}}
+  if(st.sound){const a=st.phase,b=a+dph;if((S1>a&&S1<=b)||(S1+1>a&&S1+1<=b))heartSound(1);if((S2>a&&S2<=b)||(S2+1>a&&S2+1<=b))heartSound(2)}
+  st.phase=(st.phase+dph)%1;st.t+=dph*60/72;st.cyc+=dph;st.atStop=-1;
+  {const q=(st.cyc/3)%1;cyc.m=q<0.4?Math.pow(Math.sin(Math.PI*q/0.4),2):0}
+  cycle(st.phase);
+  moveParticles(dph*60/72);
+  if(hit>=0){snap(hit);if(st.target===hit){st.phase=STOPS[hit];st.target=null;st.playing=false;st.atStop=hit;cycle(st.phase);return true}}
+  return false;
+}
+function stepFwd(k){
+  if(k==null){if(st.atStop>=0)k=(st.atStop+1)%STOPS.length;else{k=0;let best=2;for(let i=0;i<STOPS.length;i++){const rem=((STOPS[i]-st.phase)%1+1)%1;if(rem>1e-6&&rem<best){best=rem;k=i}}}}
+  if(k===st.atStop)return;
+  st.target=k;st.playing=false;syncUI();
+}
+function stepBack(){
+  const cur=st.atStop;
+  if(cur>=0&&hist.length&&hist[hist.length-1].k===cur)hist.pop();
+  const h=hist[hist.length-1];
+  if(h)restore(h);
+  else{let k;if(cur>=0)k=(cur+STOPS.length-1)%STOPS.length;else{k=STOPS.length-1;for(let i=0;i<STOPS.length;i++)if(STOPS[i]<st.phase)k=i}st.phase=STOPS[k];st.atStop=k}
+  st.target=null;st.playing=false;cycle(st.phase);syncUI();
+}
+
+/* ================= 心電圖與心音 ================= */
+// 電訊號略早於機械收縮：P 波在心房收縮前，QRS 在心室收縮前，T 波在心室舒張前
+const S1=0.16,S2=0.46; // 第一心音：房室瓣關閉；第二心音：半月瓣關閉
+function ecgV(ph){
+  const g=(c,w)=>{let d=ph-c;d-=Math.round(d);return Math.exp(-d*d/(2*w*w))};
+  return 0.13*g(0.02,0.022)-0.1*g(0.137,0.006)+g(0.15,0.007)-0.2*g(0.164,0.007)+0.27*g(0.40,0.04);
+}
+const ecgC=document.getElementById('ecg'),ecgX=ecgC.getContext('2d');
+function drawECG(){
+  const dpr=Math.min(window.devicePixelRatio||1,2),w=ecgC.clientWidth,h=ecgC.clientHeight;
+  if(!w||!h)return;
+  if(ecgC.width!==Math.round(w*dpr)||ecgC.height!==Math.round(h*dpr)){ecgC.width=Math.round(w*dpr);ecgC.height=Math.round(h*dpr)}
+  const c=ecgX;c.setTransform(dpr,0,0,dpr,0,0);c.clearRect(0,0,w,h);
+  const big=w>=700,fs=big?15:11,nowX=w*0.9,win=Math.min((big?5:3)*st.bpm/60,nowX/(fs*(st.mode==='real'?5:11))),bw=nowX/win; // win：畫面涵蓋的心跳數
+  const top=fs+8,bot=h-2*fs-14,base=bot-(bot-top)*0.22,amp=(bot-top)*0.72;
+  const X=d=>nowX-d*bw,real=st.mode==='real';
+  c.strokeStyle='rgba(255,255,255,.06)';c.lineWidth=1;c.beginPath();
+  for(let d=st.phase;d<win;d+=1){const x=X(d);c.moveTo(x,top-4);c.lineTo(x,bot+4)}
+  c.moveTo(0,base);c.lineTo(w,base);c.stroke();
+  c.strokeStyle='#6fe3a1';c.lineWidth=big?2.4:1.8;c.lineJoin='round';c.beginPath();
+  for(let x=0;x<=nowX;x+=1){const v=ecgV(st.phase-(nowX-x)/bw),y=base-v*amp;if(x===0)c.moveTo(x,y);else c.lineTo(x,y)}
+  c.stroke();
+  c.fillStyle='#6fe3a1';c.beginPath();c.arc(nowX,base-ecgV(st.phase)*amp,big?4.5:3.5,0,6.3);c.fill();
+  c.font=fs+'px '+getComputedStyle(document.body).fontFamily;c.textBaseline='alphabetic';
+  const lab=(ctr,txt,y,col,align)=>{for(let d=((st.phase-ctr)%1+1)%1;d<win;d+=1){const x=X(d);if(x<8)break;c.fillStyle=col;c.textAlign=align||'center';c.fillText(txt,x,y)}};
+  lab(0.15,real?'QRS':'心室收縮',fs+2,'#e8eef4');
+  lab(0.02,real?'P':'心房收縮',bot+fs+2,'#93a4b5');
+  lab(0.40,real?'T':'心室舒張',bot+fs+2,'#93a4b5');
+  // 心音記號
+  const tick=(ctr,txt)=>{for(let d=((st.phase-ctr)%1+1)%1;d<win;d+=1){const x=X(d);if(x<8)break;const hot=d<0.06&&st.sound;
+    c.fillStyle=hot?'#fff':'#f2c14e';c.beginPath();c.moveTo(x,h-fs-9);c.lineTo(x-5,h-fs-2);c.lineTo(x+5,h-fs-2);c.fill();c.textAlign='center';c.fillText(txt,x,h-3)}};
+  tick(S1,real?'S1':'心音1');tick(S2,real?'S2':'心音2');
+}
+let actx=null;
+function heartSound(k){
+  if(!actx||actx.state!=='running')return;
+  const t=actx.currentTime+0.01,dur=k===1?0.14:0.09,vol=k===1?0.9:0.65,g=actx.createGain();
+  g.gain.setValueAtTime(0.0001,t);g.gain.exponentialRampToValueAtTime(vol,t+0.008);g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+  // 第一心音低而長，第二心音高而短；加入泛音讓小喇叭也聽得到
+  [[k===1?70:115,'triangle',1],[k===1?105:170,'sine',0.6],[k===1?210:340,'sine',0.18]].forEach(o=>{
+    const os=actx.createOscillator(),og=actx.createGain();os.type=o[1];os.frequency.setValueAtTime(o[0]*1.15,t);os.frequency.exponentialRampToValueAtTime(o[0]*0.8,t+dur);
+    og.gain.value=o[2];os.connect(og);og.connect(g);os.start(t);os.stop(t+dur+0.03)});
+  g.connect(actx.destination);
+}
+function setEcg(on){st.ecg=on;ecgC.hidden=!on;$('ecgBtn').setAttribute('aria-pressed',on)}
+function setSound(on){
+  if(on){try{actx=actx||new (window.AudioContext||window.webkitAudioContext)();actx.resume()}catch(e){on=false}}
+  st.sound=on;$('sndBtn').setAttribute('aria-pressed',on);
+}
+
+/* ================= 循環路徑與血球旅程 ================= */
+const ROUTES=[
+  {name:'體循環',stn:['左心室','主動脈','小動脈','微血管','小靜脈','大靜脈','右心房'],desc:'把氧氣和養分送到全身細胞，再把二氧化碳和廢物帶回心臟。',end:'ra',pool:1,
+   tip:'同一批血液分頭流向不同器官，路程長短不同，所以回到心臟的時間也不同。'},
+  {name:'肺循環',stn:['右心室','肺動脈','肺部微血管','肺靜脈','左心房'],desc:'把缺氧血送到肺，排出二氧化碳、換回氧氣，再回到心臟。',end:'la',pool:0,
+   tip:'所有血球都經過肺部微血管，由缺氧血變成充氧血。'}];
+const nm=x=>st.mode==='real'?x.replace(/大靜脈/g,'腔靜脈'):x;
+let jr=null,routeEls=[];
+function onHop(p,nx){
+  if(!jr)return;
+  if(nx.bed){const b=BED[nx.bed];if(!p.route)p.route=b;else if(p.route.slice(-b.length)!==b)p.route+=' → '+b}
+  if(nx.name===ROUTES[jr.c].end){
+    p.tag=0;jr.arrived++;jr.log.push({r:p.route,b:st.cyc-jr.start});
+    if(jr.leader===p)jr.leader=jr.cells.find(q=>q.tag)||null;
+    if(jr.arrived>=jr.n){jr.done=true;jr.follow=false;st.playing=false;st.target=null}
+    jr.dirty=true;
+  }
+}
+function setHi(h){
+  st.hi=h;VU.uHi.value=h;press(['hAll','hSys','hPul'],h<0?'hAll':h===0?'hSys':'hPul');
+  const R=ROUTES[h];$('pdesc').textContent=R?R.desc:'選擇體循環或肺循環，另一條路徑會變暗。';
+  const ol=$('route');ol.textContent='';routeEls=[];
+  if(R)R.stn.forEach(t=>{const li=document.createElement('li');li.innerHTML='<span></span><span class="c"></span>';li.firstChild.textContent=nm(t);ol.appendChild(li);routeEls.push(li)});
+}
+function startJourney(c){
+  endJourney();
+  const R=ROUTES[c];let cand=parts.filter(p=>p.ty===0&&p.s.pool===R.pool);
+  if(cand.length<8)cand=cand.concat(parts.filter(p=>p.ty===0&&p.s.name===(c===0?'la':'ra')));
+  for(let i=cand.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));const t=cand[i];cand[i]=cand[j];cand[j]=t}
+  const cells=cand.slice(0,NTAG);cells.forEach(p=>{p.tag=1;p.route=''});
+  jr={c,cells,n:cells.length,arrived:0,start:st.cyc,log:[],follow:false,leader:cells[0],done:false,dirty:true};
+  setHi(c);st.playing=true;st.target=null;syncUI();
+  press(['vAll','vHeart','vLeg'],'vAll');goView('all');
+  $('jrow').hidden=false;$('follow').setAttribute('aria-pressed','false');$('jlog').textContent='';
+}
+function endJourney(msg){
+  if(jr){jr.cells.forEach(p=>{p.tag=0})}
+  jr=null;$('jrow').hidden=true;$('jstat').textContent=msg||'';$('jlog').textContent='';
+  routeEls.forEach(li=>{li.classList.remove('has');li.lastChild.textContent=''});
+}
+let jTick=0;
+function updateJourney(){
+  if(!jr)return;
+  if(jr.follow&&jr.leader&&!tween){const L=jr.leader;_q.set(L.x-controls.target.x,L.y-controls.target.y,L.z-controls.target.z).multiplyScalar(0.1);controls.target.add(_q);camera.position.add(_q)}
+  if(!jr.dirty&&(jTick++%8))return;jr.dirty=false;
+  const R=ROUTES[jr.c],cnt=R.stn.map(()=>0);
+  jr.cells.forEach(p=>{if(p.tag)cnt[Math.min(p.s.circ===jr.c?p.s.stn:0,cnt.length-1)]++});
+  cnt[cnt.length-1]+=jr.arrived;
+  routeEls.forEach((li,i)=>{li.classList.toggle('has',cnt[i]>0);li.lastChild.textContent=cnt[i]||''});
+  const beats=Math.floor(st.cyc-jr.start)+1,endN=nm(R.stn[R.stn.length-1]);
+  if(!jr.done){
+    $('jstat').textContent='第 '+beats+' 次心跳：'+jr.n+' 顆血球出發，'+jr.arrived+' 顆已回到'+endN+'。'+(jr.follow&&jr.leader?'跟隨中的血球在'+nm(jr.leader.s.loc)+'。':'');
+  }else if(!jr.shown){
+    jr.shown=true;syncUI();$('jrow').hidden=true;
+    const g={};jr.log.forEach(l=>{(g[l.r]=g[l.r]||[]).push(l.b)});
+    const rows=Object.keys(g).map(k=>({k,n:g[k].length,avg:g[k].reduce((a,b)=>a+b,0)/g[k].length})).sort((a,b)=>a.avg-b.avg);
+    const mx=Math.ceil(Math.max.apply(null,jr.log.map(l=>l.b)));
+    $('jstat').textContent=jr.n+' 顆血球全部回到'+endN+'，最後一顆花了約 '+mx+' 次心跳。'+R.tip;
+    const ul=$('jlog');ul.textContent='';rows.forEach(r=>{const li=document.createElement('li');li.textContent='經過'+r.k+'：'+r.n+' 顆，平均約 '+Math.round(r.avg)+' 次心跳';ul.appendChild(li)});
+  }
+}
+
+/* 淋巴：流速慢、單向，靠管壁與周圍肌肉擠壓前進 */
+function segPoint(sg,t,out){const f=t*(sg.K-1),i0=Math.min(Math.floor(f),sg.K-2),w=f-i0,a=i0*3;return out.set(lerp(sg.P[a],sg.P[a+3],w),lerp(sg.P[a+1],sg.P[a+4],w),lerp(sg.P[a+2],sg.P[a+5],w))}
+function bez(o,a,b,c,t){const u=1-t;o.x=u*u*a.x+2*u*t*b.x+t*t*c.x;o.y=u*u*a.y+2*u*t*b.y+t*t*c.y;o.z=u*u*a.z+2*u*t*b.z+t*t*c.z}
+function lymSpeed(t,P,seed){return 0.22+0.5*Math.pow(Math.sin(st.t*1.6-t*P.L*1.2+seed),2)}
+/* 白血球穿出微血管，經組織進入微淋巴管 */
+function leaveBlood(p,sg){
+  const list=lymph.byBed[sg.bed],pi=list[Math.floor(Math.random()*list.length)],S=lymph.paths[pi].S;
+  const p0=segPoint(sg,0.5,new V3()),p2=new V3(S[0],S[1],S[2]);
+  const p1=new V3().lerpVectors(p0,p2,0.5).add(new V3((Math.random()-0.5)*0.3,(Math.random()-0.5)*0.3,0.18));
+  p.ly={ph:0,a:0,dur:4+Math.random()*3,p0,p1,p2,path:pi,t:0,x:p0.x,y:p0.y,z:p0.z};
+}
+function spawnDrop(d){
+  const cs=lymph.caps[d.bed],sg=cs[Math.floor(Math.random()*cs.length)];
+  segPoint(sg,0.1+Math.random()*0.25,d.p0);
+  if(Math.random()<0.35){const l=lymph.byBed[d.bed],S=lymph.paths[l[Math.floor(Math.random()*l.length)]].S;d.p2.set(S[0],S[1],S[2])} // 進入微淋巴管
+  else segPoint(cs[Math.floor(Math.random()*cs.length)],0.7+Math.random()*0.2,d.p2); // 回到微血管靠靜脈的一端
+  d.p1.lerpVectors(d.p0,d.p2,0.5);d.p1.x+=(Math.random()-0.5)*0.3;d.p1.y+=(Math.random()-0.5)*0.3;d.p1.z+=0.16+Math.random()*0.2;
+  d.dur=3.5+Math.random()*3;d.age=d.init?Math.random()*d.dur:0;d.init=false;
+}
+function updateLymph(){
+  muscles.forEach((m,i)=>{const k=cyc.m;m.scale.set(0.2+0.09*k,0.62-0.07*k,0.24+0.05*k);m.position.x=m.userData.x0+(i?-1:1)*0.05*k});
+  if(!lymph||!lymph.g.visible)return;
+  let dt=st.t-lymph.lastT;lymph.lastT=st.t;if(dt<0||dt>0.5)dt=0;
+  const M=lymph.pm.instanceMatrix.array;
+  lymph.cells.forEach((c,i)=>{
+    let P=lymph.paths[c.p];
+    c.t+=dt*lymSpeed(c.t,P,c.p)/P.L;
+    if(c.t>=1){if(P.next>=0){c.p=P.next;c.t=0}else{c.p=lymph.spawn[Math.floor(Math.random()*lymph.spawn.length)];c.t=0}P=lymph.paths[c.p]}
+    const f=c.t*(P.n-1),i0=Math.min(Math.floor(f),P.n-2),w=f-i0,a=i0*3,o=i*16,sz=0.011;
+    M[o]=M[o+5]=M[o+10]=sz;M[o+15]=1;M[o+12]=lerp(P.S[a],P.S[a+3],w);M[o+13]=lerp(P.S[a+1],P.S[a+4],w);M[o+14]=lerp(P.S[a+2],P.S[a+5],w);
+  });
+  lymph.pm.instanceMatrix.needsUpdate=true;
+  // 組織液：血漿從微血管滲出，一部分回到微血管，一部分進入微淋巴管
+  const D=lymph.dm.instanceMatrix.array;
+  lymph.drops.forEach((d,i)=>{
+    d.age+=dt;if(d.age>=d.dur)spawnDrop(d);
+    const u=d.age/d.dur,o=i*16,sz=0.011*Math.sqrt(Math.max(0,Math.sin(Math.PI*u)));bez(_p,d.p0,d.p1,d.p2,u);
+    D[o]=D[o+5]=D[o+10]=sz;D[o+15]=1;D[o+12]=_p.x;D[o+13]=_p.y;D[o+14]=_p.z;
+  });
+  lymph.dm.instanceMatrix.needsUpdate=true;
+  // 離開血液的白血球
+  for(let i=0;i<wbcs.length;i++){const p=wbcs[i],L=p.ly;if(!L)continue;
+    if(L.ph===0){L.a+=dt;if(L.a>=L.dur){L.ph=1;L.t=0}else bez(L,L.p0,L.p1,L.p2,ss(0,1,L.a/L.dur))}
+    if(L.ph===1){let P=lymph.paths[L.path];L.t+=dt*lymSpeed(L.t,P,L.path)/P.L;
+      if(L.t>=1){if(P.next>=0){L.path=P.next;L.t=0;P=lymph.paths[L.path]}else{p.ly=null;p.s=segs.svc;p.t=0.2;continue}} // 由胸管回到靜脈
+      const f=L.t*(P.n-1),i0=Math.min(Math.floor(f),P.n-2),w=f-i0,a=i0*3;L.x=lerp(P.S[a],P.S[a+3],w);L.y=lerp(P.S[a+1],P.S[a+4],w);L.z=lerp(P.S[a+2],P.S[a+5],w)}
+  }
+}
+function setLymph(on){st.lymph=on;lymph.g.visible=on;lymph.lastT=st.t;if(!on)wbcs.forEach(p=>{if(p.ly){p.ly=null;p.s=segs.svc;p.t=Math.random()*0.9}});$('lymBtn').setAttribute('aria-pressed',on);showNote()}
+function showNote(){
+  const leg=$('vLeg').getAttribute('aria-pressed')==='true';
+  $('vnote').textContent=(leg?'下肢的血液要逆著重力流回心臟。骨骼肌收縮時擠壓靜脈，把血液往上推；肌肉放鬆時，瓣膜關閉，血液不會倒流。':'')+(leg&&st.lymph?'\n':'')+
+    (st.lymph?'綠色是淋巴系統。淡黃色小液滴是從微血管滲出的血漿，也就是組織液：一部分回到微血管，一部分進入末端封閉的微淋巴管成為淋巴。白血球也會穿出微血管、進入淋巴管，經過淋巴結，最後由胸管流回靜脈。淋巴裡沒有紅血球和血小板。':'');
+}
+
+/* ================= 探測器、上色、靜脈注射 ================= */
+const PCOL=['#f2c14e','#6fe3a1','#c59cff','#ff9ecb'];
+const probes=[];const pbBox=document.getElementById('pbs');let pCells=[];
+const _ray=new THREE.Raycaster(),_ndc=new THREE.Vector2();
+function pickSeg(cx,cy){
+  const r=renderer.domElement.getBoundingClientRect();
+  _ndc.set((cx-r.left)/r.width*2-1,-((cy-r.top)/r.height*2-1));_ray.setFromCamera(_ndc,camera);
+  const O=_ray.ray.origin,D=_ray.ray.direction,tol=camera.position.distanceTo(controls.target)*0.018;
+  let best=null,bs=1e9,bp=null;
+  for(let n=0;n<segList.length;n++){const s=segList[n],P=s.P;
+    for(let i=0;i<s.K;i++){const x=P[i*3]-O.x,y=P[i*3+1]-O.y,z=P[i*3+2]-O.z,tp=x*D.x+y*D.y+z*D.z;if(tp<0)continue;
+      const d=Math.sqrt(Math.max(0,x*x+y*y+z*z-tp*tp)),lim=Math.max(lerp(s.r0,s.r1,i/(s.K-1)),tol);
+      if(d<lim){const sc=d/lim+tp*0.003;if(sc<bs){bs=sc;best=s;bp=new V3(P[i*3],P[i*3+1],P[i*3+2])}}}}
+  return best?{seg:best,pos:bp}:null;
+}
+function addProbe(seg,pos){
+  if(probes.length>=4){$('pstat').textContent='最多放 4 個探測器，請先移除一個。';return false}
+  if(!pos){const i=Math.floor(seg.K/2)*3;pos=new V3(seg.P[i],seg.P[i+1],seg.P[i+2])}
+  const el=document.createElement('div');el.className='pb';pbBox.appendChild(el);
+  probes.push({seg,pos,el,val:null});renderProbes();return true;
+}
+function removeProbe(i){probes[i].el.remove();probes.splice(i,1);renderProbes()}
+function clearProbes(){while(probes.length)probes.pop().el.remove();renderProbes()}
+function subsShown(){return st.drugOn?SUB:SUB.slice(0,4)}
+const REALAX={o2:v=>(60+38*v)/100,co2:v=>(38+10*v)/60,nh3:v=>v,urea:v=>v,drug:v=>Math.min(1,v/st.drugRef/2)};
+const REALNUM={o2:v=>Math.round(60+38*v),co2:v=>Math.round(38+10*v),nh3:v=>Math.round(200*v),urea:v=>(10*v).toFixed(1),drug:v=>Math.round(100*v/st.drugRef)};
+const CHARTNAME={teach:{o2:'氧',co2:'二氧化碳',nh3:'氨',urea:'尿素',drug:'藥物'},real:{o2:'血氧 %',co2:'CO₂ mmHg',nh3:'氨 µmol/L',urea:'尿素 mmol/L',drug:'藥物 %'}};
+function renderProbes(){
+  const leg=$('pleg'),ch=$('pchart'),pv=$('pvals');leg.textContent='';ch.textContent='';pv.textContent='';pCells=[];
+  probes.forEach((p,i)=>{p.el.textContent=i+1;p.el.style.background=PCOL[i]});
+  if(!probes.length){$('pnote').textContent='';$('pstat').textContent='按「放置探測器」後點一下血管，或直接選一組快速比較。探測器會顯示流經該處血液的物質含量。';return}
+  $('pstat').textContent='';
+  $('pnote').textContent=st.mode==='real'?'長條高度從 0 起算；下方數字的顏色對應探測器。組織多半把氮包裝成麩醯胺酸等無毒形式運到肝，所以上、下腔靜脈的氨不高。':'每組長條比較同一種物質；兩條橫線是低、中、高的分界。';
+  probes.forEach((p,i)=>{const c=document.createElement('span');c.className='chip';
+    c.innerHTML='<span class="bdg" style="background:'+PCOL[i]+'">'+(i+1)+'</span><span></span><button aria-label="移除探測器 '+(i+1)+'">移除</button>';
+    c.children[1].textContent=nm(p.seg.loc);c.lastChild.onclick=()=>removeProbe(i);leg.appendChild(c)});
+  ch.className=st.mode;
+  const rows=st.mode==='real'?probes.map((p,i)=>{const r=document.createElement('div');r.style.color=PCOL[i];pv.appendChild(r);return r}):null;
+  subsShown().forEach(k=>{const g=document.createElement('div');g.className='pg';const bs=document.createElement('div');bs.className='bars';g.appendChild(bs);
+    const gl=document.createElement('div');gl.className='gl';gl.textContent=CHARTNAME[st.mode][k];g.appendChild(gl);ch.appendChild(g);
+    const bars=probes.map((p,i)=>{const b=document.createElement('div');b.className='b';b.innerHTML='<span class="v"></span><i style="background:'+PCOL[i]+'"></i>';bs.appendChild(b);return b});
+    const nums=rows?rows.map(r=>{const n=document.createElement('span');r.appendChild(n);return n}):null;
+    pCells.push({k,bars,nums})});
+  pTick=0;
+}
+let pTick=0;
+function updateProbes(){
+  const w=stage.clientWidth,h=stage.clientHeight;
+  probes.forEach(p=>{_p.copy(p.pos);if(p.seg.heart)beat(_p);_p.project(camera);
+    p.el.style.transform='translate('+((_p.x*0.5+0.5)*w).toFixed(1)+'px,'+((-_p.y*0.5+0.5)*h).toFixed(1)+'px)';p.el.style.display=_p.z>1?'none':''});
+  if(!probes.length&&!st.drugOn)return;
+  if(pTick++%8)return;
+  gSum.fill(0);gCnt.fill(0);let dsum=0;
+  for(let i=0;i<parts.length;i++){const p=parts[i],g=p.s.gid,o=g*5;gCnt[g]++;gSum[o]+=p.o2;gSum[o+1]+=p.co2;gSum[o+2]+=p.nh3;gSum[o+3]+=p.urea;gSum[o+4]+=p.drug;dsum+=p.drug}
+  probes.forEach(p=>{const g=p.seg.gid;if(!gCnt[g])return;
+    if(!p.val){p.val=[];for(let j=0;j<5;j++)p.val[j]=gSum[g*5+j]/gCnt[g]}else for(let j=0;j<5;j++)p.val[j]+=(gSum[g*5+j]/gCnt[g]-p.val[j])*0.3});
+  if(st.drugOn){st.drugMax=Math.max(st.drugMax,dsum);st.drugRef=Math.max(st.drugMax/parts.length,1e-4)}
+  const teach=st.mode==='teach';
+  pCells.forEach(pc=>{const j=SUB.indexOf(pc.k);pc.bars.forEach((b,i)=>{const v=probes[i]&&probes[i].val?probes[i].val[j]:null;if(v==null)return;
+    const u=clamp(teach?(pc.k==='drug'?v/(2*st.drugRef):v):REALAX[pc.k](v),0,1),pct=(u*100).toFixed(1)+'%';
+    b.lastChild.style.height=pct;
+    if(teach){b.firstChild.textContent=u<0.4?'低':u<0.7?'中':'高';b.firstChild.style.bottom='calc('+pct+' + 3px)'}
+    else pc.nums[i].textContent=REALNUM[pc.k](v)})});
+  if(st.drugOn){st.drugMax=Math.max(st.drugMax,dsum);st.drugRef=Math.max(st.drugMax/parts.length,1e-4);
+    $('dstat').textContent=st.cyc<st.injUntil?'正在從上半身的靜脈注射…':'藥物隨血液先回到右心，經過肺再由左心送往全身；流經肝會被分解，流經腎會被排出。體內藥量約剩 '+Math.round(100*dsum/Math.max(st.drugMax,1e-6))+'%。'}
+}
+const CBY=[['blood','血色'],['o2','氧'],['co2','二氧化碳'],['nh3','氨'],['urea','尿素'],['drug','藥物']];
+function setColorBy(k){
+  st.colorBy=k;VU.uMono.value=k==='blood'?0:1;
+  document.querySelectorAll('#cby button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.k===k));
+  if(k==='blood'){$('lg1').textContent='充氧血';$('lg2').textContent='缺氧血';$('sw1').style.background='var(--oxy)';$('sw2').style.background='var(--deoxy)'}
+  else{const n=SUBNAME.teach[k];$('lg1').textContent=n+'多';$('lg2').textContent=n+'少';$('sw1').style.background='#ffd24a';$('sw2').style.background='#3a4656'}
+}
+function inject(){
+  st.drugOn=true;st.injUntil=st.cyc+1.2;st.drugMax=0;st.drugRef=0.01;parts.forEach(p=>{p.drug=0});
+  setColorBy('drug');renderProbes();if(!st.playing&&st.target==null){st.playing=true;syncUI()}
+}
+let tapDown=null;
+renderer.domElement.addEventListener('pointerdown',e=>{tapDown={x:e.clientX,y:e.clientY,t:performance.now()}});
+renderer.domElement.addEventListener('pointerup',e=>{
+  if(!tapDown||!st.placing)return;const d=Math.hypot(e.clientX-tapDown.x,e.clientY-tapDown.y),dt=performance.now()-tapDown.t;tapDown=null;
+  if(d>8||dt>600)return;
+  const hit=pickSeg(e.clientX,e.clientY);
+  if(!hit){$('pstat').textContent='沒有點到血管，請再點一次。';return}
+  if(addProbe(hit.seg,hit.pos))setPlacing(false);
+});
+function setPlacing(on){st.placing=on;stage.classList.toggle('placing',on);$('pAdd').setAttribute('aria-pressed',on);if(on)$('pstat').textContent='請在模型上點一下要測量的血管。'}
+function preset(names){clearProbes();names.forEach(n=>addProbe(segs[n]))}
+
+/* ================= 標示 ================= */
+// [教學用詞, 位置, 層級(s 全身 / h 心臟), dx, dy, 擬真用詞]
+const LABELS=[
+  ['右肺',[-3.4,3.72,0],'s'],['左肺',[3.4,3.72,0],'s'],['上半身微血管',[0,5.6,0],'s'],
+  ['肝',[-0.75,-2.45,0.5],'s'],['胃、腸',[0.9,-3.45,0.5],'s'],['腎',[0,-4.6,0.4],'s'],['下半身微血管',[0,-9.15,0],'s'],['下肢靜脈',[-1.71,-7.2,0],'s',-44,8],['靜脈瓣膜',[-1.74,-5.72,0.1],'s',-40,-22],['骨骼肌',[-1.2,-6.35,0.2],'s',34,0],['下肢動脈',[1.72,-6.6,0],'s',40,0],
+  ['微淋巴管',[0.55,-8.1,0.4],'s',62,-24,null,'lymph'],['淋巴結',[2.2,0.0,0.45],'s',46,0,null,'lymph'],['胸管',[2.02,1.5,0.5],'s',44,0,null,'lymph'],['淋巴流回靜脈',[-0.9,3.78,0.1],'s',-20,-30,null,'lymph'],
+  ['肝門靜脈',[-0.02,-3.12,0.1],'s',0,34],['主動脈',[1.76,-1.4,-0.4],'s',34,0],['下大靜脈',[-1.74,-1.4,-0.12],'s',-38,0,'下腔靜脈'],
+  ['上大靜脈',[-0.96,3.0,0],'s',-38,0,'上腔靜脈'],['肺動脈',[1.5,2.08,0.08],'s',0,-26],['肺靜脈',[2.1,1.04,0],'s',0,24],
+  ['右心房',[-0.98,0.82,0],'h'],['右心室',[-0.62,-0.5,0],'h'],['左心房',[0.9,0.82,0],'h'],['左心室',[0.52,-0.62,0],'h'],
+  ['房室瓣',[-0.93,0.12,0],'h',-46,10,'三尖瓣'],['房室瓣',[0.8,0.14,0],'h',48,10,'二尖瓣'],['半月瓣',[0.2,0.3,0],'h',-20,48,'主動脈瓣'],['半月瓣',[-0.36,0.3,0.02],'h',10,-70,'肺動脈瓣'],
+  ['心室中隔',[0.0,-0.75,0.04],'h',0,62],['上大靜脈',[-0.95,1.5,0.15],'h',-30,-16,'上腔靜脈'],['下大靜脈',[-1.52,-0.1,0.1],'h',-10,30,'下腔靜脈'],
+  ['主動脈',[-0.18,1.75,0.15],'h',-20,-26],['肺動脈',[0.32,1.38,0.45],'h',44,-10],['肺靜脈',[1.5,0.96,0.07],'h',20,24],['乳頭肌與腱索',[0.72,-0.72,-0.05],'h',44,34]];
+const labBox=document.getElementById('labels');const labEls=[];let labScale=1;
+function buildLabels(){
+  LABELS.forEach(L=>{
+    const e=document.createElement('div');e.className='lab';labBox.appendChild(e);
+    let lead=null,dot=null;
+    if(L[3]||L[4]){lead=document.createElement('div');lead.className='lead';labBox.insertBefore(lead,labBox.firstChild);dot=document.createElement('div');dot.className='dot';labBox.appendChild(dot)}
+    labEls.push({e,lead,dot,p:new V3(...L[1]),tier:L[2],dx:L[3]||0,dy:L[4]||0,w:0,h:0,teach:L[0],real:L[5]||L[0],cond:L[6]});
+  });
+}
+function measureLabels(){
+  labEls.forEach(l=>{l.e.textContent=l[st.mode];l.e.style.display='';l.w=l.e.offsetWidth;l.h=l.e.offsetHeight});
+  labScale=(parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--lab'))||12)/12;
+}
+function updateLabels(){
+  const w=stage.clientWidth,h=stage.clientHeight;
+  const near=camera.position.distanceTo(controls.target)<viewDist(VIEWS.heart)*1.7&&controls.target.distanceTo(VIEWS.heart.t)<2.2;
+  labEls.forEach(l=>{
+    const show=st.labels&&(l.tier==='h'?near:!near)&&(!l.cond||st[l.cond]);
+    if(!show){l.e.style.display='none';if(l.lead){l.lead.style.display='none';l.dot.style.display='none'}return}
+    _p.copy(l.p);if(l.tier==='h')beat(_p);_p.project(camera);
+    if(_p.z>1){l.e.style.display='none';if(l.lead){l.lead.style.display='none';l.dot.style.display='none'}return}
+    const x=(_p.x*0.5+0.5)*w,y=(-_p.y*0.5+0.5)*h;
+    let lx=clamp(x+l.dx*labScale-l.w/2,4,w-l.w-4),ly=clamp(y+l.dy*labScale-l.h/2,4,h-l.h-4);
+    l.e.style.display='';l.e.style.transform='translate('+lx.toFixed(1)+'px,'+ly.toFixed(1)+'px)';
+    if(l.lead){
+      const cx=lx+l.w/2,cy=ly+l.h/2,len=Math.hypot(cx-x,cy-y),ang=Math.atan2(cy-y,cx-x);
+      l.lead.style.display='';l.dot.style.display='';
+      l.lead.style.width=len.toFixed(1)+'px';l.lead.style.transform='translate('+x.toFixed(1)+'px,'+y.toFixed(1)+'px) rotate('+ang.toFixed(3)+'rad)';
+      l.dot.style.transform='translate('+x.toFixed(1)+'px,'+y.toFixed(1)+'px)';
+    }
+  });
+}
+
+/* ================= 主迴圈與操作 ================= */
+const $=id=>document.getElementById(id);
+const stepBtns=[];let capShown=-1,capMode='';
+function press(ids,on){ids.forEach(i=>$(i).setAttribute('aria-pressed',i===on?'true':'false'))}
+function syncUI(){
+  const run=st.playing||st.target!=null;
+  $('play').textContent=run?'暫停':'播放';$('play').setAttribute('aria-pressed',run);
+}
+function showCaption(){
+  const k=st.atStop>=0?st.atStop:capIndex(st.phase);
+  if(k===capShown&&capMode===st.mode)return;capShown=k;capMode=st.mode;
+  const c=CAPS[st.mode][k];$('capT').textContent=c[0];$('capD').textContent=c[1];
+  stepBtns.forEach((b,i)=>{b.setAttribute('aria-current',i===k?'true':'false');b.querySelector('.t').textContent=CAPS[st.mode][i][0];b.setAttribute('aria-label','第 '+(i+1)+' 步：'+CAPS[st.mode][i][0])});
+}
+function applyMode(m){
+  st.mode=m;const P=PAL[m];
+  VU.uOx.value.set(P.ox);VU.uDe.value.set(P.de);PR.copy(srgb(P.pOx));PB.copy(srgb(P.pDe));
+  document.documentElement.style.setProperty('--oxy',P.cssOx);document.documentElement.style.setProperty('--deoxy',P.cssDe);
+  if(heartMesh){heartMesh.geometry.setAttribute('color',heartMesh.geometry.userData[m]);heartMesh.geometry.attributes.color.needsUpdate=true}
+  press(['mTeach','mReal'],m==='teach'?'mTeach':'mReal');
+  if(labEls.length)measureLabels();
+  if(routeEls.length||st.hi>=0)setHi(st.hi);if(jr)jr.dirty=true;
+  if(segList.length){setExchange();renderProbes()}
+}
+let last=0;
+function frame(now){
+  requestAnimationFrame(frame);
+  const dt=Math.min((now-last)/1000,0.05);last=now;
+  const run=st.playing||st.target!=null;
+  if(run&&tick(dt*st.rate*st.bpm/60))syncUI();
+  beatU.uV.value=cyc.uV;beatU.uA.value=cyc.uA;VU.uPh.value=st.phase;
+  updateValves();updateLymph();drawParticles();
+  if(tween){tween.k=Math.min(1,tween.k+0.03);const e=ss(0,1,tween.k);camera.position.lerpVectors(tween.p0,tween.p1,e);controls.target.lerpVectors(tween.t0,tween.t1,e);if(tween.k>=1)tween=null}
+  controls.update();
+  renderer.render(scene,camera);
+  updateJourney();updateLabels();updateProbes();showCaption();if(st.ecg)drawECG();
+}
+$('play').onclick=()=>{const run=st.playing||st.target!=null;st.target=null;st.playing=!run;syncUI()};
+$('fwd').onclick=()=>stepFwd();
+$('back').onclick=()=>{if(jr&&!jr.done)endJourney('已退回上一步，這次旅程取消。');stepBack()};
+$('ecgBtn').onclick=()=>setEcg(!st.ecg);$('sndBtn').onclick=()=>setSound(!st.sound);
+$('pAdd').onclick=()=>setPlacing(!st.placing);$('pClr').onclick=()=>{setPlacing(false);clearProbes()};
+$('pLiver').onclick=()=>preset(['hepA','portal','hepv']);$('pKidney').onclick=()=>preset(['renA','renv']);$('pLung').onclick=()=>preset(['pt','lpv']);
+$('inj').onclick=inject;
+CBY.forEach(c=>{const b=document.createElement('button');b.textContent=c[1];b.dataset.k=c[0];b.onclick=()=>setColorBy(c[0]);$('cby').appendChild(b)});
+$('hAll').onclick=()=>setHi(-1);$('hSys').onclick=()=>setHi(0);$('hPul').onclick=()=>setHi(1);
+$('jSys').onclick=()=>startJourney(0);$('jPul').onclick=()=>startJourney(1);$('jEnd').onclick=()=>endJourney('旅程已結束。');
+$('follow').onclick=()=>{if(!jr||!jr.leader)return;jr.follow=!jr.follow;$('follow').setAttribute('aria-pressed',jr.follow);jr.dirty=true;
+  if(jr.follow){const L=jr.leader,t1=new V3(L.x,L.y,L.z);tween={p0:camera.position.clone(),t0:controls.target.clone(),p1:t1.clone().add(new V3(0,0,9)),t1,k:0}}};
+/* 區塊：收合、拖出面板、還原 */
+const blks=[].slice.call(document.querySelectorAll('.blk'));
+let zTop=20;
+function saveClosed(){try{localStorage.setItem('circ-closed',blks.filter(b=>b.classList.contains('closed')).map(b=>b.dataset.id).join(','))}catch(e){}}
+function restoreBlk(b){if(!b._stub)return;b.classList.remove('float');b.style.cssText='';b._stub.replaceWith(b);b._stub=null;b.querySelector('.rst').hidden=true}
+blks.forEach(b=>{
+  const bd=document.createElement('div');bd.className='bd';while(b.firstChild)bd.appendChild(b.firstChild);
+  const h=document.createElement('header');
+  h.innerHTML='<button class="grip" aria-label="拖曳移動這個區塊">⠿</button><button class="ttl" aria-expanded="true"></button><button class="rst" hidden>還原</button>';
+  const grip=h.children[0],ttl=h.children[1],rst=h.children[2];ttl.textContent=b.dataset.title;
+  b.appendChild(h);b.appendChild(bd);
+  ttl.onclick=()=>{const c=b.classList.toggle('closed');ttl.setAttribute('aria-expanded',!c);saveClosed()};
+  rst.onclick=()=>restoreBlk(b);
+  let d=null;
+  // 區塊移出面板時會換父層，所以拖曳事件掛在 window 上
+  const move=e=>{if(!d)return;const dx=e.clientX-d.x,dy=e.clientY-d.y;
+    if(!d.moved){if(Math.hypot(dx,dy)<6)return;d.moved=true;
+      if(!b._stub){const st2=document.createElement('div');st2.className='stub';st2.innerHTML='<span></span><button>還原</button>';st2.firstChild.textContent=b.dataset.title+'（已移到畫面上）';st2.lastChild.onclick=()=>restoreBlk(b);
+        b.replaceWith(st2);b._stub=st2;document.body.appendChild(b);b.classList.add('float');b.style.width=d.w+'px';rst.hidden=false}}
+    b.style.left=clamp(d.l+dx,0,window.innerWidth-60)+'px';b.style.top=clamp(d.t+dy,0,window.innerHeight-44)+'px'};
+  const end=()=>{d=null;window.removeEventListener('pointermove',move);window.removeEventListener('pointerup',end);window.removeEventListener('pointercancel',end)};
+  grip.addEventListener('pointerdown',e=>{if(window.innerWidth<860)return;e.preventDefault();const r=b.getBoundingClientRect();d={x:e.clientX,y:e.clientY,l:r.left,t:r.top,w:r.width,moved:b.classList.contains('float')};b.style.zIndex=++zTop;
+    window.addEventListener('pointermove',move);window.addEventListener('pointerup',end);window.addEventListener('pointercancel',end)});
+});
+try{(localStorage.getItem('circ-closed')||'').split(',').forEach(id=>{const b=blks.find(x=>x.dataset.id===id);if(b){b.classList.add('closed');b.querySelector('.ttl').setAttribute('aria-expanded','false')}})}catch(e){}
+window.addEventListener('resize',()=>{if(window.innerWidth<860)blks.forEach(restoreBlk)});
+document.querySelectorAll('#tabs button').forEach(b=>{b.onclick=()=>{document.querySelectorAll('#tabs button').forEach(x=>x.setAttribute('aria-pressed',x===b));blks.forEach(g=>g.classList.toggle('on',g.dataset.cat===b.dataset.t))}});
+/* 說明視窗 */
+function showHelp(on){$('help').hidden=!on;if(on)$('helpX').focus();else $('helpBtn').focus()}
+$('helpBtn').onclick=()=>showHelp(true);$('helpX').onclick=()=>showHelp(false);
+$('help').addEventListener('click',e=>{if(e.target===$('help'))showHelp(false)});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('help').hidden)showHelp(false)});
+document.querySelectorAll('#help header [data-h]').forEach(b=>{b.onclick=()=>{document.querySelectorAll('#help header [data-h]').forEach(x=>x.setAttribute('aria-pressed',x===b));
+  document.querySelectorAll('.hbody section').forEach(x=>{x.hidden=x.dataset.h!==b.dataset.h});document.querySelector('.hbody').scrollTop=0}});
+$('vAll').onclick=()=>{press(['vAll','vHeart','vLeg'],'vAll');goView('all');showNote()};
+$('vLeg').onclick=()=>{press(['vAll','vHeart','vLeg'],'vLeg');goView('leg');showNote()};
+$('vHeart').onclick=()=>{press(['vAll','vHeart','vLeg'],'vHeart');goView('heart');showNote()};
+$('lymBtn').onclick=()=>setLymph(!st.lymph);
+$('labBtn').onclick=()=>{st.labels=!st.labels;$('labBtn').setAttribute('aria-pressed',st.labels)};
+$('mTeach').onclick=()=>applyMode('teach');$('mReal').onclick=()=>applyMode('real');
+[['s1',1],['s2',0.5],['s4',0.25]].forEach(([id,r])=>{$(id).onclick=()=>{st.rate=r;press(['s1','s2','s4'],id)}});
+$('bpm').oninput=e=>{st.bpm=+e.target.value;$('bpmv').textContent=st.bpm+' 次/分'};
+controls.addEventListener('start',()=>{tween=null});
+STOPS.forEach((_,i)=>{const li=document.createElement('li'),b=document.createElement('button');
+  b.innerHTML='<span class="n">'+(i+1)+'</span><span class="t"></span>';b.onclick=()=>stepFwd(i);li.appendChild(b);$('steps').appendChild(li);stepBtns.push(b)});
+
+function start(){
+  resize();
+  const t0=performance.now();
+  try{
+    applyMode('teach');build();applyMode('teach');
+    initSubstances();cycle(st.phase);for(let i=0;i<1000;i++)tick(0.05); // 先跑約 60 次心跳，讓血球分布與物質濃度進入穩定狀態 // 先跑一段，讓血球分布進入穩定狀態
+    console.info('build ms',Math.round(performance.now()-t0),'verts',heartMesh.geometry.attributes.position.count,acc.count);
+  }catch(err){$('loading').textContent='模型建立失敗：'+err.message;console.error(err);return}
+  buildLabels();measureLabels();setHi(-1);setColorBy('blood');renderProbes();setEcg(window.innerWidth>=860);
+  $('loading').remove();
+  if(window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches){st.playing=false}
+  syncUI();
+  const init=(location.hash==='#heart')?'heart':'all';
+  if(init==='heart')press(['vAll','vHeart','vLeg'],'vHeart');
+  goView(init,true);
+  new ResizeObserver(()=>{resize();measureLabels()}).observe(stage);
+  window.__st=st;window.__cam=camera;window.__ctl=controls;window.__api={updateLymph,wbcs,segs,parts,setLymph,preset,inject,setColorBy,probes,pickSeg,stepFwd,stepBack,applyMode,tick,startJourney,setHi,jr:()=>jr};
+  last=performance.now();requestAnimationFrame(frame);
+}
+if(!window.THREE){$('loading').textContent='無法載入 3D 函式庫，請檢查網路後重新整理。'}
+else requestAnimationFrame(()=>setTimeout(start,30));
+})();
+</script>
+</body>
+</html>
