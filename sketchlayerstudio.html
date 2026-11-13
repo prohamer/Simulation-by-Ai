@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-<title>SketchLayer Studio</title>
+<title>SketchLayer StudioV5</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
@@ -268,6 +268,16 @@
 
   <!-- 右側：匯出 SVG / PNG / PDF 與專案存取 -->
   <div class="flex items-center gap-1.5 shrink-0">
+    <div class="flex items-center bg-slate-800/90 p-0.5 rounded-lg border border-slate-700/80">
+      <button id="btn-export-png" type="button" class="px-2.5 py-1.5 rounded-md hover:bg-slate-700 text-xs font-medium text-slate-200 flex items-center gap-1 transition" title="匯出當前頁面為高畫質 PNG 圖片">
+        <svg class="w-3.5 h-3.5 text-cyan-400" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8">
+          <path d="M10 3v10M6 9.2l4 4 4-4M4 16.5h12"/>
+        </svg>
+        <span>PNG</span>
+      </button>
+
+      <button id="btn-export-svg" type="button" class="px-2.5 py-1.5 rounded-md hover:bg-slate-700 text-xs font-medium text-slate-200 flex items-center gap-1 transition" title="匯出當前頁面為可縮放 SVG 向量檔">
+        <svg class="w-3.5 h-3.5 text-purple-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <polygon points="12 2 2 7 12 12 22 7 12 2"/>
           <polyline points="2 17 12 22 22 17"/>
           <polyline points="2 12 12 17 22 12"/>
@@ -1591,6 +1601,8 @@
       },
       clearSelection() { if (st.selId != null) { st.selId = null; refreshUI(); render(); } },
       setGridSnap(v) { opt.gridSnap = !!v; },
+      setPenOnly(v) { st.sawPen = !!v; },
+      get penOnly() { return st.sawPen; },
       toast,
       redraw: render, exportPNG, downloadPNG,
       drawTo: (c, customOpts = {}) => drawAll(c, Object.assign({ selection: false }, customOpts)),
@@ -1761,27 +1773,26 @@
         }
         if (vid) {
           return {
-        setTool, get tool() { return st.tool; },
-        expand, collapse, toggle: () => (st.collapsed ? expand() : collapse()), get collapsed() { return st.collapsed; },
-        undo, redo, clear, setVisible, get visible() { return st.visible; },
-        get items() { return clone(st.items); },
-        toJSON: () => clone(st.items),
-        load(items, { resetHistory = true } = {}) {
-          commitText();
-          st.items = Array.isArray(items) ? clone(items) : []; fixIds(); st.selId = null;
-          if (resetHistory) st.hist = { stack: [JSON.stringify(st.items)], idx: 0 };
-          refreshUI(); render();
-        },
-        clearSelection() { if (st.selId != null) { st.selId = null; refreshUI(); render(); } },
-        setGridSnap(v) { opt.gridSnap = !!v; },
-        setPenOnly(v) { st.sawPen = !!v; },
-        get penOnly() { return st.sawPen; },
-        toast,
-        redraw: render, exportPNG, downloadPNG,
-        drawTo: (c, customOpts = {}) => drawAll(c, Object.assign({ selection: false }, customOpts)),
-        setStyle(s) { Object.assign(st.style, s); refreshUI(); },
-        get overlayCanvas() { return overlay; },
-        destroy() {
+            embedUrl: `https://www.youtube.com/embed/${vid}?rel=0&playsinline=1`,
+            title: `YouTube 影片 (${vid})`,
+            note: '已自動轉換為可嵌入的 YouTube 播放器網址'
+          };
+        }
+      }
+
+      // 2. GitHub 倉庫網址轉換
+      if (host === 'github.com') {
+        const parts = u.pathname.split('/').filter(Boolean);
+        if (parts.length >= 4 && parts[2] === 'blob' && /\.html?$/i.test(parts[parts.length - 1])) {
+          const rawUrl = `https://raw.githubusercontent.com/${parts[0]}/${parts[1]}/${parts.slice(3).join('/')}`;
+          return {
+            embedUrl: `https://htmlpreview.github.io/?${encodeURIComponent(rawUrl)}`,
+            title: `GitHub HTML: ${parts[1]}/${parts[parts.length - 1]}`,
+            note: '已自動透過 GitHub HTML Preview 轉為可互動網頁'
+          };
+        }
+        if (parts.length === 2) {
+          const user = parts[0], repo = parts[1];
           return {
             embedUrl: `https://${user}.github.io/${repo}/`,
             title: `GitHub Pages: ${user}/${repo}`,
@@ -2437,8 +2448,61 @@
   }
   cv.addEventListener('pointerup', onHostPointerUp);
   cv.addEventListener('pointercancel', onHostPointerUp);
+  cv.addEventListener('contextmenu', e => e.preventDefault());
+
+  cv.addEventListener('wheel', e => {
+    e.preventDefault();
+    const r = cv.getBoundingClientRect();
+    const sx = e.clientX - r.left, sy = e.clientY - r.top;
+    if (e.ctrlKey || e.metaKey || !e.shiftKey) {
+      zoomAt(Math.exp(-e.deltaY * 0.0014), sx, sy);
+    } else {
+      view.cx += e.deltaX / view.scale;
+      view.cy += e.deltaY / view.scale;
+      draw();
+    }
+  }, { passive: false });
+
+  /* ---------------- 全螢幕與沉浸無邊框模式 (快捷鍵 F / Shift+F) ---------------- */
+  function isFullscreenActive() {
+    return !!(document.fullscreenElement || document.webkitFullscreenElement);
+  }
+
+  function updateFullscreenUI() {
+    const fs = isFullscreenActive();
+    const zen = document.body.classList.contains('zen-mode');
+    document.getElementById('icon-fs-enter').classList.toggle('hidden', fs);
+    document.getElementById('icon-fs-exit').classList.toggle('hidden', !fs);
+    document.getElementById('lbl-fullscreen-top').textContent = fs ? '退出全螢幕' : '全螢幕';
+    document.getElementById('lbl-fullscreen-bottom').textContent = fs ? '退出全螢幕 (F)' : '全螢幕 (F)';
+    document.getElementById('lbl-zen-mode').textContent = zen ? '退出沉浸' : '沉浸';
+    setTimeout(() => {
+      resize();
+      fitPageToView();
+    }, 60);
+  }
+
+  function toggleZenMode(forceState) {
+    const next = typeof forceState === 'boolean'
+      ? forceState
+      : !document.body.classList.contains('zen-mode');
+    document.body.classList.toggle('zen-mode', next);
+    updateFullscreenUI();
+    sk && sk.toast(next
+      ? '已進入「沉浸滿版模式」，按 Shift+F 或右下角按鈕可恢復工具列'
+      : '已恢復顯示頂部列與側邊欄');
+  }
+
+  async function toggleFullscreen(withZen = false) {
+    try {
+      if (!isFullscreenActive()) {
+        const el = document.documentElement;
+        const req = el.requestFullscreen || el.webkitRequestFullscreen;
+        if (req) {
+          await req.call(el);
+          if (withZen) document.body.classList.add('zen-mode');
+          sk && sk.toast('已進入全螢幕模式（按 F 或 Esc 可退出，按 Shift+F 切換沉浸無邊框）');
         } else {
-          // 若在受限的 iFrame 預覽環境中，自動切換為沉浸滿版模式
           toggleZenMode();
         }
       } else {
@@ -2449,7 +2513,6 @@
         }
       }
     } catch (err) {
-      // 當瀏覽器或嵌入環境阻擋原生 Fullscreen API 時，自動降級為沉浸滿版模式
       toggleZenMode();
     }
     updateFullscreenUI();
@@ -2467,7 +2530,6 @@
     if (e.code === 'Space') {
       spacePressed = true;
     }
-    // 全螢幕快捷鍵：F 切換全螢幕、Shift+F 切換沉浸無邊框模式
     if (!e.ctrlKey && !e.metaKey && !e.altKey && e.key.toLowerCase() === 'f') {
       e.preventDefault();
       if (e.shiftKey) {
@@ -2648,6 +2710,422 @@
     cameraInput.onchange = e => {
       handleImageFiles(e.target.files);
       cameraInput.value = '';
+    };
+  }
+
+  const dropOverlay = document.getElementById('drop-overlay');
+  let dragCounter = 0;
+  window.addEventListener('dragenter', e => {
+    if (e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files')) {
+      e.preventDefault();
+      dragCounter++;
+      dropOverlay.classList.add('active');
+    }
+  });
+  window.addEventListener('dragover', e => {
+    if (e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files')) {
+      e.preventDefault();
+    }
+  });
+  window.addEventListener('dragleave', () => {
+    dragCounter = Math.max(0, dragCounter - 1);
+    if (dragCounter === 0) dropOverlay.classList.remove('active');
+  });
+  window.addEventListener('drop', e => {
+    e.preventDefault();
+    dragCounter = 0;
+    dropOverlay.classList.remove('active');
+    if (e.dataTransfer && e.dataTransfer.files) {
+      handleImageFiles(e.dataTransfer.files);
+    }
+  });
+
+  /* ---------------- 嵌入互動網頁 / 模擬對話框邏輯 ---------------- */
+  const embedModal = document.getElementById('embed-modal');
+  const inpEmbedUrl = document.getElementById('inp-embed-url');
+  const embedUrlHint = document.getElementById('embed-url-hint');
+
+  function openEmbedModal() {
+    embedModal.classList.remove('hidden');
+    setTimeout(() => inpEmbedUrl.focus(), 50);
+  }
+  function closeEmbedModal() {
+    embedModal.classList.add('hidden');
+  }
+
+  document.getElementById('btn-open-embed').onclick = openEmbedModal;
+  document.getElementById('btn-close-embed-modal').onclick = closeEmbedModal;
+  document.getElementById('btn-cancel-embed').onclick = closeEmbedModal;
+
+  inpEmbedUrl.addEventListener('input', () => {
+    const info = normalizeEmbedURL(inpEmbedUrl.value);
+    if (info) {
+      embedUrlHint.textContent = `✅ ${info.note} → 將載入：${info.embedUrl}`;
+      embedUrlHint.className = 'text-[11px] text-cyan-300 mt-1.5 leading-relaxed truncate';
+    } else {
+      embedUrlHint.textContent = '💡 系統會自動轉換 YouTube 觀看連結與 GitHub .html 原始碼網址為可互動嵌入格式。';
+      embedUrlHint.className = 'text-[11px] text-slate-400 mt-1.5 leading-relaxed';
+    }
+  });
+
+  document.querySelectorAll('.preset-embed-btn').forEach(btn => {
+    btn.onclick = () => {
+      inpEmbedUrl.value = btn.dataset.presetUrl || '';
+      inpEmbedUrl.dispatchEvent(new Event('input'));
+    };
+  });
+
+  function insertEmbedByURL(rawUrl, customTitle) {
+    const info = normalizeEmbedURL(rawUrl);
+    if (!info) {
+      sk && sk.toast('請輸入有效的網頁或模擬器網址');
+      return;
+    }
+    const asNewPage = document.getElementById('chk-embed-new-page').checked;
+    const fillPage = document.getElementById('chk-embed-fill').checked;
+
+    if (asNewPage) {
+      saveCurrentPageAnnotations();
+      const newP = createPageObj({
+        title: customTitle || info.title.slice(0, 14),
+        width: 1280,
+        height: 720,
+        bgStyle: 'chalkboard'
+      });
+      pages.push(newP);
+      switchToPage(pages.length - 1, true);
+    }
+
+    const p = curPage();
+    if (!p.embeds) p.embeds = [];
+    const w = fillPage ? p.width : Math.round(p.width * 0.82);
+    const h = fillPage ? p.height : Math.round(p.height * 0.82);
+    const x = fillPage ? 0 : Math.round((p.width - w) / 2);
+    const y = fillPage ? 0 : Math.round((p.height - h) / 2);
+
+    p.embeds.push({
+      id: nextEmbedId++,
+      url: info.embedUrl,
+      rawUrl,
+      title: customTitle || info.title,
+      x,
+      y,
+      w,
+      h,
+      locked: fillPage
+    });
+
+    closeEmbedModal();
+    setEmbedInteractionMode(true);
+    draw();
+    renderPageSidebar();
+    sk && sk.toast('已嵌入互動網頁！目前為「🎮 操作模式」，點選上方繪圖工具即可直接在畫面標註');
+  }
+
+  document.getElementById('btn-confirm-embed').onclick = () => {
+    insertEmbedByURL(inpEmbedUrl.value);
+  };
+  inpEmbedUrl.addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      insertEmbedByURL(inpEmbedUrl.value);
+    }
+  });
+
+  document.getElementById('btn-mode-interact').onclick = () => {
+    setEmbedInteractionMode(true);
+    sk && sk.toast('🎮 已切換為「操作網頁/模擬」模式，可直接點擊操作網頁內容');
+  };
+  document.getElementById('btn-mode-draw').onclick = () => {
+    setEmbedInteractionMode(false);
+    if (sk && sk.collapsed) sk.expand();
+    if (sk && sk.tool === 'select') sk.setTool('pen');
+    sk && sk.toast('✏️ 已切換為「畫筆標註」模式，可直接在模擬畫面正上方畫圖');
+  };
+
+  document.getElementById('btn-capture-screen').onclick = async () => {
+    try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+        sk && sk.toast('您的瀏覽器不支援畫面擷取，請使用系統截圖後按 Ctrl+V 貼上');
+        return;
+      }
+      sk && sk.toast('請在彈出視窗中選擇「此分頁 (目前標籤頁)」並按分享...');
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: { displaySurface: 'browser' },
+        audio: false,
+        preferCurrentTab: true
+      });
+      const track = stream.getVideoTracks()[0];
+      const vid = document.createElement('video');
+      vid.srcObject = stream;
+      vid.muted = true;
+      await vid.play();
+      await new Promise(r => setTimeout(r, 120));
+
+      const p = curPage();
+      const tl = toScreen(0, 0);
+      const br = toScreen(p.width, p.height);
+      const rectWrap = wrap.getBoundingClientRect();
+
+      const scaleX = vid.videoWidth / window.innerWidth;
+      const scaleY = vid.videoHeight / window.innerHeight;
+
+      const sx = Math.max(0, (rectWrap.left + tl.x) * scaleX);
+      const sy = Math.max(0, (rectWrap.top + tl.y) * scaleY);
+      const sw = Math.min(vid.videoWidth - sx, (br.x - tl.x) * scaleX);
+      const sh = Math.min(vid.videoHeight - sy, (br.y - tl.y) * scaleY);
+
+      const capCv = document.createElement('canvas');
+      capCv.width = p.width;
+      capCv.height = p.height;
+      const capCtx = capCv.getContext('2d');
+      capCtx.drawImage(vid, sx, sy, sw, sh, 0, 0, p.width, p.height);
+
+      track.stop();
+      stream.getTracks().forEach(t => t.stop());
+
+      const dataUrl = capCv.toDataURL('image/png');
+      const imgEl = await loadImageElement(dataUrl);
+      p.images.push({
+        id: nextImgId++,
+        src: dataUrl,
+        imgEl,
+        x: 0,
+        y: 0,
+        w: p.width,
+        h: p.height,
+        rotation: 0,
+        locked: true
+      });
+      draw();
+      renderPageSidebar();
+      sk && sk.toast('📸 已將模擬器畫面擷取為本頁高畫質底圖！匯出 PNG / PDF 時將完整包含');
+    } catch (err) {
+      console.warn(err);
+      sk && sk.toast('已取消擷取（或可使用系統截圖 Win+Shift+S 後直接按 Ctrl+V 貼上）');
+    }
+  };
+
+  /* ---------------- 圖片浮動工具列動作 ---------------- */
+  function deleteSelectedImage() {
+    const p = curPage();
+    if (!p || !selectedImgId) return;
+    p.images = p.images.filter(im => im.id !== selectedImgId);
+    selectedImgId = null;
+    draw();
+    renderPageSidebar();
+    sk && sk.toast('已刪除圖片');
+  }
+
+  document.getElementById('btn-img-lock').onclick = () => {
+    const im = getSelectedImage();
+    if (!im) return;
+    im.locked = !im.locked;
+    if (im.locked) {
+      selectedImgId = null;
+      sk && sk.toast('已鎖定為底圖！現在可在上方安心畫記，右下角可隨時解鎖');
+    }
+    draw();
+  };
+
+  document.getElementById('btn-unlock-all').onclick = () => {
+    const p = curPage();
+    if (!p) return;
+    p.images.forEach(im => { im.locked = false; });
+    if (p.embeds) p.embeds.forEach(em => { em.locked = false; });
+    if (p.images.length) selectedImgId = p.images[p.images.length - 1].id;
+    if (sk) sk.setTool('select');
+    draw();
+    sk && sk.toast('已解鎖本頁底圖與嵌入視窗，可點擊拖曳調整');
+  };
+
+  document.getElementById('btn-img-fit').onclick = () => {
+    const im = getSelectedImage();
+    const p = curPage();
+    if (!im || !p) return;
+    const natW = im.imgEl.naturalWidth || im.w;
+    const natH = im.imgEl.naturalHeight || im.h;
+    const k = Math.min((p.width * 0.92) / natW, (p.height * 0.92) / natH);
+    im.w = Math.round(natW * k);
+    im.h = Math.round(natH * k);
+    im.x = Math.round((p.width - im.w) / 2);
+    im.y = Math.round((p.height - im.h) / 2);
+    im.rotation = 0;
+    draw();
+  };
+
+  document.getElementById('btn-img-page-match').onclick = () => {
+    const im = getSelectedImage();
+    const p = curPage();
+    if (!im || !p) return;
+    p.width = Math.max(400, Math.round(im.w));
+    p.height = Math.max(300, Math.round(im.h));
+    im.x = 0;
+    im.y = 0;
+    im.rotation = 0;
+    syncPageSettingsUI();
+    fitPageToView();
+    renderPageSidebar();
+    sk && sk.toast(`頁面尺寸已調整為 ${p.width} × ${p.height}`);
+  };
+
+  document.getElementById('btn-img-front').onclick = () => {
+    const im = getSelectedImage();
+    const p = curPage();
+    if (!im || !p) return;
+    p.images = p.images.filter(x => x.id !== im.id);
+    p.images.push(im);
+    draw();
+  };
+
+  document.getElementById('btn-img-del').onclick = deleteSelectedImage;
+
+  /* ---------------- 圖片裁切 & 智慧去背工作台 (Crop & Smart BG Removal) ---------------- */
+  const imgEditModal = document.getElementById('img-edit-modal');
+  const editCv = document.getElementById('img-edit-cv');
+  const editCtx = editCv.getContext('2d');
+
+  const editState = {
+    mode: 'crop',        // 'crop' | 'bg'
+    targetIm: null,
+    sourceCanvas: null,
+    previewCanvas: null,
+    imgW: 0,
+    imgH: 0,
+    crop: { x: 0, y: 0, w: 100, h: 100 },
+    cropRatio: 0,
+    cropDrag: null,
+    bgMode: 'flood',     // 'flood' | 'luma' | 'color'
+    sampleRGB: [255, 255, 255],
+    tolerance: 32,
+    invertInk: false
+  };
+
+  function openImageEditor(initialMode = 'crop') {
+    const im = getSelectedImage();
+    if (!im || !im.imgEl) return;
+    editState.targetIm = im;
+    const nw = im.imgEl.naturalWidth || im.w;
+    const nh = im.imgEl.naturalHeight || im.h;
+    editState.imgW = nw;
+    editState.imgH = nh;
+
+    const srcCv = document.createElement('canvas');
+    srcCv.width = nw;
+    srcCv.height = nh;
+    const sCtx = srcCv.getContext('2d');
+    sCtx.drawImage(im.imgEl, 0, 0, nw, nh);
+    editState.sourceCanvas = srcCv;
+
+    const prevCv = document.createElement('canvas');
+    prevCv.width = nw;
+    prevCv.height = nh;
+    prevCv.getContext('2d').drawImage(srcCv, 0, 0);
+    editState.previewCanvas = prevCv;
+
+    const cornerData = sCtx.getImageData(0, 0, 1, 1).data;
+    if (cornerData[3] > 20) {
+      editState.sampleRGB = [cornerData[0], cornerData[1], cornerData[2]];
+    } else {
+      editState.sampleRGB = [255, 255, 255];
+    }
+    updateSwatchUI();
+
+    editState.crop = { x: 0, y: 0, w: nw, h: nh };
+    editState.cropRatio = 0;
+
+    editCv.width = nw;
+    editCv.height = nh;
+    document.getElementById('img-edit-dim-info').textContent = `原始解析度：${nw} × ${nh} px`;
+
+    switchEditorTab(initialMode);
+    imgEditModal.classList.remove('hidden');
+  }
+
+  function updateSwatchUI() {
+    const [r, g, b] = editState.sampleRGB;
+    document.getElementById('bg-sample-swatch').style.background = `rgb(${r},${g},${b})`;
+  }
+
+  function switchEditorTab(mode) {
+    editState.mode = mode;
+    const isCrop = mode === 'crop';
+    const tabCrop = document.getElementById('tab-edit-crop');
+    const tabBg = document.getElementById('tab-edit-bg');
+    tabCrop.className = isCrop
+      ? 'px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 bg-cyan-500 text-slate-950'
+      : 'px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 bg-slate-800 text-slate-300 hover:text-white';
+    tabBg.className = !isCrop
+      ? 'px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 bg-purple-500 text-white'
+      : 'px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 bg-slate-800 text-slate-300 hover:text-white';
+
+    document.getElementById('panel-edit-crop').classList.toggle('hidden', !isCrop);
+    document.getElementById('panel-edit-bg').classList.toggle('hidden', isCrop);
+
+    if (!isCrop) {
+      runSmartBackgroundRemovalPreview();
+    } else {
+      renderImageEditorCanvas();
+    }
+  }
+
+  function renderImageEditorCanvas() {
+    const w = editState.imgW, h = editState.imgH;
+    editCtx.clearRect(0, 0, w, h);
+
+    if (editState.mode === 'bg') {
+      editCtx.drawImage(editState.previewCanvas, 0, 0);
+      return;
+    }
+
+    editCtx.drawImage(editState.sourceCanvas, 0, 0);
+    const c = editState.crop;
+
+    editCtx.save();
+    editCtx.fillStyle = 'rgba(2, 6, 23, 0.62)';
+    editCtx.beginPath();
+    editCtx.rect(0, 0, w, h);
+    editCtx.rect(c.x, c.y, c.w, c.h);
+    editCtx.fill('evenodd');
+
+    editCtx.strokeStyle = '#22d3ee';
+    const lw = Math.max(2, Math.round(Math.max(w, h) / 320));
+    editCtx.lineWidth = lw;
+    editCtx.strokeRect(c.x, c.y, c.w, c.h);
+
+    editCtx.strokeStyle = 'rgba(34, 211, 238, 0.35)';
+    editCtx.lineWidth = Math.max(1, lw * 0.5);
+    editCtx.beginPath();
+    editCtx.moveTo(c.x + c.w / 3, c.y); editCtx.lineTo(c.x + c.w / 3, c.y + c.h);
+    editCtx.moveTo(c.x + (c.w * 2) / 3, c.y); editCtx.lineTo(c.x + (c.w * 2) / 3, c.y + c.h);
+    editCtx.moveTo(c.x, c.y + c.h / 3); editCtx.lineTo(c.x + c.w, c.y + c.h / 3);
+    editCtx.moveTo(c.x, c.y + (c.h * 2) / 3); editCtx.lineTo(c.x + c.w, c.y + (c.h * 2) / 3);
+    editCtx.stroke();
+
+    const hs = Math.max(8, Math.round(Math.max(w, h) / 75));
+    const handles = getCropHandles(c);
+    editCtx.fillStyle = '#0f172a';
+    editCtx.strokeStyle = '#22d3ee';
+    editCtx.lineWidth = lw;
+    Object.values(handles).forEach(pt => {
+      editCtx.fillRect(pt.x - hs / 2, pt.y - hs / 2, hs, hs);
+      editCtx.strokeRect(pt.x - hs / 2, pt.y - hs / 2, hs, hs);
+    });
+    editCtx.restore();
+
+    document.getElementById('img-edit-dim-info').textContent = `裁切尺寸：${Math.round(c.w)} × ${Math.round(c.h)} px`;
+  }
+
+  function getCropHandles(c) {
+    return {
+      tl: { x: c.x, y: c.y },
+      tm: { x: c.x + c.w / 2, y: c.y },
+      tr: { x: c.x + c.w, y: c.y },
+      mr: { x: c.x + c.w, y: c.y + c.h / 2 },
+      br: { x: c.x + c.w, y: c.y + c.h },
+      bm: { x: c.x + c.w / 2, y: c.y + c.h },
+      bl: { x: c.x, y: c.y + c.h },
+      ml: { x: c.x, y: c.y + c.h / 2 }
     };
   }
 
@@ -3148,6 +3626,46 @@
   };
 
   document.getElementById('btn-del-page').onclick = () => {
+    if (pages.length <= 1) {
+      curPage().images = [];
+      curPage().embeds = [];
+      curPage().annotations = [];
+      if (sk) sk.load([], { resetHistory: true });
+      draw();
+      renderPageSidebar();
+      sk && sk.toast('已清空第 1 頁內容');
+      return;
+    }
+    pages.splice(curPageIdx, 1);
+    const nextIdx = Math.min(curPageIdx, pages.length - 1);
+    curPageIdx = nextIdx;
+    if (sk) sk.load(curPage().annotations || [], { resetHistory: true });
+    syncPageSettingsUI();
+    draw();
+    renderPageSidebar();
+    sk && sk.toast('已刪除頁面');
+  };
+
+  document.getElementById('sel-bg-style').onchange = e => {
+    const p = curPage();
+    if (!p) return;
+    p.bgStyle = e.target.value;
+    draw();
+  };
+
+  document.getElementById('sel-page-size').onchange = e => {
+    const p = curPage();
+    if (!p) return;
+    const [w, h] = e.target.value.split('x').map(Number);
+    if (w && h) {
+      p.width = w;
+      p.height = h;
+      syncPageSettingsUI();
+      fitPageToView();
+      renderPageSidebar();
+    }
+  };
+
   function toggleSidebarDrawer(forceShow) {
     const sb = document.getElementById('page-sidebar');
     const backdrop = document.getElementById('sidebar-backdrop');
