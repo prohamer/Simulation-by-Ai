@@ -301,6 +301,10 @@ input[type=range]{flex:1 1 auto;min-width:60px;accent-color:var(--accent);height
         <ul><li>按「放置探測器」，再點模型上的血管；最多放 4 個。「快速比較」會一次放好肝、腎或肺的進出血管。</li>
         <li>直條圖把每種物質分成一組，組內每根長條代表一個探測器（顏色與編號相同）。</li>
         <li>「血球上色」可改成依某種物質上色：愈亮代表愈多。「靜脈注射藥物」會從上半身的靜脈注入藥物。</li></ul>
+        <h3>繪圖工具</h3>
+        <ul><li>模型右上角的「繪圖」按鈕可展開工具列：畫筆、螢光筆、直線、箭頭、圓、描點、文字、雷射筆、橡皮擦。</li>
+        <li>畫上去的標註貼在人體正面的平面上，旋轉、縮放後仍會跟著模型。用「選取」可以拖移、改顏色或刪除。</li>
+        <li>畫圖時單指作畫、雙指縮放平移；按收合鍵（‹）收起工具列後，才能再用單指旋轉模型。</li></ul>
         <h3>面板</h3>
         <ul><li>點區塊標題可以收合或展開。</li>
         <li>寬螢幕上，按住標題左邊的把手拖曳，可以把區塊移到畫面上任何位置；按「還原」放回原處。</li>
@@ -367,6 +371,906 @@ input[type=range]{flex:1 1 auto;min-width:60px;accent-color:var(--accent);height
 
 <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+/*!
+ * SketchLayer — 可收合的畫布標註工具（教學模擬用）
+ * 用法：const sk = SketchLayer.create(hostCanvas, hostAdapter, options)
+ * 不依賴任何框架或圖示庫；標註存世界座標，畫在疊在上方的透明畫布。
+ */
+(function (global) {
+  'use strict';
+
+  /* ---------------- 圖示（20×20、currentColor） ---------------- */
+  const ICON = {
+    select: '<path d="M5 3l10.5 6.2-4.6 1.1 2.6 5-1.9 1-2.6-5.1L5 14.3z" fill="currentColor" stroke="none"/>',
+    pen: '<path d="M3.5 16.5l.9-3.6 9-9a1.5 1.5 0 012.1 0l1.1 1.1a1.5 1.5 0 010 2.1l-9 9z"/><path d="M12 5.4l2.6 2.6"/>',
+    highlighter: '<path d="M7 12.5l6.8-8.3 3 2.6-6.6 8.4z"/><path d="M7 12.5l-1.6 2.7 2.3.2 2.5-.6"/><path d="M3 17.5h8" stroke-width="3" opacity=".55"/>',
+    line: '<path d="M4 16L16 4"/>',
+    arrow: '<path d="M4 16L15.5 4.5"/><path d="M9 4.5h6.5V11"/>',
+    ellipse: '<ellipse cx="10" cy="10" rx="7.2" ry="5.2"/>',
+    point: '<circle cx="8" cy="12" r="2.6" fill="currentColor"/><path d="M12 8.5l1.6-4.5 1.6 4.5M12.6 7h2"/>',
+    text: '<path d="M4 5h12M10 5v11M7.5 16h5"/>',
+    ruler: '<path d="M2.8 13.6L13.6 2.8l3.6 3.6L6.4 17.2z"/><path d="M6 10.4l1.6 1.6M8.4 8l1.6 1.6M10.8 5.6l1.6 1.6"/>',
+    laser: '<circle cx="14" cy="6" r="2.2" fill="currentColor"/><path d="M3.5 16.5l7-7" opacity=".55"/><path d="M14 1.8v1.3M14 8.9v1.3M9.8 6h1.3M16.9 6h1.3"/>',
+    eraser: '<path d="M8.5 16.8h8.5"/><path d="M3.9 12.6l7.2-7.2a1.6 1.6 0 012.2 0l2.8 2.8a1.6 1.6 0 010 2.2l-6.3 6.4H7.5z"/><path d="M7.2 9.3l4.4 4.4"/>',
+    undo: '<path d="M7 4L3 8l4 4"/><path d="M3 8h9a4.5 4.5 0 010 9H8"/>',
+    redo: '<path d="M13 4l4 4-4 4"/><path d="M17 8H8a4.5 4.5 0 000 9h4"/>',
+    eye: '<path d="M2 10s3-5.5 8-5.5S18 10 18 10s-3 5.5-8 5.5S2 10 2 10z"/><circle cx="10" cy="10" r="2.4"/>',
+    eyeOff: '<path d="M2 10s3-5.5 8-5.5S18 10 18 10s-3 5.5-8 5.5S2 10 2 10z"/><circle cx="10" cy="10" r="2.4"/><path d="M3.5 3.5l13 13"/>',
+    trash: '<path d="M4 6h12M8 6V4h4v2M5.8 6l.9 11h6.6l.9-11"/>',
+    fold: '<path d="M12.5 5l-5 5 5 5"/>',
+    download: '<path d="M10 3v10M6 9.2l4 4 4-4M4 16.5h12"/>',
+    copy: '<path d="M7 7h9.5v9.5H7z"/><path d="M4 13V3.5h9.5"/>',
+    dash: '<path d="M2.5 10h3.4M8.3 10h3.4M14.1 10h3.4"/>',
+    head0: '<path d="M3 10h14"/>',
+    head1: '<path d="M3 10h14M12.5 6l4.5 4-4.5 4"/>',
+    head2: '<path d="M3 10h14M14 6.5l3 3.5-3 3.5M7.5 6.5l3 3.5-3 3.5"/>'
+  };
+  const svg = k => `<svg viewBox="0 0 20 20" aria-hidden="true">${ICON[k]}</svg>`;
+
+  const TOOL_INFO = {
+    select:      { name: '選取', key: 'V', hint: '點標註可選取、拖移；拖兩端方塊可調整；雙擊文字或描點可修改' },
+    pen:         { name: '畫筆', key: 'P', hint: '手寫、圈選；觸控筆會依壓力改變粗細' },
+    highlighter: { name: '螢光筆', key: 'H', hint: '半透明粗線，用來強調區域' },
+    line:        { name: '直線', key: 'L', hint: 'Shift：鎖定 15° 倍數；端點會吸附重要位置' },
+    arrow:       { name: '箭頭／光線', key: 'A', hint: 'Shift：鎖定 15° 倍數；樣式列可切換「中段箭頭」畫光線' },
+    ellipse:     { name: '圓／橢圓', key: 'O', hint: '拖曳畫出橢圓；Shift：正圓' },
+    point:       { name: '描點', key: 'D', hint: '自動標 A、B、C…；靠近光線轉折點、元件中心或像時會吸附' },
+    text:        { name: '文字', key: 'T', hint: '點一下打字，Enter 完成、Shift+Enter 換行、Esc 取消；點已有文字可修改' },
+    ruler:       { name: '量尺', key: 'M', hint: '拖曳量兩點距離與角度；Shift：鎖定 15° 倍數' },
+    laser:       { name: '雷射筆', key: 'K', hint: '上課指示用，軌跡會自動消失、不會留下' },
+    eraser:      { name: '橡皮擦', key: 'E', hint: '點或拖過哪個標註就刪掉哪個' }
+  };
+
+  const DEFAULTS = {
+    position: 'top-left',                // top-left | top-right | bottom-left | bottom-right
+    collapsed: true,                     // 預設收合
+    rememberCollapsed: false,            // true：記住上次展開/收合（localStorage）
+    storageKey: 'sketch-layer',
+    tools: ['select', 'pen', 'highlighter', 'line', 'arrow', 'ellipse', 'point', 'text', 'ruler', 'laser', 'eraser'],
+    colors: ['#facc15', '#f8fafc', '#f87171', '#4ade80', '#22d3ee', '#e879f9', '#fb923c'],
+    customColor: true,
+    widths: [[2, '細'], [3.5, '中'], [6, '粗']],
+    textSizes: [[16, '小'], [22, '中'], [30, '大']],
+    scaleWithZoom: true,                 // 線寬、字級跟著畫面縮放（標註「黏」在場景上）
+    gridSnap: false,                     // 直線端點、描點吸附網格（需 host.gridSize）
+    snapRadius: 12,                      // 吸附重要位置的距離（螢幕 px）
+    angleStep: 15,
+    units: { perWorld: 1, label: 'px', decimals: 1 },   // 量尺：長度 = 世界距離 × perWorld
+    history: 'own',                      // 'own'：自己的復原/重做；'host'：交給宿主的整體歷史
+    shortcuts: true,
+    palmRejection: true,                 // 偵測到觸控筆後，手指觸控不畫圖（交給宿主平移）
+    exportButton: true,
+    theme: 'dark',                       // dark | light
+    font: '"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif'
+  };
+
+  const CSS = `
+.sk-root{--sk-bg:rgba(15,23,42,.92);--sk-line:rgba(148,163,184,.25);--sk-fg:#cbd5e1;--sk-dim:#94a3b8;--sk-hover:rgba(148,163,184,.16);--sk-accent:#06b6d4;--sk-on:#03121a;
+  position:absolute;z-index:30;display:flex;flex-direction:column;gap:6px;align-items:flex-start;pointer-events:none;max-width:calc(100% - 24px);
+  font:13px/1.25 system-ui,"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;-webkit-user-select:none;user-select:none}
+.sk-root.sk-light{--sk-bg:rgba(255,255,255,.94);--sk-line:rgba(15,23,42,.14);--sk-fg:#334155;--sk-dim:#64748b;--sk-hover:rgba(15,23,42,.07);--sk-accent:#0891b2;--sk-on:#fff}
+.sk-root>*{pointer-events:auto}
+.sk-tl{top:12px;left:12px}.sk-tr{top:12px;right:12px;align-items:flex-end}
+.sk-bl{bottom:12px;left:12px;flex-direction:column-reverse}.sk-br{bottom:12px;right:12px;align-items:flex-end;flex-direction:column-reverse}
+.sk-panel{display:flex;flex-wrap:wrap;align-items:center;gap:2px;padding:5px;background:var(--sk-bg);border:1px solid var(--sk-line);border-radius:12px;
+  -webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);box-shadow:0 10px 30px rgba(0,0,0,.28)}
+.sk-btn{width:34px;height:34px;display:inline-grid;place-items:center;border:0;border-radius:8px;background:transparent;color:var(--sk-fg);cursor:pointer;padding:0}
+.sk-btn svg{width:19px;height:19px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.sk-btn:hover:not(:disabled){background:var(--sk-hover)}
+.sk-btn[aria-pressed="true"]{background:var(--sk-accent);color:var(--sk-on)}
+.sk-btn:disabled{opacity:.32;cursor:default}
+.sk-btn:focus-visible,.sk-chip:focus-visible,.sk-sw:focus-visible,.sk-fab:focus-visible{outline:2px solid var(--sk-accent);outline-offset:1px}
+.sk-sep{width:1px;height:22px;background:var(--sk-line);margin:0 3px}
+.sk-fab{display:inline-flex;align-items:center;gap:7px;height:38px;padding:0 13px 0 11px;border-radius:19px;border:1px solid var(--sk-line);background:var(--sk-bg);
+  color:var(--sk-fg);cursor:pointer;font:inherit;font-weight:600;box-shadow:0 8px 24px rgba(0,0,0,.25);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+.sk-fab:hover{color:#fff;border-color:var(--sk-accent)}.sk-light .sk-fab:hover{color:#0f172a}
+.sk-fab svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.sk-badge{min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--sk-accent);color:var(--sk-on);font-size:11px;display:inline-grid;place-items:center}
+.sk-badge[hidden]{display:none}
+.sk-sw{width:22px;height:22px;border-radius:50%;border:2px solid transparent;cursor:pointer;padding:0;box-shadow:inset 0 0 0 1px rgba(0,0,0,.35)}
+.sk-sw[aria-pressed="true"]{border-color:var(--sk-bg);box-shadow:0 0 0 2px var(--sk-accent)}
+.sk-cc{position:relative;width:22px;height:22px;border-radius:50%;overflow:hidden;cursor:pointer;
+  background:conic-gradient(#f87171,#facc15,#4ade80,#22d3ee,#818cf8,#e879f9,#f87171)}
+.sk-cc input{position:absolute;inset:-6px;width:34px;height:34px;opacity:0;cursor:pointer;border:0;padding:0}
+.sk-chip{height:28px;min-width:30px;padding:0 9px;border-radius:7px;border:1px solid var(--sk-line);background:transparent;color:var(--sk-fg);cursor:pointer;font:inherit;
+  display:inline-flex;align-items:center;gap:4px}
+.sk-chip svg{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.sk-chip:hover{background:var(--sk-hover)}
+.sk-chip[aria-pressed="true"]{background:var(--sk-accent);color:var(--sk-on);border-color:transparent}
+.sk-chip.sk-danger:hover{background:rgba(248,113,113,.18);color:#fca5a5}
+.sk-hint{font-size:11.5px;color:var(--sk-dim);padding:2px 6px;background:var(--sk-bg);border-radius:7px;max-width:520px}
+.sk-hint:empty{display:none}
+.sk-collapsed .sk-bar,.sk-collapsed .sk-style,.sk-collapsed .sk-hint{display:none}
+.sk-root:not(.sk-collapsed) .sk-fab{display:none}
+.sk-style[hidden]{display:none}
+.sk-bar,.sk-style{animation:sk-in .14s ease-out}
+@keyframes sk-in{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.sk-bar,.sk-style{animation:none}}
+@media (pointer:coarse){.sk-btn{width:42px;height:42px}.sk-sw,.sk-cc{width:28px;height:28px}.sk-chip{height:36px}}
+.sk-overlay{position:absolute;pointer-events:none;z-index:5}
+.sk-text{position:absolute;z-index:40;margin:0;padding:0 3px;background:rgba(2,6,23,.82);border:1px solid #06b6d4;border-radius:4px;outline:none;resize:none;
+  overflow:hidden;white-space:pre;font-weight:700;line-height:1.25;min-width:60px}
+.sk-text[hidden]{display:none}
+.sk-toast{position:absolute;left:50%;bottom:18px;transform:translateX(-50%);z-index:45;padding:7px 14px;border-radius:9px;background:rgba(15,23,42,.94);color:#e2e8f0;
+  font:13px system-ui,"Noto Sans TC",sans-serif;box-shadow:0 8px 24px rgba(0,0,0,.3);pointer-events:none;transition:opacity .2s}
+.sk-toast[hidden]{display:none}`;
+
+  function injectCSS() {
+    if (document.getElementById('sk-style')) return;
+    const s = document.createElement('style');
+    s.id = 'sk-style'; s.textContent = CSS;
+    document.head.appendChild(s);
+  }
+
+  const DRAW_TOOLS = ['pen', 'highlighter', 'line', 'arrow', 'ellipse', 'point', 'text', 'ruler'];
+  const clone = o => JSON.parse(JSON.stringify(o));
+  const hypot = Math.hypot;
+  function distToSeg(p, a, b) {
+    const vx = b.x - a.x, vy = b.y - a.y, L2 = vx * vx + vy * vy;
+    const t = L2 ? Math.max(0, Math.min(1, ((p.x - a.x) * vx + (p.y - a.y) * vy) / L2)) : 0;
+    return hypot(p.x - a.x - t * vx, p.y - a.y - t * vy);
+  }
+
+  function create(canvas, host = {}, options = {}) {
+    injectCSS();
+    const opt = Object.assign({}, DEFAULTS, options);
+    opt.units = Object.assign({}, DEFAULTS.units, options.units || {});
+    const H = Object.assign({
+      toWorld: (sx, sy) => ({ x: sx, y: sy }),
+      toScreen: (x, y) => ({ x, y }),
+      zoom: () => 1,
+      snapPoints: () => [],
+      gridSize: 0,
+      hitTest: null, onChange: null, onCommit: null, zoomBy: null, panBy: null
+    }, host);
+
+    /* ---------- 狀態 ---------- */
+    const st = {
+      items: [], nextId: 1, tool: 'select', selId: null, visible: true,
+      style: { color: opt.colors[0], width: opt.widths[1] ? opt.widths[1][0] : opt.widths[0][0], size: opt.textSizes[1] ? opt.textSizes[1][0] : opt.textSizes[0][0], dash: false, head: 1 },
+      current: null, gesture: null, eraser: null, laser: [], sawPen: false, space: false,
+      touches: new Map(), pinch: null, hist: { stack: ['[]'], idx: 0 }, lastTap: { id: null, t: 0 },
+      collapsed: opt.collapsed, cursorSet: false
+    };
+    if (opt.rememberCollapsed) { try { const v = localStorage.getItem(opt.storageKey + ':collapsed'); if (v != null) st.collapsed = v === '1'; } catch (e) {} }
+
+    /* ---------- DOM ---------- */
+    const parent = canvas.parentElement;
+    if (getComputedStyle(parent).position === 'static') parent.style.position = 'relative';
+    if (!canvas.style.touchAction) canvas.style.touchAction = 'none';
+
+    const overlay = document.createElement('canvas');
+    overlay.className = 'sk-overlay';
+    parent.appendChild(overlay);
+    const ctx = overlay.getContext('2d');
+
+    const posCls = { 'top-left': 'sk-tl', 'top-right': 'sk-tr', 'bottom-left': 'sk-bl', 'bottom-right': 'sk-br' }[opt.position] || 'sk-tl';
+    const root = document.createElement('div');
+    root.className = `sk-root ${posCls}${opt.theme === 'light' ? ' sk-light' : ''}`;
+    root.setAttribute('role', 'toolbar'); root.setAttribute('aria-label', '繪圖工具');
+    parent.appendChild(root);
+
+    const fab = document.createElement('button');
+    fab.type = 'button'; fab.className = 'sk-fab';
+    fab.innerHTML = `${svg('pen')}<span>繪圖</span><span class="sk-badge" hidden></span>`;
+    fab.title = '展開繪圖工具'; fab.setAttribute('aria-expanded', 'false');
+    fab.onclick = () => expand();
+    root.appendChild(fab);
+
+    const bar = document.createElement('div'); bar.className = 'sk-panel sk-bar'; root.appendChild(bar);
+    const styleBar = document.createElement('div'); styleBar.className = 'sk-panel sk-style'; root.appendChild(styleBar);
+    const hint = document.createElement('div'); hint.className = 'sk-hint'; root.appendChild(hint);
+
+    const ta = document.createElement('textarea');
+    ta.className = 'sk-text'; ta.rows = 1; ta.spellcheck = false; ta.hidden = true;
+    parent.appendChild(ta);
+    const toastEl = document.createElement('div'); toastEl.className = 'sk-toast'; toastEl.hidden = true; parent.appendChild(toastEl);
+    let toastTimer = 0;
+    function toast(msg) { toastEl.textContent = msg; toastEl.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => { toastEl.hidden = true; }, 1800); }
+
+    const btns = {};
+    function mkBtn(id, icon, title, onClick) {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'sk-btn'; b.innerHTML = svg(icon); b.title = title; b.setAttribute('aria-label', title);
+      b.onclick = onClick; btns[id] = b; return b;
+    }
+    const sep = () => { const s = document.createElement('span'); s.className = 'sk-sep'; return s; };
+    function buildBar() {
+      bar.innerHTML = '';
+      opt.tools.forEach(t => {
+        const info = TOOL_INFO[t]; if (!info) return;
+        const title = info.name + (opt.shortcuts ? `（${info.key}）` : '');
+        bar.appendChild(mkBtn('tool-' + t, t, title, () => setTool(st.tool === t && t !== 'select' ? 'select' : t)));
+      });
+      bar.appendChild(sep());
+      bar.appendChild(mkBtn('undo', 'undo', '復原（Ctrl+Z）', undo));
+      bar.appendChild(mkBtn('redo', 'redo', '重做（Ctrl+Shift+Z）', redo));
+      bar.appendChild(mkBtn('visible', 'eye', '隱藏標註', () => setVisible(!st.visible)));
+      if (opt.exportButton) bar.appendChild(mkBtn('export', 'download', '下載圖片（含標註）', () => downloadPNG()));
+      bar.appendChild(mkBtn('clear', 'trash', '清除所有標註', clear));
+      bar.appendChild(sep());
+      bar.appendChild(mkBtn('fold', 'fold', '收合繪圖工具', collapse));
+    }
+
+    /* ---------- 工具列狀態 ---------- */
+    function refreshUI() {
+      root.classList.toggle('sk-collapsed', st.collapsed);
+      fab.setAttribute('aria-expanded', String(!st.collapsed));
+      const badge = fab.querySelector('.sk-badge');
+      badge.hidden = !st.items.length; badge.textContent = st.items.length;
+      fab.title = st.items.length ? `展開繪圖工具（目前 ${st.items.length} 個標註${st.visible ? '' : '，已隱藏'}）` : '展開繪圖工具';
+      opt.tools.forEach(t => { const b = btns['tool-' + t]; if (b) b.setAttribute('aria-pressed', String(st.tool === t)); });
+      if (btns.undo) btns.undo.disabled = opt.history !== 'own' || st.hist.idx <= 0;
+      if (btns.redo) btns.redo.disabled = opt.history !== 'own' || st.hist.idx >= st.hist.stack.length - 1;
+      if (opt.history !== 'own') { btns.undo && (btns.undo.hidden = true); btns.redo && (btns.redo.hidden = true); }
+      if (btns.clear) btns.clear.disabled = !st.items.length;
+      if (btns.visible) {
+        btns.visible.innerHTML = svg(st.visible ? 'eye' : 'eyeOff');
+        const t = st.visible ? '隱藏標註' : '顯示標註';
+        btns.visible.title = t; btns.visible.setAttribute('aria-label', t);
+        btns.visible.setAttribute('aria-pressed', String(!st.visible));
+      }
+      buildStyleBar();
+      hint.textContent = TOOL_INFO[st.tool] ? (st.tool === 'select' && !st.items.length ? '' : TOOL_INFO[st.tool].hint + '　·　Esc 回到選取') : '';
+    }
+
+    function selItem() { return st.items.find(d => d.id === st.selId) || null; }
+
+    function buildStyleBar() {
+      styleBar.innerHTML = '';
+      const sel = st.tool === 'select' ? selItem() : null;
+      const t = sel ? sel.t : st.tool;
+      const editing = !!sel;
+      const show = editing || (DRAW_TOOLS.includes(t) || t === 'laser');
+      styleBar.hidden = !show;
+      if (!show) return;
+      const cur = editing ? sel : null;
+      const getColor = () => cur ? cur.c : st.style.color;
+      const apply = (fn) => { if (cur) { fn(cur); commit('style', cur); } else fn(null); refreshUI(); render(); };
+
+      // 顏色
+      opt.colors.forEach(c => {
+        const b = document.createElement('button');
+        b.type = 'button'; b.className = 'sk-sw'; b.style.background = c; b.title = c; b.setAttribute('aria-label', '顏色 ' + c);
+        b.setAttribute('aria-pressed', String(getColor().toLowerCase() === c.toLowerCase()));
+        b.onclick = () => apply(d => { if (d) d.c = c; else st.style.color = c; });
+        styleBar.appendChild(b);
+      });
+      if (opt.customColor) {
+        const w = document.createElement('label'); w.className = 'sk-cc'; w.title = '自訂顏色';
+        const inp = document.createElement('input'); inp.type = 'color'; inp.value = /^#[0-9a-f]{6}$/i.test(getColor()) ? getColor() : '#ffffff';
+        inp.setAttribute('aria-label', '自訂顏色');
+        inp.oninput = () => { if (cur) { cur.c = inp.value; render(); } else st.style.color = inp.value; };
+        inp.onchange = () => apply(d => { if (d) d.c = inp.value; else st.style.color = inp.value; });
+        w.appendChild(inp); styleBar.appendChild(w);
+      }
+      if (t === 'laser') return;
+
+      // 粗細或字級
+      if (t !== 'point') {
+        styleBar.appendChild(sep());
+        const isText = t === 'text';
+        (isText ? opt.textSizes : opt.widths).forEach(([v, name]) => {
+          const b = document.createElement('button');
+          b.type = 'button'; b.className = 'sk-chip'; b.textContent = isText ? name + '字' : name;
+          const curV = cur ? (isText ? cur.size : cur.w) : (isText ? st.style.size : st.style.width);
+          b.setAttribute('aria-pressed', String(curV === v));
+          b.onclick = () => apply(d => { if (d) { if (isText) d.size = v; else d.w = v; } else { if (isText) st.style.size = v; else st.style.width = v; } });
+          styleBar.appendChild(b);
+        });
+      }
+      // 虛線
+      if (['pen', 'line', 'arrow', 'ellipse'].includes(t)) {
+        const b = document.createElement('button');
+        b.type = 'button'; b.className = 'sk-chip'; b.innerHTML = svg('dash') + '虛線'; b.title = '虛線';
+        b.setAttribute('aria-pressed', String(cur ? !!cur.dash : st.style.dash));
+        b.onclick = () => apply(d => { if (d) d.dash = !d.dash; else st.style.dash = !st.style.dash; });
+        styleBar.appendChild(b);
+      }
+      // 箭頭樣式（直線類）
+      if (t === 'arrow' || (cur && cur.t === 'line')) {
+        const heads = [[0, 'head0', '無箭頭'], [1, 'head1', '末端箭頭'], [2, 'head2', '光線（中段也有箭頭）']];
+        const curH = cur ? (cur.head || 0) : st.style.head;
+        heads.forEach(([v, ic, name]) => {
+          const b = document.createElement('button');
+          b.type = 'button'; b.className = 'sk-chip'; b.innerHTML = svg(ic); b.title = name; b.setAttribute('aria-label', name);
+          b.setAttribute('aria-pressed', String(curH === v));
+          b.onclick = () => apply(d => { if (d) d.head = v; else st.style.head = v; });
+          styleBar.appendChild(b);
+        });
+      }
+      // 選取時：複製、刪除
+      if (cur) {
+        styleBar.appendChild(sep());
+        const c = document.createElement('button'); c.type = 'button'; c.className = 'sk-chip'; c.innerHTML = svg('copy') + '複製'; c.title = '複製一份（Ctrl+D）';
+        c.onclick = () => duplicate(); styleBar.appendChild(c);
+        const d = document.createElement('button'); d.type = 'button'; d.className = 'sk-chip sk-danger'; d.innerHTML = svg('trash') + '刪除'; d.title = '刪除（Delete）';
+        d.onclick = () => removeSelected(); styleBar.appendChild(d);
+        if (cur.t === 'ruler') { const n = document.createElement('span'); n.className = 'sk-hint'; n.style.background = 'none'; n.textContent = rulerLabel(cur); styleBar.appendChild(n); }
+      }
+    }
+
+    /* ---------- 工具切換、收合 ---------- */
+    function setTool(t) {
+      if (!TOOL_INFO[t]) return;
+      commitText();
+      st.tool = t; st.current = null; st.eraser = null;
+      if (t !== 'select') st.selId = null;
+      canvas.style.cursor = t === 'select' ? '' : t === 'text' ? 'text' : t === 'eraser' ? 'none' : 'crosshair';
+      st.cursorSet = t !== 'select';
+      refreshUI(); render();
+    }
+    function saveCollapsed() { if (opt.rememberCollapsed) { try { localStorage.setItem(opt.storageKey + ':collapsed', st.collapsed ? '1' : '0'); } catch (e) {} } }
+    function expand() { st.collapsed = false; saveCollapsed(); refreshUI(); const b = btns['tool-pen'] || btns['tool-select']; b && b.focus({ preventScroll: true }); }
+    function collapse() { setTool('select'); st.selId = null; st.collapsed = true; saveCollapsed(); refreshUI(); render(); fab.focus({ preventScroll: true }); }
+    function setVisible(v) { st.visible = v; if (!v) { st.selId = null; if (st.tool !== 'select' && st.tool !== 'laser') setTool('select'); } refreshUI(); render(); }
+
+    /* ---------- 歷史與變更通知 ---------- */
+    function commit(reason, item) {
+      const s = JSON.stringify(st.items);
+      if (opt.history === 'own') {
+        const h = st.hist;
+        if (h.stack[h.idx] !== s) { h.stack.splice(h.idx + 1); h.stack.push(s); if (h.stack.length > 150) h.stack.shift(); h.idx = h.stack.length - 1; }
+      } else if (H.onCommit) H.onCommit(reason, item);
+      if (H.onChange) { try { H.onChange(clone(st.items), { reason, item: item ? clone(item) : null }); } catch (e) { console.error(e); } }
+      refreshUI();
+    }
+    function restore(s) { st.items = JSON.parse(s); fixIds(); if (!selItem()) st.selId = null; refreshUI(); render(); if (H.onChange) H.onChange(clone(st.items), { reason: 'history', item: null }); }
+    function undo() { commitText(); const h = st.hist; if (opt.history !== 'own' || h.idx <= 0) return false; h.idx--; restore(h.stack[h.idx]); return true; }
+    function redo() { const h = st.hist; if (opt.history !== 'own' || h.idx >= h.stack.length - 1) return false; h.idx++; restore(h.stack[h.idx]); return true; }
+    function fixIds() { st.items.forEach(d => { if (d.id == null) d.id = st.nextId++; st.nextId = Math.max(st.nextId, d.id + 1); }); }
+    function clear() {
+      commitText();
+      if (!st.items.length) return;
+      st.items = []; st.selId = null; commit('clear');
+      render(); toast(opt.history === 'own' ? '已清除所有標註，按「復原」可以找回' : '已清除所有標註');
+    }
+    function removeSelected() { const d = selItem(); if (!d) return; st.items = st.items.filter(x => x !== d); st.selId = null; commit('delete', d); render(); }
+    function duplicate() {
+      const d = selItem(); if (!d) return;
+      const c = clone(d); c.id = st.nextId++;
+      const o = H.toWorld(18, 18), z = H.toWorld(0, 0), dx = o.x - z.x, dy = o.y - z.y;   // 螢幕上往右下 18px
+      moveItem(c, dx, dy);
+      if (c.t === 'point') c.label = nextPointLabel();
+      st.items.push(c); st.selId = c.id; commit('duplicate', c); render();
+    }
+    function moveItem(d, dx, dy) {
+      if (d.pts) d.pts = d.pts.map(p => [p[0] + dx, p[1] + dy].concat(p.length > 2 ? [p[2]] : []));
+      if (d.a) { d.a = [d.a[0] + dx, d.a[1] + dy]; d.b = [d.b[0] + dx, d.b[1] + dy]; }
+      if (d.x != null) { d.x += dx; d.y += dy; }
+    }
+    function nextPointLabel() {
+      const used = new Set(st.items.filter(d => d.t === 'point').map(d => d.label));
+      for (let i = 0; i < 26; i++) { const L = String.fromCharCode(65 + i); if (!used.has(L)) return L; }
+      let k = 1; while (used.has('P' + k)) k++; return 'P' + k;
+    }
+
+    /* ---------- 座標、吸附 ---------- */
+    let rect = canvas.getBoundingClientRect();
+    const scr = (p) => H.toScreen(p[0], p[1]);
+    const wld = (sx, sy) => { const w = H.toWorld(sx, sy); return [w.x, w.y]; };
+    const K = () => opt.scaleWithZoom ? (H.zoom() || 1) : 1;
+    const coarse = () => matchMedia('(pointer:coarse)').matches;
+    function evPos(e) { rect = canvas.getBoundingClientRect(); return { x: e.clientX - rect.left, y: e.clientY - rect.top }; }
+
+    function snapScreen(sp) {                         // 回傳世界座標
+      const R = opt.snapRadius;
+      let best = null, bd = R;
+      const own = st.items.filter(d => d.t === 'point').map(d => ({ x: d.x, y: d.y }));   // 自己描的點也能吸附
+      (H.snapPoints() || []).concat(own).forEach(q => { const s = H.toScreen(q.x, q.y), d = hypot(s.x - sp.x, s.y - sp.y); if (d < bd) { bd = d; best = q; } });
+      if (best) return [best.x, best.y];
+      const w = wld(sp.x, sp.y);
+      if (opt.gridSnap && H.gridSize) { const g = H.gridSize; return [Math.round(w[0] / g) * g, Math.round(w[1] / g) * g]; }
+      return w;
+    }
+    function lockAngle(a, sp) {                        // 在螢幕上鎖定角度
+      const A = scr(a), L = hypot(sp.x - A.x, sp.y - A.y), step = opt.angleStep * Math.PI / 180;
+      const ang = Math.round(Math.atan2(sp.y - A.y, sp.x - A.x) / step) * step;
+      return wld(A.x + L * Math.cos(ang), A.y + L * Math.sin(ang));
+    }
+    function rulerLabel(d) {
+      const u = opt.units, L = hypot(d.b[0] - d.a[0], d.b[1] - d.a[1]) * u.perWorld;
+      const A = scr(d.a), B = scr(d.b);
+      let deg = -Math.atan2(B.y - A.y, B.x - A.x) * 180 / Math.PI; if (deg < 0) deg += 360;
+      return `${L.toFixed(u.decimals)} ${u.label}　${(Math.round(deg * 10) / 10) % 360}°`;
+    }
+
+    /* ---------- 命中測試（螢幕座標） ---------- */
+    function textBox(d) {
+      const k = K(), size = d.size * k, lines = String(d.text).split('\n');
+      ctx.save(); ctx.font = `700 ${size}px ${opt.font}`;
+      const w = Math.max(...lines.map(l => ctx.measureText(l).width)); ctx.restore();
+      const s = H.toScreen(d.x, d.y);
+      return { x: s.x, y: s.y, w, h: lines.length * size * 1.25 };
+    }
+    function hitItem(d, p, tol) {
+      const k = K();
+      if (d.t === 'pen' || d.t === 'highlighter') {
+        const pts = d.pts.map(scr), extra = (d.t === 'highlighter' ? d.w * 4 : d.w) * k / 2;
+        if (pts.length === 1) return hypot(p.x - pts[0].x, p.y - pts[0].y) < tol + extra;
+        for (let i = 1; i < pts.length; i++) if (distToSeg(p, pts[i - 1], pts[i]) < tol + extra) return true;
+        return false;
+      }
+      if (d.t === 'line' || d.t === 'ruler') return distToSeg(p, scr(d.a), scr(d.b)) < tol + d.w * k / 2;
+      if (d.t === 'ellipse') {
+        const A = scr(d.a), B = scr(d.b), cx = (A.x + B.x) / 2, cy = (A.y + B.y) / 2, rx = Math.abs(B.x - A.x) / 2, ry = Math.abs(B.y - A.y) / 2;
+        if (rx < 1 || ry < 1) return distToSeg(p, A, B) < tol;
+        const r = hypot((p.x - cx) / rx, (p.y - cy) / ry);
+        return Math.abs(r - 1) * Math.min(rx, ry) < tol + d.w * k / 2;
+      }
+      if (d.t === 'point') { const s = H.toScreen(d.x, d.y); return hypot(p.x - s.x, p.y - s.y) < tol + 6; }
+      if (d.t === 'text') { const b = textBox(d); return p.x > b.x - tol && p.x < b.x + b.w + tol && p.y > b.y - tol && p.y < b.y + b.h + tol; }
+      return false;
+    }
+    function topHit(p, tol) {                       // 描點、文字目標小，優先選到
+      for (const pass of [d => d.t === 'point' || d.t === 'text', () => true])
+        for (let i = st.items.length - 1; i >= 0; i--) if (pass(st.items[i]) && hitItem(st.items[i], p, tol)) return st.items[i];
+      return null;
+    }
+    function handleHit(p) {
+      const d = selItem(); if (!d || !d.a) return null;
+      const lim = coarse() ? 22 : 12;
+      for (const key of ['b', 'a']) { const s = scr(d[key]); if (hypot(s.x - p.x, s.y - p.y) < lim) return key; }
+      return null;
+    }
+
+    /* ---------- 繪製 ---------- */
+    let raf = 0;
+    function render() { if (!raf) raf = requestAnimationFrame(paint); }
+    function syncOverlay() {
+      const dpr = window.devicePixelRatio || 1, w = canvas.clientWidth, h = canvas.clientHeight;
+      overlay.style.left = canvas.offsetLeft + 'px'; overlay.style.top = canvas.offsetTop + 'px';
+      overlay.style.width = w + 'px'; overlay.style.height = h + 'px';
+      if (overlay.width !== Math.round(w * dpr) || overlay.height !== Math.round(h * dpr)) { overlay.width = Math.round(w * dpr); overlay.height = Math.round(h * dpr); }
+      return dpr;
+    }
+    function paint() {
+      raf = 0;
+      const dpr = syncOverlay();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.clearRect(0, 0, overlay.width, overlay.height);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      drawAll(ctx, { selection: true });
+      // 雷射筆軌跡
+      const now = performance.now(), LIFE = 900;
+      st.laser = st.laser.filter(q => now - q.t < LIFE);
+      if (st.laser.length) {
+        ctx.save(); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+        for (let i = 1; i < st.laser.length; i++) {
+          const a = st.laser[i - 1], b = st.laser[i]; if (b.brk) continue;
+          const life = 1 - (now - b.t) / LIFE;
+          ctx.globalAlpha = Math.max(0, life);
+          ctx.strokeStyle = st.style.color; ctx.shadowColor = st.style.color; ctx.shadowBlur = 12;
+          ctx.lineWidth = 3 + 3 * life;
+          ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+        }
+        const last = st.laser[st.laser.length - 1];
+        ctx.globalAlpha = 1; ctx.fillStyle = '#fff'; ctx.shadowBlur = 16;
+        ctx.beginPath(); ctx.arc(last.x, last.y, 4, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+        render();
+      }
+      if (st.eraser) {
+        ctx.save(); ctx.setLineDash([3, 3]); ctx.lineWidth = 1.5; ctx.strokeStyle = '#f8fafc';
+        ctx.beginPath(); ctx.arc(st.eraser.x, st.eraser.y, st.eraser.r, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
+      }
+    }
+
+    function strokeSmooth(c, pts) {
+      c.beginPath(); c.moveTo(pts[0].x, pts[0].y);
+      if (pts.length === 1) { c.lineTo(pts[0].x + 0.01, pts[0].y); return; }
+      for (let i = 1; i < pts.length - 1; i++) c.quadraticCurveTo(pts[i].x, pts[i].y, (pts[i].x + pts[i + 1].x) / 2, (pts[i].y + pts[i + 1].y) / 2);
+      c.lineTo(pts[pts.length - 1].x, pts[pts.length - 1].y);
+    }
+    function arrowHead(c, x, y, ang, size) {
+      c.beginPath(); c.moveTo(x, y);
+      c.lineTo(x - size * Math.cos(ang - 0.45), y - size * Math.sin(ang - 0.45));
+      c.lineTo(x - size * Math.cos(ang + 0.45), y - size * Math.sin(ang + 0.45));
+      c.closePath(); c.fill();
+    }
+    function outlinedText(c, text, x, y, size) {
+      c.lineWidth = Math.max(3, size / 5); c.strokeStyle = 'rgba(2,6,23,.85)';
+      c.strokeText(text, x, y); c.fillText(text, x, y);
+    }
+
+    function drawItem(c, d, k) {
+      const col = d.c || '#facc15';
+      c.strokeStyle = col; c.fillStyle = col; c.setLineDash([]); c.globalAlpha = 1;
+      const w = (d.w || 2) * k;
+      const dashOn = () => { if (d.dash) c.setLineDash([3 * w + 4, 2 * w + 4]); };
+      if (d.t === 'pen') {
+        const pts = d.pts.map(p => Object.assign(scr(p), { p: p[2] }));
+        const pressure = pts.length > 2 && pts.some(q => q.p != null) && !d.dash;
+        if (!pressure) { c.lineWidth = w; dashOn(); strokeSmooth(c, pts); c.stroke(); return; }
+        // 壓力筆觸：每一小段各自的粗細
+        let prev = pts[0];
+        for (let i = 1; i < pts.length; i++) {
+          const q = pts[i], end = i < pts.length - 1 ? { x: (q.x + pts[i + 1].x) / 2, y: (q.y + pts[i + 1].y) / 2 } : q;
+          c.lineWidth = w * (0.35 + 0.9 * (q.p != null ? q.p : 0.5));
+          c.beginPath(); c.moveTo(prev.x, prev.y); c.quadraticCurveTo(q.x, q.y, end.x, end.y); c.stroke();
+          prev = end;
+        }
+        return;
+      }
+      if (d.t === 'highlighter') {
+        c.globalAlpha = 0.35; c.lineWidth = w * 4; c.lineCap = 'round';
+        strokeSmooth(c, d.pts.map(scr)); c.stroke(); c.globalAlpha = 1; return;
+      }
+      if (d.t === 'line') {
+        const A = scr(d.a), B = scr(d.b), L = hypot(B.x - A.x, B.y - A.y), ang = Math.atan2(B.y - A.y, B.x - A.x);
+        c.lineWidth = w; dashOn();
+        c.beginPath(); c.moveTo(A.x, A.y); c.lineTo(B.x, B.y); c.stroke(); c.setLineDash([]);
+        const hs = 8 + w * 2;
+        if (d.head >= 1 && L > 6) arrowHead(c, B.x, B.y, ang, hs);
+        if (d.head === 2 && L > 70) arrowHead(c, (A.x + B.x) / 2 + Math.cos(ang) * hs / 2, (A.y + B.y) / 2 + Math.sin(ang) * hs / 2, ang, hs * 0.85);
+        return;
+      }
+      if (d.t === 'ellipse') {
+        const A = scr(d.a), B = scr(d.b);
+        c.lineWidth = w; dashOn();
+        c.beginPath(); c.ellipse((A.x + B.x) / 2, (A.y + B.y) / 2, Math.max(0.5, Math.abs(B.x - A.x) / 2), Math.max(0.5, Math.abs(B.y - A.y) / 2), 0, 0, Math.PI * 2); c.stroke();
+        return;
+      }
+      if (d.t === 'ruler') {
+        const A = scr(d.a), B = scr(d.b), an = Math.atan2(B.y - A.y, B.x - A.x), nx = -Math.sin(an) * 7, ny = Math.cos(an) * 7;
+        c.lineWidth = Math.max(1.4, w * 0.6);
+        c.beginPath(); c.moveTo(A.x, A.y); c.lineTo(B.x, B.y);
+        c.moveTo(A.x - nx, A.y - ny); c.lineTo(A.x + nx, A.y + ny); c.moveTo(B.x - nx, B.y - ny); c.lineTo(B.x + nx, B.y + ny); c.stroke();
+        const t = rulerLabel(d);
+        c.font = `700 12px ui-monospace,"IBM Plex Mono",Menlo,monospace`;
+        const tw = c.measureText(t).width, mx = (A.x + B.x) / 2 + nx * 2.4, my = (A.y + B.y) / 2 + ny * 2.4;
+        c.fillStyle = 'rgba(7,11,18,.85)'; c.fillRect(mx - tw / 2 - 5, my - 10, tw + 10, 20);
+        c.fillStyle = col; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(t, mx, my);
+        return;
+      }
+      if (d.t === 'point') {
+        const s = H.toScreen(d.x, d.y);
+        c.beginPath(); c.arc(s.x, s.y, 5, 0, Math.PI * 2); c.fill();
+        c.lineWidth = 1.5; c.strokeStyle = 'rgba(2,6,23,.9)'; c.stroke();
+        if (d.label) { c.font = `700 ${16 * Math.min(1.6, Math.max(0.8, k))}px ${opt.font}`; c.textAlign = 'left'; c.textBaseline = 'bottom'; c.fillStyle = col; outlinedText(c, d.label, s.x + 7, s.y - 5, 16); }
+        return;
+      }
+      if (d.t === 'text') {
+        if (textEdit && textEdit.id === d.id) return;   // 編輯中由輸入框顯示
+        const s = H.toScreen(d.x, d.y), size = d.size * k;
+        c.font = `700 ${size}px ${opt.font}`; c.textAlign = 'left'; c.textBaseline = 'top';
+        String(d.text).split('\n').forEach((line, i) => outlinedText(c, line, s.x, s.y + i * size * 1.25, size));
+      }
+    }
+
+    function drawSelection(c, d, k) {
+      c.save();
+      c.strokeStyle = 'rgba(34,211,238,.45)'; c.lineCap = 'round'; c.lineJoin = 'round';
+      if (d.t === 'pen' || d.t === 'highlighter') { c.lineWidth = (d.t === 'highlighter' ? d.w * 4 : d.w) * k + 9; strokeSmooth(c, d.pts.map(scr)); c.stroke(); }
+      else if (d.t === 'line' || d.t === 'ruler') { const A = scr(d.a), B = scr(d.b); c.lineWidth = d.w * k + 9; c.beginPath(); c.moveTo(A.x, A.y); c.lineTo(B.x, B.y); c.stroke(); }
+      else if (d.t === 'ellipse') { const A = scr(d.a), B = scr(d.b); c.setLineDash([4, 4]); c.lineWidth = 1.5; c.strokeStyle = '#22d3ee'; c.strokeRect(Math.min(A.x, B.x), Math.min(A.y, B.y), Math.abs(B.x - A.x), Math.abs(B.y - A.y)); }
+      else if (d.t === 'text') { const b = textBox(d); c.setLineDash([4, 4]); c.lineWidth = 1.5; c.strokeStyle = '#22d3ee'; c.strokeRect(b.x - 4, b.y - 3, b.w + 8, b.h + 6); }
+      else if (d.t === 'point') { const s = H.toScreen(d.x, d.y); c.lineWidth = 2; c.strokeStyle = '#22d3ee'; c.beginPath(); c.arc(s.x, s.y, 10, 0, Math.PI * 2); c.stroke(); }
+      c.restore();
+    }
+    function drawHandles(c, d) {
+      if (!d.a) return;
+      c.save();
+      for (const key of ['a', 'b']) { const s = scr(d[key]); c.fillStyle = '#0f172a'; c.strokeStyle = '#22d3ee'; c.lineWidth = 2; c.fillRect(s.x - 5, s.y - 5, 10, 10); c.strokeRect(s.x - 5, s.y - 5, 10, 10); }
+      c.restore();
+    }
+
+    function drawAll(c, o = {}) {
+      if (!st.visible) return;
+      const k = K();
+      c.save(); c.lineCap = 'round'; c.lineJoin = 'round';
+      const sel = o.selection ? selItem() : null;
+      const list = st.current && !st.items.includes(st.current) ? st.items.concat([st.current]) : st.items;
+      for (const d of list) {
+        if (d === sel) drawSelection(c, d, k);
+        c.save(); drawItem(c, d, k); c.restore();
+      }
+      if (sel) drawHandles(c, sel);
+      c.restore();
+    }
+
+    /* ---------- 文字輸入（描點標籤也用它） ---------- */
+    let textEdit = null;
+    function openText(worldPt, existing, mode = 'text') {
+      commitText();
+      const k = K();
+      const size = mode === 'label' ? 16 : (existing ? existing.size : st.style.size);
+      const color = existing ? existing.c : st.style.color;
+      textEdit = { mode, x: worldPt[0], y: worldPt[1], size, color, id: existing ? existing.id : null };
+      const s = H.toScreen(worldPt[0], worldPt[1]);
+      const ox = canvas.offsetLeft, oy = canvas.offsetTop;
+      if (mode === 'label') { ta.style.left = `${ox + s.x + 6}px`; ta.style.top = `${oy + s.y - 28}px`; }
+      else { ta.style.left = `${ox + s.x - 4}px`; ta.style.top = `${oy + s.y - 2}px`; }
+      ta.style.fontSize = `${size * (mode === 'label' ? 1 : k)}px`;
+      ta.style.color = color; ta.style.fontFamily = opt.font;
+      ta.value = existing ? (mode === 'label' ? existing.label : existing.text) : '';
+      ta.hidden = false; autosize(); render();
+      ta.focus(); setTimeout(() => { ta.focus(); if (existing) ta.select(); }, 0);
+    }
+    function autosize() { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; ta.style.width = 'auto'; ta.style.width = Math.max(60, ta.scrollWidth + 8) + 'px'; }
+    function commitText(cancel = false) {
+      if (!textEdit) return;
+      const t = textEdit; textEdit = null; ta.hidden = true;
+      const text = ta.value.replace(/\s+$/, '');
+      const ex = t.id != null ? st.items.find(d => d.id === t.id) : null;
+      if (cancel) { render(); return; }
+      if (t.mode === 'label') { if (ex && text && text !== ex.label) { ex.label = text.split('\n')[0].slice(0, 12); commit('edit', ex); } render(); return; }
+      if (ex) {
+        if (!text) { st.items = st.items.filter(d => d !== ex); if (st.selId === ex.id) st.selId = null; commit('delete', ex); }
+        else if (text !== ex.text) { ex.text = text; commit('edit', ex); }
+      } else if (text) {
+        const it = { id: st.nextId++, t: 'text', x: t.x, y: t.y, text, size: t.size, c: t.color };
+        st.items.push(it); commit('add', it);
+      }
+      render();
+    }
+    ta.addEventListener('input', autosize);
+    ta.addEventListener('keydown', e => {
+      e.stopPropagation();
+      if (e.isComposing || e.keyCode === 229) return;          // 中文輸入法選字中的 Enter 不算完成
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); commitText(); }
+      else if (e.key === 'Escape') { e.preventDefault(); commitText(true); }
+    });
+    ta.addEventListener('blur', () => commitText());
+
+    /* ---------- 指標事件（在 window 捕獲階段先攔截，宿主的事件不受影響） ---------- */
+    const onCanvas = e => e.target === canvas || e.target === overlay;
+    function swallow(e) { e.preventDefault(); e.stopImmediatePropagation(); }
+    const isDrawTool = t => DRAW_TOOLS.includes(t) || t === 'eraser' || t === 'laser';
+
+    function onDown(e) {
+      if (!onCanvas(e)) return;
+      if (textEdit) commitText();
+      if (e.pointerType === 'pen') st.sawPen = true;
+      if (e.pointerType === 'mouse' && e.button !== 0) return;          // 右鍵、中鍵：交給宿主（平移）
+      if (st.space) return;                                              // 空白鍵＋拖曳：交給宿主
+      const p = evPos(e);
+      // 多指觸控：取消正在畫的，交給縮放
+      if (e.pointerType === 'touch') {
+        st.touches.set(e.pointerId, p);
+        if (st.touches.size >= 2 && st.gesture) {
+          if (st.current && st.items.includes(st.current)) st.items.pop();
+          st.current = null; st.gesture = null; st.eraser = null; render();
+          if (H.zoomBy && H.panBy) { const [a, b] = [...st.touches.values()]; st.pinch = { d: hypot(a.x - b.x, a.y - b.y) || 1, mid: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 } }; swallow(e); }
+          return;
+        }
+        if (st.pinch) { swallow(e); return; }
+        if (opt.palmRejection && st.sawPen && isDrawTool(st.tool)) return;   // 有觸控筆時，手指交給宿主
+      }
+      const t = st.tool;
+      if (t === 'select') {
+        if (!st.visible || st.collapsed) return;                         // 收合時不攔截，宿主照常操作
+        const hk = handleHit(p);
+        if (hk) { swallow(e); st.gesture = { type: 'handle', key: hk, pid: e.pointerId, item: selItem(), before: JSON.stringify(st.items) }; return; }
+        if (H.hitTest && H.hitTest(p.x, p.y)) return;                    // 宿主物件優先
+        const hit = topHit(p, coarse() ? 14 : 7);
+        if (!hit) { if (st.selId != null) { st.selId = null; refreshUI(); render(); } return; }
+        swallow(e);
+        const now = performance.now();
+        const dbl = st.lastTap.id === hit.id && now - st.lastTap.t < 380;
+        st.lastTap = { id: hit.id, t: now };
+        if (dbl && (hit.t === 'text' || hit.t === 'point')) {
+          st.gesture = null;
+          if (hit.t === 'text') openText([hit.x, hit.y], hit); else openText([hit.x, hit.y], hit, 'label');
+          return;
+        }
+        const changed = st.selId !== hit.id;
+        st.selId = hit.id;
+        st.gesture = { type: 'move', pid: e.pointerId, item: hit, start: wld(p.x, p.y), orig: clone(hit), moved: false };
+        if (changed) refreshUI();
+        render(); return;
+      }
+      if (!st.visible) setVisible(true);
+      swallow(e);
+      try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
+      const s = st.style;
+      if (t === 'pen' || t === 'highlighter') {
+        const w = wld(p.x, p.y); if (e.pointerType === 'pen' && t === 'pen') w.push(+e.pressure.toFixed(2));
+        st.current = { id: st.nextId++, t, pts: [w], c: s.color, w: s.width, dash: t === 'pen' ? s.dash : false };
+        st.gesture = { type: 'draw', pid: e.pointerId, last: p };
+      } else if (t === 'line' || t === 'arrow' || t === 'ellipse' || t === 'ruler') {
+        const a = t === 'ellipse' ? wld(p.x, p.y) : snapScreen(p);
+        const it = { id: st.nextId++, t: t === 'arrow' ? 'line' : t, a, b: a.slice(), c: s.color, w: s.width };
+        if (t === 'line') it.head = 0;
+        if (t === 'arrow') it.head = s.head;
+        if (t !== 'ruler') it.dash = s.dash;
+        st.current = it; st.gesture = { type: 'draw2', pid: e.pointerId, tool: t };
+      } else if (t === 'point') {
+        const q = snapScreen(p);
+        const it = { id: st.nextId++, t: 'point', x: q[0], y: q[1], c: s.color, label: nextPointLabel() };
+        st.items.push(it); commit('add', it);
+      } else if (t === 'text') {
+        const hit = [...st.items].reverse().find(d => d.t === 'text' && hitItem(d, p, 4));
+        openText(hit ? [hit.x, hit.y] : wld(p.x, p.y), hit || null);
+      } else if (t === 'eraser') {
+        const r = e.pointerType === 'touch' ? 18 : 10;
+        st.eraser = { x: p.x, y: p.y, r };
+        st.gesture = { type: 'erase', pid: e.pointerId, removed: [] };
+        eraseAt(p, r);
+      } else if (t === 'laser') {
+        st.laser.push({ x: p.x, y: p.y, t: performance.now(), brk: true });
+        st.gesture = { type: 'laser', pid: e.pointerId };
+      }
+      render();
+    }
+
+    function eraseAt(p, r) {
+      const keep = [];
+      st.items.forEach(d => { if (hitItem(d, p, r)) st.gesture.removed.push(d); else keep.push(d); });
+      if (keep.length !== st.items.length) { st.items = keep; if (!selItem()) st.selId = null; }
+    }
+
+    function onMove(e) {
+      const p0 = onCanvas(e) || st.gesture ? evPos(e) : null;
+      if (e.pointerType === 'touch' && st.touches.has(e.pointerId) && p0) st.touches.set(e.pointerId, p0);
+      if (st.pinch) {
+        if (st.touches.size < 2) return;
+        const [a, b] = [...st.touches.values()], d = hypot(a.x - b.x, a.y - b.y) || 1, mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+        H.panBy(mid.x - st.pinch.mid.x, mid.y - st.pinch.mid.y);
+        H.zoomBy(d / st.pinch.d, mid.x, mid.y);
+        st.pinch = { d, mid }; swallow(e); render(); return;
+      }
+      const g = st.gesture;
+      if (!g) {
+        if (!p0 || !onCanvas(e)) { if (st.eraser) { st.eraser = null; render(); } return; }
+        if (st.tool === 'eraser') { st.eraser = { x: p0.x, y: p0.y, r: e.pointerType === 'touch' ? 18 : 10 }; render(); }
+        else if (st.tool === 'select' && st.visible && !st.collapsed && e.pointerType === 'mouse') {
+          const over = handleHit(p0) ? 'crosshair' : (topHit(p0, 7) && !(H.hitTest && H.hitTest(p0.x, p0.y)) ? 'move' : null);
+          if (over) { canvas.style.cursor = over; st.cursorSet = true; } else if (st.cursorSet) { canvas.style.cursor = ''; st.cursorSet = false; }
+        }
+        return;
+      }
+      if (e.pointerId !== g.pid) return;
+      swallow(e);
+      const p = p0;
+      if (g.type === 'draw') {
+        const it = st.current, evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [];
+        (evs.length ? evs : [e]).forEach(ev => {
+          const q = { x: ev.clientX - rect.left, y: ev.clientY - rect.top };
+          if (hypot(q.x - g.last.x, q.y - g.last.y) < 1.5) return;
+          g.last = q; const w = wld(q.x, q.y);
+          if (ev.pointerType === 'pen' && it.t === 'pen') w.push(+ev.pressure.toFixed(2));
+          it.pts.push(w);
+        });
+      } else if (g.type === 'draw2') {
+        const it = st.current;
+        if (g.tool === 'ellipse') {
+          let b = wld(p.x, p.y);
+          if (e.shiftKey) { const A = scr(it.a), dx = p.x - A.x, dy = p.y - A.y, m = Math.max(Math.abs(dx), Math.abs(dy)); b = wld(A.x + Math.sign(dx || 1) * m, A.y + Math.sign(dy || 1) * m); }
+          it.b = b;
+        } else it.b = e.shiftKey ? lockAngle(it.a, p) : snapScreen(p);
+        if (g.tool === 'ruler') hint.textContent = rulerLabel(it);
+      } else if (g.type === 'move') {
+        const w = wld(p.x, p.y), it = g.item, o = g.orig;
+        const dx = w[0] - g.start[0], dy = w[1] - g.start[1];
+        Object.assign(it, clone(o)); moveItem(it, dx, dy);
+        if (Math.abs(dx) + Math.abs(dy) > 0) g.moved = true;
+      } else if (g.type === 'handle') {
+        const it = g.item, other = g.key === 'a' ? 'b' : 'a';
+        it[g.key] = it.t === 'ellipse' ? wld(p.x, p.y) : (e.shiftKey ? lockAngle(it[other], p) : snapScreen(p));
+        if (it.t === 'ruler') buildStyleBar();
+      } else if (g.type === 'erase') {
+        st.eraser = { x: p.x, y: p.y, r: st.eraser ? st.eraser.r : 10 };
+        eraseAt(p, st.eraser.r);
+      } else if (g.type === 'laser') {
+        st.laser.push({ x: p.x, y: p.y, t: performance.now() });
+      }
+      render();
+    }
+
+    function onUp(e) {
+      if (e.pointerType === 'touch') {
+        st.touches.delete(e.pointerId);
+        if (st.pinch) { if (st.touches.size < 2) st.pinch = null; swallow(e); return; }
+      }
+      const g = st.gesture;
+      if (!g || e.pointerId !== g.pid) return;
+      swallow(e);
+      st.gesture = null;
+      try { canvas.releasePointerCapture(e.pointerId); } catch (err) {}
+      if (g.type === 'draw' || g.type === 'draw2') {
+        const it = st.current; st.current = null;
+        let tiny;
+        if (it.pts) tiny = it.pts.length < 2 && it.t === 'highlighter';
+        else { const A = scr(it.a), B = scr(it.b); tiny = hypot(B.x - A.x, B.y - A.y) < 4; }
+        if (!tiny) { st.items.push(it); commit('add', it); }
+        refreshUI();
+      } else if (g.type === 'move') { if (g.moved) commit('move', g.item); }
+      else if (g.type === 'handle') { if (JSON.stringify(st.items) !== g.before) commit('edit', g.item); }
+      else if (g.type === 'erase') { if (g.removed.length) commit('erase', null); if (e.pointerType !== 'mouse') st.eraser = null; }
+      render();
+    }
+
+    function onKey(e) {
+      const tg = e.target, tag = tg && tg.tagName;
+      if (tag === 'TEXTAREA' || tag === 'SELECT' || (tag === 'INPUT' && !/range|checkbox|radio|button|color/.test(tg.type)) || (tg && tg.isContentEditable)) return;
+      const mod = e.ctrlKey || e.metaKey, k = e.key.toLowerCase();
+      if (e.code === 'Space') { st.space = true; return; }
+      if (e.key === 'Escape') {
+        if (st.gesture) { if (st.current) st.current = null; st.gesture = null; render(); return; }
+        if (st.tool !== 'select') { setTool('select'); return; }
+        if (st.selId != null) { st.selId = null; refreshUI(); render(); }
+        return;
+      }
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selItem()) { swallow(e); removeSelected(); return; }
+      if (mod && k === 'd' && selItem()) { swallow(e); duplicate(); return; }
+      if (opt.history === 'own' && mod && (k === 'z' || k === 'y')) {
+        const ok = (k === 'y' || e.shiftKey) ? redo() : undo();
+        if (ok) swallow(e);
+        return;
+      }
+      if (opt.shortcuts && !st.collapsed && !mod && !e.altKey) {
+        const t = opt.tools.find(t => TOOL_INFO[t] && TOOL_INFO[t].key.toLowerCase() === k);
+        if (t) { swallow(e); setTool(t); }
+      }
+    }
+    function onKeyUp(e) { if (e.code === 'Space') st.space = false; }
+
+    // 宿主若用 touch 事件，畫圖時一併攔下
+    function onTouch(e) { if ((st.gesture || st.pinch) && onCanvas(e)) { e.stopImmediatePropagation(); if (e.cancelable) e.preventDefault(); } }
+
+    window.addEventListener('pointerdown', onDown, true);
+    window.addEventListener('pointermove', onMove, true);
+    window.addEventListener('pointerup', onUp, true);
+    window.addEventListener('pointercancel', onUp, true);
+    window.addEventListener('keydown', onKey, true);
+    window.addEventListener('keyup', onKeyUp, true);
+    window.addEventListener('touchstart', onTouch, { capture: true, passive: false });
+    window.addEventListener('touchmove', onTouch, { capture: true, passive: false });
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(() => render()) : null;
+    ro && ro.observe(canvas);
+    const onResize = () => render();
+    window.addEventListener('resize', onResize);
+
+    /* ---------- 匯出 ---------- */
+    function exportPNG() {
+      const dpr = window.devicePixelRatio || 1, w = canvas.clientWidth, h = canvas.clientHeight;
+      const out = document.createElement('canvas'); out.width = Math.round(w * dpr); out.height = Math.round(h * dpr);
+      const c = out.getContext('2d');
+      try { c.drawImage(canvas, 0, 0, out.width, out.height); } catch (e) {}
+      c.setTransform(dpr, 0, 0, dpr, 0, 0);
+      drawAll(c, { selection: false });
+      return out.toDataURL('image/png');
+    }
+    function downloadPNG() {
+      const pad = n => String(n).padStart(2, '0'), d = new Date();
+      const a = document.createElement('a');
+      a.href = exportPNG(); a.download = `標註-${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}.png`;
+      document.body.appendChild(a); a.click(); a.remove();
+    }
+
+    buildBar(); refreshUI(); render();
+
+    /* ---------- 公開 API ---------- */
+    return {
+      setTool, get tool() { return st.tool; },
+      expand, collapse, toggle: () => (st.collapsed ? expand() : collapse()), get collapsed() { return st.collapsed; },
+      undo, redo, clear, setVisible, get visible() { return st.visible; },
+      get items() { return clone(st.items); },
+      toJSON: () => clone(st.items),
+      load(items, { resetHistory = true } = {}) {
+        commitText();
+        st.items = Array.isArray(items) ? clone(items) : []; fixIds(); st.selId = null;
+        if (resetHistory) st.hist = { stack: [JSON.stringify(st.items)], idx: 0 };
+        refreshUI(); render();
+      },
+      redraw: render, exportPNG, downloadPNG, drawTo: (c) => drawAll(c, { selection: false }),
+      setStyle(s) { Object.assign(st.style, s); refreshUI(); },
+      destroy() {
+        window.removeEventListener('pointerdown', onDown, true); window.removeEventListener('pointermove', onMove, true);
+        window.removeEventListener('pointerup', onUp, true); window.removeEventListener('pointercancel', onUp, true);
+        window.removeEventListener('keydown', onKey, true); window.removeEventListener('keyup', onKeyUp, true);
+        window.removeEventListener('touchstart', onTouch, true); window.removeEventListener('touchmove', onTouch, true);
+        window.removeEventListener('resize', onResize); ro && ro.disconnect();
+        [overlay, root, ta, toastEl].forEach(n => n.remove());
+      }
+    };
+  }
+
+  global.SketchLayer = { create, DEFAULTS, TOOL_INFO };
+})(typeof window !== 'undefined' ? window : this);
+</script>
 <script>
 (function(){
 'use strict';
@@ -1340,6 +2244,27 @@ function showNote(){
     (st.lymph?'綠色是淋巴系統。淡黃色小液滴是從微血管滲出的血漿，也就是組織液：一部分回到微血管，一部分進入末端封閉的微淋巴管成為淋巴。白血球也會穿出微血管、進入淋巴管，經過淋巴結，最後由胸管流回靜脈。淋巴裡沒有紅血球和血小板。':'');
 }
 
+/* ================= 繪圖工具（SketchLayer） =================
+   標註存在人體正面的平面（z=0）上，所以旋轉、縮放後仍貼著模型。 */
+let sketch=null;
+function initSketch(){
+  const cv=renderer.domElement,ray=new THREE.Raycaster(),pl=new THREE.Plane(new V3(0,0,1),0),v=new V3(),n=new THREE.Vector2();
+  sketch=SketchLayer.create(cv,{
+    toWorld:(sx,sy)=>{n.set(sx/cv.clientWidth*2-1,-(sy/cv.clientHeight*2-1));ray.setFromCamera(n,camera);
+      if(!ray.ray.intersectPlane(pl,v))ray.ray.at(camera.position.distanceTo(controls.target),v);return{x:v.x,y:v.y}},
+    toScreen:(x,y)=>{v.set(x,y,0).project(camera);return{x:(v.x*0.5+0.5)*cv.clientWidth,y:(-v.y*0.5+0.5)*cv.clientHeight}},
+    zoom:()=>viewDist(VIEWS.all)/Math.max(0.1,camera.position.distanceTo(controls.target)),
+    hitTest:()=>st.placing, // 放置探測器時，點擊交給模型
+    zoomBy:(k)=>{tween=null;v.copy(camera.position).sub(controls.target).multiplyScalar(1/clamp(k,0.5,2));if(v.length()>controls.minDistance&&v.length()<controls.maxDistance)camera.position.copy(controls.target).add(v)},
+    panBy:(dx,dy)=>{tween=null;const d=camera.position.distanceTo(controls.target),u=2*d*Math.tan(camera.fov*Math.PI/360)/cv.clientHeight;
+      v.setFromMatrixColumn(camera.matrix,0).multiplyScalar(-dx*u);const up=new V3().setFromMatrixColumn(camera.matrix,1).multiplyScalar(dy*u);v.add(up);camera.position.add(v);controls.target.add(v)}
+  },{
+    position:'top-right',theme:'dark',exportButton:false, // 這個頁面的環境不允許下載檔案
+    tools:['select','pen','highlighter','line','arrow','ellipse','point','text','laser','eraser'], // 模型不是等比例，所以不放量尺
+    font:'"PingFang TC","Noto Sans TC","Microsoft JhengHei",system-ui,sans-serif'
+  });
+}
+
 /* ================= 探測器、上色、靜脈注射 ================= */
 const PCOL=['#f2c14e','#6fe3a1','#c59cff','#ff9ecb'];
 const probes=[];const pbBox=document.getElementById('pbs');let pCells=[];
@@ -1509,7 +2434,7 @@ function frame(now){
   if(tween){tween.k=Math.min(1,tween.k+0.03);const e=ss(0,1,tween.k);camera.position.lerpVectors(tween.p0,tween.p1,e);controls.target.lerpVectors(tween.t0,tween.t1,e);if(tween.k>=1)tween=null}
   controls.update();
   renderer.render(scene,camera);
-  updateJourney();updateLabels();updateProbes();showCaption();if(st.ecg)drawECG();
+  updateJourney();updateLabels();updateProbes();showCaption();if(st.ecg)drawECG();if(sketch)sketch.redraw();
 }
 $('play').onclick=()=>{const run=st.playing||st.target!=null;st.target=null;st.playing=!run;syncUI()};
 $('fwd').onclick=()=>stepFwd();
@@ -1577,6 +2502,7 @@ function start(){
     initSubstances();cycle(st.phase);for(let i=0;i<1000;i++)tick(0.05); // 先跑約 60 次心跳，讓血球分布與物質濃度進入穩定狀態 // 先跑一段，讓血球分布進入穩定狀態
     console.info('build ms',Math.round(performance.now()-t0),'verts',heartMesh.geometry.attributes.position.count,acc.count);
   }catch(err){$('loading').textContent='模型建立失敗：'+err.message;console.error(err);return}
+  initSketch();
   buildLabels();measureLabels();setHi(-1);setColorBy('blood');renderProbes();setEcg(window.innerWidth>=860);
   $('loading').remove();
   if(window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches){st.playing=false}
@@ -1585,7 +2511,7 @@ function start(){
   if(init==='heart')press(['vAll','vHeart','vLeg'],'vHeart');
   goView(init,true);
   new ResizeObserver(()=>{resize();measureLabels()}).observe(stage);
-  window.__st=st;window.__cam=camera;window.__ctl=controls;window.__api={updateLymph,wbcs,segs,parts,setLymph,preset,inject,setColorBy,probes,pickSeg,stepFwd,stepBack,applyMode,tick,startJourney,setHi,jr:()=>jr};
+  window.__st=st;window.__cam=camera;window.__ctl=controls;window.__api={sketch:()=>sketch,updateLymph,wbcs,segs,parts,setLymph,preset,inject,setColorBy,probes,pickSeg,stepFwd,stepBack,applyMode,tick,startJourney,setHi,jr:()=>jr};
   last=performance.now();requestAnimationFrame(frame);
 }
 if(!window.THREE){$('loading').textContent='無法載入 3D 函式庫，請檢查網路後重新整理。'}
