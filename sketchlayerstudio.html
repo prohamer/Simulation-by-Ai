@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-<title>SketchLayer StudioV5</title>
+<title>SketchLayer StudioV6</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
@@ -754,6 +754,7 @@
     point: '<circle cx="8" cy="12" r="2.6" fill="currentColor"/><path d="M12 8.5l1.6-4.5 1.6 4.5M12.6 7h2"/>',
     text: '<path d="M4 5h12M10 5v11M7.5 16h5"/>',
     ruler: '<path d="M2.8 13.6L13.6 2.8l3.6 3.6L6.4 17.2z"/><path d="M6 10.4l1.6 1.6M8.4 8l1.6 1.6M10.8 5.6l1.6 1.6"/>',
+    protractor: '<path d="M2.5 15.5h15"/><path d="M3.5 15.5a6.5 6.5 0 0113 0"/><circle cx="10" cy="15.5" r="1.4" fill="currentColor"/><path d="M10 15.5L14.8 9.2"/>',
     laser: '<circle cx="14" cy="6" r="2.2" fill="currentColor"/><path d="M3.5 16.5l7-7" opacity=".55"/><path d="M14 1.8v1.3M14 8.9v1.3M9.8 6h1.3M16.9 6h1.3"/>',
     eraser: '<path d="M8.5 16.8h8.5"/><path d="M3.9 12.6l7.2-7.2a1.6 1.6 0 012.2 0l2.8 2.8a1.6 1.6 0 010 2.2l-6.3 6.4H7.5z"/><path d="M7.2 9.3l4.4 4.4"/>',
     undo: '<path d="M7 4L3 8l4 4"/><path d="M3 8h9a4.5 4.5 0 010 9H8"/>',
@@ -781,6 +782,7 @@
     point:       { name: '描點', key: 'D', hint: '自動標 A、B、C…；靠近端點或中心時會吸附' },
     text:        { name: '文字', key: 'T', hint: '點一下打字，Enter 完成、Shift+Enter 換行、Esc 取消；點已有文字可修改' },
     ruler:       { name: '量尺', key: 'M', hint: '拖曳量兩點距離與角度；Shift：鎖定 15° 倍數' },
+    protractor:  { name: '量角器', key: 'G', hint: '可切換「半圓／全圓／三點(多點)」；多點模式連點建立折線（雙擊或 Enter 完成），各頂點皆可拖曳微調夾角' },
     laser:       { name: '雷射筆', key: 'K', hint: '上課指示用，軌跡會自動消失、不會留下' },
     eraser:      { name: '橡皮擦', key: 'E', hint: '點或拖過哪個標註就刪掉哪個' }
   };
@@ -790,7 +792,7 @@
     collapsed: false,
     rememberCollapsed: false,
     storageKey: 'sketch-layer',
-    tools: ['select', 'pen', 'highlighter', 'line', 'arrow', 'ellipse', 'point', 'text', 'ruler', 'laser', 'eraser'],
+    tools: ['select', 'pen', 'highlighter', 'line', 'arrow', 'ellipse', 'point', 'text', 'ruler', 'protractor', 'laser', 'eraser'],
     colors: ['#facc15', '#f8fafc', '#f87171', '#4ade80', '#22d3ee', '#e879f9', '#fb923c', '#1e293b'],
     customColor: true,
     widths: [[2, '細'], [3.5, '中'], [6, '粗']],
@@ -866,7 +868,7 @@
     document.head.appendChild(s);
   }
 
-  const DRAW_TOOLS = ['pen', 'highlighter', 'line', 'arrow', 'ellipse', 'point', 'text', 'ruler'];
+  const DRAW_TOOLS = ['pen', 'highlighter', 'line', 'arrow', 'ellipse', 'point', 'text', 'ruler', 'protractor'];
   const clone = o => JSON.parse(JSON.stringify(o));
   const hypot = Math.hypot;
   function distToSeg(p, a, b) {
@@ -890,7 +892,7 @@
 
     const st = {
       items: [], nextId: 1, tool: 'select', selId: null, visible: true,
-      style: { color: opt.colors[0], width: opt.widths[1] ? opt.widths[1][0] : opt.widths[0][0], size: opt.textSizes[1] ? opt.textSizes[1][0] : opt.textSizes[0][0], dash: false, head: 1 },
+      style: { color: opt.colors[0], width: opt.widths[1] ? opt.widths[1][0] : opt.widths[0][0], size: opt.textSizes[1] ? opt.textSizes[1][0] : opt.textSizes[0][0], dash: false, head: 1, pMode: 'semi', labelBg: 'rgba(7,11,18,0.88)' },
       current: null, gesture: null, eraser: null, laser: [], sawPen: false, space: false,
       touches: new Map(), pinch: null, hist: { stack: ['[]'], idx: 0 }, lastTap: { id: null, t: 0 },
       collapsed: opt.collapsed, cursorSet: false
@@ -1024,6 +1026,110 @@
         b.onclick = () => apply(d => { if (d) d.dash = !d.dash; else st.style.dash = !st.style.dash; });
         styleBar.appendChild(b);
       }
+      // 角度／量尺的文字底色設定（支援深色底、淺白底、透明無底色、自訂底色）
+      if (t === 'protractor' || t === 'ruler') {
+        styleBar.appendChild(sep());
+        const curBg = cur ? (cur.labelBg !== undefined ? cur.labelBg : 'rgba(7,11,18,0.88)') : st.style.labelBg;
+        const bgPresets = [
+          ['rgba(7,11,18,0.88)', '深底', '深色半透明底（預設）'],
+          ['rgba(255,255,255,0.92)', '白底', '淺白半透明底（適合白底考卷）'],
+          ['none', '無底', '透明無底色（僅文字描邊，不遮擋底圖）']
+        ];
+        bgPresets.forEach(([val, txt, title]) => {
+          const b = document.createElement('button');
+          b.type = 'button'; b.className = 'sk-chip'; b.textContent = txt; b.title = '角度/數值文字底色：' + title;
+          b.setAttribute('aria-pressed', String(curBg === val));
+          b.onclick = () => apply(d => { if (d) d.labelBg = val; else st.style.labelBg = val; });
+          styleBar.appendChild(b);
+        });
+        // 自訂角度文字底色選色器
+        const bgWrap = document.createElement('label');
+        bgWrap.className = 'sk-chip';
+        bgWrap.style.position = 'relative';
+        bgWrap.style.overflow = 'hidden';
+        bgWrap.title = '自訂角度文字底色';
+        const isCustomHex = /^#[0-9a-f]{6}$/i.test(curBg);
+        bgWrap.setAttribute('aria-pressed', String(isCustomHex));
+        const dot = document.createElement('span');
+        dot.style.cssText = `width:12px;height:12px;border-radius:3px;border:1px solid rgba(255,255,255,.4);background:${isCustomHex ? curBg : '#1e293b'};display:inline-block`;
+        const lbl = document.createElement('span');
+        lbl.textContent = '底色';
+        const bgInp = document.createElement('input');
+        bgInp.type = 'color';
+        bgInp.value = isCustomHex ? curBg : '#1e293b';
+        bgInp.style.cssText = 'position:absolute;inset:-4px;width:120%;height:140%;opacity:0;cursor:pointer;border:0;padding:0';
+        bgInp.oninput = () => {
+          dot.style.background = bgInp.value;
+          if (cur) { cur.labelBg = bgInp.value; render(); } else st.style.labelBg = bgInp.value;
+        };
+        bgInp.onchange = () => apply(d => { if (d) d.labelBg = bgInp.value; else st.style.labelBg = bgInp.value; });
+        bgWrap.appendChild(dot); bgWrap.appendChild(lbl); bgWrap.appendChild(bgInp);
+        styleBar.appendChild(bgWrap);
+      }
+      if (t === 'protractor') {
+        styleBar.appendChild(sep());
+        const modes = [
+          ['semi', '🌓 半圓 (180°)'],
+          ['full', '🌕 全圓 (360°)'],
+          ['poly', '📐 三點/多點夾角']
+        ];
+        const curM = cur ? (cur.mode || 'semi') : st.style.pMode;
+        modes.forEach(([mKey, mLabel]) => {
+          const b = document.createElement('button');
+          b.type = 'button'; b.className = 'sk-chip'; b.textContent = mLabel;
+          b.setAttribute('aria-pressed', String(curM === mKey));
+          b.onclick = () => {
+            if (cur) {
+              convertProtractorMode(cur, mKey);
+              commit('style', cur);
+              refreshUI(); render();
+            } else {
+              if (st.current && st.current.t === 'protractor') finishPolyProtractor();
+              st.style.pMode = mKey;
+              refreshUI(); render();
+            }
+          };
+          styleBar.appendChild(b);
+        });
+        if (cur && cur.mode === 'poly' && Array.isArray(cur.pts)) {
+          const addPtBtn = document.createElement('button');
+          addPtBtn.type = 'button'; addPtBtn.className = 'sk-chip';
+          addPtBtn.textContent = '+ 新增頂點';
+          addPtBtn.title = '在折線末端延伸一個新頂點';
+          addPtBtn.onclick = () => {
+            const n = cur.pts.length;
+            const last = cur.pts[n - 1];
+            const prev = cur.pts[n - 2] || [last[0] - 80, last[1]];
+            const ang = Math.atan2(last[1] - prev[1], last[0] - prev[0]) + Math.PI / 4;
+            const len = Math.max(60, hypot(last[0] - prev[0], last[1] - prev[1]) * 0.85);
+            cur.pts.push([Math.round(last[0] + Math.cos(ang) * len), Math.round(last[1] + Math.sin(ang) * len)]);
+            commit('edit', cur); refreshUI(); render();
+          };
+          styleBar.appendChild(addPtBtn);
+          if (cur.pts.length > 3) {
+            const popPtBtn = document.createElement('button');
+            popPtBtn.type = 'button'; popPtBtn.className = 'sk-chip';
+            popPtBtn.textContent = '− 刪末點';
+            popPtBtn.title = '移除最後一個頂點';
+            popPtBtn.onclick = () => {
+              if (cur.pts.length > 3) {
+                cur.pts.pop();
+                commit('edit', cur); refreshUI(); render();
+              }
+            };
+            styleBar.appendChild(popPtBtn);
+          }
+        }
+        if (st.current && st.current.t === 'protractor' && st.current.mode === 'poly' && st.current.pts.length >= 3) {
+          const doneBtn = document.createElement('button');
+          doneBtn.type = 'button'; doneBtn.className = 'sk-chip';
+          doneBtn.style.background = 'var(--sk-accent)';
+          doneBtn.style.color = 'var(--sk-on)';
+          doneBtn.textContent = '✓ 完成多點繪製 (Enter)';
+          doneBtn.onclick = () => finishPolyProtractor();
+          styleBar.appendChild(doneBtn);
+        }
+      }
       if (t === 'arrow' || (cur && cur.t === 'line')) {
         const heads = [[0, 'head0', '無箭頭'], [1, 'head1', '末端箭頭'], [2, 'head2', '光線（中段也有箭頭）']];
         const curH = cur ? (cur.head || 0) : st.style.head;
@@ -1042,12 +1148,55 @@
         const d = document.createElement('button'); d.type = 'button'; d.className = 'sk-chip sk-danger'; d.innerHTML = svg('trash') + '刪除'; d.title = '刪除（Delete）';
         d.onclick = () => removeSelected(); styleBar.appendChild(d);
         if (cur.t === 'ruler') { const n = document.createElement('span'); n.className = 'sk-hint'; n.style.background = 'none'; n.textContent = rulerLabel(cur); styleBar.appendChild(n); }
+        if (cur.t === 'protractor') { const n = document.createElement('span'); n.className = 'sk-hint'; n.style.background = 'none'; n.textContent = protractorSummaryLabel(cur); styleBar.appendChild(n); }
       }
+    }
+
+    function convertProtractorMode(d, newMode) {
+      if (d.mode === newMode) return;
+      if (newMode === 'poly') {
+        if (!d.pts || d.pts.length < 3) {
+          const c = d.cPt || [640, 360];
+          const p1 = d.p1 || [c[0] + 120, c[1]];
+          const p2 = d.p2 || [c[0] + 85, c[1] - 85];
+          d.pts = [p1.slice(), c.slice(), p2.slice()];
+        }
+      } else {
+        if (!d.cPt && d.pts && d.pts.length >= 3) {
+          d.cPt = d.pts[1].slice();
+          d.p1 = d.pts[0].slice();
+          d.p2 = d.pts[2].slice();
+        }
+      }
+      d.mode = newMode;
+    }
+
+    function finishPolyProtractor() {
+      if (!st.current || st.current.t !== 'protractor' || st.current.mode !== 'poly') return;
+      const it = st.current;
+      st.current = null;
+      st.gesture = null;
+      if (it.pts && it.pts.length >= 2) {
+        if (it.pts.length === 2) {
+          const a = it.pts[0], b = it.pts[1];
+          const ang = Math.atan2(b[1] - a[1], b[0] - a[0]) - Math.PI / 3;
+          const L = Math.max(60, hypot(b[0] - a[0], b[1] - a[1]) * 0.8);
+          it.pts.push([b[0] + Math.cos(ang) * L, b[1] + Math.sin(ang) * L]);
+        }
+        st.items.push(it);
+        st.selId = it.id;
+        commit('add', it);
+      }
+      refreshUI();
+      render();
     }
 
     function setTool(t) {
       if (!TOOL_INFO[t]) return;
       commitText();
+      if (st.current && st.current.t === 'protractor' && st.current.mode === 'poly') {
+        finishPolyProtractor();
+      }
       st.tool = t; st.current = null; st.eraser = null;
       if (t !== 'select') st.selId = null;
       canvas.style.cursor = t === 'select' ? '' : t === 'text' ? 'text' : t === 'eraser' ? 'none' : 'crosshair';
@@ -1089,6 +1238,11 @@
     function moveItem(d, dx, dy) {
       if (d.pts) d.pts = d.pts.map(p => [p[0] + dx, p[1] + dy].concat(p.length > 2 ? [p[2]] : []));
       if (d.a) { d.a = [d.a[0] + dx, d.a[1] + dy]; d.b = [d.b[0] + dx, d.b[1] + dy]; }
+      if (d.cPt) {
+        d.cPt = [d.cPt[0] + dx, d.cPt[1] + dy];
+        if (d.p1) d.p1 = [d.p1[0] + dx, d.p1[1] + dy];
+        if (d.p2) d.p2 = [d.p2[0] + dx, d.p2[1] + dy];
+      }
       if (d.x != null) { d.x += dx; d.y += dy; }
     }
     function nextPointLabel() {
@@ -1126,6 +1280,40 @@
       return `${L.toFixed(u.decimals)} ${u.label}　${(Math.round(deg * 10) / 10) % 360}°`;
     }
 
+    function calcVertexAngleDeg(A, V, B) {
+      const a1 = Math.atan2(A.y - V.y, A.x - V.x);
+      const a2 = Math.atan2(B.y - V.y, B.x - V.x);
+      let diff = Math.abs(a2 - a1) * 180 / Math.PI;
+      if (diff > 180) diff = 360 - diff;
+      return diff;
+    }
+
+    function calcDialAngleDeg(C, P1, P2, isFull) {
+      const a1 = Math.atan2(P1.y - C.y, P1.x - C.x);
+      const a2 = Math.atan2(P2.y - C.y, P2.x - C.x);
+      // 螢幕座標 y 向下，逆時針數學角為 a1 - a2
+      let deg = (a1 - a2) * 180 / Math.PI;
+      while (deg < 0) deg += 360;
+      while (deg >= 360) deg -= 360;
+      if (!isFull && deg > 180) deg = 360 - deg;
+      return deg;
+    }
+
+    function protractorSummaryLabel(d) {
+      if (d.mode === 'poly' && Array.isArray(d.pts)) {
+        if (d.pts.length < 3) return '請再點選第 3 個頂點以計算夾角';
+        const angles = [];
+        for (let i = 1; i < d.pts.length - 1; i++) {
+          const deg = calcVertexAngleDeg(scr(d.pts[i - 1]), scr(d.pts[i]), scr(d.pts[i + 1]));
+          angles.push(`∠${i}=${deg.toFixed(1)}°`);
+        }
+        return angles.join(' · ') + '（可拖曳各頂點微調）';
+      }
+      const C = scr(d.cPt), P1 = scr(d.p1), P2 = scr(d.p2);
+      const deg = calcDialAngleDeg(C, P1, P2, d.mode === 'full');
+      return `${d.mode === 'full' ? '全圓' : '半圓'}夾角：${deg.toFixed(1)}°（可拖曳中心、基準臂與測量臂）`;
+    }
+
     function textBox(d) {
       const k = K(), size = d.size * k, lines = String(d.text).split('\n');
       ctx.save(); ctx.font = `700 ${size}px ${opt.font}`;
@@ -1150,6 +1338,35 @@
       }
       if (d.t === 'point') { const s = H.toScreen(d.x, d.y); return hypot(p.x - s.x, p.y - s.y) < tol + 6; }
       if (d.t === 'text') { const b = textBox(d); return p.x > b.x - tol && p.x < b.x + b.w + tol && p.y > b.y - tol && p.y < b.y + b.h + tol; }
+      if (d.t === 'protractor') {
+        const extra = (d.w || 2) * k / 2;
+        if (d.mode === 'poly' && Array.isArray(d.pts)) {
+          const pts = d.pts.map(scr);
+          for (let i = 0; i < pts.length; i++) if (hypot(p.x - pts[i].x, p.y - pts[i].y) < tol + 8) return true;
+          for (let i = 1; i < pts.length; i++) if (distToSeg(p, pts[i - 1], pts[i]) < tol + extra) return true;
+          return false;
+        }
+        const C = scr(d.cPt), P1 = scr(d.p1), P2 = scr(d.p2);
+        const R = Math.max(36, hypot(P1.x - C.x, P1.y - C.y));
+        if (distToSeg(p, C, P1) < tol + extra || distToSeg(p, C, P2) < tol + extra) return true;
+        const distC = hypot(p.x - C.x, p.y - C.y);
+        if (distC < tol + 10) return true;
+        if (Math.abs(distC - R) < tol + 10) {
+          if (d.mode === 'full') return true;
+          const baseAng = Math.atan2(P1.y - C.y, P1.x - C.x);
+          const ptAng = Math.atan2(p.y - C.y, p.x - C.x);
+          let rel = baseAng - ptAng;
+          while (rel < -Math.PI) rel += Math.PI * 2;
+          while (rel > Math.PI) rel -= Math.PI * 2;
+          if (rel >= -0.15 && rel <= Math.PI + 0.15) return true;
+        }
+        if (d.mode !== 'full') {
+          const baseAng = Math.atan2(P1.y - C.y, P1.x - C.x);
+          const opp = { x: C.x - R * Math.cos(baseAng), y: C.y - R * Math.sin(baseAng) };
+          if (distToSeg(p, opp, P1) < tol + extra) return true;
+        }
+        return false;
+      }
       return false;
     }
     function topHit(p, tol) {
@@ -1158,9 +1375,24 @@
       return null;
     }
     function handleHit(p) {
-      const d = selItem(); if (!d || !d.a) return null;
+      const d = selItem(); if (!d) return null;
       const lim = coarse() ? 22 : 12;
-      for (const key of ['b', 'a']) { const s = scr(d[key]); if (hypot(s.x - p.x, s.y - p.y) < lim) return key; }
+      if (d.a) {
+        for (const key of ['b', 'a']) { const s = scr(d[key]); if (hypot(s.x - p.x, s.y - p.y) < lim) return key; }
+      }
+      if (d.t === 'protractor') {
+        if (d.mode === 'poly' && Array.isArray(d.pts)) {
+          for (let i = d.pts.length - 1; i >= 0; i--) {
+            const s = scr(d.pts[i]);
+            if (hypot(s.x - p.x, s.y - p.y) < lim) return 'pt:' + i;
+          }
+        } else if (d.cPt) {
+          for (const key of ['p2', 'p1', 'cPt']) {
+            const s = scr(d[key]);
+            if (hypot(s.x - p.x, s.y - p.y) < lim) return key;
+          }
+        }
+      }
       return null;
     }
 
@@ -1266,10 +1498,23 @@
         c.beginPath(); c.moveTo(A.x, A.y); c.lineTo(B.x, B.y);
         c.moveTo(A.x - nx, A.y - ny); c.lineTo(A.x + nx, A.y + ny); c.moveTo(B.x - nx, B.y - ny); c.lineTo(B.x + nx, B.y + ny); c.stroke();
         const t = rulerLabel(d);
-        c.font = `700 ${Math.round(12 * Math.max(0.85, k))}px ui-monospace,"IBM Plex Mono",Menlo,monospace`;
+        const fontSz = Math.round(12 * Math.max(0.85, k));
+        c.font = `700 ${fontSz}px ui-monospace,"IBM Plex Mono",Menlo,monospace`;
         const tw = c.measureText(t).width, mx = (A.x + B.x) / 2 + nx * 2.4, my = (A.y + B.y) / 2 + ny * 2.4;
-        c.fillStyle = 'rgba(7,11,18,.85)'; c.fillRect(mx - tw / 2 - 5, my - 10, tw + 10, 20);
-        c.fillStyle = col; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(t, mx, my);
+        const lbg = d.labelBg !== undefined ? d.labelBg : 'rgba(7,11,18,0.88)';
+        c.textAlign = 'center'; c.textBaseline = 'middle';
+        if (lbg && lbg !== 'none') {
+          c.fillStyle = lbg;
+          c.fillRect(mx - tw / 2 - 5, my - 10, tw + 10, 20);
+          c.fillStyle = col;
+          c.fillText(t, mx, my);
+        } else {
+          outlinedText(c, t, mx, my, fontSz);
+        }
+        return;
+      }
+      if (d.t === 'protractor') {
+        drawProtractorItem(c, d, k, toS);
         return;
       }
       if (d.t === 'point') {
@@ -1287,6 +1532,257 @@
       }
     }
 
+    function drawProtractorItem(c, d, k, toS) {
+      const col = d.c || '#facc15';
+      const w = (d.w || 2) * k;
+      if (d.mode === 'poly' && Array.isArray(d.pts)) {
+        const pts = d.pts.map(toS);
+        if (pts.length < 1) return;
+        // 1. 畫折線段
+        c.strokeStyle = col;
+        c.lineWidth = Math.max(1.8, w);
+        if (d.dash) c.setLineDash([3 * w + 4, 2 * w + 4]);
+        c.beginPath();
+        c.moveTo(pts[0].x, pts[0].y);
+        for (let i = 1; i < pts.length; i++) c.lineTo(pts[i].x, pts[i].y);
+        c.stroke();
+        c.setLineDash([]);
+
+        // 2. 在每個轉折頂點畫夾角弧線（或直角符號）與角度標籤
+        for (let i = 1; i < pts.length - 1; i++) {
+          const A = pts[i - 1], V = pts[i], B = pts[i + 1];
+          const L1 = hypot(A.x - V.x, A.y - V.y), L2 = hypot(B.x - V.x, B.y - V.y);
+          if (L1 < 6 || L2 < 6) continue;
+          const a1 = Math.atan2(A.y - V.y, A.x - V.x);
+          const a2 = Math.atan2(B.y - V.y, B.x - V.x);
+          let delta = a2 - a1;
+          while (delta <= -Math.PI) delta += Math.PI * 2;
+          while (delta > Math.PI) delta -= Math.PI * 2;
+          const deg = Math.abs(delta) * 180 / Math.PI;
+          const arcR = Math.min(42 * Math.max(0.75, k), L1 * 0.42, L2 * 0.42);
+
+          c.save();
+          if (Math.abs(deg - 90) < 0.35 && arcR >= 10) {
+            // 直角 90° 專用方框記號
+            const sq = arcR * 0.72;
+            const u1x = Math.cos(a1) * sq, u1y = Math.sin(a1) * sq;
+            const u2x = Math.cos(a2) * sq, u2y = Math.sin(a2) * sq;
+            c.fillStyle = col;
+            c.globalAlpha = 0.2;
+            c.beginPath();
+            c.moveTo(V.x, V.y);
+            c.lineTo(V.x + u1x, V.y + u1y);
+            c.lineTo(V.x + u1x + u2x, V.y + u1y + u2y);
+            c.lineTo(V.x + u2x, V.y + u2y);
+            c.closePath();
+            c.fill();
+            c.globalAlpha = 0.95;
+            c.lineWidth = Math.max(1.4, w * 0.65);
+            c.beginPath();
+            c.moveTo(V.x + u1x, V.y + u1y);
+            c.lineTo(V.x + u1x + u2x, V.y + u1y + u2y);
+            c.lineTo(V.x + u2x, V.y + u2y);
+            c.stroke();
+          } else if (arcR >= 8) {
+            c.fillStyle = col;
+            c.globalAlpha = 0.2;
+            c.beginPath();
+            c.moveTo(V.x, V.y);
+            c.arc(V.x, V.y, arcR, a1, a1 + delta, delta < 0);
+            c.closePath();
+            c.fill();
+            c.globalAlpha = 0.95;
+            c.lineWidth = Math.max(1.5, w * 0.7);
+            c.beginPath();
+            c.arc(V.x, V.y, arcR, a1, a1 + delta, delta < 0);
+            c.stroke();
+          }
+
+          // 角度文字放於角平分線上
+          const midAng = a1 + delta / 2;
+          const labelDist = arcR + 16 * Math.max(0.8, k);
+          const lx = V.x + Math.cos(midAng) * labelDist;
+          const ly = V.y + Math.sin(midAng) * labelDist;
+          const txt = `${deg.toFixed(1)}°`;
+          const fontSz = Math.round(12.5 * Math.max(0.85, Math.min(1.35, k)));
+          c.font = `700 ${fontSz}px ui-monospace,"IBM Plex Mono",Menlo,monospace`;
+          const tw = c.measureText(txt).width;
+          const lbg = d.labelBg !== undefined ? d.labelBg : 'rgba(7, 11, 18, 0.88)';
+          c.textAlign = 'center';
+          c.textBaseline = 'middle';
+          if (lbg && lbg !== 'none') {
+            c.globalAlpha = 0.92;
+            c.fillStyle = lbg;
+            c.fillRect(lx - tw / 2 - 5, ly - 10, tw + 10, 20);
+            c.globalAlpha = 1;
+            c.fillStyle = col;
+            c.fillText(txt, lx, ly);
+          } else {
+            c.globalAlpha = 1;
+            c.fillStyle = col;
+            outlinedText(c, txt, lx, ly, fontSz);
+          }
+          c.restore();
+        }
+
+        // 3. 每個頂點畫圓點標記
+        for (let i = 0; i < pts.length; i++) {
+          const p = pts[i];
+          c.beginPath();
+          c.arc(p.x, p.y, Math.max(4, 4.5 * Math.min(1.3, k)), 0, Math.PI * 2);
+          c.fillStyle = i === 0 || i === pts.length - 1 ? '#0f172a' : col;
+          c.fill();
+          c.lineWidth = 2;
+          c.strokeStyle = col;
+          c.stroke();
+        }
+        return;
+      }
+
+      // 半圓 (semi) 與 全圓 (full) 量角器盤面模式
+      if (!d.cPt || !d.p1 || !d.p2) return;
+      const C = toS(d.cPt), P1 = toS(d.p1), P2 = toS(d.p2);
+      const R = Math.max(42, hypot(P1.x - C.x, P1.y - C.y));
+      const baseAng = Math.atan2(P1.y - C.y, P1.x - C.x);
+      const armAng = Math.atan2(P2.y - C.y, P2.x - C.x);
+      const isFull = d.mode === 'full';
+
+      c.save();
+      c.translate(C.x, C.y);
+      c.rotate(baseAng);
+
+      // 1. 量角器半透明底盤與內圈鏤空感
+      c.fillStyle = 'rgba(15, 23, 42, 0.56)';
+      c.strokeStyle = col;
+      c.lineWidth = Math.max(1.5, w * 0.65);
+      c.beginPath();
+      if (isFull) {
+        c.arc(0, 0, R, 0, Math.PI * 2);
+      } else {
+        c.arc(0, 0, R, 0, -Math.PI, true);
+        c.closePath();
+      }
+      c.fill();
+      c.stroke();
+
+      // 內圈參考環
+      if (R > 65) {
+        c.strokeStyle = col;
+        c.globalAlpha = 0.25;
+        c.lineWidth = 1;
+        c.beginPath();
+        if (isFull) c.arc(0, 0, R * 0.62, 0, Math.PI * 2);
+        else { c.arc(0, 0, R * 0.62, 0, -Math.PI, true); c.closePath(); }
+        c.stroke();
+        c.globalAlpha = 1;
+      }
+
+      // 2. 角度刻度線與數字 (1°, 5°, 10°)
+      const maxDeg = isFull ? 359 : 180;
+      const stepDeg = R < 75 ? 5 : 1;
+      const fontSz = Math.max(8, Math.min(12, R * 0.075));
+      c.font = `600 ${fontSz.toFixed(1)}px ui-monospace,"IBM Plex Mono",sans-serif`;
+      c.fillStyle = col;
+      c.strokeStyle = col;
+      c.textAlign = 'center';
+      c.textBaseline = 'middle';
+
+      for (let deg = 0; deg <= maxDeg; deg += stepDeg) {
+        const rad = -deg * Math.PI / 180;
+        const isMajor = deg % 10 === 0;
+        const isMid = deg % 5 === 0;
+        const tickLen = isMajor ? Math.min(15, R * 0.13) : isMid ? Math.min(10, R * 0.085) : Math.min(5, R * 0.045);
+        c.globalAlpha = isMajor ? 0.88 : isMid ? 0.55 : 0.32;
+        c.lineWidth = isMajor ? 1.35 : 0.9;
+        const cos = Math.cos(rad), sin = Math.sin(rad);
+        c.beginPath();
+        c.moveTo((R - tickLen) * cos, (R - tickLen) * sin);
+        c.lineTo(R * cos, R * sin);
+        c.stroke();
+
+        const labelStep = R < 90 ? 30 : isFull ? 30 : 10;
+        if (deg % labelStep === 0 && R >= 58) {
+          if (isFull && deg === 360) continue;
+          const tr = R - tickLen - fontSz * 0.95;
+          c.save();
+          c.translate(tr * cos, tr * sin);
+          c.rotate(rad + Math.PI / 2);
+          c.globalAlpha = 0.92;
+          c.fillText(String(deg), 0, 0);
+          c.restore();
+        }
+      }
+      c.restore();
+
+      // 3. 繪製當前夾角高亮扇形、基準臂與測量臂
+      let sweep = armAng - baseAng;
+      while (sweep > 0) sweep -= Math.PI * 2;
+      while (sweep <= -Math.PI * 2) sweep += Math.PI * 2;
+      let ccw = true;
+      if (!isFull && Math.abs(sweep) > Math.PI) {
+        sweep = sweep + Math.PI * 2;
+        ccw = false;
+      }
+
+      const sectorR = Math.min(R * 0.45, Math.max(26, R * 0.32));
+      c.save();
+      c.fillStyle = col;
+      c.globalAlpha = 0.22;
+      c.beginPath();
+      c.moveTo(C.x, C.y);
+      c.arc(C.x, C.y, sectorR, baseAng, baseAng + sweep, ccw);
+      c.closePath();
+      c.fill();
+
+      c.globalAlpha = 0.95;
+      c.strokeStyle = col;
+      c.lineWidth = Math.max(1.6, w * 0.85);
+      c.beginPath();
+      c.arc(C.x, C.y, sectorR, baseAng, baseAng + sweep, ccw);
+      c.stroke();
+
+      // 基準臂 (C -> P1) 與 測量臂 (C -> P2)
+      c.lineWidth = Math.max(2, w);
+      c.beginPath();
+      c.moveTo(C.x, C.y); c.lineTo(P1.x, P1.y);
+      c.moveTo(C.x, C.y); c.lineTo(P2.x, P2.y);
+      c.stroke();
+
+      // 中心十字準星
+      c.fillStyle = '#0f172a';
+      c.beginPath();
+      c.arc(C.x, C.y, 4.5, 0, Math.PI * 2);
+      c.fill();
+      c.stroke();
+
+      // 角度數值膠囊標籤
+      const degVal = calcDialAngleDeg(C, P1, P2, isFull);
+      const midAng = baseAng + sweep / 2;
+      const lblR = Math.min(R * 0.55, sectorR + 22);
+      const lx = C.x + Math.cos(midAng) * lblR;
+      const ly = C.y + Math.sin(midAng) * lblR;
+      const labelTxt = `${degVal.toFixed(1)}°`;
+      const lblFontSz = Math.round(13 * Math.max(0.85, Math.min(1.3, k)));
+      c.font = `700 ${lblFontSz}px ui-monospace,"IBM Plex Mono",Menlo,monospace`;
+      const tw = c.measureText(labelTxt).width;
+      const lbg = d.labelBg !== undefined ? d.labelBg : 'rgba(7, 11, 18, 0.9)';
+      c.textAlign = 'center';
+      c.textBaseline = 'middle';
+      if (lbg && lbg !== 'none') {
+        c.fillStyle = lbg;
+        c.fillRect(lx - tw / 2 - 6, ly - 11, tw + 12, 22);
+        c.strokeStyle = col;
+        c.lineWidth = 1.2;
+        c.strokeRect(lx - tw / 2 - 6, ly - 11, tw + 12, 22);
+        c.fillStyle = col;
+        c.fillText(labelTxt, lx, ly);
+      } else {
+        c.fillStyle = col;
+        outlinedText(c, labelTxt, lx, ly, lblFontSz);
+      }
+      c.restore();
+    }
+
     function drawSelection(c, d, k) {
       c.save();
       c.strokeStyle = 'rgba(34,211,238,.45)'; c.lineCap = 'round'; c.lineJoin = 'round';
@@ -1295,12 +1791,45 @@
       else if (d.t === 'ellipse') { const A = scr(d.a), B = scr(d.b); c.setLineDash([4, 4]); c.lineWidth = 1.5; c.strokeStyle = '#22d3ee'; c.strokeRect(Math.min(A.x, B.x), Math.min(A.y, B.y), Math.abs(B.x - A.x), Math.abs(B.y - A.y)); }
       else if (d.t === 'text') { const b = textBox(d); c.setLineDash([4, 4]); c.lineWidth = 1.5; c.strokeStyle = '#22d3ee'; c.strokeRect(b.x - 4, b.y - 3, b.w + 8, b.h + 6); }
       else if (d.t === 'point') { const s = H.toScreen(d.x, d.y); c.lineWidth = 2; c.strokeStyle = '#22d3ee'; c.beginPath(); c.arc(s.x, s.y, 10, 0, Math.PI * 2); c.stroke(); }
+      else if (d.t === 'protractor') {
+        if (d.mode === 'poly' && Array.isArray(d.pts) && d.pts.length >= 2) {
+          c.lineWidth = (d.w || 2) * k + 8;
+          const pts = d.pts.map(scr);
+          c.beginPath(); c.moveTo(pts[0].x, pts[0].y);
+          for (let i = 1; i < pts.length; i++) c.lineTo(pts[i].x, pts[i].y);
+          c.stroke();
+        } else if (d.cPt && d.p1 && d.p2) {
+          const C = scr(d.cPt), P1 = scr(d.p1), P2 = scr(d.p2);
+          c.lineWidth = (d.w || 2) * k + 7;
+          c.beginPath();
+          c.moveTo(C.x, C.y); c.lineTo(P1.x, P1.y);
+          c.moveTo(C.x, C.y); c.lineTo(P2.x, P2.y);
+          c.stroke();
+        }
+      }
       c.restore();
     }
     function drawHandles(c, d) {
-      if (!d.a) return;
       c.save();
-      for (const key of ['a', 'b']) { const s = scr(d[key]); c.fillStyle = '#0f172a'; c.strokeStyle = '#22d3ee'; c.lineWidth = 2; c.fillRect(s.x - 5, s.y - 5, 10, 10); c.strokeRect(s.x - 5, s.y - 5, 10, 10); }
+      const drawSq = (s, isRound = false, accent = '#22d3ee') => {
+        c.fillStyle = '#0f172a'; c.strokeStyle = accent; c.lineWidth = 2;
+        if (isRound) {
+          c.beginPath(); c.arc(s.x, s.y, 6, 0, Math.PI * 2); c.fill(); c.stroke();
+        } else {
+          c.fillRect(s.x - 5.5, s.y - 5.5, 11, 11); c.strokeRect(s.x - 5.5, s.y - 5.5, 11, 11);
+        }
+      };
+      if (d.a) {
+        for (const key of ['a', 'b']) drawSq(scr(d[key]));
+      } else if (d.t === 'protractor') {
+        if (d.mode === 'poly' && Array.isArray(d.pts)) {
+          d.pts.forEach(pt => drawSq(scr(pt)));
+        } else if (d.cPt) {
+          drawSq(scr(d.cPt), true, '#facc15');
+          drawSq(scr(d.p1), false, '#22d3ee');
+          drawSq(scr(d.p2), true, '#38bdf8');
+        }
+      }
       c.restore();
     }
 
@@ -1422,7 +1951,41 @@
         if (t === 'line') it.head = 0;
         if (t === 'arrow') it.head = s.head;
         if (t !== 'ruler') it.dash = s.dash;
+        if (t === 'ruler') it.labelBg = s.labelBg;
         st.current = it; st.gesture = { type: 'draw2', pid: e.pointerId, tool: t };
+      } else if (t === 'protractor') {
+        const mode = s.pMode || 'semi';
+        const q = snapScreen(p);
+        if (mode === 'poly') {
+          const now = performance.now();
+          if (st.current && st.current.t === 'protractor' && st.current.mode === 'poly') {
+            const pts = st.current.pts;
+            const prevFixed = pts[pts.length - 2];
+            const prevScr = prevFixed ? scr(prevFixed) : null;
+            const isDblClick = (now - st.lastTap.t < 360) || (prevScr && hypot(p.x - prevScr.x, p.y - prevScr.y) < 12);
+            st.lastTap = { id: st.current.id, t: now };
+            if (isDblClick && pts.length >= 3) {
+              pts.pop(); // 移除重複的預覽點並完成多點折線
+              finishPolyProtractor();
+              return;
+            }
+            pts[pts.length - 1] = q.slice();
+            pts.push(q.slice());
+            st.gesture = { type: 'poly-add', pid: e.pointerId };
+            refreshUI();
+          } else {
+            st.lastTap = { id: -1, t: now };
+            st.current = { id: st.nextId++, t: 'protractor', mode: 'poly', pts: [q.slice(), q.slice()], c: s.color, w: s.width, dash: s.dash, labelBg: s.labelBg };
+            st.gesture = { type: 'poly-add', pid: e.pointerId };
+            refreshUI();
+          }
+        } else {
+          const rWorld = Math.max(40, (130 / (H.zoom() || 1)));
+          const p1 = [q[0] + rWorld, q[1]];
+          const p2 = [q[0] + rWorld * Math.cos(-Math.PI / 3), q[1] + rWorld * Math.sin(-Math.PI / 3)];
+          st.current = { id: st.nextId++, t: 'protractor', mode, cPt: q.slice(), p1, p2, c: s.color, w: s.width, labelBg: s.labelBg };
+          st.gesture = { type: 'draw-prot', pid: e.pointerId };
+        }
       } else if (t === 'point') {
         const q = snapScreen(p);
         const it = { id: st.nextId++, t: 'point', x: q[0], y: q[1], c: s.color, label: nextPointLabel() };
@@ -1461,6 +2024,15 @@
       const g = st.gesture;
       if (!g) {
         if (!p0 || !onCanvas(e)) { if (st.eraser) { st.eraser = null; render(); } return; }
+        if (st.tool === 'protractor' && st.current && st.current.t === 'protractor' && st.current.mode === 'poly') {
+          const pts = st.current.pts;
+          if (pts.length >= 2) {
+            pts[pts.length - 1] = e.shiftKey ? lockAngle(pts[pts.length - 2], p0) : snapScreen(p0);
+            hint.textContent = protractorSummaryLabel(st.current) + '　·　雙擊或按 Enter 結束多點繪製';
+            render();
+            return;
+          }
+        }
         if (st.tool === 'eraser') { st.eraser = { x: p0.x, y: p0.y, r: e.pointerType === 'touch' ? 18 : 10 }; render(); }
         else if (st.tool === 'select' && st.visible && !st.collapsed && e.pointerType === 'mouse') {
           const over = handleHit(p0) ? 'crosshair' : (topHit(p0, 7) && !(H.hitTest && H.hitTest(p0.x, p0.y)) ? 'move' : null);
@@ -1488,15 +2060,64 @@
           it.b = b;
         } else it.b = e.shiftKey ? lockAngle(it.a, p) : snapScreen(p);
         if (g.tool === 'ruler') hint.textContent = rulerLabel(it);
+      } else if (g.type === 'draw-prot') {
+        const it = st.current;
+        const C = scr(it.cPt);
+        const dist = Math.max(45, hypot(p.x - C.x, p.y - C.y));
+        const ang2 = e.shiftKey
+          ? Math.round(Math.atan2(p.y - C.y, p.x - C.x) / (opt.angleStep * Math.PI / 180)) * (opt.angleStep * Math.PI / 180)
+          : Math.atan2(p.y - C.y, p.x - C.x);
+        it.p1 = wld(C.x + dist, C.y);
+        it.p2 = wld(C.x + dist * Math.cos(ang2), C.y + dist * Math.sin(ang2));
+        hint.textContent = protractorSummaryLabel(it);
+      } else if (g.type === 'poly-add') {
+        if (st.current && st.current.pts && st.current.pts.length >= 2) {
+          const pts = st.current.pts;
+          pts[pts.length - 1] = e.shiftKey ? lockAngle(pts[pts.length - 2], p) : snapScreen(p);
+        }
       } else if (g.type === 'move') {
         const w = wld(p.x, p.y), it = g.item, o = g.orig;
         const dx = w[0] - g.start[0], dy = w[1] - g.start[1];
         Object.assign(it, clone(o)); moveItem(it, dx, dy);
         if (Math.abs(dx) + Math.abs(dy) > 0) g.moved = true;
       } else if (g.type === 'handle') {
-        const it = g.item, other = g.key === 'a' ? 'b' : 'a';
-        it[g.key] = it.t === 'ellipse' ? wld(p.x, p.y) : (e.shiftKey ? lockAngle(it[other], p) : snapScreen(p));
-        if (it.t === 'ruler') buildStyleBar();
+        const it = g.item;
+        if (it.t === 'protractor') {
+          if (g.key.startsWith('pt:')) {
+            const idx = parseInt(g.key.slice(3), 10);
+            const refNeighbor = idx > 0 ? it.pts[idx - 1] : it.pts[idx + 1];
+            it.pts[idx] = (e.shiftKey && refNeighbor) ? lockAngle(refNeighbor, p) : snapScreen(p);
+          } else if (g.key === 'cPt') {
+            const nw = snapScreen(p);
+            const dx = nw[0] - it.cPt[0], dy = nw[1] - it.cPt[1];
+            it.cPt = nw;
+            it.p1 = [it.p1[0] + dx, it.p1[1] + dy];
+            it.p2 = [it.p2[0] + dx, it.p2[1] + dy];
+          } else if (g.key === 'p1') {
+            const C = scr(it.cPt);
+            const oldAng1 = Math.atan2(scr(it.p1).y - C.y, scr(it.p1).x - C.x);
+            const oldAng2 = Math.atan2(scr(it.p2).y - C.y, scr(it.p2).x - C.x);
+            const np1 = e.shiftKey ? lockAngle(it.cPt, p) : snapScreen(p);
+            it.p1 = np1;
+            const S1 = scr(np1);
+            const newR = Math.max(40, hypot(S1.x - C.x, S1.y - C.y));
+            const newAng1 = Math.atan2(S1.y - C.y, S1.x - C.x);
+            const newAng2 = oldAng2 + (newAng1 - oldAng1);
+            it.p2 = wld(C.x + newR * Math.cos(newAng2), C.y + newR * Math.sin(newAng2));
+          } else if (g.key === 'p2') {
+            const C = scr(it.cPt), S1 = scr(it.p1);
+            const R = Math.max(40, hypot(S1.x - C.x, S1.y - C.y));
+            const target = e.shiftKey ? lockAngle(it.cPt, p) : snapScreen(p);
+            const St = scr(target);
+            const ang2 = Math.atan2(St.y - C.y, St.x - C.x);
+            it.p2 = wld(C.x + R * Math.cos(ang2), C.y + R * Math.sin(ang2));
+          }
+          buildStyleBar();
+        } else {
+          const other = g.key === 'a' ? 'b' : 'a';
+          it[g.key] = it.t === 'ellipse' ? wld(p.x, p.y) : (e.shiftKey ? lockAngle(it[other], p) : snapScreen(p));
+          if (it.t === 'ruler') buildStyleBar();
+        }
       } else if (g.type === 'erase') {
         st.eraser = { x: p.x, y: p.y, r: st.eraser ? st.eraser.r : 10 };
         eraseAt(p, st.eraser.r);
@@ -1523,6 +2144,17 @@
         else { const A = scr(it.a), B = scr(it.b); tiny = hypot(B.x - A.x, B.y - A.y) < 4; }
         if (!tiny) { st.items.push(it); commit('add', it); }
         refreshUI();
+      } else if (g.type === 'draw-prot') {
+        const it = st.current; st.current = null;
+        st.items.push(it);
+        st.selId = it.id;
+        st.tool = 'select';
+        canvas.style.cursor = '';
+        st.cursorSet = false;
+        commit('add', it);
+        refreshUI();
+      } else if (g.type === 'poly-add') {
+        refreshUI();
       } else if (g.type === 'move') { if (g.moved) commit('move', g.item); }
       else if (g.type === 'handle') { if (JSON.stringify(st.items) !== g.before) commit('edit', g.item); }
       else if (g.type === 'erase') { if (g.removed.length) commit('erase', null); if (e.pointerType !== 'mouse') st.eraser = null; }
@@ -1534,7 +2166,23 @@
       if (tag === 'TEXTAREA' || tag === 'SELECT' || (tag === 'INPUT' && !/range|checkbox|radio|button|color/.test(tg.type)) || (tg && tg.isContentEditable)) return;
       const mod = e.ctrlKey || e.metaKey, k = e.key.toLowerCase();
       if (e.code === 'Space') { st.space = true; return; }
+      if (e.key === 'Enter' && st.current && st.current.t === 'protractor' && st.current.mode === 'poly') {
+        swallow(e);
+        if (st.current.pts.length > 3) st.current.pts.pop();
+        finishPolyProtractor();
+        return;
+      }
       if (e.key === 'Escape') {
+        if (st.current && st.current.t === 'protractor' && st.current.mode === 'poly') {
+          swallow(e);
+          if (st.current.pts.length > 3) {
+            st.current.pts.pop();
+            finishPolyProtractor();
+          } else {
+            st.current = null; st.gesture = null; refreshUI(); render();
+          }
+          return;
+        }
         if (st.gesture) { if (st.current) st.current = null; st.gesture = null; render(); return; }
         if (st.tool !== 'select') { setTool('select'); return; }
         if (st.selId != null) { st.selId = null; refreshUI(); render(); }
@@ -3885,8 +4533,67 @@
         if (deg < 0) deg += 360;
         const label = `${L.toFixed(0)} px  ${(Math.round(deg * 10) / 10) % 360}°`;
         const mx = (ax + bx) / 2 + nx * 2.4, my = (ay + by) / 2 + ny * 2.4;
-        parts.push(`<rect x="${mx - 62}" y="${my - 10}" width="124" height="20" rx="4" fill="rgba(7,11,18,0.85)"/>`);
-        parts.push(`<text x="${mx}" y="${my + 4}" fill="${col}" font-family="monospace" font-size="12" font-weight="bold" text-anchor="middle">${escapeXml(label)}</text>`);
+        const lbg = d.labelBg !== undefined ? d.labelBg : 'rgba(7,11,18,0.85)';
+        if (lbg && lbg !== 'none') {
+          parts.push(`<rect x="${mx - 62}" y="${my - 10}" width="124" height="20" rx="4" fill="${lbg}"/>`);
+          parts.push(`<text x="${mx}" y="${my + 4}" fill="${col}" font-family="monospace" font-size="12" font-weight="bold" text-anchor="middle">${escapeXml(label)}</text>`);
+        } else {
+          parts.push(`<text x="${mx}" y="${my + 4}" fill="${col}" stroke="rgba(2,6,23,0.85)" stroke-width="3" paint-order="stroke" font-family="monospace" font-size="12" font-weight="bold" text-anchor="middle">${escapeXml(label)}</text>`);
+        }
+      } else if (d.t === 'protractor') {
+        const lbg = d.labelBg !== undefined ? d.labelBg : 'rgba(7,11,18,0.88)';
+        if (d.mode === 'poly' && Array.isArray(d.pts) && d.pts.length >= 2) {
+          const ptsAttr = d.pts.map(p => `${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ');
+          parts.push(`<polyline points="${ptsAttr}" fill="none" stroke="${col}" stroke-width="${w}"${dashAttr}/>`);
+          for (let i = 1; i < d.pts.length - 1; i++) {
+            const A = d.pts[i - 1], V = d.pts[i], B = d.pts[i + 1];
+            const a1 = Math.atan2(A[1] - V[1], A[0] - V[0]);
+            const a2 = Math.atan2(B[1] - V[1], B[0] - V[0]);
+            let delta = a2 - a1;
+            while (delta <= -Math.PI) delta += Math.PI * 2;
+            while (delta > Math.PI) delta -= Math.PI * 2;
+            const deg = Math.abs(delta) * 180 / Math.PI;
+            const L1 = Math.hypot(A[0] - V[0], A[1] - V[1]), L2 = Math.hypot(B[0] - V[0], B[1] - V[1]);
+            const arcR = Math.min(40, L1 * 0.4, L2 * 0.4);
+            const sx = V[0] + Math.cos(a1) * arcR, sy = V[1] + Math.sin(a1) * arcR;
+            const ex = V[0] + Math.cos(a1 + delta) * arcR, ey = V[1] + Math.sin(a1 + delta) * arcR;
+            const sweepFlag = delta >= 0 ? 1 : 0;
+            parts.push(`<path d="M ${V[0]} ${V[1]} L ${sx.toFixed(1)} ${sy.toFixed(1)} A ${arcR.toFixed(1)} ${arcR.toFixed(1)} 0 0 ${sweepFlag} ${ex.toFixed(1)} ${ey.toFixed(1)} Z" fill="${col}" fill-opacity="0.2" stroke="${col}" stroke-width="1.5"/>`);
+            const midAng = a1 + delta / 2;
+            const lx = V[0] + Math.cos(midAng) * (arcR + 16), ly = V[1] + Math.sin(midAng) * (arcR + 16);
+            if (lbg && lbg !== 'none') {
+              parts.push(`<rect x="${(lx - 26).toFixed(1)}" y="${(ly - 10).toFixed(1)}" width="52" height="20" rx="4" fill="${lbg}"/>`);
+              parts.push(`<text x="${lx.toFixed(1)}" y="${(ly + 4).toFixed(1)}" fill="${col}" font-family="monospace" font-size="12" font-weight="bold" text-anchor="middle">${deg.toFixed(1)}°</text>`);
+            } else {
+              parts.push(`<text x="${lx.toFixed(1)}" y="${(ly + 4).toFixed(1)}" fill="${col}" stroke="rgba(2,6,23,0.85)" stroke-width="3" paint-order="stroke" font-family="monospace" font-size="12" font-weight="bold" text-anchor="middle">${deg.toFixed(1)}°</text>`);
+            }
+          }
+          d.pts.forEach(p => {
+            parts.push(`<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="4.5" fill="#0f172a" stroke="${col}" stroke-width="2"/>`);
+          });
+        } else if (d.cPt && d.p1 && d.p2) {
+          const [cx, cy] = d.cPt, [x1, y1] = d.p1, [x2, y2] = d.p2;
+          const R = Math.max(42, Math.hypot(x1 - cx, y1 - cy));
+          const a1 = Math.atan2(y1 - cy, x1 - cx), a2 = Math.atan2(y2 - cy, x2 - cx);
+          let deg = (a1 - a2) * 180 / Math.PI;
+          while (deg < 0) deg += 360;
+          while (deg >= 360) deg -= 360;
+          if (d.mode !== 'full' && deg > 180) deg = 360 - deg;
+          if (d.mode === 'full') {
+            parts.push(`<circle cx="${cx}" cy="${cy}" r="${R.toFixed(1)}" fill="rgba(15,23,42,0.55)" stroke="${col}" stroke-width="1.5"/>`);
+          } else {
+            const ox = cx - R * Math.cos(a1), oy = cy - R * Math.sin(a1);
+            parts.push(`<path d="M ${x1.toFixed(1)} ${y1.toFixed(1)} A ${R.toFixed(1)} ${R.toFixed(1)} 0 1 0 ${ox.toFixed(1)} ${oy.toFixed(1)} Z" fill="rgba(15,23,42,0.55)" stroke="${col}" stroke-width="1.5"/>`);
+          }
+          parts.push(`<line x1="${cx}" y1="${cy}" x2="${x1}" y2="${y1}" stroke="${col}" stroke-width="${w}"/>`);
+          parts.push(`<line x1="${cx}" y1="${cy}" x2="${x2}" y2="${y2}" stroke="${col}" stroke-width="${w}"/>`);
+          if (lbg && lbg !== 'none') {
+            parts.push(`<rect x="${(cx - 30).toFixed(1)}" y="${(cy - 32).toFixed(1)}" width="60" height="22" rx="4" fill="${lbg}" stroke="${col}" stroke-width="1"/>`);
+            parts.push(`<text x="${cx.toFixed(1)}" y="${(cy - 17).toFixed(1)}" fill="${col}" font-family="monospace" font-size="13" font-weight="bold" text-anchor="middle">${deg.toFixed(1)}°</text>`);
+          } else {
+            parts.push(`<text x="${cx.toFixed(1)}" y="${(cy - 17).toFixed(1)}" fill="${col}" stroke="rgba(2,6,23,0.85)" stroke-width="3" paint-order="stroke" font-family="monospace" font-size="13" font-weight="bold" text-anchor="middle">${deg.toFixed(1)}°</text>`);
+          }
+        }
       } else if (d.t === 'point') {
         parts.push(`<circle cx="${d.x}" cy="${d.y}" r="5" fill="${col}" stroke="#020617" stroke-width="1.5"/>`);
         if (d.label) {
