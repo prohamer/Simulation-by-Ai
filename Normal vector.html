@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>光學法線練習 2.1</title>
+    <title>光學法線練習 2.4</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap');
@@ -17,6 +17,8 @@
         .shape-btn:hover { border-color: rgba(96, 165, 250, 0.6); background: rgba(59, 130, 246, 0.15); color: #fff; }
         .shape-btn.active { background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); border-color: #93c5fd; color: #fff; box-shadow: 0 0 15px rgba(59, 130, 246, 0.5); }
         .shape-icon { width: 26px; height: 26px; stroke: currentColor; fill: none; stroke-width: 2; }
+        .laser-active { background: linear-gradient(135deg, #0891b2 0%, #06b6d4 100%) !important; border-color: #67e8f9 !important; color: #fff !important; box-shadow: 0 0 15px rgba(6, 182, 212, 0.55); }
+        .launcher-active { background: linear-gradient(135deg, #ea580c 0%, #f97316 100%) !important; border-color: #fdba74 !important; color: #fff !important; box-shadow: 0 0 15px rgba(249, 115, 22, 0.55); }
         .control-panel { backdrop-filter: blur(16px); background: rgba(15, 23, 42, 0.92); border-bottom: 1px solid rgba(148, 163, 184, 0.15); }
         @media (max-width: 768px) { .shape-btn { width: 36px; height: 36px; } .shape-icon { width: 20px; height: 20px; } }
     </style>
@@ -46,7 +48,29 @@
             </div>
 
             <!-- 操作按鈕區 -->
-            <div class="flex items-center gap-2">
+            <div class="flex items-center gap-1.5 md:gap-2 flex-wrap">
+                <!-- 雷射光筆輔助按鈕 -->
+                <button id="laserToggleBtn" class="btn px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-600 rounded-lg text-xs md:text-sm font-bold flex items-center gap-1.5" title="開啟/關閉雷射光筆輔助 (按住按鈕或雷射筆才會發光)">
+                    <svg class="w-4 h-4 stroke-current fill-none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M14.5 4.5l5 5L7 22H2v-5L14.5 4.5z"/>
+                        <path d="M12 7l5 5"/>
+                        <path d="M18 2l4 4" stroke="#22d3ee"/>
+                        <circle cx="20" cy="4" r="1" fill="#22d3ee"/>
+                    </svg>
+                    <span>雷射</span>
+                </button>
+
+                <!-- 發球機輔助按鈕 -->
+                <button id="launcherToggleBtn" class="btn px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-600 rounded-lg text-xs md:text-sm font-bold flex items-center gap-1.5" title="開啟/關閉發球機輔助 (點擊發射按鈕射出球)">
+                    <svg class="w-4 h-4 stroke-current fill-none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="2" y="9" width="12" height="8" rx="2"/>
+                        <path d="M14 11h4v4h-4z"/>
+                        <circle cx="21" cy="13" r="2" fill="#fb923c" stroke="none"/>
+                        <path d="M5 17l-2 4M11 17l2 4"/>
+                    </svg>
+                    <span>發球機</span>
+                </button>
+
                 <div class="flex items-center gap-1 bg-slate-800/80 border border-slate-700 rounded-lg px-2 py-1" title="調整容許角度誤差 (3°~12°)">
                     <span class="text-xs text-slate-400 hidden sm:inline">容差</span>
                     <button id="toleranceDown" class="btn px-1.5 py-0.5 bg-slate-700 hover:bg-slate-600 rounded text-xs">−</button>
@@ -145,7 +169,6 @@
             biconcave: '雙凹透鏡'
         };
 
-        // 用於統計視窗的 SVG 圖示定義
         const ShapeSVGs = {
             circle: '<circle cx="20" cy="20" r="14"/>',
             ellipse: '<ellipse cx="20" cy="20" rx="15" ry="10"/>',
@@ -164,11 +187,22 @@
             userAngle: null,
             userLengthRatio: 0.22,
             userColor: '#fbbf24',
-            isDrawing: false,
+            dragMode: null,        // 'normal' | 'tool_source' | 'target_pending' | 'target_move' | 'laser_hold_btn'
+            dragStartPos: null,
             showingAnswer: false,
             answered: false,
             answerViewed: false,
             tolerance: 10,
+            // 輔助工具狀態（雷射光筆 & 發球機共用位置與入射角度）
+            laserEnabled: false,
+            laserFiring: false,    // 雷射筆是否正在按住發光中（放開即滅，訓練空間工作記憶）
+            launcherEnabled: false,
+            laserSide: 1,          // 1 或 -1，代表法線外側方向
+            laserIncidenceRad: 0,  // 相對於外側法線的隨機/手動入射角 (-85° ~ +85°)
+            laserDistRatio: 0.28,  // 工具距離紅點的比例
+            balls: [],             // 發球機飛行中的球陣列
+            animFrameId: null,
+            actionBtnRect: { x: 18, y: 18, w: 136, h: 42 }, // 畫布左上角互動按鈕區域
             logicalWidth: 800,
             logicalHeight: 600,
             records: JSON.parse(localStorage.getItem('optics_normal_records') || '[]')
@@ -224,6 +258,34 @@
                 return { tangentAngle, normalAngle };
             },
 
+            getOutwardSide(curveKey, t, w, h) {
+                const target = this.shapes[curveKey].getPoint(t, w, h);
+                const { normalAngle } = this.getAngles(curveKey, t, w, h);
+                const nx = Math.cos(normalAngle), ny = Math.sin(normalAngle);
+                const vx = target.x - w / 2, vy = target.y - h / 2;
+                if (this.shapes[curveKey].isClosed) {
+                    return (nx * vx + ny * vy) >= 0 ? 1 : -1;
+                }
+                return (nx * vx + ny * vy) <= 0 ? 1 : -1;
+            },
+
+            findClosestT(curveKey, px, py, w, h) {
+                const shape = this.shapes[curveKey];
+                let bestT = State.t;
+                let minDist = Infinity;
+                const steps = 250;
+                for (let i = 1; i < steps; i++) {
+                    const candidateT = i / steps;
+                    const pt = shape.getPoint(candidateT, w, h);
+                    const d = Math.hypot(pt.x - px, pt.y - py);
+                    if (d < minDist) {
+                        minDist = d;
+                        bestT = candidateT;
+                    }
+                }
+                return bestT;
+            },
+
             getBiconcavePath(w, h) {
                 const cx = w / 2, cy = h / 2;
                 const scale = (h * 0.68) / 450;
@@ -244,7 +306,6 @@
                 });
             },
 
-            // 在匯出證書 Canvas 上繪製指定形狀的小圖示 (中心點 cx, cy，尺寸約 28x28)
             drawMiniIcon(ctx, key, cx, cy, color) {
                 ctx.save();
                 ctx.translate(cx - 20, cy - 20);
@@ -494,7 +555,324 @@
         };
 
         /**
-         * 3. 畫面渲染器 (Canvas Renderer)
+         * 3. 雷射光筆與發球機輔助系統 (Laser & Ball Launcher System)
+         */
+        function randomizeToolPosition() {
+            if (!State.curveKey || State.t === null) return;
+            State.laserSide = GeometryEngine.getOutwardSide(State.curveKey, State.t, State.logicalWidth, State.logicalHeight);
+            // 隨機 0° ~ 60° 入射角
+            const deg = Math.random() * 60;
+            const sign = Math.random() < 0.5 ? 1 : -1;
+            State.laserIncidenceRad = sign * (deg * Math.PI / 180);
+            State.laserDistRatio = 0.27;
+            State.balls = [];
+            State.laserFiring = false;
+        }
+
+        function getToolPositions(target, normalAngle, w, h) {
+            const outwardNormal = State.laserSide === 1 ? normalAngle : normalAngle + Math.PI;
+            const dist = Math.min(w, h) * State.laserDistRatio;
+            const srcAngle = outwardNormal + State.laserIncidenceRad;
+            const reflAngle = outwardNormal - State.laserIncidenceRad;
+
+            const srcPos = {
+                x: target.x + dist * Math.cos(srcAngle),
+                y: target.y + dist * Math.sin(srcAngle)
+            };
+            const reflPos = {
+                x: target.x + dist * 1.25 * Math.cos(reflAngle),
+                y: target.y + dist * 1.25 * Math.sin(reflAngle)
+            };
+            return { srcPos, reflPos, srcAngle, reflAngle, outwardNormal };
+        }
+
+        function fireBall() {
+            if (!State.launcherEnabled || !State.curveKey || State.t === null) return;
+            State.balls.push({
+                progress: 0,
+                trail: []
+            });
+            startBallAnimation();
+        }
+
+        function startBallAnimation() {
+            if (State.animFrameId) return;
+            function step() {
+                if (!State.launcherEnabled || State.balls.length === 0) {
+                    State.animFrameId = null;
+                    render();
+                    return;
+                }
+                const w = State.logicalWidth, h = State.logicalHeight;
+                const target = GeometryEngine.shapes[State.curveKey].getPoint(State.t, w, h);
+                const { normalAngle } = GeometryEngine.getAngles(State.curveKey, State.t, w, h);
+                const { srcPos, reflPos } = getToolPositions(target, normalAngle, w, h);
+
+                State.balls.forEach(b => {
+                    const prevP = b.progress;
+                    b.progress += 0.028;
+
+                    let bx, by;
+                    if (b.progress <= 1) {
+                        bx = srcPos.x + (target.x - srcPos.x) * b.progress;
+                        by = srcPos.y + (target.y - srcPos.y) * b.progress;
+                    } else {
+                        if (prevP < 1) b.trail.push({ x: target.x, y: target.y });
+                        const u = (b.progress - 1) / 1.25;
+                        bx = target.x + (reflPos.x - target.x) * u;
+                        by = target.y + (reflPos.y - target.y) * u;
+                    }
+                    b.x = bx;
+                    b.y = by;
+                    b.trail.push({ x: bx, y: by });
+                    if (b.trail.length > 28) b.trail.shift();
+                });
+
+                State.balls = State.balls.filter(b => b.progress <= 2.35);
+                render();
+
+                if (State.balls.length > 0) {
+                    State.animFrameId = requestAnimationFrame(step);
+                } else {
+                    State.animFrameId = null;
+                }
+            }
+            State.animFrameId = requestAnimationFrame(step);
+        }
+
+        // 繪製雷射光筆（僅在 State.laserFiring === true 按住時才射出光束！）
+        function drawLaserRayAndPointer(ctx, target, normalAngle, w, h) {
+            const { srcPos, reflPos, srcAngle, reflAngle } = getToolPositions(target, normalAngle, w, h);
+
+            ctx.save();
+
+            if (State.laserFiring) {
+                // 按住發光狀態：顯示完整入射光與反射光束
+                ctx.shadowColor = '#22d3ee';
+                ctx.shadowBlur = 12;
+                ctx.beginPath();
+                ctx.moveTo(srcPos.x, srcPos.y);
+                ctx.lineTo(target.x, target.y);
+                ctx.strokeStyle = '#22d3ee';
+                ctx.lineWidth = 3.2;
+                ctx.stroke();
+
+                const midInX = (srcPos.x + target.x) / 2;
+                const midInY = (srcPos.y + target.y) / 2;
+                const inDir = srcAngle + Math.PI;
+                const arr = 10;
+                ctx.beginPath();
+                ctx.moveTo(midInX + arr * 0.5 * Math.cos(inDir), midInY + arr * 0.5 * Math.sin(inDir));
+                ctx.lineTo(midInX - arr * Math.cos(inDir - Math.PI / 6), midInY - arr * Math.sin(inDir - Math.PI / 6));
+                ctx.moveTo(midInX + arr * 0.5 * Math.cos(inDir), midInY + arr * 0.5 * Math.sin(inDir));
+                ctx.lineTo(midInX - arr * Math.cos(inDir + Math.PI / 6), midInY - arr * Math.sin(inDir + Math.PI / 6));
+                ctx.stroke();
+
+                ctx.beginPath();
+                ctx.moveTo(target.x, target.y);
+                ctx.lineTo(reflPos.x, reflPos.y);
+                ctx.strokeStyle = '#38bdf8';
+                ctx.lineWidth = 3;
+                ctx.stroke();
+
+                ctx.beginPath();
+                ctx.moveTo(reflPos.x, reflPos.y);
+                ctx.lineTo(reflPos.x - 12 * Math.cos(reflAngle - Math.PI / 6), reflPos.y - 12 * Math.sin(reflAngle - Math.PI / 6));
+                ctx.moveTo(reflPos.x, reflPos.y);
+                ctx.lineTo(reflPos.x - 12 * Math.cos(reflAngle + Math.PI / 6), reflPos.y - 12 * Math.sin(reflAngle + Math.PI / 6));
+                ctx.stroke();
+                ctx.shadowBlur = 0;
+
+                ctx.font = 'bold 13px "Noto Sans TC"';
+                ctx.fillStyle = '#7dd3fc';
+                ctx.textAlign = 'center';
+                ctx.fillText('反射光', reflPos.x, reflPos.y - 10);
+            } else {
+                // 未按住時：只顯示筆頭前方的短瞄準虛線，不顯示光束，訓練學生視覺記憶
+                const aimX = srcPos.x + (target.x - srcPos.x) * 0.3;
+                const aimY = srcPos.y + (target.y - srcPos.y) * 0.3;
+                ctx.beginPath();
+                ctx.moveTo(srcPos.x, srcPos.y);
+                ctx.lineTo(aimX, aimY);
+                ctx.strokeStyle = 'rgba(34, 211, 238, 0.4)';
+                ctx.lineWidth = 2;
+                ctx.setLineDash([4, 4]);
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+
+            // 繪製雷射筆機身
+            ctx.save();
+            ctx.translate(srcPos.x, srcPos.y);
+            ctx.rotate(srcAngle);
+            const bodyLen = 40, bodyW = 13;
+
+            ctx.fillStyle = '#334155';
+            ctx.strokeStyle = State.laserFiring ? '#22d3ee' : '#94a3b8';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.roundRect(0, -bodyW / 2, bodyLen, bodyW, 4);
+            ctx.fill();
+            ctx.stroke();
+
+            // 筆頭發光孔
+            ctx.fillStyle = State.laserFiring ? '#22d3ee' : '#475569';
+            ctx.fillRect(0, -bodyW / 2 + 2, 6, bodyW - 4);
+
+            // 筆身按壓開關鈕（按住時變亮綠色/青色）
+            ctx.fillStyle = State.laserFiring ? '#22d3ee' : '#f43f5e';
+            ctx.beginPath();
+            ctx.arc(18, 0, 4, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+
+            ctx.font = 'bold 13px "Noto Sans TC"';
+            ctx.fillStyle = State.laserFiring ? '#22d3ee' : '#67e8f9';
+            ctx.textAlign = 'center';
+            ctx.fillText('雷射筆(按住發光/可拖曳)', srcPos.x, srcPos.y - 20);
+
+            // 在畫布左上角繪製「🔦 按住發光」瞬時按鈕
+            const btn = State.actionBtnRect;
+            ctx.save();
+            if (State.laserFiring) {
+                ctx.shadowColor = 'rgba(34, 211, 238, 0.75)';
+                ctx.shadowBlur = 16;
+                ctx.fillStyle = '#06b6d4';
+                ctx.strokeStyle = '#cffafe';
+            } else {
+                ctx.shadowColor = 'rgba(8, 145, 178, 0.4)';
+                ctx.shadowBlur = 10;
+                ctx.fillStyle = '#0e7490';
+                ctx.strokeStyle = '#67e8f9';
+            }
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.roundRect(btn.x, btn.y, btn.w, btn.h, 10);
+            ctx.fill();
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 15px "Noto Sans TC"';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(State.laserFiring ? '⚡ 發光中...' : '🔦 按住發光', btn.x + btn.w / 2, btn.y + btn.h / 2);
+            ctx.restore();
+
+            ctx.restore();
+        }
+
+        // 繪製發球機、飛行球體與畫布上的「發射球」按鈕
+        function drawLauncherAndBalls(ctx, target, normalAngle, w, h) {
+            const { srcPos, srcAngle } = getToolPositions(target, normalAngle, w, h);
+
+            ctx.save();
+
+            const aimX = srcPos.x + (target.x - srcPos.x) * 0.35;
+            const aimY = srcPos.y + (target.y - srcPos.y) * 0.35;
+            ctx.beginPath();
+            ctx.moveTo(srcPos.x, srcPos.y);
+            ctx.lineTo(aimX, aimY);
+            ctx.strokeStyle = 'rgba(251, 146, 60, 0.45)';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([4, 4]);
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            State.balls.forEach(b => {
+                if (b.trail.length > 1) {
+                    for (let i = 1; i < b.trail.length; i++) {
+                        const alpha = (i / b.trail.length) * 0.65;
+                        ctx.beginPath();
+                        ctx.moveTo(b.trail[i - 1].x, b.trail[i - 1].y);
+                        ctx.lineTo(b.trail[i].x, b.trail[i].y);
+                        ctx.strokeStyle = `rgba(251, 191, 36, ${alpha})`;
+                        ctx.lineWidth = (i / b.trail.length) * 6;
+                        ctx.lineCap = 'round';
+                        ctx.stroke();
+                    }
+                }
+                if (Math.abs(b.progress - 1.0) < 0.08) {
+                    ctx.beginPath();
+                    ctx.arc(target.x, target.y, 18, 0, Math.PI * 2);
+                    ctx.strokeStyle = 'rgba(253, 224, 71, 0.8)';
+                    ctx.lineWidth = 3;
+                    ctx.stroke();
+                }
+                if (b.x !== undefined) {
+                    ctx.save();
+                    ctx.shadowColor = '#f59e0b';
+                    ctx.shadowBlur = 10;
+                    ctx.beginPath();
+                    ctx.arc(b.x, b.y, 7.5, 0, Math.PI * 2);
+                    ctx.fillStyle = '#fde047';
+                    ctx.fill();
+                    ctx.strokeStyle = '#ea580c';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                    ctx.restore();
+                }
+            });
+
+            ctx.save();
+            ctx.translate(srcPos.x, srcPos.y);
+            ctx.rotate(srcAngle);
+
+            ctx.fillStyle = '#475569';
+            ctx.strokeStyle = '#fb923c';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.roundRect(-4, -9, 26, 18, 3);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.fillStyle = '#1e293b';
+            ctx.strokeStyle = '#f97316';
+            ctx.lineWidth = 2.2;
+            ctx.beginPath();
+            ctx.roundRect(14, -14, 30, 28, 7);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.fillStyle = '#ef4444';
+            ctx.beginPath();
+            ctx.arc(29, 0, 5.5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = '#fca5a5';
+            ctx.lineWidth = 1.2;
+            ctx.stroke();
+            ctx.restore();
+
+            ctx.font = 'bold 13px "Noto Sans TC"';
+            ctx.fillStyle = '#fdba74';
+            ctx.textAlign = 'center';
+            ctx.fillText('發球機(可拖曳/點擊發射)', srcPos.x, srcPos.y - 22);
+
+            const btn = State.actionBtnRect;
+            ctx.save();
+            ctx.shadowColor = 'rgba(234, 88, 12, 0.45)';
+            ctx.shadowBlur = 12;
+            ctx.fillStyle = '#ea580c';
+            ctx.strokeStyle = '#fdba74';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.roundRect(btn.x, btn.y, btn.w, btn.h, 10);
+            ctx.fill();
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 15px "Noto Sans TC"';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('🎯 發射球', btn.x + btn.w / 2, btn.y + btn.h / 2);
+            ctx.restore();
+
+            ctx.restore();
+        }
+
+        /**
+         * 4. 畫面渲染器 (Canvas Renderer)
          */
         const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
@@ -564,6 +942,14 @@
             const target = shape.getPoint(State.t, w, h);
             const { tangentAngle, normalAngle } = GeometryEngine.getAngles(State.curveKey, State.t, w, h);
             const refLength = Math.min(w, h) * 0.26;
+
+            // 繪製雷射光筆或發球機輔助
+            if (State.laserEnabled) {
+                drawLaserRayAndPointer(ctx, target, normalAngle, w, h);
+            }
+            if (State.launcherEnabled) {
+                drawLauncherAndBalls(ctx, target, normalAngle, w, h);
+            }
 
             if (State.showingAnswer) {
                 const sq = 14;
@@ -635,6 +1021,7 @@
                 ctx.stroke();
             }
 
+            // 繪製紅點（入射點）
             ctx.beginPath();
             ctx.arc(target.x, target.y, 9, 0, Math.PI * 2);
             ctx.fillStyle = '#ef4444';
@@ -645,7 +1032,7 @@
         }
 
         /**
-         * 4. 互動邏輯與計分系統 (Controller)
+         * 5. 互動邏輯與計分系統 (Controller)
          */
         function setFeedback(text, color = '#94a3b8') {
             const el = document.getElementById('feedback');
@@ -661,8 +1048,16 @@
             State.showingAnswer = false;
             State.answered = false;
             State.answerViewed = false;
+            randomizeToolPosition();
             render();
-            setFeedback(`請從「${ShapeNames[State.curveKey]}」上的紅點拖曳畫出法線`, '#60a5fa');
+            if (State.launcherEnabled) {
+                fireBall();
+                setFeedback(`已發射球！可按左上角「🎯 發射球」重發，或拖曳發球機與紅點`, '#fb923c');
+            } else if (State.laserEnabled) {
+                setFeedback(`按住「🔦 按住發光」或「雷射筆」觀察光路，放開熄滅後憑記憶畫出法線`, '#38bdf8');
+            } else {
+                setFeedback(`請從「${ShapeNames[State.curveKey]}」上的紅點拖曳畫出法線`, '#60a5fa');
+            }
         }
 
         function showAnswer() {
@@ -714,7 +1109,6 @@
             render();
         }
 
-        // 統計各形狀通過次數（相容舊版僅有 shape 中文名稱的紀錄）
         function getShapePassCounts() {
             const counts = {};
             ShapeOrder.forEach(k => counts[k] = 0);
@@ -738,56 +1132,240 @@
             };
         }
 
+        function normalizeAngleDiff(angle, ref) {
+            let d = (angle - ref) % (Math.PI * 2);
+            if (d > Math.PI) d -= Math.PI * 2;
+            if (d < -Math.PI) d += Math.PI * 2;
+            return d;
+        }
+
         canvas.addEventListener('pointerdown', (e) => {
             if (!State.curveKey || State.t === null) return;
             const pos = getPointerPos(e);
-            const target = GeometryEngine.shapes[State.curveKey].getPoint(State.t, State.logicalWidth, State.logicalHeight);
-            const dist = Math.hypot(pos.x - target.x, pos.y - target.y);
+            const w = State.logicalWidth, h = State.logicalHeight;
+            const target = GeometryEngine.shapes[State.curveKey].getPoint(State.t, w, h);
+            const { normalAngle } = GeometryEngine.getAngles(State.curveKey, State.t, w, h);
 
-            if (dist < 45) {
-                if (State.answered) State.answerViewed = true;
-                State.answered = false;
-                State.isDrawing = true;
-                State.userColor = '#fbbf24';
+            // 1. 優先檢測是否點擊了畫布左上角的互動按鈕（🔦 按住發光 / 🎯 發射球）
+            if (State.laserEnabled || State.launcherEnabled) {
+                const b = State.actionBtnRect;
+                if (pos.x >= b.x && pos.x <= b.x + b.w && pos.y >= b.y && pos.y <= b.y + b.h) {
+                    if (State.launcherEnabled) {
+                        fireBall();
+                    } else if (State.laserEnabled) {
+                        State.laserFiring = true;
+                        State.dragMode = 'laser_hold_btn';
+                        canvas.setPointerCapture(e.pointerId);
+                        render();
+                    }
+                    return;
+                }
+            }
+
+            // 2. 檢測是否點擊在「雷射筆 / 發球機」機身上
+            if (State.laserEnabled || State.launcherEnabled) {
+                const { srcPos, srcAngle } = getToolPositions(target, normalAngle, w, h);
+                const bodyCenter = {
+                    x: srcPos.x + 20 * Math.cos(srcAngle),
+                    y: srcPos.y + 20 * Math.sin(srcAngle)
+                };
+                if (Math.hypot(pos.x - srcPos.x, pos.y - srcPos.y) < 34 || Math.hypot(pos.x - bodyCenter.x, pos.y - bodyCenter.y) < 34) {
+                    State.dragStartPos = pos;
+                    State.dragMode = 'tool_source';
+                    // 按住雷射筆機身時，同步點亮雷射光束，放開手即熄滅
+                    if (State.laserEnabled) {
+                        State.laserFiring = true;
+                        render();
+                    }
+                    canvas.setPointerCapture(e.pointerId);
+                    return;
+                }
+            }
+
+            // 3. 檢測是否點擊在「紅點（入射點）」上
+            const distToTarget = Math.hypot(pos.x - target.x, pos.y - target.y);
+            if (distToTarget < 42) {
+                State.dragStartPos = pos;
+                State.dragMode = (State.laserEnabled || State.launcherEnabled) ? 'target_pending' : 'normal';
                 canvas.setPointerCapture(e.pointerId);
             }
         });
 
         canvas.addEventListener('pointermove', (e) => {
-            if (!State.isDrawing || State.t === null) return;
-            const pos = getPointerPos(e);
-            const target = GeometryEngine.shapes[State.curveKey].getPoint(State.t, State.logicalWidth, State.logicalHeight);
-            const dist = Math.hypot(pos.x - target.x, pos.y - target.y);
+            if (!State.dragMode || State.t === null) return;
+            if (State.dragMode === 'laser_hold_btn') return;
 
-            if (dist > 10) {
-                State.userAngle = Math.atan2(pos.y - target.y, pos.x - target.x);
-                State.userLengthRatio = Math.min(0.42, Math.max(0.12, dist / Math.min(State.logicalWidth, State.logicalHeight)));
+            const pos = getPointerPos(e);
+            const w = State.logicalWidth, h = State.logicalHeight;
+            const target = GeometryEngine.shapes[State.curveKey].getPoint(State.t, w, h);
+            const { tangentAngle, normalAngle } = GeometryEngine.getAngles(State.curveKey, State.t, w, h);
+
+            // A. 拖曳雷射筆或發球機：動態調整位置與入射角度
+            if (State.dragMode === 'tool_source') {
+                const dx = pos.x - target.x, dy = pos.y - target.y;
+                const dist = Math.hypot(dx, dy);
+                if (dist > 25) {
+                    const pointerAngle = Math.atan2(dy, dx);
+                    const outwardNormal = State.laserSide === 1 ? normalAngle : normalAngle + Math.PI;
+                    let relAngle = normalizeAngleDiff(pointerAngle, outwardNormal);
+
+                    if (Math.abs(relAngle) > Math.PI * 0.55) {
+                        State.laserSide *= -1;
+                        const newOutward = State.laserSide === 1 ? normalAngle : normalAngle + Math.PI;
+                        relAngle = normalizeAngleDiff(pointerAngle, newOutward);
+                    }
+                    const maxRad = 85 * Math.PI / 180;
+                    State.laserIncidenceRad = Math.max(-maxRad, Math.min(maxRad, relAngle));
+                    State.laserDistRatio = Math.min(0.42, Math.max(0.15, dist / Math.min(w, h)));
+                    render();
+                }
+                return;
+            }
+
+            // B. 判斷從紅點出發的手勢：沿切線滑動 = 移動紅點；離開曲線向外拉 = 畫法線
+            if (State.dragMode === 'target_pending') {
+                const moveDist = Math.hypot(pos.x - State.dragStartPos.x, pos.y - State.dragStartPos.y);
+                if (moveDist > 12) {
+                    const moveAngle = Math.atan2(pos.y - target.y, pos.x - target.x);
+                    const cosTangent = Math.abs(Math.cos(moveAngle - tangentAngle));
+                    if (cosTangent > 0.78) {
+                        State.dragMode = 'target_move';
+                    } else {
+                        if (State.answered) State.answerViewed = true;
+                        State.answered = false;
+                        State.userColor = '#fbbf24';
+                        State.dragMode = 'normal';
+                    }
+                }
+                return;
+            }
+
+            // C. 沿曲線拖曳紅點（入射點位置）
+            if (State.dragMode === 'target_move') {
+                State.t = GeometryEngine.findClosestT(State.curveKey, pos.x, pos.y, w, h);
+                State.userAngle = null;
+                State.answered = false;
+                State.showingAnswer = false;
                 render();
+                return;
+            }
+
+            // D. 拖曳繪製法線
+            if (State.dragMode === 'normal') {
+                if (State.answered) {
+                    State.answerViewed = true;
+                    State.answered = false;
+                    State.userColor = '#fbbf24';
+                }
+                const dist = Math.hypot(pos.x - target.x, pos.y - target.y);
+                if (dist > 10) {
+                    State.userAngle = Math.atan2(pos.y - target.y, pos.x - target.x);
+                    State.userLengthRatio = Math.min(0.42, Math.max(0.12, dist / Math.min(w, h)));
+                    render();
+                }
             }
         });
 
         function finishPointer(e) {
-            if (!State.isDrawing) return;
-            State.isDrawing = false;
+            if (!State.dragMode) return;
+            const mode = State.dragMode;
             const pos = getPointerPos(e);
-            const target = GeometryEngine.shapes[State.curveKey].getPoint(State.t, State.logicalWidth, State.logicalHeight);
-            const dist = Math.hypot(pos.x - target.x, pos.y - target.y);
+            State.dragMode = null;
 
-            if (dist < 25) {
-                State.userAngle = null;
+            // 放開左上角發光鈕，立即關閉雷射光束
+            if (mode === 'laser_hold_btn') {
+                State.laserFiring = false;
                 render();
-                setFeedback('拉線距離太短，請從紅點向外拖曳長一點的線段', '#fbbf24');
+                setFeedback('雷射已熄滅，請回想剛剛的光路對稱關係，從紅點向外拉出法線', '#38bdf8');
                 return;
             }
-            checkAnswer();
+
+            if (mode === 'normal') {
+                const target = GeometryEngine.shapes[State.curveKey].getPoint(State.t, State.logicalWidth, State.logicalHeight);
+                const dist = Math.hypot(pos.x - target.x, pos.y - target.y);
+
+                if (dist < 25) {
+                    State.userAngle = null;
+                    render();
+                    setFeedback('拉線距離太短，請從紅點向外拖曳長一點的線段', '#fbbf24');
+                    return;
+                }
+                checkAnswer();
+            } else if (mode === 'tool_source') {
+                // 放開雷射筆機身時，立即熄滅光束
+                if (State.laserEnabled) {
+                    State.laserFiring = false;
+                    render();
+                }
+                const moveDist = State.dragStartPos ? Math.hypot(pos.x - State.dragStartPos.x, pos.y - State.dragStartPos.y) : 99;
+                if (State.launcherEnabled && moveDist < 8) {
+                    fireBall();
+                    return;
+                }
+                const deg = Math.abs(State.laserIncidenceRad * 180 / Math.PI).toFixed(0);
+                if (State.launcherEnabled) {
+                    setFeedback(`目前發球機入射角約 ${deg}°，可從紅點向外拖曳畫出法線`, '#fb923c');
+                } else {
+                    setFeedback(`雷射已熄滅（目前入射角約 ${deg}°），請憑記憶從紅點向外拉出法線`, '#38bdf8');
+                }
+            } else if (mode === 'target_move') {
+                const deg = Math.abs(State.laserIncidenceRad * 180 / Math.PI).toFixed(0);
+                setFeedback(`已移動入射點（目前入射角約 ${deg}°），可從紅點向外拖曳畫出法線`, '#60a5fa');
+            }
         }
 
         canvas.addEventListener('pointerup', finishPointer);
         canvas.addEventListener('pointercancel', finishPointer);
 
         /**
-         * 5. UI 綁定與統計證書匯出
+         * 6. UI 綁定與統計證書匯出
          */
+        const laserToggleBtn = document.getElementById('laserToggleBtn');
+        const launcherToggleBtn = document.getElementById('launcherToggleBtn');
+
+        // 雷射光筆切換
+        laserToggleBtn.addEventListener('click', () => {
+            State.laserEnabled = !State.laserEnabled;
+            State.laserFiring = false;
+            if (State.laserEnabled) {
+                State.launcherEnabled = false;
+                State.balls = [];
+                launcherToggleBtn.classList.remove('launcher-active');
+                randomizeToolPosition();
+                if (State.curveKey) {
+                    const deg = Math.abs(State.laserIncidenceRad * 180 / Math.PI).toFixed(0);
+                    setFeedback(`雷射已就緒（入射角 ${deg}°）！請按住左上角「🔦 按住發光」或按住雷射筆觀察光路`, '#38bdf8');
+                }
+            } else if (State.curveKey) {
+                setFeedback(`已關閉雷射輔助，請從紅點拖曳畫出法線`, '#60a5fa');
+            }
+            laserToggleBtn.classList.toggle('laser-active', State.laserEnabled);
+            render();
+        });
+
+        // 發球機切換
+        launcherToggleBtn.addEventListener('click', () => {
+            State.launcherEnabled = !State.launcherEnabled;
+            State.laserFiring = false;
+            if (State.launcherEnabled) {
+                State.laserEnabled = false;
+                laserToggleBtn.classList.remove('laser-active');
+                randomizeToolPosition();
+                if (State.curveKey) {
+                    const deg = Math.abs(State.laserIncidenceRad * 180 / Math.PI).toFixed(0);
+                    setFeedback(`發球機已開啟（入射角 ${deg}°）！點擊畫面左上角「🎯 發射球」或拖曳調整位置`, '#fb923c');
+                    fireBall();
+                }
+            } else {
+                State.balls = [];
+                if (State.curveKey) {
+                    setFeedback(`已關閉發球機輔助，請從紅點拖曳畫出法線`, '#60a5fa');
+                }
+            }
+            launcherToggleBtn.classList.toggle('launcher-active', State.launcherEnabled);
+            render();
+        });
+
         document.querySelectorAll('.shape-btn').forEach(btn => {
             btn.addEventListener('click', () => {
                 document.querySelectorAll('.shape-btn').forEach(b => b.classList.remove('active'));
@@ -846,7 +1424,6 @@
             document.getElementById('wrongCount').textContent = wrong;
             document.getElementById('accuracy').textContent = acc + '%';
 
-            // 渲染 9 種形狀通過次數小圖示與數字
             const passCounts = getShapePassCounts();
             const gridEl = document.getElementById('shapePassGrid');
             gridEl.innerHTML = ShapeOrder.map(key => {
@@ -896,16 +1473,13 @@
             outCanvas.height = 500 + listHeight;
             const c = outCanvas.getContext('2d');
 
-            // 1. 背景
             c.fillStyle = '#0f172a';
             c.fillRect(0, 0, outCanvas.width, outCanvas.height);
 
-            // 證書外框裝飾線
             c.strokeStyle = '#334155';
             c.lineWidth = 2;
             c.strokeRect(20, 20, outCanvas.width - 40, outCanvas.height - 40);
 
-            // 2. 標題與學生資訊
             c.fillStyle = '#ffffff';
             c.font = 'bold 30px "Noto Sans TC", sans-serif';
             c.textAlign = 'center';
@@ -917,7 +1491,7 @@
             const infoText = (student ? `學生：${student}  ｜  ` : '') + `時間：${now.toLocaleDateString('zh-TW')} ${now.toLocaleTimeString('zh-TW')}`;
             c.fillText(infoText, 430, 96);
 
-            // 3. 最上方：9 種形狀通過次數一覽（圖示 + 數字）
+            // 最上方：9 種形狀通過次數一覽（圖示 + 數字）
             const startX = 50;
             const boxW = 76;
             const boxH = 88;
@@ -929,25 +1503,21 @@
                 const count = passCounts[key];
                 const passed = count > 0;
 
-                // 卡片底色與邊框
                 c.fillStyle = passed ? 'rgba(6, 78, 59, 0.45)' : '#1e293b';
                 c.fillRect(bx, shapeBarY, boxW, boxH);
                 c.strokeStyle = passed ? '#10b981' : '#334155';
                 c.lineWidth = passed ? 2 : 1;
                 c.strokeRect(bx, shapeBarY, boxW, boxH);
 
-                // 繪製形狀圖示
                 const iconColor = passed ? '#34d399' : '#64748b';
                 GeometryEngine.drawMiniIcon(c, key, bx + boxW / 2, shapeBarY + 28, iconColor);
 
-                // 繪製通過次數數字
                 c.fillStyle = passed ? '#ffffff' : '#64748b';
                 c.font = 'bold 22px "Noto Sans TC", sans-serif';
                 c.textAlign = 'center';
                 c.fillText(String(count), bx + boxW / 2, shapeBarY + 74);
             });
 
-            // 4. 總計四格統計卡
             const cardsY = 228;
             const cards = [
                 { label: '總題數', val: total, color: '#60a5fa', x: 135 },
@@ -967,7 +1537,6 @@
                 c.fillText(String(card.val), card.x, cardsY + 80);
             });
 
-            // 5. 作答明細記錄
             const detailTitleY = 375;
             c.fillStyle = '#e2e8f0';
             c.font = 'bold 19px "Noto Sans TC", sans-serif';
@@ -1021,6 +1590,16 @@
             } else if (e.code === 'Enter') {
                 e.preventDefault();
                 showAnswer();
+            } else if (e.code === 'KeyL' && State.laserEnabled && !State.laserFiring) {
+                State.laserFiring = true;
+                render();
+            }
+        });
+
+        window.addEventListener('keyup', (e) => {
+            if (e.code === 'KeyL' && State.laserEnabled && State.laserFiring) {
+                State.laserFiring = false;
+                render();
             }
         });
 
