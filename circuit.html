@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>circuit simulator V4</title>
+    <title>circuit simulator V5</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
@@ -510,6 +510,7 @@
                     <p>• <b>切換開關</b>：雙擊「閘刀開關」可直接切換通路/斷路。</p>
                     <p>• <b>並聯多條導線</b>：同兩個接點之間可重複拉線，拉幾條就有幾條，電流會平分。</p>
                     <p>• <b>留下未接電線</b>：拉線途中在<b>空白處點兩下</b>，電線會停在該處 (橘色接頭)；雙擊橘點可再繼續拉線。</p>
+                    <p>• <b>拆開電線接點</b>：點一下兩條電線接在一起的橘色接頭（不要拖動），選「拔開」就能分開。</p>
                     <p>• <b>拔線重接</b>：點已接線的端子可「拔開接頭」；把<b>橘色接頭</b>拖到端子上（出現綠圈放開），或選取橘點後點一下目標端子即可接回。</p>
                     <p>• <b>快捷鍵</b>：<b>R</b> 旋轉、<b>F</b> 正負極對調、<b>Delete</b> 刪除、<b>Ctrl+Z / Ctrl+Y</b> 復原與重做。</p>
                 </div>
@@ -1581,7 +1582,8 @@
         function detachWireEndpoint(wire, endKey, comp, termId, offsetIndex = 0) {
             const termPos = getTerminalWorldPos(comp, termId);
             const outDir = getTerminalOutwardDir(comp, termId);
-            const spread = (offsetIndex % 2 === 0 ? 1 : -1) * Math.ceil(offsetIndex / 2) * 18;
+            // 一次拔開多條線時，各接頭間距大於吸附半徑，避免彼此誤接
+            const spread = (offsetIndex % 2 === 0 ? 1 : -1) * Math.ceil(offsetIndex / 2) * 40;
             const detachX = snap(termPos.x + outDir.dx * 40 + (outDir.dy !== 0 ? spread : 0));
             const detachY = snap(termPos.y + outDir.dy * 40 + (outDir.dx !== 0 ? spread : 0));
 
@@ -1613,11 +1615,17 @@
         // ---- 拔開的電線接頭 (橘色圓點) 重新接回元件 ----
         const FREE_END_SNAP_RADIUS = 30;
 
-        // 找出懸空接頭附近 (吸附半徑內) 最近的元件接點
+        // 兩個懸空接頭是否屬於同一條電線的兩端 (接在一起會變成無效的自我迴圈)
+        function sameWireEnds(a, b) {
+            return state.wires.some(w => (w.from.compId === a && w.to.compId === b) || (w.from.compId === b && w.to.compId === a));
+        }
+
+        // 找出懸空接頭附近 (吸附半徑內) 最近的接點：元件端子，或另一條電線的懸空接頭
         function findSnapTerminal(freeComp) {
             let best = null, bestDist = FREE_END_SNAP_RADIUS;
             for (const c of state.components) {
-                if (c.id === freeComp.id || c.isFreeWireEnd) continue;
+                if (c.id === freeComp.id) continue;
+                if (c.isFreeWireEnd && sameWireEnds(freeComp.id, c.id)) continue;
                 for (const t of COMP_DEFS[c.type].terminals) {
                     const pos = getTerminalWorldPos(c, t.id);
                     const dist = Math.hypot(pos.x - freeComp.x, pos.y - freeComp.y);
@@ -1638,7 +1646,9 @@
             state.components = state.components.filter(item => item.id !== freeComp.id);
             state.dragging = null;
             selectItem('component', comp.id);
-            showToast(`⚡ 電線接頭已重新插回「${comp.label || COMP_DEFS[comp.type].name}」！`);
+            showToast(comp.isFreeWireEnd
+                ? '⚡ 兩條電線的接頭已經接在一起，可以通電了！'
+                : `⚡ 電線接頭已接上「${comp.label || COMP_DEFS[comp.type].name}」！`);
         }
 
         // 拖曳懸空接頭放開時，若靠近某個元件接點就自動吸附插回
@@ -4033,6 +4043,15 @@
                     fVis.style.pointerEvents = 'none';
                     fg.appendChild(fVis);
                     fg.addEventListener('mousedown', (e) => onComponentMouseDown(e, c));
+                    // 從端子拖曳拉線、在橘色接頭上放開：直接接上這條電線的端點
+                    fg.addEventListener('mouseup', (e) => {
+                        if (!state.wiringStart || state.wiringStart.compId === c.id) return;
+                        e.stopPropagation();
+                        clearPendingWireCancel();
+                        createWire(state.wiringStart, { compId: c.id, termId: 't1' });
+                        state.wiringStart = null;
+                        render();
+                    });
                     fg.addEventListener('touchstart', (e) => onComponentTouchStart(e, c), { passive: false });
                     freeEndHandles.push(fg);
                     return;
@@ -4255,6 +4274,8 @@
                 id: comp.id,
                 offsetX: comp.x - worldPos.x,
                 offsetY: comp.y - worldPos.y,
+                startX: comp.x,
+                startY: comp.y,
                 isTouch: true
             };
         }
@@ -4371,8 +4392,21 @@
                 type: 'comp',
                 id: comp.id,
                 offsetX: comp.x - worldPos.x,
-                offsetY: comp.y - worldPos.y
+                offsetY: comp.y - worldPos.y,
+                startX: comp.x,
+                startY: comp.y
             };
+        }
+
+        // 點一下 (沒有拖動) 接著 2 條以上電線的橘色接頭：開啟接點選單，可以把電線拆開
+        function freeEndTapped(comp, drag) {
+            if (!comp || !comp.isFreeWireEnd || !drag) return false;
+            if (comp.x !== drag.startX || comp.y !== drag.startY) return false;
+            const wires = state.wires.filter(w => (w.from.compId === comp.id) || (w.to.compId === comp.id));
+            if (wires.length < 2) return false;
+            state.dragging = null;
+            openTerminalPopover(comp.id, 't1', wires);
+            return true;
         }
 
         function onWireMouseDown(e, wire) {
@@ -4400,6 +4434,7 @@
             if (e.button !== 0) return;
             e.stopPropagation();
             clearPendingWireCancel();
+            lastClick = { time: 0, key: '' }; // 點了別的東西，就不算對同一個元件雙擊
             if (taskHandleTerminalTap(compId, termId)) return; // 任務卡「指出位置」階段
 
             // 已選取懸空的電線接頭時，點一下任何接點就直接把它插上去 (不必拖曳)
@@ -4456,7 +4491,9 @@
             const listEl = document.getElementById('term-pop-wires-list');
 
             const termName = termId === 'pos' ? '正極 (+)' : (termId === 'neg' ? '負極 (−)' : '接點');
-            titleEl.textContent = `${comp.label || COMP_DEFS[comp.type].name} — ${termName}`;
+            titleEl.textContent = comp.isFreeWireEnd
+                ? `電線接頭（接著 ${connectedWires.length} 條線）`
+                : `${comp.label || COMP_DEFS[comp.type].name} — ${termName}`;
 
             connectBtn.onclick = () => {
                 state.wiringStart = { compId, termId };
@@ -4470,6 +4507,7 @@
             detachAllBtn.className = 'w-full px-2.5 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 font-bold flex items-center space-x-2 transition';
             detachAllBtn.innerHTML = `<i class="fa-solid fa-plug-circle-xmark text-amber-600"></i><span>拔開此處電線接頭 (移開不刪除)</span>`;
             detachAllBtn.onclick = () => {
+                editHistory.lock = true; // 一次拔開多條線只算一個復原步驟
                 connectedWires.forEach((w, idx) => {
                     if (w.from.compId === compId && w.from.termId === termId) {
                         detachWireEndpoint(w, 'from', comp, termId, idx);
@@ -4477,6 +4515,7 @@
                         detachWireEndpoint(w, 'to', comp, termId, idx);
                     }
                 });
+                editHistory.lock = false;
                 closeTerminalPopover();
                 showToast('🔌 已將電線接頭移開！拖曳橘色接頭靠近端子（出現綠圈時放開），或直接點一下要接的端子即可插回！');
                 render();
@@ -4682,6 +4721,7 @@
             }
             if (state.dragging && state.dragging.type === 'comp') {
                 const draggedComp = state.components.find(c => c.id === state.dragging.id);
+                if (freeEndTapped(draggedComp, state.dragging)) return;
                 if (draggedComp && draggedComp.isFreeWireEnd) {
                     if (trySnapFreeWireEnd(draggedComp)) {
                         state.dragging = null;
@@ -4883,6 +4923,11 @@
             }
             if (state.dragging && state.dragging.type === 'comp') {
                 const draggedComp = state.components.find(c => c.id === state.dragging.id);
+                if (freeEndTapped(draggedComp, state.dragging)) {
+                    render();
+                    openTerminalPopover(draggedComp.id, 't1', state.wires.filter(w => w.from.compId === draggedComp.id || w.to.compId === draggedComp.id));
+                    return;
+                }
                 if (draggedComp && draggedComp.isFreeWireEnd) {
                     trySnapFreeWireEnd(draggedComp);
                 }
