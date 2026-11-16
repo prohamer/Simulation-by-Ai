@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>circuit simulator V3</title>
+    <title>circuit simulator V4</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
@@ -85,6 +85,11 @@
         ::-webkit-scrollbar-thumb:hover {
             background: #94a3b8;
         }
+        /* 任務卡模式：隱藏會洩露答案的數值面板、鎖住元件庫 */
+        body.task-mode .task-hide { display: none !important; }
+        body.task-mode button[onclick^="addComponent"] { opacity: 0.35; }
+        #task-panel button { touch-action: manipulation; }
+        #task-panel input { -webkit-user-select: text; user-select: text; }
         /* SVG 內旋轉動畫需以元件自身外框中心為軸 (馬達扇葉) */
         .spin-self {
             transform-box: fill-box;
@@ -166,6 +171,10 @@
             </div>
             <!-- 快速場景按鈕與分類下拉選單 (參考沙盒風格：會考題區 & 實驗探索區) -->
             <div class="flex items-center space-x-1.5">
+                <button onclick="openTaskPicker()" class="px-2.5 lg:px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-bold text-xs shadow-sm flex items-center space-x-1.5 transition shrink-0" title="學習單任務卡（任務一～五）">
+                    <i class="fa-solid fa-clipboard-check"></i>
+                    <span>任務卡</span>
+                </button>
                 <button onclick="openSceneDrawer()" class="px-2.5 lg:px-3 py-1.5 rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white font-bold text-xs shadow-sm flex items-center space-x-1.5 transition shrink-0" title="開啟視覺化快速場景面板">
                     <i class="fa-solid fa-layer-group"></i>
                     <span>快速場景</span>
@@ -201,7 +210,7 @@
 
         <!-- 右側：匯出與出題功能 -->
         <div class="flex items-center space-x-1.5 lg:space-x-2 shrink-0">
-            <button onclick="openQuestionGenerator()" class="px-2.5 lg:px-3 py-2 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 text-xs font-bold flex items-center space-x-1 transition" title="自動讀取目前電路數值並產生考題文字">
+            <button onclick="openQuestionGenerator()" class="task-hide px-2.5 lg:px-3 py-2 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 text-xs font-bold flex items-center space-x-1 transition" title="自動讀取目前電路數值並產生考題文字">
                 <i class="fa-solid fa-wand-magic-sparkles"></i>
                 <span class="hidden md:inline">智慧題幹</span>
             </button>
@@ -506,7 +515,7 @@
                 </div>
 
                 <!-- 進階設定 (全域)：預設收合。模擬舊電池、舊電線、接點壓降等真實狀況 -->
-                <div class="border border-slate-300 rounded-xl overflow-hidden bg-slate-50">
+                <div class="task-hide border border-slate-300 rounded-xl overflow-hidden bg-slate-50">
                     <button onclick="toggleAdvPanel('global')" class="w-full p-2.5 px-3 flex items-center justify-between text-left bg-slate-100 hover:bg-slate-200/70 transition">
                         <div class="flex items-center space-x-2">
                             <i class="fa-solid fa-flask-vial text-slate-600 text-xs"></i>
@@ -538,12 +547,16 @@
                                 <span class="flex items-center space-x-1"><input type="number" id="adv-g-ammeterR" min="0" step="0.05" oninput="setGlobalAdv('ammeterR', this.value)" class="w-16 px-1.5 py-0.5 text-right font-bold border border-slate-300 rounded-lg"><span class="w-5 text-slate-500">Ω</span></span></label>
                             <label class="flex items-center justify-between gap-2"><span class="text-slate-700 font-medium">伏特計內阻 <span class="text-slate-400">(0=無限大)</span></span>
                                 <span class="flex items-center space-x-1"><input type="number" id="adv-g-voltmeterR" min="0" step="1" oninput="setGlobalAdv('voltmeterR', this.value)" class="w-16 px-1.5 py-0.5 text-right font-bold border border-slate-300 rounded-lg"><span class="w-5 text-slate-500">kΩ</span></span></label>
+                            <label class="flex items-center justify-between gap-2 cursor-pointer"><span class="text-slate-700 font-medium">燈絲電阻隨溫度變化 <span class="text-slate-400">(燈泡數值＝3 V 時)</span></span>
+                                <input type="checkbox" id="adv-g-filamentHot" onchange="setGlobalAdvFlag('filamentHot', this.checked)" class="rounded text-blue-600"></label>
                         </div>
                         <div class="pt-2 border-t border-slate-100 space-y-1.5">
                             <label class="flex items-center justify-between cursor-pointer"><span class="text-slate-700 font-medium">顯示電器消耗功率</span>
                                 <input type="checkbox" id="adv-g-showCompPower" onchange="setGlobalAdvFlag('showCompPower', this.checked)" class="rounded text-blue-600"></label>
                             <label class="flex items-center justify-between cursor-pointer"><span class="text-slate-700 font-medium">顯示導線耗電功率</span>
                                 <input type="checkbox" id="adv-g-showWirePower" onchange="setGlobalAdvFlag('showWirePower', this.checked)" class="rounded text-blue-600"></label>
+                            <label class="flex items-center justify-between cursor-pointer"><span class="text-slate-700 font-medium">顯示導線電流 <span class="text-slate-400">(大小與方向)</span></span>
+                                <input type="checkbox" id="adv-g-showWireCurrent" onchange="setGlobalAdvFlag('showWireCurrent', this.checked)" class="rounded text-blue-600"></label>
                         </div>
                         <div class="pt-2 border-t border-slate-100 space-y-1">
                             <button onclick="resetAllAdvOverrides()" class="w-full py-1.5 rounded-lg bg-white hover:bg-amber-50 text-amber-800 border border-amber-300 text-[11px] font-bold flex items-center justify-center space-x-1.5 transition">
@@ -640,6 +653,8 @@
                     <g id="drawings-layer"></g>
                     <!-- 6. 正在繪製中的手繪預覽層 -->
                     <g id="temp-drawing-layer"></g>
+                    <!-- 7. 任務卡標記層 (並聯起點 / 終點、短路線) -->
+                    <g id="task-layer"></g>
                 </g>
             </svg>
 
@@ -662,6 +677,14 @@
                     </div>
                 </div>
             </div>
+
+            <!-- 任務卡：預測鎖 (選好預測前鎖住畫面) -->
+            <div id="task-lock" class="hidden absolute inset-0 z-[15] bg-slate-900/25 backdrop-blur-[1px] flex items-center justify-center pointer-events-auto">
+                <div class="bg-white rounded-2xl shadow-xl px-4 py-3 text-sm font-bold text-slate-700 mx-4 text-center"><i class="fa-solid fa-lock text-amber-500 mr-1.5"></i><span id="task-lock-msg">先在任務卡選好你的預測，畫面才會解鎖</span></div>
+            </div>
+
+            <!-- 任務卡面板 (寬螢幕在右上、手機在下方) -->
+            <div id="task-panel" class="hidden absolute z-20 left-2 right-2 bottom-14 max-h-[46%] sm:left-auto sm:bottom-auto sm:top-14 sm:right-3 sm:w-[310px] sm:max-h-[calc(100%-8rem)] overflow-y-auto bg-white/97 backdrop-blur-md rounded-2xl shadow-xl border border-emerald-200 pointer-events-auto"></div>
 
             <!-- 浮動教學繪圖批註工具列 (預設位於上方、預設收合、支援滑鼠與觸控自由拖拉移動位置) -->
             <div id="drawing-toolbar" style="top: 52px; left: 12px;" class="absolute z-20 pointer-events-auto bg-white/95 backdrop-blur-md px-2 py-1.5 rounded-2xl shadow-xl border border-slate-200/90 flex items-center space-x-1 max-w-[95vw] select-none">
@@ -914,7 +937,7 @@
                 </div>
 
                 <!-- 物理量數值調整區 (依元件類型動態顯示) -->
-                <div id="prop-value-box" class="p-3.5 rounded-xl bg-blue-50/60 border border-blue-200/80 space-y-2.5">
+                <div id="prop-value-box" class="task-hide p-3.5 rounded-xl bg-blue-50/60 border border-blue-200/80 space-y-2.5">
                     <div class="flex items-center justify-between">
                         <label id="prop-value-label" class="text-xs font-bold text-blue-900">數值設定</label>
                         <span id="prop-value-unit" class="text-xs font-bold text-blue-700 bg-white px-2 py-0.5 rounded border border-blue-200">Ω</span>
@@ -982,7 +1005,7 @@
                 </div>
 
                 <!-- 考卷命題：數值顯示與挖空設定 -->
-                <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-2.5">
+                <div class="task-hide p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-2.5">
                     <label class="block text-xs font-bold text-slate-700 flex items-center space-x-1.5">
                         <i class="fa-solid fa-circle-question text-amber-500"></i>
                         <span>考題數值顯示模式（挖空出題）</span>
@@ -1002,7 +1025,7 @@
                 </div>
 
                 <!-- 模擬即時測量讀數 (教師解答參考) -->
-                <div class="p-3.5 rounded-xl bg-indigo-950 text-white space-y-2.5 shadow-inner">
+                <div class="task-hide p-3.5 rounded-xl bg-indigo-950 text-white space-y-2.5 shadow-inner">
                     <div class="flex items-center justify-between border-b border-indigo-800 pb-1.5">
                         <span class="text-xs font-bold text-indigo-200 flex items-center space-x-1.5">
                             <i class="fa-solid fa-calculator"></i>
@@ -1027,7 +1050,7 @@
                 </div>
 
                 <!-- 進階設定 (個別調整)：預設收合 -->
-                <div id="adv-comp-wrap" class="border border-slate-300 rounded-xl overflow-hidden bg-slate-50">
+                <div id="adv-comp-wrap" class="task-hide border border-slate-300 rounded-xl overflow-hidden bg-slate-50">
                     <button onclick="toggleAdvPanel('comp')" class="w-full p-2.5 px-3 flex items-center justify-between text-left bg-slate-100 hover:bg-slate-200/70 transition">
                         <span class="flex items-center space-x-2 text-xs font-bold text-slate-800"><i class="fa-solid fa-flask-vial text-slate-600"></i><span>進階設定（個別調整）</span></span>
                         <span class="flex items-center space-x-1.5">
@@ -1085,7 +1108,7 @@
                 </div>
 
                 <!-- 導線即時電流讀數 -->
-                <div class="p-3.5 rounded-xl bg-indigo-950 text-white space-y-1.5">
+                <div class="task-hide p-3.5 rounded-xl bg-indigo-950 text-white space-y-1.5">
                     <div class="flex items-center justify-between">
                         <span class="text-xs font-bold text-indigo-200">通過此導線電流：</span>
                         <span id="wire-readout-i" class="font-mono font-bold text-base text-cyan-300">0.00 A</span>
@@ -1094,7 +1117,7 @@
                 </div>
 
                 <!-- 進階設定 (個別調整)：預設收合 -->
-                <div class="border border-slate-300 rounded-xl overflow-hidden bg-slate-50">
+                <div class="task-hide border border-slate-300 rounded-xl overflow-hidden bg-slate-50">
                     <button onclick="toggleAdvPanel('wire')" class="w-full p-2.5 px-3 flex items-center justify-between text-left bg-slate-100 hover:bg-slate-200/70 transition">
                         <span class="flex items-center space-x-2 text-xs font-bold text-slate-800"><i class="fa-solid fa-flask-vial text-slate-600"></i><span>進階設定（個別調整）</span></span>
                         <span class="flex items-center space-x-1.5">
@@ -1188,6 +1211,27 @@
         </div>
     </div>
 
+    <!-- 任務卡列表 Modal -->
+    <div id="task-modal" onclick="if (event.target === this) closeTaskPicker()" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm hidden items-center justify-center z-50 p-3 sm:p-5">
+        <div class="bg-white rounded-2xl max-w-3xl w-full max-h-[88vh] shadow-2xl border border-slate-200 overflow-hidden flex flex-col">
+            <div class="px-5 py-3.5 bg-gradient-to-r from-emerald-600 to-teal-600 text-white flex items-center justify-between shrink-0">
+                <div class="flex items-center space-x-2">
+                    <i class="fa-solid fa-clipboard-check text-lg"></i>
+                    <div>
+                        <h3 class="font-bold text-sm sm:text-base">學習單任務卡</h3>
+                        <p class="text-[11px] text-emerald-100">題號與紙本學習單相同。★ 一次完成、☆ 第二次完成、● 三次以上</p>
+                    </div>
+                </div>
+                <button onclick="closeTaskPicker()" class="w-8 h-8 rounded-full hover:bg-white/20 flex items-center justify-center"><i class="fa-solid fa-xmark text-base"></i></button>
+            </div>
+            <div id="task-picker-list" class="p-4 sm:p-5 overflow-y-auto space-y-3 flex-1"></div>
+            <div class="px-5 py-2.5 border-t border-slate-100 flex items-center justify-between text-xs shrink-0">
+                <button onclick="resetTaskProgress()" class="text-slate-400 hover:text-rose-600">清除我的成績</button>
+                <button id="task-picker-exit" onclick="closeTaskPicker(); exitTaskMode()" class="hidden px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold">結束任務模式（自由操作）</button>
+            </div>
+        </div>
+    </div>
+
     <!-- 右下角 Toast 通知 -->
     <div id="toast" class="fixed bottom-5 right-5 bg-slate-900 text-white px-4 py-2.5 rounded-xl shadow-xl text-xs font-bold flex items-center space-x-2 transform translate-y-20 opacity-0 transition-all duration-300 z-50 pointer-events-none">
         <i class="fa-solid fa-circle-check text-emerald-400 text-sm"></i>
@@ -1232,8 +1276,10 @@
                 batteryR: 0,       // 電池內阻 (Ω)
                 ammeterR: 0,       // 安培計 / 檢流計內阻 (Ω)
                 voltmeterR: 0,     // 伏特計內阻 (kΩ)，0 = 理想無限大
+                filamentHot: false, // 燈絲電阻隨溫度變化 (燈泡數值＝3 V 時的電阻)
                 showCompPower: false,  // 在電器標籤顯示消耗電功率
-                showWirePower: false   // 在導線上顯示耗電功率
+                showWirePower: false,  // 在導線上顯示耗電功率
+                showWireCurrent: false // 在導線上顯示電流大小與方向
             },
             advOpen: { global: false, comp: false, wire: false },
             shortRedMin: 20
@@ -1733,6 +1779,7 @@
             };
             resetReadings();
             if (state.components.length === 0) {
+                state.termV = new Map();
                 updateShortCircuitAlert();
                 return;
             }
@@ -1754,7 +1801,14 @@
                 if (c.type === 'npn' || c.type === 'pnp' || c.type === 'nmos') { transOn[c.id] = false; transFlips[c.id] = 0; }
             });
 
-            const MAX_ITER = 12;
+            // 進階設定「燈絲電阻隨溫度變化」：鎢絲電阻 R = R(3V) × (V / 3V)^0.4，冷燈絲最低為 0.2 倍
+            const hotR = {};
+            const bulbR = (c) => {
+                const base = Math.max(0.01, c.value);
+                return state.adv.filamentHot ? (hotR[c.id] || base) : base;
+            };
+
+            const MAX_ITER = 80;
             for (let iter = 0; iter < MAX_ITER; iter++) {
                 // ---------- (1) 收集零電阻連結 ----------
                 const links = [];
@@ -1857,7 +1911,7 @@
                             break;
                         }
                         case 'bulb':
-                            addR(c, ti(c, 't1'), ti(c, 't2'), c.burned ? G_OPEN : 1 / Math.max(0.01, c.value), 'main');
+                            addR(c, ti(c, 't1'), ti(c, 't2'), c.burned ? G_OPEN : 1 / bulbR(c), 'main');
                             break;
                         case 'resistor':
                         case 'var_resistor':
@@ -2003,6 +2057,10 @@
                 // ---------- (6) 回填讀數 ----------
                 resetReadings();
                 state.shortCircuit = false;
+                // 保存各端子電位 (任務卡判斷並聯起點 / 終點時使用)
+                const termV = new Map();
+                termIdx.forEach((i, k) => termV.set(k, x[nodeOf[i]]));
+                state.termV = termV;
                 const outCurrent = {};
                 let maxShortI = 0;
                 links.forEach(l => {
@@ -2071,6 +2129,13 @@
                         } else if (!diodeOn[c.id] && dv > 1e-3 && diodeFlips[c.id] < 2) {
                             diodeOn[c.id] = true; diodeFlips[c.id]++; changed = true;
                         }
+                    } else if (c.type === 'bulb' && state.adv.filamentHot && !c.burned) {
+                        const base = Math.max(0.01, c.value);
+                        const v = Math.abs(Vt(ti(c, 't1')) - Vt(ti(c, 't2')));
+                        const target = base * Math.max(0.2, Math.pow(v / 3, 0.4));
+                        const cur = hotR[c.id] || base;
+                        const next = Math.sqrt(cur * target); // 取幾何平均做阻尼，確保收斂
+                        if (Math.abs(next - cur) / cur > 1e-6) { hotR[c.id] = next; changed = true; }
                     } else if (c.type === 'npn' || c.type === 'pnp' || c.type === 'nmos') {
                         let drive, threshold;
                         if (c.type === 'npn') { drive = Vt(ti(c, 'b')) - Vt(ti(c, 'e')); threshold = 0.55; }
@@ -2160,7 +2225,10 @@
             renderDrawings();
             updateInspectorReadouts();
             updateStats();
-            if (!state.dragging) commitHistory();
+            if (!state.dragging) {
+                commitHistory();
+                taskAfterRender(); // 任務卡：放開後才判定
+            }
         }
 
         // ==========================================
@@ -2828,6 +2896,12 @@
                 hitPath.setAttribute('stroke-width', '16');
                 hitPath.setAttribute('data-export-skip', '1');
                 hitPath.addEventListener('mousedown', (e) => onWireMouseDown(e, w));
+                // 任務中 iPad 點導線：拆下預留虛線 / 指出短路線
+                hitPath.addEventListener('touchstart', (e) => {
+                    if (!taskState.active || e.touches.length !== 1) return;
+                    state.mousePos = screenToWorld(e.touches[0].clientX, e.touches[0].clientY);
+                    if (taskHandleWireTap(w)) { e.preventDefault(); e.stopPropagation(); }
+                }, { passive: false });
                 g.appendChild(hitPath);
 
                 // 選取時的高亮外框
@@ -2851,10 +2925,31 @@
                 const wireColor = state.shortCircuit && Math.abs(w.current) > (state.shortRedMin || 20) ? '#ef4444' : (w.color || '#334155');
                 mainPath.setAttribute('stroke', wireColor);
                 mainPath.setAttribute('stroke-width', state.viewMode === 'schematic' ? '3' : '4.5');
+                if (w.removable) {
+                    // 預留給安培計的可拆線段：橘色虛線
+                    mainPath.setAttribute('stroke', '#ea580c');
+                    mainPath.setAttribute('stroke-dasharray', '8 6');
+                }
                 mainPath.setAttribute('stroke-linecap', 'round');
                 mainPath.setAttribute('stroke-linejoin', 'round');
                 mainPath.style.pointerEvents = 'none';
                 g.appendChild(mainPath);
+                if (w.removable && taskState.active) {
+                    const sc = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                    sc.setAttribute('x', mid.x);
+                    sc.setAttribute('y', mid.y - 9);
+                    sc.setAttribute('text-anchor', 'middle');
+                    sc.setAttribute('font-size', '13');
+                    sc.setAttribute('font-weight', 'bold');
+                    sc.setAttribute('fill', '#ea580c');
+                    sc.setAttribute('paint-order', 'stroke');
+                    sc.setAttribute('stroke', '#ffffff');
+                    sc.setAttribute('stroke-width', '3.5');
+                    sc.setAttribute('data-export-skip', '1');
+                    sc.style.pointerEvents = 'none';
+                    sc.textContent = '✂可拆';
+                    g.appendChild(sc);
+                }
 
                 // 電流或電子流動畫層
                 if (state.animMode !== 'none' && Math.abs(w.current) > 0.005 && !state.shortCircuit) {
@@ -2883,7 +2978,8 @@
 
                 // 考題專用：導線上的電流方向箭頭與文字標籤 (箭頭沿導線實際走向繪製，方向即電流方向)
                 const showWireP = state.adv.showWirePower && (w.power || 0) >= 0.005;
-                if (w.showArrow || w.label || showWireP) {
+                const showWireI = state.adv.showWireCurrent && Math.abs(w.current || 0) >= 0.005;
+                if (w.showArrow || w.label || showWireP || showWireI) {
                     let mx = mid.x, my = mid.y;
                     let ang = Math.atan2(p2.y - p1.y, p2.x - p1.x);
                     if (orthoPts && orthoPts.length >= 2) {
@@ -2911,7 +3007,7 @@
                         } catch (err) { /* 尚未排版時退回端點連線方向 */ }
                     }
 
-                    if (w.showArrow) {
+                    if (w.showArrow || showWireI) {
                         const dir = w.current < 0 ? ang + Math.PI : ang;
                         const head = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
                         head.setAttribute('points', '10,0 -7,-7 -3,0 -7,7');
@@ -2948,7 +3044,9 @@
                         g.appendChild(pt);
                     }
 
-                    const labelText = w.label || (w.showArrow ? 'I' : '');
+                    // 進階設定「顯示導線電流」：標出通過這條導線的電流大小 (箭頭為電流方向)
+                    const iTxt = showWireI ? `${Math.abs(w.current).toFixed(2)}A` : '';
+                    const labelText = w.label ? (iTxt ? `${w.label}＝${iTxt}` : w.label) : (iTxt || (w.showArrow ? 'I' : ''));
                     if (labelText) {
                         const txt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
                         txt.setAttribute('x', (mx + nx * 14).toFixed(1));
@@ -2956,8 +3054,8 @@
                         txt.setAttribute('text-anchor', anchor);
                         txt.setAttribute('font-size', '13');
                         txt.setAttribute('font-weight', 'bold');
-                        txt.setAttribute('font-style', 'italic');
-                        txt.setAttribute('fill', '#b91c1c');
+                        txt.setAttribute('font-style', w.label || !iTxt ? 'italic' : 'normal');
+                        txt.setAttribute('fill', w.label || !iTxt ? '#b91c1c' : '#0369a1');
                         txt.setAttribute('paint-order', 'stroke');
                         txt.setAttribute('stroke', '#ffffff');
                         txt.setAttribute('stroke-width', '4');
@@ -4281,6 +4379,7 @@
             if (e.button !== 0) return;
             e.stopPropagation();
             closeTerminalPopover();
+            if (taskHandleWireTap(wire)) return; // 任務卡「指出位置」階段
             if (isDoubleClick(`w:${wire.id}`)) {
                 onWireDoubleClick(e, wire);
                 return;
@@ -4301,6 +4400,7 @@
             if (e.button !== 0) return;
             e.stopPropagation();
             clearPendingWireCancel();
+            if (taskHandleTerminalTap(compId, termId)) return; // 任務卡「指出位置」階段
 
             // 已選取懸空的電線接頭時，點一下任何接點就直接把它插上去 (不必拖曳)
             if (!state.wiringStart && state.selectedType === 'component') {
@@ -4330,7 +4430,8 @@
                 (w.to.compId === compId && w.to.termId === termId)
             );
 
-            if (connectedWires.length > 0) {
+            // 預留拆線段的黑點：點一下直接開始拉線 (不跳出接點選單)，方便把安培計接上去
+            if (connectedWires.length > 0 && !compId.startsWith('cut_')) {
                 openTerminalPopover(compId, termId, connectedWires);
             } else {
                 // 若該接點尚未接線，直接開始拉線，同時也在旁顯示提示選單
@@ -4591,7 +4692,10 @@
             }
             const endedEdit = state.dragging && (state.dragging.type === 'comp' || state.dragging.type === 'waypoint');
             state.dragging = null;
-            if (endedEdit) commitHistory(); // 拖曳結束才記錄一筆復原點
+            if (endedEdit) {
+                commitHistory(); // 拖曳結束才記錄一筆復原點
+                taskAfterRender(); // 任務卡：放開時判定
+            }
         });
 
         // 行動裝置觸控平移、拖曳元件與雙指縮放 (Pinch-to-Zoom)
@@ -4801,6 +4905,7 @@
         window.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
                 // Esc 一律可關閉彈出視窗
+                closeTaskPicker();
                 closeQuestionGenerator();
                 closeSceneDrawer();
                 closeTerminalPopover();
@@ -4978,13 +5083,13 @@
         // ==========================================
         const ADV_NUM_KEYS = ['wireR', 'contactR', 'batteryR', 'ammeterR', 'voltmeterR'];
         const ADV_PRESETS = {
-            ideal: { wireR: 0, contactR: 0, batteryR: 0, ammeterR: 0, voltmeterR: 0 },
-            real: { wireR: 0.05, contactR: 0.02, batteryR: 0.5, ammeterR: 0.1, voltmeterR: 10 },
-            old: { wireR: 0.3, contactR: 0.2, batteryR: 2, ammeterR: 0.1, voltmeterR: 10 }
+            ideal: { wireR: 0, contactR: 0, batteryR: 0, ammeterR: 0, voltmeterR: 0, filamentHot: false },
+            real: { wireR: 0.05, contactR: 0.02, batteryR: 0.5, ammeterR: 0.1, voltmeterR: 10, filamentHot: true },
+            old: { wireR: 0.3, contactR: 0.2, batteryR: 2, ammeterR: 0.1, voltmeterR: 10, filamentHot: true }
         };
 
         function advIsNonIdeal() {
-            return ADV_NUM_KEYS.some(k => state.adv[k] > 0);
+            return ADV_NUM_KEYS.some(k => state.adv[k] > 0) || !!state.adv.filamentHot;
         }
 
         function countAdvOverrides() {
@@ -5000,7 +5105,7 @@
                     if (el) el.value = state.adv[k];
                 });
             }
-            ['showCompPower', 'showWirePower'].forEach(k => {
+            ['showCompPower', 'showWirePower', 'showWireCurrent', 'filamentHot'].forEach(k => {
                 const el = document.getElementById(`adv-g-${k}`);
                 if (el) el.checked = !!state.adv[k];
             });
@@ -5020,6 +5125,7 @@
 
         function setGlobalAdvFlag(key, checked) {
             state.adv[key] = !!checked;
+            syncGlobalAdvUI(true);
             render();
         }
 
@@ -5190,6 +5296,10 @@
 
         // 新增元件至畫布中央
         function addComponent(type) {
+            if (taskState.active) {
+                showToast('任務中請使用畫布上已經準備好的器材；要自由操作請先結束任務');
+                return;
+            }
             const def = COMP_DEFS[type];
             const rect = svgEl.getBoundingClientRect();
             const centerWorld = screenToWorld(rect.left + rect.width / 2, rect.top + rect.height / 2);
@@ -5695,8 +5805,11 @@
             } else {
                 const card = document.getElementById('scene-info-card');
                 const cardOpen = card && !card.classList.contains('hidden');
-                const padL = 16, padT = 52, padB = 58;
-                const padR = cardOpen && rect.width >= 760 ? 340 : 16;
+                const tp = document.getElementById('task-panel');
+                const taskOpen = !!tp && !tp.classList.contains('hidden') && !taskState.collapsed;
+                const padL = 16, padT = 52;
+                const padB = taskOpen && rect.width < 640 ? Math.round(rect.height * 0.46) + 60 : 58;
+                const padR = taskOpen && rect.width >= 640 ? 330 : (cardOpen && rect.width >= 640 ? 360 : 16);
                 const availW = Math.max(120, rect.width - padL - padR);
                 const availH = Math.max(120, rect.height - padT - padB);
                 const bw = b.maxX - b.minX, bh = b.maxY - b.minY;
@@ -5712,6 +5825,10 @@
         }
 
         function clearCanvas() {
+            if (taskState.active) {
+                showToast('任務中請用任務卡上的「重設這一題」');
+                return;
+            }
             state.components = [];
             state.wires = [];
             state.drawings = [];
@@ -5939,6 +6056,7 @@
         }
 
         function loadPreset(presetName) {
+            if (taskState.active) exitTaskMode(true); // 載入快速場景時結束任務模式
             state.components = [];
             state.wires = [];
             state.drawings = [];
@@ -6320,6 +6438,7 @@
                 if (a.contactR > 0) advParts.push(`每個接點電阻 ${a.contactR} Ω`);
                 if (a.ammeterR > 0) advParts.push(`安培計內阻 ${a.ammeterR} Ω`);
                 if (a.voltmeterR > 0) advParts.push(`伏特計內阻 ${a.voltmeterR} kΩ`);
+                if (a.filamentHot) advParts.push('燈絲電阻隨溫度變化');
                 const nOver = countAdvOverrides();
                 const advNote = advParts.length === 0 && nOver === 0
                     ? '導線與電池內阻忽略不計'
@@ -6492,7 +6611,7 @@
 
             // 移除只在互動時需要的圖層：電流動畫 (匯出後沒有 CSS 會變成一條實心黃線)、點擊感應區、拉線預覽
             cloneSvg.querySelectorAll('[data-export-skip]').forEach(el => el.remove());
-            ['#temp-wire-layer', '#temp-drawing-layer'].forEach(sel => {
+            ['#temp-wire-layer', '#temp-drawing-layer', '#task-layer'].forEach(sel => {
                 const el = cloneSvg.querySelector(sel);
                 if (el) el.innerHTML = '';
             });
@@ -6611,6 +6730,1363 @@
         }
 
         // ==========================================
+        // 11. 學習單任務卡（任務一～任務五，對應老師的紙本學習單）
+        //     流程：(預測) → 動手接線 / 量測 → 放開時自動判定 → (指出位置) → 結論題 → 完成
+        // ==========================================
+        const TASK_BULB_R = 7.5;          // 任務用燈泡：接 3 V 時 0.40 A，接 1.5 V 時 0.20 A
+        const TASK_STORE_KEY = 'circuitLabTaskProgress_v1';
+        const T_RED = '#dc2626', T_BLK = '#334155';
+        const T_SHORT_MSG = '電源短路了！電池的兩極被電線（或安培計）直接接在一起，電流非常大。檢查有沒有電線直接從電池 + 接到電池 −。';
+        const uniq = (arr) => [...new Set(arr)];
+
+        function loadTaskProgress() {
+            try {
+                const raw = localStorage.getItem(TASK_STORE_KEY);
+                const p = raw ? JSON.parse(raw) : null;
+                if (p && typeof p === 'object') return { tasks: p.tasks || {}, gates: p.gates || {}, cardData: p.cardData || {} };
+            } catch (err) { /* 無法讀取時使用空白紀錄 */ }
+            return { tasks: {}, gates: {}, cardData: {} };
+        }
+        function saveTaskProgress() {
+            try { localStorage.setItem(TASK_STORE_KEY, JSON.stringify(taskProgress)); } catch (err) { /* 無痕模式等情況無法儲存 */ }
+        }
+        let taskProgress = loadTaskProgress();
+
+        const taskState = {
+            active: false, card: 0, idx: 0, phase: 'work', fills: {}, inputs: {}, inputDraft: {}, inputMsg: '',
+            marks: [], markMsg: '', feedback: '', condRes: [], hintLevel: 0, attempts: 1,
+            quizSel: [], quizWrong: [], quizMsg: '', predict: null, gateMsg: '',
+            savedAdv: null, collapsed: false, extraOn: false, extraReading: '', startSnap: '', data: {}, lastSig: ''
+        };
+
+        // ---------- 器材建構 ----------
+        function tComp(type, id, x, y, o) {
+            const d = COMP_DEFS[type];
+            return Object.assign({ id, type, x, y, rotation: 0, label: d.defaultLabel, value: d.defaultValue, valueDisplay: 'hide', closed: true, meterRangeIndex: 2 }, o || {});
+        }
+        const tBat = (id, x, y, label) => tComp('battery', id, x, y, { label, value: 1.5, valueDisplay: 'show' });
+        const tBulb = (id, x, y, label) => tComp('bulb', id, x, y, { label, value: TASK_BULB_R });
+        const tRes = (id, x, y, value) => tComp('resistor', id, x, y, { label: '電阻', value });
+        let tWireN = 0;
+        const tWire = (a, at, b, bt, color) => ({ id: `tw${++tWireN}`, from: { compId: a, termId: at }, to: { compId: b, termId: bt }, color: color || T_BLK, waypoints: [], showArrow: false, label: '', current: 0 });
+
+        function tBatteries(kind) {
+            if (kind === 'series') return { c: [tBat('bat1', 330, 440, '電池1'), tBat('bat2', 470, 440, '電池2')], w: [tWire('bat1', 'pos', 'bat2', 'neg', T_RED)], neg: ['bat1', 'neg'], pos: ['bat2', 'pos'] };
+            if (kind === 'parallel') return { c: [tBat('bat1', 400, 430, '電池1'), tBat('bat2', 400, 520, '電池2')], w: [tWire('bat1', 'neg', 'bat2', 'neg'), tWire('bat1', 'pos', 'bat2', 'pos', T_RED)], neg: ['bat1', 'neg'], pos: ['bat1', 'pos'] };
+            return { c: [tBat('bat1', 400, 430, '電池')], w: [], neg: ['bat1', 'neg'], pos: ['bat1', 'pos'] };
+        }
+
+        // 依版型接好導線 (電流方向：電池正極 → 負載 t2 → t1 → 電池負極)
+        // 並聯處用分岔節點 (黑點) 接線，讓每一顆燈泡都有「自己的」一段電線
+        // cuts：要接安培計的位置，改成「黑點—橘色虛線—黑點」，學生點一下虛線就能拆下，再把安培計接在兩個黑點之間
+        const tJunc = (id, x, y) => tComp('junction', id, x, y, { label: '' });
+        function tCircuit(batKind, layout, loads, cuts) {
+            cuts = cuts || [];
+            const b = tBatteries(batKind);
+            const c = [...b.c, ...loads];
+            const w = [];
+            const find = (id) => c.find(o => o.id === id);
+            const tpos = (ref) => getTerminalWorldPos(find(ref[0]), ref[1]);
+            const W = (p, q, col, tag) => {
+                if (!tag || !cuts.includes(tag)) { w.push(tWire(p[0], p[1], q[0], q[1], col)); return; }
+                const P1 = tpos(p), P2 = tpos(q);
+                const at = (f) => ({ x: Math.round((P1.x + (P2.x - P1.x) * f) / 10) * 10, y: Math.round((P1.y + (P2.y - P1.y) * f) / 10) * 10 });
+                const ja = `cut_${tag}_a`, jb = `cut_${tag}_b`;
+                const A1 = at(0.28), B1 = at(0.72);
+                c.push(tJunc(ja, A1.x, A1.y), tJunc(jb, B1.x, B1.y));
+                w.push(tWire(p[0], p[1], ja, 't1', col));
+                w.push(Object.assign(tWire(ja, 't1', jb, 't1', '#ea580c'), { removable: true, cutTag: tag }));
+                w.push(tWire(jb, 't1', q[0], q[1], col));
+            };
+            if (batKind === 'series') {
+                if (cuts.includes('bat')) { find('bat1').x = 280; find('bat2').x = 520; }
+                W(['bat1', 'pos'], ['bat2', 'neg'], T_RED, 'bat');
+            } else {
+                b.w.forEach(x => w.push(x));
+            }
+            const J = (id) => [id, 't1'];
+            const [A, B, C, D] = loads.map(o => o.id);
+            const P = b.pos, N = b.neg;
+            const fork = (ids, jl, jr, xl, xr) => {
+                // ids 這幾顆並聯：左端都接到 jl、右端都接到 jr
+                const ys = ids.map(id => find(id).y);
+                const x0 = find(ids[0]).x;
+                const ym = Math.round((Math.min(...ys) + Math.max(...ys)) / 2 / 10) * 10;
+                c.push(tJunc(jl, xl !== undefined ? xl : x0 - 150, ym), tJunc(jr, xr !== undefined ? xr : x0 + 150, ym));
+                ids.forEach(id => { W([id, 't1'], J(jl), T_BLK, `${id}-L`); W([id, 't2'], J(jr), T_RED, `${id}-R`); });
+            };
+            switch (layout) {
+                case 'one': W(P, [A, 't2'], T_RED, 'P-A'); W([A, 't1'], N, T_BLK, 'A-N'); break;
+                case 'series2': W(P, [B, 't2'], T_RED, 'P-B'); W([B, 't1'], [A, 't2'], T_BLK, 'B-A'); W([A, 't1'], N, T_BLK, 'A-N'); break;
+                case 'par2': fork([A, B], 'jL', 'jR'); W(P, J('jR'), T_RED, 'P-jR'); W(J('jL'), N, T_BLK, 'jL-N'); break;
+                case 'par2ser1': fork([A, B], 'jL', 'jR'); W(J('jR'), [C, 't1'], T_BLK, 'jR-C'); W(P, [C, 't2'], T_RED, 'P-C'); W(J('jL'), N, T_BLK, 'jL-N'); break;
+                case 'par3': fork([A, B, C], 'jL', 'jR'); W(P, J('jR'), T_RED, 'P-jR'); W(J('jL'), N, T_BLK, 'jL-N'); break;
+                case 'par3ab':
+                    // 甲、乙先在 jR1 合流，再和丙在 jR 匯合：jR1→jR 這一段只通往甲、乙兩顆燈泡
+                    fork([A, B], 'jL', 'jR1', 250, 550);
+                    W([C, 't1'], J('jL'), T_BLK, `${C}-L`);
+                    c.push(tJunc('jR', 690, 260));
+                    W(J('jR1'), J('jR'), T_RED, 'pair');
+                    W([C, 't2'], J('jR'), T_RED, `${C}-R`);
+                    W(P, J('jR'), T_RED, 'P-jR'); W(J('jL'), N, T_BLK, 'jL-N');
+                    break;
+                case 'groups': fork([A, B], 'jA', 'jB'); fork([C, D], 'jC', 'jD'); W(J('jB'), J('jC'), T_BLK, 'jB-jC'); W(P, J('jD'), T_RED, 'P-jD'); W(J('jA'), N, T_BLK, 'jA-N'); break;
+            }
+            return { c, w };
+        }
+        const TL = {
+            one: () => [tBulb('L1', 400, 200, '甲')],
+            series2: () => [tBulb('L1', 320, 200, '甲'), tBulb('L2', 480, 200, '乙')],
+            par2: () => [tBulb('L1', 400, 160, '甲'), tBulb('L2', 400, 280, '乙')],
+            par2ser1: () => [tBulb('L1', 300, 160, '甲'), tBulb('L2', 300, 280, '乙'), tBulb('L3', 620, 220, '丙')],
+            par3: () => [tBulb('L1', 400, 130, '甲'), tBulb('L2', 400, 230, '乙'), tBulb('L3', 400, 330, '丙')],
+            groups: () => [tBulb('L1', 220, 160, '甲'), tBulb('L2', 220, 280, '乙'), tBulb('L3', 640, 160, '丙'), tBulb('L4', 640, 280, '丁')]
+        };
+        // 任務一：器材擺好但尚未接線
+        function tLoose(n) {
+            const c = [tBat('bat1', 330, 440, '電池1'), tBat('bat2', 470, 440, '電池2')];
+            if (n === 1) c.push(tBulb('L1', 400, 220, '甲'));
+            else c.push(tBulb('L1', 300, 200, '甲'), tBulb('L2', 500, 200, '乙'));
+            if (n > 2) c.push(tBulb('L3', 400, 310, '丙'));
+            return { c, w: [] };
+        }
+        // 加上尚未接線的電表 (擺在電路右側)
+        function tMeters(circ, list) {
+            const slots = [[730, 150], [730, 320], [880, 150], [880, 320]];
+            const count = { A: 0, V: 0 };
+            list.forEach(([kind, label], i) => {
+                const [x, y] = slots[i];
+                const id = `${kind}${++count[kind]}`;
+                circ.c.push(kind === 'V'
+                    ? tComp('voltmeter', id, x, y, { label, value: 1e7, valueDisplay: 'show' })
+                    : tComp('ammeter', id, x, y, { label, value: 0.0001, valueDisplay: 'show' }));
+            });
+            return circ;
+        }
+        function taskResistorValue() {
+            const d = taskProgress.cardData[5];
+            return d && d.R ? d.R : 10;
+        }
+
+        // ---------- 電路拓樸分析 (導線、閉合開關、安培計視為同一節點；openId 指定的電表保持斷開) ----------
+        const TOPO_SKIP = ['junction', 'voltmeter', 'ammeter', 'galvanometer', 'probe_point', 'ground', 'switch', 'spdt_switch', 'fuse'];
+        function buildTopo(openId) {
+            const parent = new Map();
+            const key = (id, t) => `${id}:${t}`;
+            state.components.forEach(c => COMP_DEFS[c.type].terminals.forEach(t => parent.set(key(c.id, t.id), key(c.id, t.id))));
+            const find = (k) => {
+                if (!parent.has(k)) return k;
+                while (parent.get(k) !== k) { parent.set(k, parent.get(parent.get(k))); k = parent.get(k); }
+                return k;
+            };
+            const union = (a, b) => {
+                if (!parent.has(a) || !parent.has(b)) return;
+                const ra = find(a), rb = find(b);
+                if (ra !== rb) parent.set(ra, rb);
+            };
+            state.wires.forEach(w => union(key(w.from.compId, w.from.termId), key(w.to.compId, w.to.termId)));
+            state.components.forEach(c => {
+                if (c.id === openId) return;
+                if (c.type === 'switch' && c.closed) union(key(c.id, 't1'), key(c.id, 't2'));
+                else if (c.type === 'spdt_switch') union(key(c.id, 'c'), key(c.id, c.closed ? 'a' : 'b'));
+                else if (c.type === 'ammeter') union(key(c.id, 'neg'), key(c.id, 'pos'));
+                else if (c.type === 'galvanometer' || c.type === 'probe_point') union(key(c.id, 't1'), key(c.id, 't2'));
+                else if (c.type === 'fuse' && !c.blown) union(key(c.id, 't1'), key(c.id, 't2'));
+            });
+            const loads = new Map();
+            state.components.forEach(c => {
+                if (TOPO_SKIP.includes(c.type) || c.isFreeWireEnd) return;
+                COMP_DEFS[c.type].terminals.forEach(t => {
+                    const n = find(key(c.id, t.id));
+                    if (!loads.has(n)) loads.set(n, []);
+                    loads.get(n).push(c.id);
+                });
+            });
+            return {
+                node: (id, t) => find(key(id, t)),
+                loadsAt: (id, t) => loads.get(find(key(id, t))) || []
+            };
+        }
+
+        function meterConnected(m) {
+            const has = (t) => state.wires.some(w => (w.from.compId === m.id && w.from.termId === t) || (w.to.compId === m.id && w.to.termId === t));
+            return has('neg') && has('pos');
+        }
+        function meterReading(m) {
+            return m.type === 'voltmeter' ? (m.voltageDrop || 0) : Math.abs(m.current || 0);
+        }
+        function meterOverloaded(m) {
+            const d = COMP_DEFS[m.type];
+            const r = d.ranges[m.meterRangeIndex !== undefined ? m.meterRangeIndex : 2] || d.ranges[2];
+            return meterReading(m) > r.maxVal * 1.02;
+        }
+
+        // 判定用的輔助函式集合
+        function taskCtx() {
+            const byId = new Map(state.components.map(c => [c.id, c]));
+            const topo = buildTopo(null);
+            const terms = (id) => { const c = byId.get(id); return c ? COMP_DEFS[c.type].terminals.map(t => t.id) : []; };
+            const x = {
+                has: (id) => byId.has(id),
+                lit: (id) => { const c = byId.get(id); return !!c && !c.burned && (c.power || 0) > 0.02; },
+                dark: (id) => !x.lit(id),
+                V: (id) => Math.abs((byId.get(id) || {}).voltageDrop || 0),
+                I: (id) => Math.abs((byId.get(id) || {}).current || 0),
+                near: (a, b, tol) => Math.abs(a - b) <= (tol === undefined ? 0.08 : tol),
+                node: (id, t) => topo.node(id, t),
+                nodes: (id) => terms(id).map(t => topo.node(id, t)),
+                bulbs: () => state.components.filter(c => c.type === 'bulb').map(c => c.id),
+                // 兩顆電池串聯 (一顆的 + 接另一顆的 −，接點上沒有其他元件)
+                batSeries() {
+                    if (!byId.has('bat1') || !byId.has('bat2')) return false;
+                    const a = topo.node('bat1', 'pos') === topo.node('bat2', 'neg');
+                    const b = topo.node('bat1', 'neg') === topo.node('bat2', 'pos');
+                    if (a === b) return false;
+                    return (a ? topo.loadsAt('bat1', 'pos') : topo.loadsAt('bat1', 'neg')).length === 2;
+                },
+                // 兩顆電池並聯 (+ 接 +、− 接 −)
+                batParallel() {
+                    if (!byId.has('bat1') || !byId.has('bat2')) return false;
+                    return topo.node('bat1', 'pos') === topo.node('bat2', 'pos') &&
+                           topo.node('bat1', 'neg') === topo.node('bat2', 'neg') &&
+                           topo.node('bat1', 'pos') !== topo.node('bat1', 'neg');
+                },
+                parallel(a, b) {
+                    if (!byId.has(a) || !byId.has(b)) return false;
+                    const [a1, a2] = x.nodes(a), [b1, b2] = x.nodes(b);
+                    return a1 !== a2 && ((a1 === b1 && a2 === b2) || (a1 === b2 && a2 === b1));
+                },
+                // a、b 串聯：有一個接點只連著 a 與 b 兩個元件 (中間不分岔)
+                series(a, b) {
+                    if (!byId.has(a) || !byId.has(b)) return false;
+                    return terms(a).some(t => { const ld = topo.loadsAt(a, t); return ld.length === 2 && ld.includes(b); });
+                },
+                // 燈泡兩端被電線接通 (短路)，且仍接在電路中
+                shortedInCircuit(id) {
+                    if (!byId.has(id)) return false;
+                    const [n1, n2] = x.nodes(id);
+                    return n1 === n2 && topo.loadsAt(id, terms(id)[0]).some(o => o !== id);
+                },
+                findPair(fn) {
+                    const b = x.bulbs();
+                    for (let i = 0; i < b.length; i++) for (let j = i + 1; j < b.length; j++) {
+                        if (fn(b[i], b[j])) return [b[i], b[j], b.find(k => k !== b[i] && k !== b[j])];
+                    }
+                    return null;
+                },
+                // ---- 電表 ----
+                att(m, t) {
+                    const k = `${m.id}:${t}`, out = new Set();
+                    state.wires.forEach(w => {
+                        const a = `${w.from.compId}:${w.from.termId}`, b = `${w.to.compId}:${w.to.termId}`;
+                        if (a === k) out.add(b);
+                        if (b === k) out.add(a);
+                    });
+                    return out;
+                },
+                // 伏特計兩條線直接接在 p、q 兩個接點上
+                across(m, p, q) {
+                    const P = x.att(m, 'pos'), N = x.att(m, 'neg');
+                    const kp = p.join(':'), kq = q.join(':');
+                    return (P.has(kp) && N.has(kq)) || (P.has(kq) && N.has(kp));
+                },
+                acrossComp(m, id) { const t = terms(id); return t.length === 2 && x.across(m, [id, t[0]], [id, t[1]]); },
+                // 安培計兩側各連著哪些元件 (把這個安培計當作斷開)
+                sides(m) {
+                    const tp = buildTopo(m.id);
+                    return ['neg', 'pos'].map(t => uniq(tp.loadsAt(m.id, t)));
+                },
+                seriesSet(m, ids) { return x.sides(m).some(s => s.length === ids.length && ids.every(id => s.includes(id))); }
+            };
+            return x;
+        }
+
+        const vAcross = (id) => (m, x) => x.acrossComp(m, id);
+        const vAcrossAny = (ids) => (m, x) => ids.some(id => x.acrossComp(m, id));
+        const vPair = (p, q) => (m, x) => x.across(m, p, q);
+        const aSeries = (ids) => (m, x) => x.seriesSet(m, ids);
+        const aSeriesAny = (list) => (m, x) => list.some(ids => x.seriesSet(m, ids));
+        const BAT_ENDS = [['bat1', 'neg'], ['bat2', 'pos']];
+        const otherOf = (pair, id) => (id === pair[0] ? pair[1] : pair[0]);
+
+        // ---------- 任務內容 ----------
+        const TASK_CARDS = [
+            {
+                title: '任務一：線路連接',
+                rule: '用 2 顆電池、2 顆燈泡練習串聯與並聯（進階題多 1 顆燈泡）。電池不可並聯反接。',
+                tasks: [
+                    {
+                        id: '1-1', title: '串聯 2 顆電池，加上 1 顆燈泡',
+                        goal: '把 2 顆電池串聯，再接上 1 顆燈泡，讓燈泡發亮。',
+                        setup: () => tLoose(1),
+                        conds: [
+                            { t: '兩顆電池串聯（一顆的 + 接另一顆的 −）', ok: x => x.batSeries(), bad: '兩顆電池要串聯：把一顆電池的正極（+）接到另一顆的負極（−）。' },
+                            { t: '燈泡發亮', ok: x => x.lit('L1'), bad: '燈泡還沒亮：電流要從電池正極出發、經過燈泡、再回到電池負極，繞成完整的一圈。' },
+                            { t: '燈泡得到 2 顆電池的總電壓', ok: x => x.near(x.V('L1'), 3.0), bad: '燈泡只得到 1 顆電池的電壓，檢查 2 顆電池是不是都串在這一圈裡。' }
+                        ],
+                        quiz: { q: '和只接 1 顆電池相比，串聯 2 顆電池時燈泡會？', opts: ['比較暗', '一樣亮', '比較亮'], ans: [2] },
+                        hints: ['串聯就是「排成一列、頭接尾」，電流只有一條路可以走。', '先把電池1 的「+」接到電池2 的「−」，再從電池組兩端各拉一條線到燈泡的兩個接點。'],
+                        explain: '串聯電池的總電壓是各電池電壓相加：1.5 V + 1.5 V = 3 V，所以燈泡比只接 1 顆電池時亮。'
+                    },
+                    {
+                        id: '1-2', title: '串聯 2 顆電池，再串聯 2 顆燈泡',
+                        goal: '電池串聯，兩顆燈泡也串聯，讓兩顆燈泡都發亮。',
+                        setup: () => tLoose(2),
+                        conds: [
+                            { t: '兩顆電池串聯', ok: x => x.batSeries(), bad: '兩顆電池要串聯：一顆的 + 接另一顆的 −。' },
+                            { t: '兩顆燈泡串聯（中間不分岔）', ok: x => x.series('L1', 'L2'), bad: '兩顆燈泡要串聯：電流先經過一顆、再經過另一顆，中間不能分岔。' },
+                            { t: '兩顆燈泡都亮', ok: x => x.lit('L1') && x.lit('L2'), bad: '有燈泡沒亮，檢查每一顆燈泡是否都接在這一圈上。' },
+                            { t: '兩顆燈泡平分電池的總電壓', ok: x => x.near(x.V('L1'), 1.5) && x.near(x.V('L2'), 1.5), bad: '電壓分配不對，確認電池串聯、燈泡也串聯。' }
+                        ],
+                        quiz: { q: '和第 1 題（只有 1 顆燈泡）相比，每顆燈泡會？', opts: ['比較亮', '比較暗', '一樣亮'], ans: [1] },
+                        hints: ['串聯的燈泡像排隊過同一座橋，電流依序流過每一顆。', '電池串好後：電池組 + → 乙的一端，乙的另一端 → 甲，甲的另一端 → 電池組 −。'],
+                        explain: '兩顆燈泡串聯，平分 3 V，每顆只有 1.5 V，所以比第 1 題暗；而且只要一顆壞掉，另一顆也會熄滅。'
+                    },
+                    {
+                        id: '1-3', title: '並聯 2 顆電池，加上 1 顆燈泡',
+                        goal: '把 2 顆電池並聯，再接上 1 顆燈泡，讓燈泡發亮。',
+                        setup: () => tLoose(1),
+                        conds: [
+                            { t: '兩顆電池並聯（+ 接 +、− 接 −）', ok: x => x.batParallel(), bad: '兩顆電池要並聯：正極接正極、負極接負極。' },
+                            { t: '燈泡發亮', ok: x => x.lit('L1'), bad: '燈泡還沒亮：把並聯好的電池兩端，分別接到燈泡的兩個接點。' },
+                            { t: '兩顆電池都有供電', ok: x => x.I('bat1') > 0.01 && x.I('bat2') > 0.01, bad: '有一顆電池沒有接進迴路，兩顆都要並聯在燈泡兩端。' }
+                        ],
+                        quiz: { q: '並聯 2 顆電池和只用 1 顆電池相比，燈泡亮度？', opts: ['比較亮', '一樣亮', '比較暗'], ans: [1] },
+                        hints: ['並聯就是「並排」：兩顆電池的正極連在一起、負極也連在一起。', '注意：不可以把一顆的 + 接到另一顆的 −，那樣並聯會短路。'],
+                        explain: '並聯電池的電壓和 1 顆電池一樣（1.5 V），所以燈泡亮度一樣；但兩顆電池分擔電流，可以用比較久。實驗結束要拆開，電池不要並聯存放。'
+                    },
+                    {
+                        id: '1-4', title: '並聯 2 顆電池，再並聯 2 顆燈泡',
+                        goal: '電池並聯、燈泡也並聯，兩顆燈泡都發亮後，指出並聯的起點與終點。',
+                        setup: () => tLoose(2),
+                        conds: [
+                            { t: '兩顆電池並聯', ok: x => x.batParallel(), bad: '兩顆電池要並聯：正極接正極、負極接負極。' },
+                            { t: '兩顆燈泡並聯', ok: x => x.parallel('L1', 'L2'), bad: '兩顆燈泡要並聯：兩顆燈泡的兩端分別接在一起，再接到電池兩端。' },
+                            { t: '兩顆燈泡都亮', ok: x => x.lit('L1') && x.lit('L2'), bad: '有燈泡沒亮，檢查每一顆燈泡是否都接在電池兩端。' }
+                        ],
+                        mark: { kind: 'nodes', prompt: '點一下「並聯的起點」和「終點」（電流分岔與匯合的地方），點端子或電線都可以。', targets: x => x.nodes('L1'), wrong: '這裡電流沒有分岔，不是並聯的起點或終點，再找找看。' },
+                        quiz: { q: '如果其中一顆燈泡燒壞了，另一顆會？', opts: ['跟著熄滅', '仍然亮著', '變得更亮'], ans: [1] },
+                        hints: ['並聯時每顆燈泡各自有一條路，像兩條平行的車道。', '先把甲、乙的左端連在一起、右端也連在一起，再把這兩個連接處分別接到電池的 + 和 −。'],
+                        explain: '並聯時電流在起點分岔、到終點匯合，每顆燈泡都直接接在電池兩端，所以一顆燒壞，另一顆照樣亮。家裡的電器都是並聯。'
+                    },
+                    {
+                        id: '1-5', title: '串聯 2 顆電池，再並聯 2 顆燈泡',
+                        goal: '電池串聯、燈泡並聯，讓兩顆燈泡都發亮。',
+                        setup: () => tLoose(2),
+                        conds: [
+                            { t: '兩顆電池串聯', ok: x => x.batSeries(), bad: '兩顆電池要串聯：一顆的 + 接另一顆的 −。' },
+                            { t: '兩顆燈泡並聯', ok: x => x.parallel('L1', 'L2'), bad: '兩顆燈泡要並聯：兩顆燈泡的兩端分別接在一起，再接到電池組兩端。' },
+                            { t: '兩顆燈泡都亮', ok: x => x.lit('L1') && x.lit('L2'), bad: '有燈泡沒亮，檢查每一顆燈泡是否都接在電池組兩端。' },
+                            { t: '每顆燈泡都得到電池總電壓', ok: x => x.near(x.V('L1'), 3.0) && x.near(x.V('L2'), 3.0), bad: '燈泡電壓不是 3 V，確認電池是串聯的。' }
+                        ],
+                        quiz: {
+                            q: '關於這個電路，哪些說法正確？（可複選）', multi: true,
+                            opts: ['兩顆燈泡的電壓都等於電池總電壓 3 V', '兩顆燈泡平分 3 V，各得 1.5 V', '電池流出的電流等於兩顆燈泡電流相加', '拿掉一顆燈泡，另一顆也會熄滅'], ans: [0, 2]
+                        },
+                        hints: ['電池用串聯（+ 接 −），燈泡用並聯（兩端分別接在一起）。', '先串好電池，再把甲、乙的兩端分別接在一起，最後接到電池組的兩端。'],
+                        explain: '並聯的燈泡各自接在電池兩端，每顆都得到 3 V，和只有一顆燈泡時一樣亮；但電池要同時供應兩顆的電流，總電流變成 2 倍，電池比較快沒電。'
+                    },
+                    {
+                        id: '1-6', title: '串聯 2 顆燈泡，短路其中 1 顆',
+                        goal: '電池串聯、兩顆燈泡串聯，再用一條電線把其中 1 顆燈泡短路，最後指出短路線。',
+                        setup: () => tLoose(2),
+                        conds: [
+                            { t: '兩顆電池串聯', ok: x => x.batSeries(), bad: '兩顆電池要串聯：一顆的 + 接另一顆的 −。' },
+                            { t: '一顆燈泡被短路而熄滅', ok: x => x.bulbs().some(id => x.shortedInCircuit(id) && x.dark(id)), bad: '先把兩顆燈泡串聯，再用一條電線直接接在其中一顆燈泡的兩端。' },
+                            { t: '另一顆燈泡仍然亮著（得到 3 V）', ok: x => x.bulbs().some(id => x.lit(id) && x.near(x.V(id), 3.0)), bad: '另一顆燈泡沒有亮或不是 3 V，檢查它是否還串在迴路上。' }
+                        ],
+                        mark: { kind: 'wire', prompt: '點一下「短路線」（讓燈泡被短路的那條電線）。', wrong: '這條不是短路線：拿掉它，被短路的燈泡還是不會亮。' },
+                        quiz: { q: '被短路的燈泡為什麼不亮？', opts: ['燈泡燒壞了', '電流幾乎全部從沒有電阻的短路線通過', '電池的電壓不夠', '電流在前一顆燈泡就用完了'], ans: [1] },
+                        hints: ['短路就是讓電流「抄近路」，繞過燈泡。', '先串好兩顆燈泡；再拉一條電線，兩端分別接在乙燈泡的兩個接點上。注意不要接到電池兩端！'],
+                        explain: '短路線幾乎沒有電阻，電流全部走短路線，被短路的燈泡沒有電流而熄滅；另一顆燈泡獨得 3 V 反而變亮。若把電池兩端短路，電流非常大，非常危險。'
+                    },
+                    {
+                        id: '1-7', adv: true, title: '先並聯 2 顆燈泡，再串接 1 顆燈泡',
+                        goal: '電池串聯；兩顆燈泡並聯成一組，再和第三顆燈泡串聯，最後指出並聯的起點與終點。',
+                        setup: () => tLoose(3),
+                        conds: [
+                            { t: '兩顆電池串聯', ok: x => x.batSeries(), bad: '兩顆電池要串聯：一顆的 + 接另一顆的 −。' },
+                            { t: '三顆燈泡都亮', ok: x => x.bulbs().every(x.lit), bad: '有燈泡沒亮，檢查每一顆燈泡是否都在迴路上。' },
+                            { t: '其中兩顆燈泡並聯', ok: x => !!x.findPair((a, b) => x.parallel(a, b)), bad: '要有兩顆燈泡並聯：它們的兩端分別接在一起。' },
+                            {
+                                t: '第三顆串接在幹線上（電流＝兩顆相加）',
+                                ok: x => { const p = x.findPair((a, b) => x.parallel(a, b)); return !!p && x.I(p[2]) > 0.05 && x.near(x.I(p[2]), x.I(p[0]) + x.I(p[1]), 0.02); },
+                                bad: '第三顆燈泡要接在並聯組合「之外」，讓全部電流都流過它。'
+                            }
+                        ],
+                        mark: { kind: 'nodes', prompt: '點一下這兩顆並聯燈泡的「起點」和「終點」。', targets: x => { const p = x.findPair((a, b) => x.parallel(a, b)); return p ? x.nodes(p[0]) : []; }, wrong: '這裡電流沒有分岔，不是並聯的起點或終點，再找找看。' },
+                        quiz: { q: '三顆燈泡中，哪一顆最亮？', opts: ['並聯中的其中一顆', '三顆一樣亮', '串接在幹線上的那顆'], ans: [2] },
+                        hints: ['先把兩顆燈泡並聯成一組，再把這一組當作「一顆」，和第三顆串聯。', '例：甲、乙兩端分別接在一起；從這組的一端接到丙，丙的另一端和這組的另一端分別接到電池組。'],
+                        explain: '幹線上的燈泡要通過全部電流（兩條支路相加），分到的電壓也比較大（約 2 V，並聯的兩顆各約 1 V），所以最亮。'
+                    },
+                    {
+                        id: '1-8', adv: true, title: '先串聯 2 顆燈泡，再並聯 1 顆燈泡',
+                        goal: '電池串聯；兩顆燈泡串成一條，第三顆並聯在這一條的兩端，最後指出並聯的起點與終點。',
+                        setup: () => tLoose(3),
+                        conds: [
+                            { t: '兩顆電池串聯', ok: x => x.batSeries(), bad: '兩顆電池要串聯：一顆的 + 接另一顆的 −。' },
+                            { t: '三顆燈泡都亮', ok: x => x.bulbs().every(x.lit), bad: '有燈泡沒亮，檢查每一顆燈泡是否都在迴路上。' },
+                            { t: '其中兩顆燈泡串聯', ok: x => !!x.findPair((a, b) => x.series(a, b)), bad: '要有兩顆燈泡串成一條（中間不分岔）。' },
+                            {
+                                t: '第三顆並聯在這兩顆的兩端',
+                                ok: x => !!x.findPair((a, b) => x.series(a, b) && x.near(x.V(a), 1.5) && x.near(x.V(b), 1.5) && x.near(x.V(x.bulbs().find(k => k !== a && k !== b)), 3.0)),
+                                bad: '第三顆燈泡的兩端，要分別接到串聯那一條的頭和尾。'
+                            }
+                        ],
+                        mark: { kind: 'nodes', prompt: '點一下並聯的「起點」和「終點」。', targets: x => { const p = x.findPair((a, b) => x.series(a, b)); return p ? x.nodes(p[2]) : []; }, wrong: '這裡電流沒有分岔，不是並聯的起點或終點，再找找看。' },
+                        quiz: { q: '三顆燈泡中，哪一顆最亮？', opts: ['串聯的其中一顆', '單獨並聯的那顆', '三顆一樣亮'], ans: [1] },
+                        hints: ['先把兩顆燈泡串成一條，再讓第三顆和「這一整條」並排。', '第三顆的兩端，分別接到串聯那一條的頭和尾。'],
+                        explain: '單獨的那顆直接接在電池兩端，得到 3 V；串聯的兩顆平分 3 V，各只有 1.5 V，所以單獨那顆最亮。'
+                    }
+                ]
+            },
+            {
+                title: '任務二：電壓測量',
+                rule: '伏特計要並聯，注意正負極：量「進入燈泡」和「離開燈泡」的電壓差。電路已接好，只要加上伏特計。',
+                tasks: [
+                    {
+                        id: '2-1', title: '串聯 2 顆電池，加上 1 顆燈泡',
+                        goal: '用伏特計量出下面 4 個電壓，量到就會自動填入。',
+                        setup: () => tMeters(tCircuit('series', 'one', TL.one()), [['V', 'V₁'], ['V', 'V₂']]),
+                        predict: { q: '先預測：電池正極到燈泡之間的那條電線，會用掉多少電壓？', opts: ['0 V（幾乎不用）', '約 1.5 V', '約 3 V'] },
+                        items: [
+                            { k: 'a', label: '這 1 顆燈泡的電壓', m: 'V', test: vAcross('L1') },
+                            { k: 'b', label: '這 2 顆電池的總電壓', m: 'V', test: vPair(...BAT_ENDS) },
+                            { k: 'c', label: '電池正極到燈泡之間的電線', m: 'V', test: vPair(['bat2', 'pos'], ['L1', 't2']) },
+                            { k: 'd', label: '燈泡到電池負極之間的電線', m: 'V', test: vPair(['L1', 't1'], ['bat1', 'neg']) }
+                        ],
+                        quiz: { q: '從量到的數據，哪些說法正確？（可複選）', multi: true, opts: ['燈泡的電壓約等於 2 顆電池的總電壓', '電線兩端幾乎沒有電壓差', '電壓在電線上就用掉了一半', '伏特計要和燈泡串聯'], ans: [0, 1] },
+                        extra: { label: '改成真實電線，再量一次 (c)', adv: { wireR: 0.05, contactR: 0.02, batteryR: 0.5 }, watch: vPair(['bat2', 'pos'], ['L1', 't2']), note: '已改成真實器材（電線、接點有少許電阻，電池有內阻）。把伏特計接在電池正極到燈泡的電線兩端：' },
+                        hints: ['伏特計要「並聯」：兩條線分別接在要測的東西的兩端。', '量燈泡：伏特計 + 接燈泡靠電池正極的那端、− 接另一端。量電線：兩條線分別接在那條電線的兩頭（電池 + 和燈泡）。'],
+                        explain: '燈泡用掉了幾乎全部的 3 V，理想電線兩端的電壓差是 0。真實的電線有一點點電阻，會用掉很小的電壓，可按下方按鈕試試看。'
+                    },
+                    {
+                        id: '2-2', title: '串聯 2 顆電池，再串聯 2 顆燈泡',
+                        goal: '量出各段電壓；最後短路其中 1 顆燈泡再量。',
+                        setup: () => tMeters(tCircuit('series', 'series2', TL.series2()), [['V', 'V₁'], ['V', 'V₂']]),
+                        items: [
+                            { k: 'a', label: '甲燈泡的電壓', m: 'V', test: vAcross('L1') },
+                            { k: 'b', label: '乙燈泡的電壓', m: 'V', test: vAcross('L2') },
+                            { k: 'c', label: '2 顆燈泡合起來用掉的電壓', m: 'V', test: vPair(['L1', 't1'], ['L2', 't2']) },
+                            { k: 'd', label: '2 顆電池的總電壓', m: 'V', test: vPair(...BAT_ENDS) },
+                            { k: 'e', label: '短路 1 顆燈泡後，被短路燈泡的電壓', m: 'V', test: (m, x) => ['L1', 'L2'].some(X => x.shortedInCircuit(X) && x.lit(otherOf(['L1', 'L2'], X)) && x.acrossComp(m, X)) },
+                            { k: 'f', opt: true, label: '未被短路燈泡的電壓', m: 'V', test: (m, x) => ['L1', 'L2'].some(X => { const Y = otherOf(['L1', 'L2'], X); return x.shortedInCircuit(X) && x.lit(Y) && x.acrossComp(m, Y); }) }
+                        ],
+                        quiz: { q: '關於串聯的兩顆燈泡，哪些說法正確？（可複選）', multi: true, opts: ['兩顆燈泡的電壓相加等於電池總電壓', '串聯時每顆燈泡都得到電池總電壓', '被短路的燈泡電壓是 0', '短路一顆後，另一顆燈泡的電壓變大'], ans: [0, 2, 3] },
+                        hints: ['每一格都用同一個方法：伏特計兩條線夾在「要測的範圍」的頭和尾。', '(c) 把兩顆燈泡當成一整段，伏特計接在甲的左端和乙的右端。(e) 先拉一條電線接在其中一顆燈泡兩端，再量它。'],
+                        explain: '串聯電路中，電池的總電壓被燈泡分掉：V甲 + V乙 = V電池。被短路的燈泡兩端被電線接通，電壓為 0；另一顆燈泡獨得全部電壓。'
+                    },
+                    {
+                        id: '2-3', title: '並聯 2 顆電池，加上 1 顆燈泡',
+                        goal: '量出燈泡的電壓和電池提供的電壓。',
+                        setup: () => tMeters(tCircuit('parallel', 'one', TL.one()), [['V', 'V₁'], ['V', 'V₂']]),
+                        items: [
+                            { k: 'a', label: '燈泡的電壓', m: 'V', test: vAcross('L1') },
+                            { k: 'b', label: '電池提供的電壓', m: 'V', test: vAcrossAny(['bat1', 'bat2']) }
+                        ],
+                        quiz: { q: '並聯 2 顆電池提供的電壓？', opts: ['是 1 顆電池的 2 倍', '和 1 顆電池一樣', '是 1 顆電池的一半'], ans: [1] },
+                        hints: ['伏特計兩條線夾在要測的東西兩端。', '量電池：+ 接電池正極、− 接電池負極（任一顆電池都可以）。'],
+                        explain: '並聯電池的電壓和 1 顆電池相同（1.5 V），燈泡也得到 1.5 V。'
+                    },
+                    {
+                        id: '2-4', title: '並聯 2 顆電池，再並聯 2 顆燈泡',
+                        goal: '量出兩顆燈泡、兩顆電池各自的電壓。',
+                        setup: () => tMeters(tCircuit('parallel', 'par2', TL.par2()), [['V', 'V₁'], ['V', 'V₂']]),
+                        items: [
+                            { k: 'a', label: '甲燈泡的電壓', m: 'V', test: vAcross('L1') },
+                            { k: 'b', label: '乙燈泡的電壓', m: 'V', test: vAcross('L2') },
+                            { k: 'c', label: '電池1 的電壓', m: 'V', test: vAcross('bat1') },
+                            { k: 'd', label: '電池2 的電壓', m: 'V', test: vAcross('bat2') }
+                        ],
+                        quiz: { q: '哪些說法正確？（可複選）', multi: true, opts: ['並聯的每顆燈泡電壓都相同', '並聯的每顆電池電壓都相同', '燈泡的電壓是電池的一半', '兩顆燈泡的電壓相加等於電池電壓'], ans: [0, 1] },
+                        hints: ['並聯的每一條支路，兩端都接在同樣的兩個點上。', '依序把伏特計接在甲、乙、電池1、電池2 的兩端。'],
+                        explain: '並聯時，每一條支路兩端的電壓都相同，所以兩顆燈泡、兩顆電池量到的都是 1.5 V。'
+                    },
+                    {
+                        id: '2-5', adv: true, title: '先並聯 2 顆燈泡，再串接 1 顆燈泡',
+                        goal: '量出各燈泡與電池的電壓；最後拔掉並聯中的 1 顆燈泡再量。',
+                        setup: () => tMeters(tCircuit('series', 'par2ser1', TL.par2ser1()), [['V', 'V₁'], ['V', 'V₂']]),
+                        items: [
+                            { k: 'a1', label: '並聯中甲燈泡的電壓', m: 'V', test: vAcross('L1') },
+                            { k: 'a2', label: '並聯中乙燈泡的電壓', m: 'V', test: vAcross('L2') },
+                            { k: 'b', label: '串接的丙燈泡的電壓', m: 'V', test: vAcross('L3') },
+                            { k: 'c', label: '電池提供的電壓', m: 'V', test: vPair(...BAT_ENDS) },
+                            { k: 'd', label: '拔掉並聯中 1 顆後，另一顆的電壓', m: 'V', test: (m, x) => [['L1', 'L2'], ['L2', 'L1']].some(([X, Y]) => x.lit(X) && x.I(Y) < 1e-3 && x.acrossComp(m, X)) }
+                        ],
+                        quiz: { q: '哪些說法正確？（可複選）', multi: true, opts: ['並聯的兩顆燈泡電壓相同', '並聯部分的電壓＋串接燈泡的電壓＝電池電壓', '拔掉並聯中的一顆後，另一顆的電壓變大', '拔掉並聯中的一顆後，串接的燈泡變亮'], ans: [0, 1, 2] },
+                        hints: ['並聯的兩顆當成一組；這一組的電壓加上丙的電壓，就是電池的電壓。', '(d) 點選甲或乙，在右側按「模擬燈泡燒毀」，或拔開它的電線，再量另一顆。'],
+                        explain: '並聯的兩顆燈泡電壓相同（約 1 V），串接的丙約 2 V，合起來 3 V。拔掉一顆後，剩下的變成兩顆串聯，各分 1.5 V。'
+                    }
+                ]
+            },
+            {
+                title: '任務三：電流測量',
+                rule: '安培計要和燈泡串聯，電流從 + 端流入；不可並聯，真的電表會燒壞。要接安培計的位置預留了橘色虛線：點一下就能拆下，再把安培計接在兩個黑點之間。',
+                tasks: [
+                    {
+                        id: '3-1', title: '串聯 2 顆電池，加上 1 顆燈泡',
+                        goal: '用安培計量出流過燈泡的電流。',
+                        setup: () => tMeters(tCircuit('series', 'one', TL.one(), ['P-A']), [['A', 'A₁'], ['A', 'A₂']]),
+                        items: [{ k: 'a', label: '流過燈泡的電流', m: 'A', test: aSeries(['L1']) }],
+                        quiz: { q: '安培計的接法，哪些正確？（可複選）', multi: true, opts: ['和燈泡串聯', '和燈泡並聯（接在燈泡兩端）', '電流從 + 端流入、− 端流出', '直接接在電池的兩端'], ans: [0, 2] },
+                        hints: ['安培計要「串聯」：電流要先流過安培計，再流到燈泡。', '點一下橘色虛線把它拆下；安培計的 + 端接在靠電池正極那一側的黑點，− 端接另一個黑點。'],
+                        explain: '安培計必須和燈泡串聯，讓同一股電流流過它，而且電流要從 + 端進入。若並聯在燈泡兩端，電流會全部衝進安培計造成短路，真的電表會燒壞。'
+                    },
+                    {
+                        id: '3-2', title: '串聯 2 顆電池，再串聯 2 顆燈泡',
+                        goal: '量出流過兩顆燈泡的電流；再短路其中 1 顆燈泡後量。',
+                        setup: () => tMeters(tCircuit('series', 'series2', TL.series2(), ['P-B', 'B-A', 'A-N']), [['A', 'A₁'], ['A', 'A₂']]),
+                        items: [
+                            { k: 'a', label: '流過甲燈泡的電流', m: 'A', test: aSeries(['L1']) },
+                            { k: 'b', label: '流過乙燈泡的電流', m: 'A', test: aSeries(['L2']) },
+                            { k: 'c', label: '短路 1 顆後，流過未被短路燈泡的電流', m: 'A', test: (m, x) => ['L1', 'L2'].some(X => { const Y = otherOf(['L1', 'L2'], X); return x.shortedInCircuit(X) && x.lit(Y) && x.seriesSet(m, [Y]); }) },
+                            { k: 'd', opt: true, zeroOk: true, label: '流過被短路燈泡的電流', m: 'A', test: (m, x) => ['L1', 'L2'].some(X => { const Y = otherOf(['L1', 'L2'], X); return x.dark(X) && x.lit(Y) && x.near(x.V(Y), 3.0) && x.seriesSet(m, [X]); }) }
+                        ],
+                        quiz: { q: '哪些說法正確？（可複選）', multi: true, opts: ['串聯電路中各處的電流都相同', '短路一顆後，另一顆燈泡的電流變大', '被短路的燈泡電流為 0', '靠近電池正極的燈泡電流比較大'], ans: [0, 1, 2] },
+                        hints: ['串聯只有一條路，安培計放在路上的哪裡都量到同樣的電流。', '(c) 先拉一條電線接在其中一顆燈泡兩端（短路），再拆下另一顆燈泡旁的橘色虛線，把安培計接上去。'],
+                        explain: '串聯時電流只有一條路，處處相同（約 0.20 A）。短路一顆後總電阻變小，電流變大（約 0.40 A）；被短路的燈泡沒有電流。'
+                    },
+                    {
+                        id: '3-3', title: '並聯 2 顆電池，加上 1 顆燈泡',
+                        goal: '量出流過燈泡的電流。',
+                        setup: () => tMeters(tCircuit('parallel', 'one', TL.one(), ['P-A']), [['A', 'A₁'], ['A', 'A₂']]),
+                        items: [{ k: 'a', label: '流過燈泡的電流', m: 'A', test: aSeries(['L1']) }],
+                        quiz: { q: '並聯 2 顆電池時，流過燈泡的電流和只用 1 顆電池相比？', opts: ['是 2 倍', '一樣', '是一半'], ans: [1] },
+                        hints: ['安培計要和燈泡串聯，電流從 + 端流入。', '點一下燈泡旁的橘色虛線拆下，再把安培計接在兩個黑點之間（+ 接靠電池正極那一側）。'],
+                        explain: '電壓和 1 顆電池一樣，所以燈泡電流也一樣（約 0.20 A）；兩顆電池各分擔一半。'
+                    },
+                    {
+                        id: '3-4', title: '串聯 2 顆電池，再並聯 2 顆燈泡',
+                        goal: '量出各支路電流、電池流出的全部電流，以及電池與電池之間的電流。',
+                        setup: () => tMeters(tCircuit('series', 'par2', TL.par2(), ['L1-R', 'L2-R', 'P-jR', 'bat']), [['A', 'A₁'], ['A', 'A₂']]),
+                        items: [
+                            { k: 'a', label: '流過甲燈泡的電流', m: 'A', test: aSeries(['L1']) },
+                            { k: 'b', label: '流過乙燈泡的電流', m: 'A', test: aSeries(['L2']) },
+                            {
+                                k: 'c', label: '電池流出的全部電流', m: 'A',
+                                test: (m, x) => {
+                                    const [s1, s2] = x.sides(m);
+                                    // 一側只有一顆電池，另一側是「全部的燈泡」(還沒分岔的幹線)
+                                    const isBat = s => s.length === 1 && s[0].startsWith('bat');
+                                    const noBat = s => ['L1', 'L2'].every(id => s.includes(id)) && !s.some(i => i.startsWith('bat'));
+                                    return (isBat(s1) && noBat(s2)) || (isBat(s2) && noBat(s1));
+                                }
+                            },
+                            { k: 'd', label: '電池與電池之間的電流', m: 'A', test: (m, x) => { const [s1, s2] = x.sides(m); const one = (s, id) => s.length === 1 && s[0] === id; return (one(s1, 'bat1') && one(s2, 'bat2')) || (one(s1, 'bat2') && one(s2, 'bat1')); } }
+                        ],
+                        quiz: { q: '哪些說法正確？（可複選）', multi: true, opts: ['電池流出的電流等於兩顆燈泡電流相加', '兩顆燈泡的電流相加小於全部電流', '電池與電池之間的電流等於電池流出的全部電流', '安培計可以直接接在電池的兩端'], ans: [0, 2] },
+                        hints: ['量哪一顆燈泡，安培計就放在那顆燈泡自己的支路上；量全部電流，就放在還沒分岔的幹線上。', '(d) 拆下兩顆電池之間的橘色虛線，安培計 + 接靠電池1 那側的黑點、− 接靠電池2 那側的黑點。'],
+                        explain: '電流在並聯起點分岔、終點匯合：I總 = I甲 + I乙（0.40 + 0.40 = 0.80 A）。兩顆電池串聯，中間流過的也是全部電流。'
+                    },
+                    {
+                        id: '3-5', adv: true, title: '先並聯 2 顆燈泡，再串接 1 顆燈泡',
+                        goal: '量出流過三顆燈泡的電流。',
+                        setup: () => tMeters(tCircuit('series', 'par2ser1', TL.par2ser1(), ['L1-R', 'L2-R', 'jR-C']), [['A', 'A₁'], ['A', 'A₂']]),
+                        items: [
+                            { k: 'a', label: '流過並聯中甲燈泡的電流', m: 'A', test: aSeries(['L1']) },
+                            { k: 'b', label: '流過並聯中乙燈泡的電流', m: 'A', test: aSeries(['L2']) },
+                            { k: 'c', label: '流過串接的丙燈泡的電流', m: 'A', test: aSeries(['L3']) }
+                        ],
+                        quiz: { q: '哪些說法正確？（可複選）', multi: true, opts: ['串接燈泡的電流等於並聯兩顆燈泡電流相加', '串接燈泡的電流比並聯中的燈泡小', '並聯的兩顆燈泡電流相同', '安培計放在哪裡讀數都一樣'], ans: [0, 2] },
+                        hints: ['並聯的兩顆各自量自己的支路；丙在幹線上。', '丙的電流：拆下通往丙的那段橘色虛線，把安培計接上去。'],
+                        explain: '並聯兩支路的電流相加，等於流過丙的電流（約 0.13 + 0.13 = 0.27 A）。'
+                    }
+                ]
+            },
+            {
+                title: '任務四：電壓與電流測量',
+                rule: '伏特計並聯、安培計串聯，電流都從 + 端流入。要接安培計的位置預留了橘色虛線：點一下就能拆下，再把安培計接在兩個黑點之間。',
+                tasks: [
+                    {
+                        id: '4-1', title: '串聯 2 顆電池，加上 1 顆燈泡',
+                        goal: '用 2 個電表同時量出燈泡的電流與電壓。',
+                        setup: () => tMeters(tCircuit('series', 'one', TL.one(), ['P-A']), [['A', 'A'], ['V', 'V']]),
+                        items: [
+                            { k: 'a', label: '流過燈泡的電流', m: 'A', test: aSeries(['L1']) },
+                            { k: 'b', label: '燈泡的電壓', m: 'V', test: vAcross('L1') }
+                        ],
+                        quiz: { q: '用量到的電壓和電流，這顆燈泡的電阻約是？（R = V ÷ I）', opts: ['1.2 Ω', '7.5 Ω', '0.13 Ω'], ans: [1] },
+                        hints: ['安培計串聯、伏特計並聯在燈泡兩端，兩個可以同時接著。', '安培計：拆下橘色虛線，接在兩個黑點之間；伏特計：從燈泡兩個接點各拉一條線過來。'],
+                        explain: '電壓 3.0 V、電流 0.40 A，電阻 R = V ÷ I = 7.5 Ω。任務五會再練習這個算法。'
+                    },
+                    {
+                        id: '4-2', title: '串聯 2 顆電池，再串聯 2 顆燈泡',
+                        goal: '量出甲、乙兩顆燈泡各自的電流與電壓（電表可以移動再量）。',
+                        setup: () => tMeters(tCircuit('series', 'series2', TL.series2(), ['P-B', 'B-A']), [['A', 'A'], ['V', 'V']]),
+                        items: [
+                            { k: 'aI', label: '甲燈泡的電流', m: 'A', test: aSeries(['L1']) },
+                            { k: 'aV', label: '甲燈泡的電壓', m: 'V', test: vAcross('L1') },
+                            { k: 'bI', label: '乙燈泡的電流', m: 'A', test: aSeries(['L2']) },
+                            { k: 'bV', label: '乙燈泡的電壓', m: 'V', test: vAcross('L2') }
+                        ],
+                        quiz: { q: '哪些說法正確？（可複選）', multi: true, opts: ['兩顆燈泡的電流相同', '兩顆燈泡的電流相加等於電池電流', '兩顆燈泡的電壓相加等於電池電壓', '兩顆燈泡的電壓都等於電池電壓'], ans: [0, 2] },
+                        hints: ['量完甲以後，把伏特計移到乙再量一次。', '伏特計夾在哪顆燈泡兩端就量哪顆；安培計在串聯電路裡放哪都一樣。'],
+                        explain: '串聯：電流處處相同（0.20 A）；電壓分給兩顆燈泡（1.5 V + 1.5 V = 3 V）。'
+                    },
+                    {
+                        id: '4-3', title: '串聯 2 顆電池，再並聯 2 顆燈泡',
+                        goal: '用 3 個電表量出甲燈泡的電流、電壓，以及流過並聯燈泡的全部電流。',
+                        setup: () => tMeters(tCircuit('series', 'par2', TL.par2(), ['L1-R', 'L2-R', 'P-jR']), [['A', 'A₁'], ['A', 'A₂'], ['V', 'V']]),
+                        items: [
+                            { k: 'aI', label: '甲燈泡的電流', m: 'A', test: aSeries(['L1']) },
+                            { k: 'aV', label: '甲燈泡的電壓', m: 'V', test: vAcross('L1') },
+                            { k: 'b', label: '流過並聯燈泡的全部電流', m: 'A', test: aSeries(['L1', 'L2']) }
+                        ],
+                        quiz: { q: '哪些說法正確？（可複選）', multi: true, opts: ['全部電流等於兩顆燈泡電流相加', '全部電流等於其中一顆燈泡的電流', '每顆燈泡的電壓都等於電池電壓', '並聯的燈泡愈多，全部電流愈小'], ans: [0, 2] },
+                        hints: ['一個安培計放在甲的支路，另一個放在還沒分岔的幹線。', '伏特計夾在甲的兩端。'],
+                        explain: '甲：3.0 V、0.40 A；全部電流 0.80 A ＝ 甲 ＋ 乙。'
+                    },
+                    {
+                        id: '4-4', title: '串聯 2 顆電池，並聯 3 顆燈泡',
+                        goal: '用 3 個電表量出「其中 2 顆燈泡合起來」的電流與電壓，以及第 3 顆燈泡的電流。',
+                        setup: () => tMeters(tCircuit('series', 'par3ab', TL.par3(), ['pair', 'L3-R']), [['A', 'A₁'], ['A', 'A₂'], ['V', 'V']]),
+                        items: [
+                            { k: 'aI', label: '流過其中 2 顆燈泡的電流', m: 'A', test: (m, x) => x.sides(m).some(s => s.length === 2 && s.every(id => ['L1', 'L2', 'L3'].includes(id))) },
+                            { k: 'aV', label: '這 2 顆燈泡的電壓', m: 'V', test: vAcrossAny(['L1', 'L2', 'L3']) },
+                            { k: 'b', label: '流過第 3 顆燈泡的電流', m: 'A', test: (m, x) => x.sides(m).some(s => s.length === 1 && ['L1', 'L2', 'L3'].includes(s[0])) }
+                        ],
+                        quiz: { q: '哪些說法正確？（可複選）', multi: true, opts: ['流過 2 顆燈泡的電流約是 1 顆的 2 倍', '第 3 顆燈泡的電流比其他兩顆大', '三顆燈泡的電壓都相同', '並聯愈多顆，每顆燈泡愈暗'], ans: [0, 2] },
+                        hints: ['要量「2 顆合起來」的電流，安培計要放在只通往這 2 顆燈泡的那段電線上。', '甲、乙合流後通往右邊黑點的那段橘色虛線，只有甲＋乙的電流會經過；把安培計接在那裡。'],
+                        explain: '並聯的每顆燈泡電壓都是 3.0 V、電流各 0.40 A；2 顆合起來 0.80 A。多並聯一顆燈泡，不會影響其他燈泡的亮度（理想電池）。'
+                    },
+                    {
+                        id: '4-5', title: '串聯 2 組「並聯 2 顆燈泡」',
+                        goal: '用 4 個電表量出兩組燈泡的電流與電壓。',
+                        setup: () => tMeters(tCircuit('series', 'groups', TL.groups(), ['L1-R', 'jB-jC']), [['A', 'A₁'], ['A', 'A₂'], ['V', 'V₁'], ['V', 'V₂']]),
+                        items: [
+                            { k: 'aI', label: '第一組（甲乙）：其中 1 顆燈泡的電流', m: 'A', test: aSeriesAny([['L1'], ['L2']]) },
+                            { k: 'aV', label: '第一組（甲乙）的電壓', m: 'V', test: vAcrossAny(['L1', 'L2']) },
+                            { k: 'bI', label: '第二組（丙丁）：2 顆燈泡合起來的電流', m: 'A', test: aSeries(['L3', 'L4']) },
+                            { k: 'bV', label: '第二組（丙丁）的電壓', m: 'V', test: vAcrossAny(['L3', 'L4']) }
+                        ],
+                        quiz: { q: '哪些說法正確？（可複選）', multi: true, opts: ['兩組燈泡的電壓相加等於電池電壓', '每顆燈泡的電流都等於電池流出的電流', '流過第一組的全部電流等於流過第二組的全部電流', '兩組的電壓都等於 3 V'], ans: [0, 2] },
+                        hints: ['兩組是串聯的，所以「一整組」的電流前後相同；每組內部是並聯，兩顆燈泡電壓相同。', '第二組合起來的電流：拆下兩組之間的那段橘色虛線，把安培計接上去。'],
+                        explain: '每組電壓 1.5 V（合計 3 V）；每組全部電流 0.40 A，組內每顆 0.20 A。'
+                    }
+                ]
+            },
+            {
+                title: '任務五：電阻測量',
+                rule: '量出電壓和電流，再自己算出電阻。這一張已開啟「燈絲電阻隨溫度變化」，和真實燈泡一樣。要接安培計的位置預留了橘色虛線：點一下就能拆下，再把安培計接在兩個黑點之間。',
+                gate: { q: '開始前：電阻的計算公式是？', opts: ['R = I ÷ V', 'R = V × I', 'R = V ÷ I'], ans: 2, wrong: '再想想：同樣的電壓下，電阻愈大，電流愈小。' },
+                tasks: [
+                    {
+                        id: '5-1', title: '使用 1 顆電池，加上 1 顆燈泡',
+                        goal: '量出燈泡的電流與電壓，再算出它的電阻。',
+                        setup: () => tMeters(tCircuit('single', 'one', TL.one(), ['P-A']), [['A', 'A'], ['V', 'V']]),
+                        items: [
+                            { k: 'a', label: '流過燈泡的電流', m: 'A', test: aSeries(['L1']) },
+                            { k: 'b', label: '燈泡的電壓', m: 'V', test: vAcross('L1') },
+                            { k: 'c', type: 'input', label: '這顆燈泡的電阻', unit: 'Ω', from: ['b', 'a'] }
+                        ],
+                        hints: ['安培計和燈泡串聯、伏特計並聯在燈泡兩端，兩個都接好再讀數。', '電阻 R = 電壓 ÷ 電流，例如 1.5 V ÷ 0.30 A = 5 Ω。'],
+                        explain: '用量到的電壓除以電流，就是燈泡這時候的電阻。下一題換成 2 顆電池，看看電阻會不會一樣。'
+                    },
+                    {
+                        id: '5-2', title: '串聯 2 顆電池，加上 1 顆燈泡',
+                        goal: '同一顆燈泡改接 2 顆電池，量出電流與電壓並算出電阻。',
+                        setup: () => tMeters(tCircuit('series', 'one', TL.one(), ['P-A']), [['A', 'A'], ['V', 'V']]),
+                        items: [
+                            { k: 'a', label: '流過燈泡的電流', m: 'A', test: aSeries(['L1']) },
+                            { k: 'b', label: '燈泡的電壓', m: 'V', test: vAcross('L1') },
+                            { k: 'c', type: 'input', label: '這顆燈泡的電阻', unit: 'Ω', from: ['b', 'a'] }
+                        ],
+                        quiz: { q: '和第 1 題比，同一顆燈泡接 2 顆電池時，算出的電阻？', opts: ['變小', '一樣', '變大'], ans: [2] },
+                        hints: ['接法和第 1 題一樣，只是電池變成 2 顆串聯。', '算好後和第 1 題的答案比一比。'],
+                        explain: '電壓愈大，燈絲愈熱，鎢絲的電阻就愈大，所以燈泡的電阻不是固定值。'
+                    },
+                    {
+                        id: '5-3', title: '使用 1 顆電池，加上 1 個電阻',
+                        goal: '量出色環電阻的電流與電壓，再算出它的電阻值。',
+                        setup: () => tMeters(tCircuit('single', 'one', [tRes('R1', 400, 200, taskResistorValue())], ['P-A']), [['A', 'A'], ['V', 'V']]),
+                        items: [
+                            { k: 'a', label: '流過電阻的電流', m: 'A', test: aSeries(['R1']) },
+                            { k: 'b', label: '電阻的電壓', m: 'V', test: vAcross('R1') },
+                            { k: 'c', type: 'input', label: '這個電阻的電阻值', unit: 'Ω', from: ['b', 'a'] }
+                        ],
+                        hints: ['接法和燈泡一樣：安培計串聯、伏特計並聯。', '電阻 R = 電壓 ÷ 電流。'],
+                        explain: '色環電阻的電阻值就是用這個方法量出來的。下一題換成 2 顆電池再量一次。'
+                    },
+                    {
+                        id: '5-4', title: '串聯 2 顆電池，加上 1 個電阻',
+                        goal: '同一個電阻改接 2 顆電池，量出電流與電壓並算出電阻。',
+                        setup: () => tMeters(tCircuit('series', 'one', [tRes('R1', 400, 200, taskResistorValue())], ['P-A']), [['A', 'A'], ['V', 'V']]),
+                        items: [
+                            { k: 'a', label: '流過電阻的電流', m: 'A', test: aSeries(['R1']) },
+                            { k: 'b', label: '電阻的電壓', m: 'V', test: vAcross('R1') },
+                            { k: 'c', type: 'input', label: '這個電阻的電阻值', unit: 'Ω', from: ['b', 'a'] }
+                        ],
+                        quiz: { q: '和第 3 題比，同一個電阻接 2 顆電池時，算出的電阻？', opts: ['變大', '一樣', '變小'], ans: [1] },
+                        hints: ['接法和第 3 題一樣，只是電池變成 2 顆串聯。', '電壓變成 2 倍時，看看電流變成幾倍。'],
+                        explain: '色環電阻的溫度變化很小：電壓變 2 倍、電流也變 2 倍，電阻維持不變，符合歐姆定律。燈泡就不是這樣。'
+                    },
+                    {
+                        id: '5-5', title: '串聯 2 顆電池，再串聯燈泡與電阻',
+                        goal: '量出燈泡、電阻各自的電流與電壓。',
+                        setup: () => tMeters(tCircuit('series', 'series2', [tBulb('L1', 320, 200, '甲'), tRes('R1', 480, 200, taskResistorValue())], ['P-B', 'B-A']), [['A', 'A'], ['V', 'V']]),
+                        items: [
+                            { k: 'aI', label: '燈泡的電流', m: 'A', test: aSeries(['L1']) },
+                            { k: 'aV', label: '燈泡的電壓', m: 'V', test: vAcross('L1') },
+                            { k: 'bI', label: '電阻的電流', m: 'A', test: aSeries(['R1']) },
+                            { k: 'bV', label: '電阻的電壓', m: 'V', test: vAcross('R1') }
+                        ],
+                        quiz: { q: '哪些說法正確？（可複選）', multi: true, opts: ['燈泡和電阻的電流相同', '燈泡和電阻的電壓一定相同', '燈泡電壓＋電阻電壓＝電池電壓', '電阻值大的那個，電流比較小'], ans: [0, 2] },
+                        hints: ['串聯電路中，安培計放在哪裡都一樣。', '伏特計先夾燈泡兩端，再移到電阻兩端。'],
+                        explain: '串聯時電流相同；電壓依電阻大小分配，兩者相加等於電池電壓。'
+                    },
+                    {
+                        id: '5-6', title: '串聯 2 顆電池，再並聯燈泡與電阻',
+                        goal: '量出燈泡、電阻各自的電流與電壓。',
+                        setup: () => tMeters(tCircuit('series', 'par2', [tBulb('L1', 400, 160, '甲'), tRes('R1', 400, 280, taskResistorValue())], ['L1-R', 'R1-R']), [['A', 'A'], ['V', 'V']]),
+                        items: [
+                            { k: 'aI', label: '燈泡的電流', m: 'A', test: aSeries(['L1']) },
+                            { k: 'aV', label: '燈泡的電壓', m: 'V', test: vAcross('L1') },
+                            { k: 'bI', label: '電阻的電流', m: 'A', test: aSeries(['R1']) },
+                            { k: 'bV', label: '電阻的電壓', m: 'V', test: vAcross('R1') }
+                        ],
+                        quiz: { q: '哪些說法正確？（可複選）', multi: true, opts: ['燈泡和電阻的電壓相同', '燈泡和電阻的電流一定相同', '電池流出的電流＝燈泡電流＋電阻電流', '電阻愈大，流過的電流愈大'], ans: [0, 2] },
+                        hints: ['並聯時兩條支路的電壓相同，安培計要放在各自的支路上。', '量燈泡電流：安培計串在燈泡那一條；量電阻電流：移到電阻那一條。'],
+                        explain: '並聯時電壓相同；電流依電阻大小分配，電阻愈大電流愈小，兩者相加等於電池流出的電流。'
+                    }
+                ]
+            }
+        ];
+
+        function curCard() { return TASK_CARDS[taskState.card - 1]; }
+        function curTask() { return curCard().tasks[taskState.idx]; }
+
+        // ---------- 開始 / 結束 ----------
+        function taskGo(card, idx) {
+            const cardDef = TASK_CARDS[card - 1];
+            const t = cardDef && cardDef.tasks[idx];
+            if (!t) return;
+            closeTaskPicker();
+            closeSceneInfoCard();
+            if (!taskState.active) {
+                taskState.savedAdv = Object.assign({}, state.adv);
+                // 寬螢幕：收起左側元件庫 (任務中用不到)；畫面不夠寬時也收起右側屬性欄，把空間留給電路與任務卡
+                taskState.restoreLeft = false;
+                taskState.restoreRight = false;
+                if (window.innerWidth >= 1024) {
+                    const Lb = document.getElementById('left-sidebar'), Rb = document.getElementById('right-sidebar');
+                    if (!Lb.classList.contains('lg:hidden')) { Lb.classList.add('lg:hidden'); taskState.restoreLeft = true; }
+                    if (window.innerWidth < 1440 && !Rb.classList.contains('lg:hidden')) { Rb.classList.add('lg:hidden'); taskState.restoreRight = true; }
+                    updateSidebarToggleButtonsUI();
+                }
+            }
+            taskState.active = true;
+            document.body.classList.add('task-mode');
+            Object.assign(taskState, {
+                card, idx, phase: 'work', fills: {}, inputs: {}, inputDraft: {}, inputMsg: '', marks: [], markMsg: '',
+                feedback: '', condRes: [], hintLevel: 0, attempts: 1, quizSel: [], quizWrong: [], quizMsg: '',
+                predict: null, gateMsg: '', extraOn: false, extraReading: '', data: {}, lastSig: '', collapsed: false
+            });
+            state.adv = Object.assign({}, state.adv, ADV_PRESETS.ideal, { showCompPower: false, showWirePower: false, showWireCurrent: false, filamentHot: card === 5 });
+            syncGlobalAdvUI();
+            // 任務五：色環電阻的數值隨機 (第 3 題重新抽，之後幾題沿用同一個電阻)
+            if (card === 5 && idx >= 2) {
+                if (!taskProgress.cardData[5]) taskProgress.cardData[5] = {};
+                if (idx === 2 || !taskProgress.cardData[5].R) {
+                    const pool = [5, 6, 10, 12, 15, 20];
+                    taskProgress.cardData[5].R = pool[Math.floor(Math.random() * pool.length)];
+                    saveTaskProgress();
+                }
+            }
+            const circ = t.setup();
+            state.components = JSON.parse(JSON.stringify(circ.c));
+            state.wires = JSON.parse(JSON.stringify(circ.w));
+            state.drawings = [];
+            state.wiringStart = null;
+            state.dragging = null;
+            state.selectedType = null;
+            state.selectedId = null;
+            closeTerminalPopover();
+            if (state.drawTool !== 'select') setDrawTool('select');
+            if (t.predict) taskState.phase = 'predict';
+            if (cardDef.gate && !taskProgress.gates[card]) taskState.phase = 'gate';
+            taskState.startSnap = snapshotCircuit();
+            document.getElementById('task-panel').classList.remove('hidden');
+            if (state.viewMode !== 'lifelike') setViewMode('lifelike');
+            selectItem(null, null);
+            fitView();
+            editHistory.stack = [snapshotCircuit()];
+            editHistory.index = 0;
+            updateUndoButtons();
+            try { history.replaceState(null, '', `#${card}-${idx + 1}`); } catch (err) { /* 部分環境不允許改網址 */ }
+            if (window.innerWidth < 1024) closeMobileSidebars();
+            updateTaskLock();
+            renderTaskPanel(true);
+        }
+
+        function exitTaskMode(silent) {
+            if (!taskState.active) return;
+            taskState.active = false;
+            document.body.classList.remove('task-mode');
+            if (taskState.savedAdv) {
+                state.adv = taskState.savedAdv;
+                taskState.savedAdv = null;
+                syncGlobalAdvUI();
+            }
+            document.getElementById('task-panel').classList.add('hidden');
+            if (taskState.restoreLeft) document.getElementById('left-sidebar').classList.remove('lg:hidden');
+            if (taskState.restoreRight) document.getElementById('right-sidebar').classList.remove('lg:hidden');
+            taskState.restoreLeft = taskState.restoreRight = false;
+            updateSidebarToggleButtonsUI();
+            const layer = document.getElementById('task-layer');
+            if (layer) layer.innerHTML = '';
+            updateTaskLock();
+            try { history.replaceState(null, '', location.pathname + location.search); } catch (err) { /* 略過 */ }
+            if (!silent) {
+                render();
+                fitView();
+                showToast('已結束任務模式，畫布上的電路保留，可以自由編輯');
+            }
+        }
+
+        function taskNext() {
+            const c = curCard();
+            if (taskState.idx + 1 < c.tasks.length) taskGo(taskState.card, taskState.idx + 1);
+            else if (taskState.card < TASK_CARDS.length) taskGo(taskState.card + 1, 0);
+            else openTaskPicker();
+        }
+        function taskRestart() { taskGo(taskState.card, taskState.idx); }
+
+        function updateTaskLock() {
+            const lock = document.getElementById('task-lock');
+            if (!lock) return;
+            const locked = taskState.active && (taskState.phase === 'gate' || taskState.phase === 'predict');
+            lock.classList.toggle('hidden', !locked);
+            const msg = document.getElementById('task-lock-msg');
+            if (msg) msg.textContent = taskState.phase === 'gate' ? '先在任務卡回答開始前的問題，畫面才會解鎖' : '先在任務卡選好你的預測，畫面才會解鎖';
+        }
+
+        // ---------- 判定 ----------
+        function taskAfterRender() {
+            if (!taskState.active) return;
+            try {
+                taskEvaluate();
+            } catch (err) {
+                console.warn('任務判定錯誤', err);
+            }
+            renderTaskLayer();
+            renderTaskPanel();
+        }
+
+        function taskEvaluate() {
+            const t = curTask();
+            const x = taskCtx();
+            const touched = snapshotCircuit() !== taskState.startSnap;
+            // 量測格在完成主要題目後仍可繼續填 (例如進階的選填格)
+            let fillRes = { filled: [] };
+            if (t.items && taskState.phase !== 'gate' && taskState.phase !== 'predict') fillRes = taskFillItems(t, x);
+            if (taskState.phase === 'work') {
+                if (t.conds) {
+                    const res = t.conds.map(cd => { try { return !!cd.ok(x); } catch (err) { return false; } });
+                    taskState.condRes = res;
+                    if (!state.shortCircuit && res.every(Boolean)) {
+                        taskWorkDone(x);
+                    } else if (touched) {
+                        taskState.feedback = state.shortCircuit ? T_SHORT_MSG : t.conds[res.indexOf(false)].bad;
+                    } else {
+                        taskState.feedback = '';
+                    }
+                } else if (t.items) {
+                    const res = fillRes;
+                    const allDone = t.items.every(it => it.opt ||
+                        (it.type === 'input' ? !!(taskState.inputs[it.k] && taskState.inputs[it.k].ok) : taskState.fills[it.k] !== undefined));
+                    taskState.feedback = touched ? taskMeterFeedback(res) : '';
+                    if (allDone) taskWorkDone(x);
+                }
+            }
+            // 「再試試」延伸：顯示目前的量測值
+            if (taskState.extraOn && t.extra) {
+                const vm = state.components.find(m => m.type === 'voltmeter' && meterConnected(m) && t.extra.watch(m, x));
+                taskState.extraReading = vm ? `${(vm.voltageDrop || 0).toFixed(3)} V` : '尚未接上';
+            }
+        }
+
+        function taskFillItems(t, x) {
+            const res = { filled: [], matched: new Set() };
+            t.items.forEach(it => {
+                if (it.type === 'input') return;
+                const type = it.m === 'V' ? 'voltmeter' : 'ammeter';
+                for (const m of state.components) {
+                    if (m.type !== type || !meterConnected(m)) continue;
+                    let ok = false;
+                    try { ok = it.test(m, x); } catch (err) { ok = false; }
+                    if (!ok) continue;
+                    res.matched.add(m.id);                       // 這個電表接在題目要的位置上
+                    if (taskState.fills[it.k] !== undefined) continue; // 這一格已經填好了
+                    const r = meterReading(m);
+                    if (state.shortCircuit) continue;
+                    if (it.m === 'A' && r < 1e-3 && !it.zeroOk) continue; // 電路還沒接通時讀數為 0，不算量到
+                    if (m.reversed && r > 1e-3) continue;
+                    if (meterOverloaded(m)) continue;
+                    taskState.fills[it.k] = r;
+                    res.filled.push(it.k);
+                    break;
+                }
+            });
+            if (res.filled.length) {
+                const it = t.items.find(i => i.k === res.filled[0]);
+                showToast(`✅ 量到了：${it.label} = ${fmtReading(taskState.fills[it.k], it.m)}`);
+            }
+            return res;
+        }
+
+        function fmtReading(v, m) { return `${(v || 0).toFixed(2)} ${m === 'V' ? 'V' : 'A'}`; }
+
+        // 電表接法的錯誤原因提示 (只回報第一個問題)
+        function taskMeterFeedback(res) {
+            const meters = state.components.filter(c => (c.type === 'ammeter' || c.type === 'voltmeter') && meterConnected(c));
+            if (state.shortCircuit) {
+                return meters.some(m => m.type === 'ammeter')
+                    ? '電源短路了！安培計不能並聯在燈泡或電池兩端，它要和燈泡串聯（拔開一條線，讓電流經過它）。真的電表會燒壞！'
+                    : T_SHORT_MSG;
+            }
+            const rev = meters.find(m => m.reversed && meterReading(m) > 1e-3);
+            if (rev) return `${rev.label} 的正負極接反了，指針反轉。電流要從 + 端流入；選取這個電表按 F（或右側「正負極對調」）就能對調。`;
+            const over = meters.find(meterOverloaded);
+            if (over) return `${over.label} 破表了！改接電表下方較大的檔位（紅色接線柱）再量一次。`;
+            const loads = state.components.filter(c => (c.type === 'bulb' || c.type === 'resistor') && !c.burned);
+            const anyOn = loads.some(c => (c.power || 0) > 0.02);
+            const vmSeries = meters.find(m => m.type === 'voltmeter' && m.voltageDrop > 0.5 && !anyOn);
+            if (vmSeries) return `${vmSeries.label} 串聯進電路了，所以燈泡不亮！伏特計要並聯：先把迴路接回去，再用兩條線把伏特計夾在要測的東西兩端。`;
+            if (loads.length && !anyOn) return '電路斷開了，燈泡都不亮。檢查拔開的電線是否都接回去了。';
+            if (res.filled.length) return '';
+            const stray = meters.filter(m => !(res.matched && res.matched.has(m.id)));
+            if (stray.length) return `${stray[0].label} 接好了，但量到的不是表格裡的任何一格。看看還缺哪一格，把電表移到對應的位置。`;
+            return '';
+        }
+
+        function taskWorkDone(x) {
+            const t = curTask();
+            taskState.feedback = '';
+            if (t.mark) {
+                taskState.phase = 'mark';
+                taskState.marks = [];
+                if (t.mark.kind === 'nodes') taskState.data.targets = t.mark.targets(x);
+                else taskState.data.shorted = x.bulbs().find(id => x.shortedInCircuit(id) && x.dark(id));
+                showToast('✅ 電路接對了！接著在畫布上指出位置');
+            } else if (t.quiz) {
+                taskState.phase = 'quiz';
+                showToast(t.conds ? '✅ 電路接對了！回答任務卡上的問題' : '✅ 全部量好了！回答任務卡上的問題');
+            } else {
+                taskComplete();
+            }
+        }
+
+        function taskAdvanceAfterMark() {
+            const t = curTask();
+            if (t.quiz) taskState.phase = 'quiz';
+            else taskComplete();
+        }
+
+        function taskComplete() {
+            const t = curTask();
+            taskState.phase = 'done';
+            const prev = taskProgress.tasks[t.id];
+            if (!prev || taskState.attempts < prev.best) taskProgress.tasks[t.id] = { best: taskState.attempts };
+            saveTaskProgress();
+            if (state.viewMode !== 'schematic') {
+                setViewMode('schematic');
+                showToast('🎉 完成！已切換成電路圖，可以對照畫在學習單上');
+            } else {
+                showToast('🎉 完成！');
+            }
+            renderTaskPanel(true);
+        }
+
+        // ---------- 指出位置 (並聯起點與終點 / 短路線) ----------
+        function taskHandleTerminalTap(compId, termId) {
+            if (!taskState.active || taskState.phase !== 'mark') return false;
+            const t = curTask();
+            if (t.mark.kind !== 'nodes') {
+                taskState.markMsg = '請點一下電線本身（短路線），不是端子。';
+                renderTaskPanel(true);
+                return true;
+            }
+            const comp = state.components.find(c => c.id === compId);
+            if (!comp) return true;
+            taskMarkNode(buildTopo(null).node(compId, termId), getTerminalWorldPos(comp, termId), `${compId}:${termId}`);
+            return true;
+        }
+
+        // 點一下預留的橘色虛線：直接拆下 (讓學生把安培計接在兩個黑點之間)
+        function taskCutWire(wire) {
+            if (!taskState.active || !wire.removable) return false;
+            if (taskState.phase === 'gate' || taskState.phase === 'predict') return false;
+            state.wires = state.wires.filter(w => w !== wire);
+            state.selectedType = null;
+            state.selectedId = null;
+            showToast('✂ 已拆下這段電線：把安培計接在兩個黑點之間（+ 接靠電池正極那一側）。拆錯了可按上方「復原」。');
+            render();
+            return true;
+        }
+
+        function taskHandleWireTap(wire) {
+            if (taskState.active && taskState.phase !== 'mark' && taskCutWire(wire)) return true;
+            if (!taskState.active || taskState.phase !== 'mark') return false;
+            const t = curTask();
+            if (t.mark.kind === 'nodes') {
+                taskMarkNode(buildTopo(null).node(wire.from.compId, wire.from.termId), { x: state.mousePos.x, y: state.mousePos.y }, `${wire.from.compId}:${wire.from.termId}`);
+                return true;
+            }
+            if (taskTestShortWire(wire)) {
+                taskState.marks = [{ wireId: wire.id }];
+                taskState.markMsg = '';
+                taskAdvanceAfterMark();
+            } else {
+                taskState.attempts++;
+                taskState.markMsg = t.mark.wrong;
+            }
+            render();
+            return true;
+        }
+
+        function taskMarkNode(n, pos, key) {
+            const t = curTask();
+            const targets = taskState.data.targets || [];
+            if (!targets.includes(n)) {
+                taskState.attempts++;
+                taskState.markMsg = t.mark.wrong;
+            } else if (taskState.marks.some(mk => mk.node === n)) {
+                taskState.markMsg = '這個點已經找到了，再找另一個。';
+            } else {
+                const v = state.termV ? (state.termV.get(key) || 0) : 0;
+                taskState.marks.push({ node: n, x: pos.x, y: pos.y, v });
+                taskState.markMsg = '';
+                if (taskState.marks.length >= 2) taskAdvanceAfterMark();
+            }
+            render();
+        }
+
+        // 拿掉這條電線後，被短路的燈泡會不會亮？會亮就是短路線
+        function taskTestShortWire(wire) {
+            const X = taskState.data.shorted;
+            const i = state.wires.indexOf(wire);
+            if (!X || i < 0) return false;
+            state.wires.splice(i, 1);
+            solveCircuit();
+            const comp = state.components.find(c => c.id === X);
+            const ok = !!comp && (comp.power || 0) > 0.02;
+            state.wires.splice(i, 0, wire);
+            solveCircuit();
+            return ok;
+        }
+
+        function renderTaskLayer() {
+            const layer = document.getElementById('task-layer');
+            if (!layer) return;
+            layer.innerHTML = '';
+            if (!taskState.active || !taskState.marks.length) return;
+            const NS = 'http://www.w3.org/2000/svg';
+            const ring = (x, y, label) => {
+                const g = document.createElementNS(NS, 'g');
+                g.style.pointerEvents = 'none';
+                const c = document.createElementNS(NS, 'circle');
+                c.setAttribute('cx', x); c.setAttribute('cy', y); c.setAttribute('r', '13');
+                c.setAttribute('fill', 'rgba(16, 185, 129, 0.25)');
+                c.setAttribute('stroke', '#059669');
+                c.setAttribute('stroke-width', '3');
+                g.appendChild(c);
+                if (label) {
+                    const tx = document.createElementNS(NS, 'text');
+                    tx.setAttribute('x', x); tx.setAttribute('y', y - 20);
+                    tx.setAttribute('text-anchor', 'middle');
+                    tx.setAttribute('font-size', '13');
+                    tx.setAttribute('font-weight', 'bold');
+                    tx.setAttribute('fill', '#047857');
+                    tx.setAttribute('paint-order', 'stroke');
+                    tx.setAttribute('stroke', '#ffffff');
+                    tx.setAttribute('stroke-width', '4');
+                    tx.textContent = label;
+                    g.appendChild(tx);
+                }
+                layer.appendChild(g);
+            };
+            const mk = taskState.marks;
+            if (mk[0].wireId) {
+                const w = state.wires.find(o => o.id === mk[0].wireId);
+                if (!w) return;
+                const c1 = state.components.find(c => c.id === w.from.compId);
+                const c2 = state.components.find(c => c.id === w.to.compId);
+                if (c1 && c2) {
+                    const p1 = getTerminalWorldPos(c1, w.from.termId), p2 = getTerminalWorldPos(c2, w.to.termId);
+                    ring(p1.x, p1.y, '短路線');
+                    ring(p2.x, p2.y, '');
+                }
+                return;
+            }
+            const both = mk.length >= 2;
+            const hi = both ? (mk[0].v >= mk[1].v ? 0 : 1) : -1;
+            mk.forEach((m, i) => ring(m.x, m.y, both ? (i === hi ? '起點（分岔）' : '終點（匯合）') : '找到 1 個'));
+        }
+
+        // ---------- 任務卡互動 ----------
+        function taskGateChoose(i) {
+            const g = curCard().gate;
+            if (i === g.ans) {
+                taskProgress.gates[taskState.card] = true;
+                saveTaskProgress();
+                taskState.gateMsg = '';
+                taskState.phase = curTask().predict ? 'predict' : 'work';
+                updateTaskLock();
+                render();
+            } else {
+                taskState.gateMsg = g.wrong;
+                renderTaskPanel(true);
+            }
+        }
+        function taskPredict(i) {
+            taskState.predict = i;
+            taskState.phase = 'work';
+            updateTaskLock();
+            render();
+        }
+        function taskHint() {
+            taskState.hintLevel = Math.min(2, taskState.hintLevel + 1);
+            renderTaskPanel(true);
+        }
+        function taskQuizPick(i) {
+            const q = curTask().quiz;
+            if (taskState.phase !== 'quiz') return;
+            if (q.multi) {
+                const k = taskState.quizSel.indexOf(i);
+                if (k >= 0) taskState.quizSel.splice(k, 1);
+                else taskState.quizSel.push(i);
+                taskState.quizMsg = '';
+                renderTaskPanel(true);
+                return;
+            }
+            if (q.ans.includes(i)) {
+                taskState.quizSel = [i];
+                taskState.quizMsg = '';
+                taskComplete();
+            } else {
+                if (!taskState.quizWrong.includes(i)) taskState.quizWrong.push(i);
+                taskState.attempts++;
+                taskState.quizMsg = '再想想看，也可以回頭觀察電路。';
+                renderTaskPanel(true);
+            }
+        }
+        function taskQuizSubmit() {
+            const q = curTask().quiz;
+            if (!taskState.quizSel.length) {
+                taskState.quizMsg = '請先勾選答案。';
+            } else if (JSON.stringify([...taskState.quizSel].sort()) === JSON.stringify([...q.ans].sort())) {
+                taskState.quizMsg = '';
+                taskComplete();
+                return;
+            } else {
+                taskState.attempts++;
+                taskState.quizMsg = '還不對喔：可能選錯，也可能漏選。';
+            }
+            renderTaskPanel(true);
+        }
+        function taskInputDraft(k, v) { taskState.inputDraft[k] = v; }
+        function taskInputSubmit(k) {
+            const it = curTask().items.find(i => i.k === k);
+            const el = document.getElementById(`task-input-${k}`);
+            const val = parseFloat(el ? el.value : taskState.inputDraft[k]);
+            const V = taskState.fills[it.from[0]], I = taskState.fills[it.from[1]];
+            if (!isFinite(val)) {
+                taskState.inputMsg = '請輸入數字。';
+            } else if (!(I > 1e-6)) {
+                taskState.inputMsg = '先量好電壓和電流。';
+            } else {
+                const exp = V / I;
+                if (Math.abs(val - exp) <= exp * 0.05) {
+                    taskState.inputs[k] = { val, ok: true };
+                    taskState.inputMsg = '';
+                } else {
+                    taskState.attempts++;
+                    taskState.inputs[k] = { val, ok: false };
+                    taskState.inputMsg = '再算一次：電阻 R = 電壓 ÷ 電流，用你量到的數字代入。';
+                }
+            }
+            render();
+        }
+        function taskExtra() {
+            const t = curTask();
+            if (!t.extra) return;
+            taskState.extraOn = !taskState.extraOn;
+            if (taskState.extraOn) Object.assign(state.adv, t.extra.adv);
+            else Object.assign(state.adv, ADV_PRESETS.ideal, { filamentHot: taskState.card === 5 });
+            syncGlobalAdvUI();
+            render();
+        }
+        function taskToggleCollapse() {
+            taskState.collapsed = !taskState.collapsed;
+            renderTaskPanel(true);
+            fitView(); // 展開 / 收合後重新置中，避免電路被任務卡蓋住
+        }
+
+        // ---------- 任務卡畫面 ----------
+        function taskStarHtml(id) {
+            const p = taskProgress.tasks[id];
+            if (!p) return '<span class="text-slate-300">○</span>';
+            if (p.best <= 1) return '<span class="text-amber-400">★</span>';
+            if (p.best === 2) return '<span class="text-slate-400">★</span>';
+            return '<span class="text-slate-500">●</span>';
+        }
+        function esc(s) { return String(s).replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch])); }
+
+        function renderTaskPanel(force) {
+            const panel = document.getElementById('task-panel');
+            if (!panel || !taskState.active) return;
+            const S = taskState;
+            const sig = JSON.stringify([S.card, S.idx, S.phase, S.fills, S.inputs, S.inputMsg, S.marks.length, S.markMsg, S.feedback, S.condRes, S.hintLevel, S.attempts, S.quizSel, S.quizWrong, S.quizMsg, S.predict, S.gateMsg, S.collapsed, S.extraOn, S.extraReading, taskProgress.tasks]);
+            if (!force && sig === S.lastSig) return;
+            S.lastSig = sig;
+            const card = curCard(), t = curTask();
+            const advTag = t.adv ? '<span class="ml-1 px-1.5 py-0.5 rounded bg-white/25 text-[10px]">進階</span>' : '';
+            const chips = card.tasks.map((tk, i) => `<button onclick="taskGo(${S.card}, ${i})" class="shrink-0 px-2 py-1 rounded-lg text-[11px] font-bold border ${i === S.idx ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-600 border-slate-200 hover:bg-emerald-50'}">${i + 1}${tk.adv ? '<sup>+</sup>' : ''} ${taskStarHtml(tk.id)}</button>`).join('');
+
+            let body = '';
+            if (!S.collapsed) {
+                body += `<div class="flex items-center gap-1 overflow-x-auto no-scrollbar pb-1">${chips}</div>`;
+                body += `<p class="text-[11px] text-slate-500 leading-snug">${esc(card.rule)}</p>`;
+                body += `<p class="text-[13px] font-bold text-slate-800 leading-snug">${esc(t.goal)}</p>`;
+
+                if (S.phase === 'gate') {
+                    const g = card.gate;
+                    body += `<div class="p-2.5 rounded-xl bg-amber-50 border border-amber-200 space-y-1.5"><div class="text-xs font-bold text-amber-900">${esc(g.q)}</div>
+                        <div class="grid grid-cols-3 gap-1.5">${g.opts.map((o, i) => `<button onclick="taskGateChoose(${i})" class="py-1.5 rounded-lg bg-white border border-amber-300 text-xs font-bold text-slate-700 hover:bg-amber-100">${esc(o)}</button>`).join('')}</div>
+                        ${S.gateMsg ? `<div class="text-[11px] text-rose-600 font-bold">${esc(S.gateMsg)}</div>` : ''}</div>`;
+                } else if (S.phase === 'predict') {
+                    const p = t.predict;
+                    body += `<div class="p-2.5 rounded-xl bg-amber-50 border border-amber-200 space-y-1.5"><div class="text-xs font-bold text-amber-900">🤔 ${esc(p.q)}</div>
+                        ${p.opts.map((o, i) => `<button onclick="taskPredict(${i})" class="w-full text-left px-2.5 py-1.5 rounded-lg bg-white border border-amber-300 text-xs font-medium text-slate-700 hover:bg-amber-100">${esc(o)}</button>`).join('')}</div>`;
+                } else {
+                    if (t.predict && S.predict !== null) body += `<div class="text-[11px] text-slate-500">你的預測：${esc(t.predict.opts[S.predict])}</div>`;
+                    if (t.conds) {
+                        body += `<div class="space-y-1">${t.conds.map((cd, i) => {
+                            const ok = S.phase !== 'work' || !!S.condRes[i];
+                            return `<div class="flex items-start gap-1.5 text-xs ${ok ? 'text-emerald-700 font-bold' : 'text-slate-600'}"><span class="w-4 shrink-0">${ok ? '✅' : '⬜'}</span><span>${esc(cd.t)}</span></div>`;
+                        }).join('')}</div>`;
+                    }
+                    if (t.items) {
+                        body += `<div class="rounded-xl border border-slate-200 divide-y divide-slate-100">${t.items.map(it => {
+                            if (it.type === 'input') {
+                                const ready = taskState.fills[it.from[0]] !== undefined && taskState.fills[it.from[1]] !== undefined;
+                                const done = S.inputs[it.k] && S.inputs[it.k].ok;
+                                const draft = S.inputDraft[it.k] !== undefined ? S.inputDraft[it.k] : (S.inputs[it.k] ? S.inputs[it.k].val : '');
+                                return `<div class="px-2.5 py-1.5 text-xs flex items-center justify-between gap-2"><span class="text-slate-700">(${it.k}) ${esc(it.label)}</span>
+                                    ${done ? `<span class="font-bold text-emerald-700">${S.inputs[it.k].val} ${it.unit} ✅</span>` :
+                                    `<span class="flex items-center gap-1"><input id="task-input-${it.k}" type="number" inputmode="decimal" step="0.01" ${ready ? '' : 'disabled'} value="${esc(draft)}" oninput="taskInputDraft('${it.k}', this.value)" class="w-16 px-1.5 py-0.5 text-right font-bold border border-slate-300 rounded-lg disabled:bg-slate-100"><span>${it.unit}</span><button onclick="taskInputSubmit('${it.k}')" ${ready ? '' : 'disabled'} class="px-2 py-0.5 rounded-lg bg-emerald-600 text-white font-bold disabled:opacity-40">確定</button></span>`}</div>`;
+                            }
+                            const v = S.fills[it.k];
+                            return `<div class="px-2.5 py-1.5 text-xs flex items-center justify-between gap-2"><span class="text-slate-700">(${it.k}) ${esc(it.label)}${it.opt ? '<span class="text-[10px] text-indigo-500">（進階）</span>' : ''}</span>
+                                <span class="shrink-0 font-mono ${v !== undefined ? 'font-bold text-emerald-700' : 'text-slate-400'}">${v !== undefined ? `${fmtReading(v, it.m)} ✅` : `____ ${it.m === 'V' ? 'V' : 'A'}`}</span></div>`;
+                        }).join('')}</div>`;
+                        if (S.inputMsg) body += `<div class="text-[11px] text-rose-600 font-bold">${esc(S.inputMsg)}</div>`;
+                    }
+                    if (S.phase === 'mark') {
+                        const need = t.mark.kind === 'nodes' ? `（已找到 ${S.marks.length}／2）` : '';
+                        body += `<div class="p-2.5 rounded-xl bg-emerald-50 border border-emerald-300 text-xs text-emerald-900 font-bold">👆 ${esc(t.mark.prompt)} ${need}</div>`;
+                        if (S.markMsg) body += `<div class="text-[11px] text-rose-600 font-bold">${esc(S.markMsg)}</div>`;
+                    }
+                    if (S.phase === 'work' && S.feedback) {
+                        body += `<div class="p-2 rounded-xl bg-rose-50 border border-rose-200 text-[11px] text-rose-800 leading-snug flex gap-1.5"><i class="fa-solid fa-circle-exclamation mt-0.5"></i><span>${esc(S.feedback)}</span></div>`;
+                    }
+                    if (S.phase === 'quiz' || S.phase === 'done') {
+                        const q = t.quiz;
+                        if (q) {
+                            body += `<div class="p-2.5 rounded-xl bg-indigo-50 border border-indigo-200 space-y-1.5"><div class="text-xs font-bold text-indigo-950">📝 ${esc(q.q)}</div>
+                                ${q.opts.map((o, i) => {
+                                    const sel = S.quizSel.includes(i), wrong = S.quizWrong.includes(i);
+                                    const doneOk = S.phase === 'done' && q.ans.includes(i);
+                                    const cls = doneOk ? 'bg-emerald-100 border-emerald-400 text-emerald-900 font-bold' : wrong ? 'bg-slate-100 border-slate-200 text-slate-400 line-through' : sel ? 'bg-indigo-600 border-indigo-600 text-white font-bold' : 'bg-white border-indigo-200 text-slate-700 hover:bg-indigo-100';
+                                    return `<button onclick="taskQuizPick(${i})" ${S.phase === 'done' ? 'disabled' : ''} class="w-full text-left px-2.5 py-1.5 rounded-lg border text-xs ${cls}">${q.multi ? (sel || doneOk ? '☑ ' : '☐ ') : ''}${esc(o)}</button>`;
+                                }).join('')}
+                                ${q.multi && S.phase === 'quiz' ? '<button onclick="taskQuizSubmit()" class="w-full py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold">送出答案</button>' : ''}
+                                ${S.quizMsg ? `<div class="text-[11px] text-rose-600 font-bold">${esc(S.quizMsg)}</div>` : ''}</div>`;
+                        }
+                    }
+                    if (S.phase === 'done') {
+                        body += `<div class="p-2.5 rounded-xl bg-emerald-50 border border-emerald-300 space-y-1.5">
+                            <div class="text-xs font-bold text-emerald-800">🎉 完成！成績 ${taskStarHtml(t.id)}<span class="text-[10px] text-emerald-600 font-medium ml-1">（本次作答 ${S.attempts} 次）</span></div>
+                            <p class="text-xs text-slate-700 leading-relaxed">${esc(t.explain)}</p>
+                            ${t.extra ? `<button onclick="taskExtra()" class="w-full py-1.5 rounded-lg bg-white border border-amber-300 text-amber-800 text-xs font-bold hover:bg-amber-50">🔍 ${S.extraOn ? '改回理想電線' : esc(t.extra.label)}</button>
+                                ${S.extraOn ? `<div class="text-[11px] text-amber-900 leading-snug">${esc(t.extra.note)}<b class="font-mono">${esc(S.extraReading)}</b></div>` : ''}` : ''}
+                            <div class="grid grid-cols-2 gap-1.5 pt-0.5">
+                                <button onclick="taskRestart()" class="py-1.5 rounded-lg bg-white border border-slate-300 text-slate-700 text-xs font-bold hover:bg-slate-50">↻ 再挑戰</button>
+                                <button onclick="taskNext()" class="py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold">下一題 →</button>
+                            </div></div>`;
+                    }
+                }
+                if (S.phase !== 'done' && t.hints) {
+                    body += `<div class="space-y-1">${t.hints.slice(0, S.hintLevel).map((h, i) => `<div class="p-2 rounded-lg bg-sky-50 border border-sky-200 text-[11px] text-sky-900 leading-snug">💡 提示 ${i + 1}：${esc(h)}</div>`).join('')}
+                        <div class="flex gap-1.5">
+                            ${S.hintLevel < 2 ? `<button onclick="taskHint()" class="flex-1 py-1 rounded-lg bg-white border border-sky-300 text-sky-700 text-[11px] font-bold hover:bg-sky-50">💡 看提示（${S.hintLevel}/2）</button>` : ''}
+                            <button onclick="taskRestart()" class="flex-1 py-1 rounded-lg bg-white border border-slate-300 text-slate-600 text-[11px] font-bold hover:bg-slate-50">↺ 重設這一題</button>
+                        </div></div>`;
+                }
+            }
+
+            panel.innerHTML = `
+                <div class="px-3 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 text-white flex items-center gap-1.5">
+                    <button onclick="taskToggleCollapse()" class="flex-1 min-w-0 text-left">
+                        <div class="text-[10px] opacity-90 truncate">${esc(card.title)}</div>
+                        <div class="text-xs font-bold truncate">第 ${S.idx + 1} 題${advTag}｜${esc(t.title)}</div>
+                    </button>
+                    <button onclick="taskToggleCollapse()" class="w-7 h-7 rounded-lg hover:bg-white/20 flex items-center justify-center" title="收合 / 展開"><i class="fa-solid fa-chevron-${S.collapsed ? 'down' : 'up'} text-xs"></i></button>
+                    <button onclick="openTaskPicker()" class="w-7 h-7 rounded-lg hover:bg-white/20 flex items-center justify-center" title="任務列表"><i class="fa-solid fa-list-check text-xs"></i></button>
+                    <button onclick="exitTaskMode()" class="w-7 h-7 rounded-lg hover:bg-white/20 flex items-center justify-center" title="結束任務"><i class="fa-solid fa-xmark text-sm"></i></button>
+                </div>
+                ${S.collapsed ? '' : `<div class="p-3 space-y-2">${body}</div>`}`;
+        }
+
+        // ---------- 任務列表 ----------
+        function openTaskPicker() {
+            const list = document.getElementById('task-picker-list');
+            if (!list) return;
+            list.innerHTML = TASK_CARDS.map((c, ci) => {
+                const done = c.tasks.filter(tk => taskProgress.tasks[tk.id]).length;
+                return `<div class="p-3 rounded-xl border border-emerald-200 bg-emerald-50/40 space-y-2">
+                    <div class="flex items-center justify-between"><span class="font-bold text-sm text-emerald-950">${esc(c.title)}</span><span class="text-[11px] text-emerald-700 font-bold">${done}／${c.tasks.length}</span></div>
+                    <p class="text-[11px] text-slate-500">${esc(c.rule)}</p>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-1.5">${c.tasks.map((tk, ti) => `<button onclick="taskGo(${ci + 1}, ${ti})" class="text-left px-2.5 py-1.5 rounded-lg bg-white border border-slate-200 hover:border-emerald-400 hover:bg-emerald-50 text-xs flex items-center justify-between gap-2">
+                        <span class="text-slate-700"><b>${ti + 1}.</b> ${esc(tk.title)}${tk.adv ? ' <span class="text-[10px] text-indigo-500 font-bold">進階</span>' : ''}</span><span class="shrink-0">${taskStarHtml(tk.id)}</span></button>`).join('')}</div>
+                </div>`;
+            }).join('');
+            document.getElementById('task-picker-exit')?.classList.toggle('hidden', !taskState.active);
+            const m = document.getElementById('task-modal');
+            m.classList.remove('hidden');
+            m.classList.add('flex');
+        }
+        function closeTaskPicker() {
+            const m = document.getElementById('task-modal');
+            if (!m) return;
+            m.classList.add('hidden');
+            m.classList.remove('flex');
+        }
+        function resetTaskProgress() {
+            if (!window.confirm('確定要清除這台裝置上的任務成績嗎？')) return;
+            taskProgress = { tasks: {}, gates: {}, cardData: {} };
+            saveTaskProgress();
+            openTaskPicker();
+            if (taskState.active) renderTaskPanel(true);
+        }
+
+        // 網址加 #2-3 可直接開到任務二第 3 題
+        function taskCheckHash() {
+            const m = /^#(\d)-(\d+)$/.exec(location.hash || '');
+            if (!m) return;
+            const card = +m[1], idx = +m[2] - 1;
+            if (TASK_CARDS[card - 1] && TASK_CARDS[card - 1].tasks[idx] && !(taskState.active && taskState.card === card && taskState.idx === idx)) taskGo(card, idx);
+        }
+        window.addEventListener('hashchange', taskCheckHash);
+        // iPad 旋轉或視窗大小改變時，任務中自動重新置中電路
+        let taskResizeTimer = null;
+        window.addEventListener('resize', () => {
+            clearTimeout(taskResizeTimer);
+            taskResizeTimer = setTimeout(() => { if (taskState.active) fitView(); }, 200);
+        });
+
+
+        // ==========================================
         // 10. 初始化啟動：預設載入經典串並聯電路供老師立即體驗
         // ==========================================
         window.onload = function () {
@@ -6624,6 +8100,9 @@
             editHistory.stack = [snapshotCircuit()];
             editHistory.index = 0;
             updateUndoButtons();
+            taskCheckHash(); // 網址帶 #2-3 時直接開到該題
+            // 樣式表載入較慢時，版面穩定後再置中一次
+            setTimeout(() => { if (taskState.active) fitView(); }, 400);
         };
     </script>
 </body>
