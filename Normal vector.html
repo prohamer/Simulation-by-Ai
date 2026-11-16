@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>光學法線練習 2.4</title>
+    <title>光學法線練習 2.5</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap');
@@ -19,6 +19,7 @@
         .shape-icon { width: 26px; height: 26px; stroke: currentColor; fill: none; stroke-width: 2; }
         .laser-active { background: linear-gradient(135deg, #0891b2 0%, #06b6d4 100%) !important; border-color: #67e8f9 !important; color: #fff !important; box-shadow: 0 0 15px rgba(6, 182, 212, 0.55); }
         .launcher-active { background: linear-gradient(135deg, #ea580c 0%, #f97316 100%) !important; border-color: #fdba74 !important; color: #fff !important; box-shadow: 0 0 15px rgba(249, 115, 22, 0.55); }
+        .explore-active { background: rgba(139, 92, 246, 0.25) !important; border-color: #a78bfa !important; color: #ede9fe !important; box-shadow: 0 0 12px rgba(139, 92, 246, 0.4); }
         .control-panel { backdrop-filter: blur(16px); background: rgba(15, 23, 42, 0.92); border-bottom: 1px solid rgba(148, 163, 184, 0.15); }
         @media (max-width: 768px) { .shape-btn { width: 36px; height: 36px; } .shape-icon { width: 20px; height: 20px; } }
     </style>
@@ -49,6 +50,12 @@
 
             <!-- 操作按鈕區 -->
             <div class="flex items-center gap-1.5 md:gap-2 flex-wrap">
+                <!-- 自由探索模式勾選框（勾選後可拖拉紅點，但不計分） -->
+                <label id="exploreModeLabel" class="btn px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-600 rounded-lg text-xs md:text-sm font-bold flex items-center gap-1.5 cursor-pointer" title="勾選後可自由沿曲線拖拉紅點位置，但作答不計入成果紀錄">
+                    <input type="checkbox" id="exploreModeToggle" class="w-3.5 h-3.5 accent-violet-500 rounded cursor-pointer">
+                    <span>自由探索</span>
+                </label>
+
                 <!-- 雷射光筆輔助按鈕 -->
                 <button id="laserToggleBtn" class="btn px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-600 rounded-lg text-xs md:text-sm font-bold flex items-center gap-1.5" title="開啟/關閉雷射光筆輔助 (按住按鈕或雷射筆才會發光)">
                     <svg class="w-4 h-4 stroke-current fill-none" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -193,16 +200,18 @@
             answered: false,
             answerViewed: false,
             tolerance: 10,
-            // 輔助工具狀態（雷射光筆 & 發球機共用位置與入射角度）
+            // 自由探索模式（開啟時才允許沿曲線拖曳紅點，且不計入成果統計）
+            exploreMode: false,
+            // 輔助工具狀態（雷射光筆 & 發球機）
             laserEnabled: false,
-            laserFiring: false,    // 雷射筆是否正在按住發光中（放開即滅，訓練空間工作記憶）
+            laserFiring: false,
             launcherEnabled: false,
-            laserSide: 1,          // 1 或 -1，代表法線外側方向
-            laserIncidenceRad: 0,  // 相對於外側法線的隨機/手動入射角 (-85° ~ +85°)
-            laserDistRatio: 0.28,  // 工具距離紅點的比例
-            balls: [],             // 發球機飛行中的球陣列
+            laserSide: 1,
+            laserIncidenceRad: 0,
+            laserDistRatio: 0.28,
+            balls: [],
             animFrameId: null,
-            actionBtnRect: { x: 18, y: 18, w: 136, h: 42 }, // 畫布左上角互動按鈕區域
+            actionBtnRect: { x: 18, y: 18, w: 136, h: 42 },
             logicalWidth: 800,
             logicalHeight: 600,
             records: JSON.parse(localStorage.getItem('optics_normal_records') || '[]')
@@ -560,7 +569,6 @@
         function randomizeToolPosition() {
             if (!State.curveKey || State.t === null) return;
             State.laserSide = GeometryEngine.getOutwardSide(State.curveKey, State.t, State.logicalWidth, State.logicalHeight);
-            // 隨機 0° ~ 60° 入射角
             const deg = Math.random() * 60;
             const sign = Math.random() < 0.5 ? 1 : -1;
             State.laserIncidenceRad = sign * (deg * Math.PI / 180);
@@ -640,14 +648,12 @@
             State.animFrameId = requestAnimationFrame(step);
         }
 
-        // 繪製雷射光筆（僅在 State.laserFiring === true 按住時才射出光束！）
         function drawLaserRayAndPointer(ctx, target, normalAngle, w, h) {
             const { srcPos, reflPos, srcAngle, reflAngle } = getToolPositions(target, normalAngle, w, h);
 
             ctx.save();
 
             if (State.laserFiring) {
-                // 按住發光狀態：顯示完整入射光與反射光束
                 ctx.shadowColor = '#22d3ee';
                 ctx.shadowBlur = 12;
                 ctx.beginPath();
@@ -688,7 +694,6 @@
                 ctx.textAlign = 'center';
                 ctx.fillText('反射光', reflPos.x, reflPos.y - 10);
             } else {
-                // 未按住時：只顯示筆頭前方的短瞄準虛線，不顯示光束，訓練學生視覺記憶
                 const aimX = srcPos.x + (target.x - srcPos.x) * 0.3;
                 const aimY = srcPos.y + (target.y - srcPos.y) * 0.3;
                 ctx.beginPath();
@@ -701,7 +706,6 @@
                 ctx.setLineDash([]);
             }
 
-            // 繪製雷射筆機身
             ctx.save();
             ctx.translate(srcPos.x, srcPos.y);
             ctx.rotate(srcAngle);
@@ -715,11 +719,9 @@
             ctx.fill();
             ctx.stroke();
 
-            // 筆頭發光孔
             ctx.fillStyle = State.laserFiring ? '#22d3ee' : '#475569';
             ctx.fillRect(0, -bodyW / 2 + 2, 6, bodyW - 4);
 
-            // 筆身按壓開關鈕（按住時變亮綠色/青色）
             ctx.fillStyle = State.laserFiring ? '#22d3ee' : '#f43f5e';
             ctx.beginPath();
             ctx.arc(18, 0, 4, 0, Math.PI * 2);
@@ -731,7 +733,6 @@
             ctx.textAlign = 'center';
             ctx.fillText('雷射筆(按住發光/可拖曳)', srcPos.x, srcPos.y - 20);
 
-            // 在畫布左上角繪製「🔦 按住發光」瞬時按鈕
             const btn = State.actionBtnRect;
             ctx.save();
             if (State.laserFiring) {
@@ -762,7 +763,6 @@
             ctx.restore();
         }
 
-        // 繪製發球機、飛行球體與畫布上的「發射球」按鈕
         function drawLauncherAndBalls(ctx, target, normalAngle, w, h) {
             const { srcPos, srcAngle } = getToolPositions(target, normalAngle, w, h);
 
@@ -919,6 +919,26 @@
                 ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
             }
 
+            // 自由探索模式右上角提示徽章
+            if (State.exploreMode) {
+                ctx.save();
+                const badgeW = 240, badgeH = 34;
+                const bx = w - badgeW - 16, by = 16;
+                ctx.fillStyle = 'rgba(109, 40, 217, 0.35)';
+                ctx.strokeStyle = '#a78bfa';
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.roundRect(bx, by, badgeW, badgeH, 8);
+                ctx.fill();
+                ctx.stroke();
+                ctx.fillStyle = '#ede9fe';
+                ctx.font = 'bold 13px "Noto Sans TC"';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('🧭 自由探索模式 (可拖曳紅點｜不計分)', bx + badgeW / 2, by + badgeH / 2);
+                ctx.restore();
+            }
+
             if (!State.curveKey) {
                 ctx.fillStyle = '#60a5fa';
                 ctx.font = 'bold 20px "Noto Sans TC"';
@@ -1021,7 +1041,19 @@
                 ctx.stroke();
             }
 
-            // 繪製紅點（入射點）
+            // 繪製紅點（自由探索模式時外圈加上紫色光環代表可沿曲線移動）
+            if (State.exploreMode) {
+                ctx.beginPath();
+                ctx.arc(target.x, target.y, 15, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(167, 139, 250, 0.28)';
+                ctx.fill();
+                ctx.strokeStyle = '#c4b5fd';
+                ctx.lineWidth = 1.5;
+                ctx.setLineDash([3, 3]);
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+
             ctx.beginPath();
             ctx.arc(target.x, target.y, 9, 0, Math.PI * 2);
             ctx.fillStyle = '#ef4444';
@@ -1050,11 +1082,15 @@
             State.answerViewed = false;
             randomizeToolPosition();
             render();
-            if (State.launcherEnabled) {
+
+            if (State.exploreMode) {
+                if (State.launcherEnabled) fireBall();
+                setFeedback(`🧭 自由探索模式：沿曲線滑動紅點可改變位置，向外拉可試畫法線（不計入成果）`, '#c4b5fd');
+            } else if (State.launcherEnabled) {
                 fireBall();
-                setFeedback(`已發射球！可按左上角「🎯 發射球」重發，或拖曳發球機與紅點`, '#fb923c');
+                setFeedback(`已發射球！可按左上角「🎯 發射球」重發或拖曳發球機角度，再從紅點拉出法線`, '#fb923c');
             } else if (State.laserEnabled) {
-                setFeedback(`按住「🔦 按住發光」或「雷射筆」觀察光路，放開熄滅後憑記憶畫出法線`, '#38bdf8');
+                setFeedback(`按住「🔦 按住發光」或「雷射筆」觀察光路，放開熄滅後從紅點畫出法線`, '#38bdf8');
             } else {
                 setFeedback(`請從「${ShapeNames[State.curveKey]}」上的紅點拖曳畫出法線`, '#60a5fa');
             }
@@ -1081,6 +1117,20 @@
             const error = Math.min(diff, Math.abs(180 - diff));
             const isCorrect = error <= State.tolerance;
             State.answered = true;
+
+            // 自由探索模式下：提供即時視覺回饋與解答對照，但絕不寫入練習成果紀錄
+            if (State.exploreMode) {
+                if (isCorrect) {
+                    State.userColor = '#10b981';
+                    setFeedback(`🧭 [自由探索-不計分] ✓ 角度正確！誤差 ${error.toFixed(1)}°`, '#a78bfa');
+                } else {
+                    State.userColor = '#f59e0b';
+                    State.showingAnswer = true;
+                    setFeedback(`🧭 [自由探索-不計分] ✗ 誤差 ${error.toFixed(1)}° (需 ≤ ${State.tolerance}°)，已顯示正確解答`, '#f59e0b');
+                }
+                render();
+                return;
+            }
 
             if (!State.answerViewed) {
                 if (isCorrect) {
@@ -1172,7 +1222,6 @@
                 if (Math.hypot(pos.x - srcPos.x, pos.y - srcPos.y) < 34 || Math.hypot(pos.x - bodyCenter.x, pos.y - bodyCenter.y) < 34) {
                     State.dragStartPos = pos;
                     State.dragMode = 'tool_source';
-                    // 按住雷射筆機身時，同步點亮雷射光束，放開手即熄滅
                     if (State.laserEnabled) {
                         State.laserFiring = true;
                         render();
@@ -1186,7 +1235,8 @@
             const distToTarget = Math.hypot(pos.x - target.x, pos.y - target.y);
             if (distToTarget < 42) {
                 State.dragStartPos = pos;
-                State.dragMode = (State.laserEnabled || State.launcherEnabled) ? 'target_pending' : 'normal';
+                // 關鍵保護：只有勾選「自由探索模式 (State.exploreMode)」時，才允許沿曲線拖拉紅點；一般模式下紅點完全鎖定，只能畫法線
+                State.dragMode = State.exploreMode ? 'target_pending' : 'normal';
                 canvas.setPointerCapture(e.pointerId);
             }
         });
@@ -1200,7 +1250,7 @@
             const target = GeometryEngine.shapes[State.curveKey].getPoint(State.t, w, h);
             const { tangentAngle, normalAngle } = GeometryEngine.getAngles(State.curveKey, State.t, w, h);
 
-            // A. 拖曳雷射筆或發球機：動態調整位置與入射角度
+            // A. 拖曳雷射筆或發球機：動態調整位置與入射角度（紅點固定不動）
             if (State.dragMode === 'tool_source') {
                 const dx = pos.x - target.x, dy = pos.y - target.y;
                 const dist = Math.hypot(dx, dy);
@@ -1222,16 +1272,15 @@
                 return;
             }
 
-            // B. 判斷從紅點出發的手勢：沿切線滑動 = 移動紅點；離開曲線向外拉 = 畫法線
+            // B. 自由探索模式下判斷從紅點出發的手勢：沿切線滑動 = 移動紅點；離開曲線向外拉 = 畫法線
             if (State.dragMode === 'target_pending') {
                 const moveDist = Math.hypot(pos.x - State.dragStartPos.x, pos.y - State.dragStartPos.y);
                 if (moveDist > 12) {
                     const moveAngle = Math.atan2(pos.y - target.y, pos.x - target.x);
                     const cosTangent = Math.abs(Math.cos(moveAngle - tangentAngle));
-                    if (cosTangent > 0.78) {
+                    if (cosTangent > 0.75) {
                         State.dragMode = 'target_move';
                     } else {
-                        if (State.answered) State.answerViewed = true;
                         State.answered = false;
                         State.userColor = '#fbbf24';
                         State.dragMode = 'normal';
@@ -1240,8 +1289,9 @@
                 return;
             }
 
-            // C. 沿曲線拖曳紅點（入射點位置）
+            // C. 沿曲線拖曳紅點（僅限自由探索模式）
             if (State.dragMode === 'target_move') {
+                if (!State.exploreMode) return;
                 State.t = GeometryEngine.findClosestT(State.curveKey, pos.x, pos.y, w, h);
                 State.userAngle = null;
                 State.answered = false;
@@ -1272,7 +1322,6 @@
             const pos = getPointerPos(e);
             State.dragMode = null;
 
-            // 放開左上角發光鈕，立即關閉雷射光束
             if (mode === 'laser_hold_btn') {
                 State.laserFiring = false;
                 render();
@@ -1292,7 +1341,6 @@
                 }
                 checkAnswer();
             } else if (mode === 'tool_source') {
-                // 放開雷射筆機身時，立即熄滅光束
                 if (State.laserEnabled) {
                     State.laserFiring = false;
                     render();
@@ -1309,8 +1357,7 @@
                     setFeedback(`雷射已熄滅（目前入射角約 ${deg}°），請憑記憶從紅點向外拉出法線`, '#38bdf8');
                 }
             } else if (mode === 'target_move') {
-                const deg = Math.abs(State.laserIncidenceRad * 180 / Math.PI).toFixed(0);
-                setFeedback(`已移動入射點（目前入射角約 ${deg}°），可從紅點向外拖曳畫出法線`, '#60a5fa');
+                setFeedback(`🧭 [自由探索-不計分] 已移動紅點位置，可向外拉出法線或搭配雷射/發球機觀察`, '#c4b5fd');
             }
         }
 
@@ -1320,8 +1367,33 @@
         /**
          * 6. UI 綁定與統計證書匯出
          */
+        const exploreModeToggle = document.getElementById('exploreModeToggle');
+        const exploreModeLabel = document.getElementById('exploreModeLabel');
         const laserToggleBtn = document.getElementById('laserToggleBtn');
         const launcherToggleBtn = document.getElementById('launcherToggleBtn');
+
+        // 自由探索模式切換
+        exploreModeToggle.addEventListener('change', (e) => {
+            State.exploreMode = e.target.checked;
+            exploreModeLabel.classList.toggle('explore-active', State.exploreMode);
+
+            if (State.exploreMode) {
+                State.showingAnswer = false;
+                State.userAngle = null;
+                State.answered = false;
+                render();
+                if (State.curveKey) {
+                    setFeedback('🧭 已開啟「自由探索模式」：可沿曲線拖拉紅點位置，此模式作答不計入成果統計', '#c4b5fd');
+                }
+            } else {
+                // 切回一般計分模式時，自動重新抽一個隨機點，防止學生在探索模式先把點拉好再切回來計分
+                if (State.curveKey) {
+                    generateNewPoint();
+                } else {
+                    render();
+                }
+            }
+        });
 
         // 雷射光筆切換
         laserToggleBtn.addEventListener('click', () => {
@@ -1353,7 +1425,7 @@
                 randomizeToolPosition();
                 if (State.curveKey) {
                     const deg = Math.abs(State.laserIncidenceRad * 180 / Math.PI).toFixed(0);
-                    setFeedback(`發球機已開啟（入射角 ${deg}°）！點擊畫面左上角「🎯 發射球」或拖曳調整位置`, '#fb923c');
+                    setFeedback(`發球機已開啟（入射角 ${deg}°）！點擊畫面左上角「🎯 發射球」或拖曳調整發球角度`, '#fb923c');
                     fireBall();
                 }
             } else {
