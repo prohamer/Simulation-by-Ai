@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>circuit simulator</title>
+    <title>circuit simulator V2</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
@@ -499,6 +499,7 @@
                     <p>• <b>連接導線</b>：點擊任一端點(紅/藍/黑圈)，再點擊另一端點即可連線。</p>
                     <p>• <b>任意路徑繞線</b>：點選導線後，<b>拖曳導線中間的藍色控制點</b>，或<b>雙擊導線新增轉折點</b>，想怎麼繞就怎麼繞！</p>
                     <p>• <b>切換開關</b>：雙擊「閘刀開關」可直接切換通路/斷路。</p>
+                    <p>• <b>拔線重接</b>：點已接線的端子可「拔開接頭」；把<b>橘色接頭</b>拖到端子上（出現綠圈放開），或選取橘點後點一下目標端子即可接回。</p>
                     <p>• <b>快捷鍵</b>：<b>R</b> 旋轉、<b>F</b> 正負極對調、<b>Delete</b> 刪除、<b>Ctrl+Z / Ctrl+Y</b> 復原與重做。</p>
                 </div>
             </div>
@@ -1472,43 +1473,70 @@
             });
         }
 
-        // 當拖曳「拔開的電線端頭」放開時，若靠近某個元件接點，自動吸附插回該接點！
-        function trySnapFreeWireEnd(freeComp) {
-            if (!freeComp || !freeComp.isFreeWireEnd) return false;
+        // ---- 拔開的電線接頭 (橘色圓點) 重新接回元件 ----
+        const FREE_END_SNAP_RADIUS = 30;
+
+        // 找出懸空接頭附近 (吸附半徑內) 最近的元件接點
+        function findSnapTerminal(freeComp) {
+            let best = null, bestDist = FREE_END_SNAP_RADIUS;
             for (const c of state.components) {
                 if (c.id === freeComp.id || c.isFreeWireEnd) continue;
-                const def = COMP_DEFS[c.type];
-                for (const t of def.terminals) {
+                for (const t of COMP_DEFS[c.type].terminals) {
                     const pos = getTerminalWorldPos(c, t.id);
-                    if (Math.hypot(pos.x - freeComp.x, pos.y - freeComp.y) < 26) {
-                        // 將原本連到此懸空點的導線改接回目標元件接點
-                        state.wires.forEach(w => {
-                            if (w.from.compId === freeComp.id) {
-                                w.from = { compId: c.id, termId: t.id };
-                            }
-                            if (w.to.compId === freeComp.id) {
-                                w.to = { compId: c.id, termId: t.id };
-                            }
-                        });
-                        // 重接後清掉「兩端接在同一接點」或重複的導線
-                        const seen = new Set();
-                        state.wires = state.wires.filter(w => {
-                            const k1 = `${w.from.compId}:${w.from.termId}`, k2 = `${w.to.compId}:${w.to.termId}`;
-                            if (k1 === k2) return false;
-                            const key = k1 < k2 ? `${k1}|${k2}` : `${k2}|${k1}`;
-                            if (seen.has(key)) return false;
-                            seen.add(key);
-                            return true;
-                        });
-                        // 移除臨時懸空節點
-                        state.components = state.components.filter(item => item.id !== freeComp.id);
-                        selectItem('component', c.id);
-                        showToast(`⚡ 電線接頭已重新插回「${c.label || def.name}」！`);
-                        return true;
-                    }
+                    const dist = Math.hypot(pos.x - freeComp.x, pos.y - freeComp.y);
+                    if (dist < bestDist) { bestDist = dist; best = { comp: c, termId: t.id, pos }; }
                 }
             }
-            return false;
+            return best;
+        }
+
+        // 把懸空接頭上的導線改接到指定元件接點，並移除懸空接頭
+        function attachFreeWireEnd(freeComp, comp, termId) {
+            state.wires.forEach(w => {
+                if (w.from.compId === freeComp.id) w.from = { compId: comp.id, termId };
+                if (w.to.compId === freeComp.id) w.to = { compId: comp.id, termId };
+            });
+            // 重接後清掉「兩端接在同一接點」或重複的導線
+            const seen = new Set();
+            state.wires = state.wires.filter(w => {
+                const k1 = `${w.from.compId}:${w.from.termId}`, k2 = `${w.to.compId}:${w.to.termId}`;
+                if (k1 === k2) return false;
+                const key = k1 < k2 ? `${k1}|${k2}` : `${k2}|${k1}`;
+                if (seen.has(key)) return false;
+                seen.add(key);
+                return true;
+            });
+            state.components = state.components.filter(item => item.id !== freeComp.id);
+            state.dragging = null;
+            selectItem('component', comp.id);
+            showToast(`⚡ 電線接頭已重新插回「${comp.label || COMP_DEFS[comp.type].name}」！`);
+        }
+
+        // 拖曳懸空接頭放開時，若靠近某個元件接點就自動吸附插回
+        function trySnapFreeWireEnd(freeComp) {
+            if (!freeComp || !freeComp.isFreeWireEnd) return false;
+            const target = findSnapTerminal(freeComp);
+            if (!target) return false;
+            attachFreeWireEnd(freeComp, target.comp, target.termId);
+            return true;
+        }
+
+        // 拖曳懸空接頭時，在即將吸附的接點上顯示綠色光圈
+        function updateSnapHint(comp) {
+            tempWireLayer.querySelectorAll('[data-snap-hint]').forEach(el => el.remove());
+            if (!comp || !comp.isFreeWireEnd) return;
+            const target = findSnapTerminal(comp);
+            if (!target) return;
+            const ring = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            ring.setAttribute('cx', target.pos.x);
+            ring.setAttribute('cy', target.pos.y);
+            ring.setAttribute('r', '14');
+            ring.setAttribute('fill', 'rgba(34, 197, 94, 0.28)');
+            ring.setAttribute('stroke', '#16a34a');
+            ring.setAttribute('stroke-width', '3');
+            ring.setAttribute('data-snap-hint', '1');
+            ring.style.pointerEvents = 'none';
+            tempWireLayer.appendChild(ring);
         }
 
         // DOM 參考
@@ -3673,9 +3701,37 @@
             controlsLayer.innerHTML = '';
 
             // 1. 繪製所有元件的接線端子
+            const freeEndHandles = [];
             state.components.forEach(c => {
-                // 若為拔開導線的懸空端頭，本身已可直接拖曳吸附，不重複繪製深灰色端子點
-                if (c.isFreeWireEnd) return;
+                // 拔開導線的懸空接頭：在最上層畫一個大範圍可拖曳把手
+                // (接頭本體在元件層，會被導線的點擊感應區蓋住而抓不到，所以必須放在這一層)
+                if (c.isFreeWireEnd) {
+                    const fg = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                    fg.setAttribute('id', `free-end-${c.id}`);
+                    fg.setAttribute('transform', `translate(${c.x}, ${c.y})`);
+                    fg.setAttribute('class', 'cursor-move');
+                    fg.style.cursor = 'move';
+                    const fHit = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                    fHit.setAttribute('r', '18');
+                    fHit.setAttribute('fill', 'transparent');
+                    fg.appendChild(fHit);
+                    const fHalo = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                    fHalo.setAttribute('r', '12');
+                    fHalo.setAttribute('fill', 'rgba(234, 88, 12, 0.18)');
+                    fHalo.style.pointerEvents = 'none';
+                    fg.appendChild(fHalo);
+                    const fVis = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                    fVis.setAttribute('r', '7');
+                    fVis.setAttribute('fill', '#fff7ed');
+                    fVis.setAttribute('stroke', '#ea580c');
+                    fVis.setAttribute('stroke-width', '3');
+                    fVis.style.pointerEvents = 'none';
+                    fg.appendChild(fVis);
+                    fg.addEventListener('mousedown', (e) => onComponentMouseDown(e, c));
+                    fg.addEventListener('touchstart', (e) => onComponentTouchStart(e, c), { passive: false });
+                    freeEndHandles.push(fg);
+                    return;
+                }
 
                 const def = COMP_DEFS[c.type];
 
@@ -3766,6 +3822,9 @@
                     controlsLayer.appendChild(tg);
                 });
             });
+
+            // 懸空接頭把手最後加入，確保永遠在所有端子之上
+            freeEndHandles.forEach(fg => controlsLayer.appendChild(fg));
 
             // 2. 若有選取導線，顯示該導線的自由路徑控制點 (Waypoints)
             if (state.selectedType === 'wire' && state.selectedId) {
@@ -3942,6 +4001,17 @@
             if (e.button !== 0) return;
             e.stopPropagation();
 
+            // 已選取懸空的電線接頭時，點一下任何接點就直接把它插上去 (不必拖曳)
+            if (!state.wiringStart && state.selectedType === 'component') {
+                const sel = state.components.find(c => c.id === state.selectedId);
+                const target = state.components.find(c => c.id === compId);
+                if (sel && sel.isFreeWireEnd && target && !target.isFreeWireEnd) {
+                    closeTerminalPopover();
+                    attachFreeWireEnd(sel, target, termId);
+                    return;
+                }
+            }
+
             // 若已經在拉線狀態，點擊目標端子直接完成接線
             if (state.wiringStart) {
                 if (state.wiringStart.compId !== compId || state.wiringStart.termId !== termId) {
@@ -4006,7 +4076,7 @@
                     }
                 });
                 closeTerminalPopover();
-                showToast('🔌 已將電線接頭移開！直接拖曳懸空橘色接頭靠近任何端子即可重新插回！');
+                showToast('🔌 已將電線接頭移開！拖曳橘色接頭靠近端子（出現綠圈時放開），或直接點一下要接的端子即可插回！');
                 render();
             };
             listEl.appendChild(detachAllBtn);
@@ -4027,7 +4097,7 @@
                 singleDetachBtn.onclick = () => {
                     detachWireEndpoint(w, isFrom ? 'from' : 'to', comp, termId, 0);
                     closeTerminalPopover();
-                    showToast(`🔌 已將通往「${otherName}」的電線接頭移開，拖曳橘點即可重接！`);
+                    showToast(`🔌 已將通往「${otherName}」的電線接頭移開！拖曳橘點到端子，或直接點一下要接的端子即可重接！`);
                     render();
                 };
 
@@ -4186,6 +4256,7 @@
                             }
                         });
                         render({ solve: false });
+                        updateSnapHint(comp);
                     }
                 }
             } else if (state.dragging.type === 'waypoint') {
@@ -4355,7 +4426,14 @@
                     if (compG) {
                         compG.setAttribute('transform', `translate(${comp.x}, ${comp.y}) rotate(${comp.rotation || 0})`);
                         renderWires();
-                        renderControls(); // 接線端子跟著元件一起移動 (手指按住的是元件層，不受影響)
+                        if (comp.isFreeWireEnd) {
+                            // 手指按住的把手就在控制層，不可重建該層 (否則觸控事件會中斷)，只移動把手本身
+                            const handle = document.getElementById(`free-end-${comp.id}`);
+                            if (handle) handle.setAttribute('transform', `translate(${comp.x}, ${comp.y})`);
+                        } else {
+                            renderControls(); // 接線端子跟著元件一起移動 (手指按住的是元件層，不受影響)
+                        }
+                        updateSnapHint(comp);
                     } else {
                         render();
                     }
