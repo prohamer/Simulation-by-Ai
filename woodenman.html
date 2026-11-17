@@ -1,0 +1,4054 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>3D 木頭人偶 Skill 測試工作台</title>
+
+  <!-- Tailwind CSS CDN（僅用於外層工作台 UI 排版；核心 WoodenMannequinSkill 類別 100% 獨立無依賴） -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- 字體設定 -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+  <style>
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: 'Inter', 'Noto Sans TC', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: radial-gradient(circle at 50% 42%, #2c241d 0%, #1b1510 58%, #100c09 100%);
+      color: #f5f0eb;
+      user-select: none;
+    }
+
+    #canvas-container {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+      touch-action: none;
+    }
+
+    #canvas-container canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      touch-action: none;
+      outline: none;
+    }
+
+    /* 隱藏水平捲動軸但保留小螢幕橫向滑動能力 */
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+
+    /* 虛擬搖桿立體質感與脈衝光暈 */
+    #joystick-base {
+      background: radial-gradient(circle at 35% 30%, rgba(41, 37, 36, 0.88), rgba(18, 15, 13, 0.94));
+      box-shadow:
+        inset 0 2px 10px rgba(0, 0, 0, 0.78),
+        inset 0 0 0 1px rgba(251, 191, 36, 0.22),
+        0 12px 30px rgba(0, 0, 0, 0.58);
+      touch-action: none;
+    }
+
+    #joystick-knob {
+      background: radial-gradient(circle at 32% 28%, #fbbf24 0%, #d97706 62%, #92400e 100%);
+      box-shadow:
+        0 6px 16px rgba(0, 0, 0, 0.65),
+        inset 0 1px 2px rgba(255, 255, 255, 0.55);
+      will-change: transform;
+      transition: transform 0.06s ease-out;
+    }
+
+    #joystick-knob.is-dragging {
+      transition: none;
+    }
+
+    .joy-quadrant-pulse {
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.28s ease-out;
+    }
+
+    .joy-quadrant-pulse.active {
+      opacity: 1;
+      transition: opacity 0.04s ease-in;
+    }
+  </style>
+
+  <!-- Three.js r160 ES Module Import Map -->
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body class="text-stone-100 antialiased">
+  <!-- 3D 渲染畫布容器 -->
+  <div id="canvas-container"></div>
+
+  <!-- ===================================================================== -->
+  <!-- 頂部毛玻璃雙群組工具列（Tailwind CSS） -->
+  <!-- ===================================================================== -->
+  <header class="fixed top-3 left-3 right-3 z-30 pointer-events-none flex flex-wrap items-center justify-between gap-2">
+    <!-- 左側群組：品牌標題、移動模式切換、鎖定擺姿勢、放開回站姿/定格切換 -->
+    <div class="pointer-events-auto flex items-center gap-1.5 px-2.5 py-1.5 rounded-2xl bg-stone-950/85 backdrop-blur-md border border-amber-400/20 shadow-2xl max-w-full overflow-x-auto no-scrollbar">
+      <!-- 品牌識別 -->
+      <div class="flex items-center gap-2 pr-2.5 border-r border-white/10 shrink-0">
+        <div class="w-8 h-8 rounded-xl bg-gradient-to-br from-amber-500 to-amber-800 flex items-center justify-center text-white shadow-inner shrink-0">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="5" r="2.5" />
+            <path d="M9 10h6l-1 5h-4l-1-5z" />
+            <path d="M9 10.5L5.5 14" />
+            <path d="M15 10.5L18.5 14" />
+            <path d="M10.5 15L9.5 21" />
+            <path d="M13.5 15L14.5 21" />
+          </svg>
+        </div>
+        <div class="hidden xl:block">
+          <h1 class="text-xs font-bold text-amber-100 leading-tight">3D 木頭人偶 Skill 工作台</h1>
+          <p class="text-[10px] text-stone-400 leading-tight">地面圓圈拖移・橫移/轉向・IK/FK 擺姿</p>
+        </div>
+      </div>
+
+      <!-- 移動模式切換：橫移模式 vs 轉向模式 (快捷鍵 M) -->
+      <div class="inline-flex items-center gap-0.5 p-0.5 rounded-xl bg-black/45 border border-white/10 shrink-0" role="group" aria-label="移動模式切換">
+        <button type="button" id="btn-movemode-strafe" class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-amber-600 text-white shadow transition" title="鎖定朝向不轉身，左右推側向跨步、前後推前進/後退 (快捷鍵 M)">
+          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M5 9l-3 3 3 3" />
+            <path d="M19 9l3 3-3 3" />
+            <path d="M2 12h20" />
+          </svg>
+          <span>橫移模式 (M)</span>
+        </button>
+        <button type="button" id="btn-movemode-turn" class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-stone-300 hover:text-white hover:bg-white/10 transition" title="人偶自動轉向移動方向並走跑 (快捷鍵 M)">
+          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+            <path d="M3 3v5h5" />
+          </svg>
+          <span>轉向模式 (M)</span>
+        </button>
+      </div>
+
+      <!-- 互動模式切換：自由移動 / 鎖定擺姿勢 (快捷鍵 L) -->
+      <button type="button" id="btn-toggle-lock" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-white/15 bg-stone-800/90 hover:bg-stone-700 text-stone-200 text-xs font-semibold transition shrink-0" title="鎖定位置後可直接拖曳手腳 IK 控制球與身體關節，仍可拖拉地面圓圈移動 (快捷鍵 L)">
+        <svg id="icon-lock-open" class="w-3.5 h-3.5 text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+          <path d="M7 11V7a5 5 0 0 1 9.9-1" />
+        </svg>
+        <svg id="icon-lock-closed" class="w-3.5 h-3.5 text-emerald-200 hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+          <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+        </svg>
+        <span id="label-lock-btn">自由移動 / 鎖定擺姿勢 (L)</span>
+      </button>
+
+      <!-- 放開搖桿行為切換：放開自動回站姿 vs 放開定格當前步伐 -->
+      <button type="button" id="btn-release-mode" class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-white/10 bg-stone-800/80 hover:bg-stone-700 text-stone-300 hover:text-white text-xs font-semibold transition shrink-0" title="切換放開搖桿或停止拖曳時自動回到基準姿勢，或定格在當前步伐">
+        <span id="label-release-mode">放開自動回站姿</span>
+      </button>
+    </div>
+
+    <!-- 右側群組：預設姿勢、外型裝扮、材質切換、復原/重做、鏡頭跟隨、視角與重設 -->
+    <div class="pointer-events-auto flex items-center gap-1.5 px-2.5 py-1.5 rounded-2xl bg-stone-950/85 backdrop-blur-md border border-amber-400/20 shadow-2xl max-w-full overflow-x-auto no-scrollbar">
+      <!-- 預設動作姿勢 -->
+      <div class="inline-flex items-center gap-0.5 p-0.5 rounded-xl bg-black/45 border border-white/10 shrink-0" role="group" aria-label="預設動作姿勢">
+        <button type="button" data-pose="raiseRight" class="quick-pose-btn px-2.5 py-1.5 rounded-lg text-xs font-bold bg-amber-600 text-white shadow transition" title="右手高舉不對稱姿勢">右手高舉</button>
+        <button type="button" data-pose="pointForward" class="quick-pose-btn px-2.5 py-1.5 rounded-lg text-xs font-semibold text-stone-300 hover:text-white hover:bg-white/10 transition" title="右手向前指物姿勢">向前指物</button>
+        <button type="button" data-pose="stand" class="quick-pose-btn px-2.5 py-1.5 rounded-lg text-xs font-semibold text-stone-300 hover:text-white hover:bg-white/10 transition" title="標準自然站姿">標準站姿</button>
+        <button type="button" data-pose="runFreeze" class="quick-pose-btn px-2.5 py-1.5 rounded-lg text-xs font-semibold text-stone-300 hover:text-white hover:bg-white/10 transition" title="動態跑步定格姿勢">跑步定格</button>
+        <button type="button" data-pose="thinker" class="quick-pose-btn px-2.5 py-1.5 rounded-lg text-xs font-semibold text-stone-300 hover:text-white hover:bg-white/10 transition" title="沉思者姿勢">沉思者</button>
+        <button type="button" data-pose="martial" class="quick-pose-btn px-2.5 py-1.5 rounded-lg text-xs font-semibold text-stone-300 hover:text-white hover:bg-white/10 transition" title="武術架勢">武術架勢</button>
+      </div>
+
+      <!-- 外型裝扮抽屜開關 (快捷鍵 C) -->
+      <button type="button" id="btn-toggle-drawer" class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-amber-400/35 bg-amber-600/25 hover:bg-amber-600/40 text-amber-200 text-xs font-bold transition shrink-0" title="展開或收合服裝、披風、髮型與髮色面板 (快捷鍵 C)">
+        <svg class="w-3.5 h-3.5 text-amber-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M20.38 3.46L16 2a4 4 0 0 1-8 0L3.62 3.46a2 2 0 0 0-1.34 2.23l.58 3.47a1 1 0 0 0 .99.84H6v10c0 1.1.9 2 2 2h8a2 2 0 0 0 2-2V10h2.15a1 1 0 0 0 .99-.84l.58-3.47a2 2 0 0 0-1.34-2.23z" />
+        </svg>
+        <span>外型裝扮 (C)</span>
+      </button>
+
+      <!-- 木紋材質切換：山毛櫸 / 黑胡桃木 -->
+      <div class="inline-flex items-center gap-0.5 p-0.5 rounded-xl bg-black/45 border border-white/10 shrink-0" role="group" aria-label="木材質切換">
+        <button type="button" data-wood="beech" class="wood-btn px-2.5 py-1.5 rounded-lg text-xs font-bold bg-amber-600 text-white shadow transition">山毛櫸</button>
+        <button type="button" data-wood="walnut" class="wood-btn px-2.5 py-1.5 rounded-lg text-xs font-semibold text-stone-300 hover:text-white hover:bg-white/10 transition">黑胡桃木</button>
+      </div>
+
+      <!-- 復原 / 重做 (Ctrl+Z / Ctrl+Y) -->
+      <button type="button" id="btn-undo" disabled class="px-2.5 py-1.5 rounded-xl border border-white/10 bg-stone-800/85 hover:bg-stone-700 disabled:opacity-40 disabled:cursor-not-allowed text-xs font-semibold text-stone-200 transition shrink-0" title="復原上一個姿勢 (Ctrl+Z)">復原</button>
+      <button type="button" id="btn-redo" disabled class="px-2.5 py-1.5 rounded-xl border border-white/10 bg-stone-800/85 hover:bg-stone-700 disabled:opacity-40 disabled:cursor-not-allowed text-xs font-semibold text-stone-200 transition shrink-0" title="重做姿勢 (Ctrl+Y)">重做</button>
+
+      <div class="w-px h-5 bg-white/15 mx-0.5 shrink-0"></div>
+
+      <!-- 鏡頭跟隨開關 -->
+      <label class="inline-flex items-center gap-2 px-2.5 py-1 rounded-xl bg-black/45 border border-white/10 text-xs font-semibold text-stone-300 cursor-pointer shrink-0" title="搖桿移動時鏡頭自動跟隨人偶（拖曳地面圓圈時保持鏡頭穩定以便對齊刻度）">
+        <span>鏡頭跟隨</span>
+        <input id="opt-follow-cam" type="checkbox" checked class="sr-only peer" />
+        <span class="relative w-7 h-4 rounded-full bg-stone-700 peer-checked:bg-amber-600 transition after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:w-3 after:h-3 after:rounded-full after:bg-white after:transition peer-checked:after:translate-x-3"></span>
+      </label>
+
+      <!-- 視角快速切換 -->
+      <div class="inline-flex items-center gap-0.5 p-0.5 rounded-xl bg-black/45 border border-white/10 shrink-0" role="group" aria-label="攝影機視角">
+        <button type="button" data-cam="classic" class="cam-preset-btn px-2 py-1.5 rounded-lg text-xs font-bold bg-amber-600 text-white shadow transition">45° 經典</button>
+        <button type="button" data-cam="front" class="cam-preset-btn px-2 py-1.5 rounded-lg text-xs font-semibold text-stone-300 hover:text-white hover:bg-white/10 transition">正面</button>
+        <button type="button" data-cam="side" class="cam-preset-btn px-2 py-1.5 rounded-lg text-xs font-semibold text-stone-300 hover:text-white hover:bg-white/10 transition">側面</button>
+        <button type="button" data-cam="back" class="cam-preset-btn px-2 py-1.5 rounded-lg text-xs font-semibold text-stone-300 hover:text-white hover:bg-white/10 transition">背面</button>
+      </div>
+
+      <!-- 重設回到原點 -->
+      <button type="button" id="btn-reset-all" class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl border border-amber-400/30 bg-stone-800/90 hover:bg-stone-700 text-amber-200 text-xs font-semibold transition shrink-0" title="重設人偶至原點 (0, 0) 與預設姿勢">
+        <svg class="w-3.5 h-3.5 text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+          <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+          <path d="M3 3v5h5" />
+        </svg>
+        <span>重設</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- ===================================================================== -->
+  <!-- 左下角：零誤觸虛擬搖桿（連續拖曳走跑 ＋ 四象限輕點單步跨步） -->
+  <!-- ===================================================================== -->
+  <section class="fixed bottom-4 left-4 z-20 flex flex-col items-start gap-2" aria-label="虛擬搖桿走跑與單步控制器">
+    <div class="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-stone-950/85 backdrop-blur-md border border-amber-400/20 shadow-xl">
+      <span id="gait-badge" class="px-2 py-0.5 rounded-md text-[11px] font-bold bg-stone-700 text-stone-200 transition">靜止</span>
+      <span class="font-mono text-xs font-semibold text-amber-300">推力 <span id="thrust-percent">0%</span></span>
+      <span class="hidden sm:inline text-[10.5px] text-stone-400">｜輕點跨步・拖曳走跑・或直接拖拉腳下圓圈</span>
+    </div>
+
+    <div id="joystick-base" class="relative w-32 h-32 sm:w-36 sm:h-36 rounded-full flex items-center justify-center cursor-grab overflow-hidden">
+      <!-- 四象限輕點脈衝光暈回饋 -->
+      <div id="joy-pulse-up" class="joy-quadrant-pulse absolute top-0 left-4 right-4 h-12 rounded-b-full bg-gradient-to-b from-amber-400/60 to-transparent"></div>
+      <div id="joy-pulse-down" class="joy-quadrant-pulse absolute bottom-0 left-4 right-4 h-12 rounded-t-full bg-gradient-to-t from-amber-400/60 to-transparent"></div>
+      <div id="joy-pulse-left" class="joy-quadrant-pulse absolute left-0 top-4 bottom-4 w-12 rounded-r-full bg-gradient-to-r from-amber-400/60 to-transparent"></div>
+      <div id="joy-pulse-right" class="joy-quadrant-pulse absolute right-0 top-4 bottom-4 w-12 rounded-l-full bg-gradient-to-l from-amber-400/60 to-transparent"></div>
+
+      <!-- 50% 慢走/快跑分界虛線環與十字刻線 -->
+      <div class="absolute w-16 h-16 sm:w-[74px] sm:h-[74px] rounded-full border border-dashed border-amber-400/35 pointer-events-none"></div>
+      <div class="absolute left-4 right-4 h-px bg-white/10 pointer-events-none"></div>
+      <div class="absolute top-4 bottom-4 w-px bg-white/10 pointer-events-none"></div>
+
+      <span class="absolute top-2 text-[9.5px] font-bold text-stone-300/80 pointer-events-none">前 / ↑</span>
+      <span class="absolute bottom-2 text-[9.5px] font-bold text-stone-300/80 pointer-events-none">後 / ↓</span>
+      <span class="absolute left-2 text-[9.5px] font-bold text-stone-300/80 pointer-events-none">左/←</span>
+      <span class="absolute right-2 text-[9.5px] font-bold text-stone-300/80 pointer-events-none">右/→</span>
+
+      <!-- 可拖曳搖桿球頭 -->
+      <div id="joystick-knob" class="relative z-10 w-12 h-12 sm:w-13 sm:h-13 rounded-full flex items-center justify-center border-2 border-amber-100/85 pointer-events-none">
+        <div class="w-4 h-4 rounded-full bg-amber-950/35 border border-amber-100/40"></div>
+      </div>
+
+      <!-- 鎖定擺姿勢模式遮罩 -->
+      <div id="joystick-locked-overlay" class="hidden absolute inset-0 z-20 rounded-full bg-stone-950/90 backdrop-blur-sm flex flex-col items-center justify-center text-center p-2.5 border border-emerald-400/40 gap-0.5">
+        <svg class="w-5 h-5 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+          <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+          <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+        </svg>
+        <span class="text-[11px] font-bold text-emerald-300 leading-tight">已鎖定擺姿勢</span>
+        <span class="text-[9.5px] text-stone-400 leading-tight">直接拖曳肢體或腳下圓圈</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================================================================== -->
+  <!-- 右側可收合：外型裝扮抽屜（服裝、披風、髮型、髮色） -->
+  <!-- ===================================================================== -->
+  <aside id="appearance-drawer" class="fixed top-20 right-3 z-20 w-72 max-w-[calc(100vw-1.5rem)] max-h-[calc(100vh-14.5rem)] overflow-y-auto no-scrollbar rounded-2xl bg-stone-950/88 backdrop-blur-md border border-amber-400/20 shadow-2xl p-3.5 flex flex-col gap-3 transition-all duration-200" aria-label="外型裝扮面板">
+    <div class="flex items-center justify-between border-b border-white/10 pb-2">
+      <div class="flex items-center gap-1.5">
+        <span class="w-2 h-2 rounded-full bg-amber-400"></span>
+        <h2 class="text-xs font-bold text-amber-100 tracking-wide">人偶外型裝扮</h2>
+      </div>
+      <button type="button" id="btn-close-drawer" class="text-[11px] text-stone-400 hover:text-white px-1.5 py-0.5 rounded-lg hover:bg-white/10 transition" title="收合面板 (C)">收合 ✕</button>
+    </div>
+
+    <!-- 1. 服裝款式 -->
+    <div class="flex flex-col gap-1.5">
+      <div class="flex items-center justify-between">
+        <span class="text-[11px] font-semibold text-stone-300">服裝款式</span>
+        <span id="label-outfit-name" class="text-[10.5px] font-medium text-amber-300">經典原木素體</span>
+      </div>
+      <div class="grid grid-cols-3 gap-1" id="outfit-style-group">
+        <button type="button" data-outfit="none" class="outfit-btn px-2 py-1.5 rounded-lg text-[11px] font-bold bg-amber-600 text-white shadow transition">原木素體</button>
+        <button type="button" data-outfit="labcoat" class="outfit-btn px-2 py-1.5 rounded-lg text-[11px] font-semibold bg-white/5 text-stone-300 hover:text-white hover:bg-white/10 transition">實驗白袍</button>
+        <button type="button" data-outfit="jacket" class="outfit-btn px-2 py-1.5 rounded-lg text-[11px] font-semibold bg-white/5 text-stone-300 hover:text-white hover:bg-white/10 transition">立領夾克</button>
+        <button type="button" data-outfit="cape" class="outfit-btn px-2 py-1.5 rounded-lg text-[11px] font-semibold bg-white/5 text-stone-300 hover:text-white hover:bg-white/10 transition">英雄披風</button>
+        <button type="button" data-outfit="tunic" class="outfit-btn px-2 py-1.5 rounded-lg text-[11px] font-semibold bg-white/5 text-stone-300 hover:text-white hover:bg-white/10 transition">學院背心</button>
+      </div>
+    </div>
+
+    <!-- 2. 服裝主色 -->
+    <div class="flex flex-col gap-1.5">
+      <div class="flex items-center justify-between">
+        <span class="text-[11px] font-semibold text-stone-300">服裝配色</span>
+        <span id="label-outfit-color" class="text-[10.5px] font-medium text-stone-400">實驗白</span>
+      </div>
+      <div class="grid grid-cols-8 gap-1.5" id="outfit-color-group">
+        <button type="button" data-color="#f4f1ea" data-name="實驗白" class="outfit-color-btn w-6 h-6 rounded-full border-2 border-white ring-2 ring-amber-400 scale-110 transition" style="background:#f4f1ea" title="實驗白"></button>
+        <button type="button" data-color="#253b59" data-name="海軍藍" class="outfit-color-btn w-6 h-6 rounded-full border border-white/25 hover:scale-110 transition" style="background:#253b59" title="海軍藍"></button>
+        <button type="button" data-color="#8f2d36" data-name="勃根地紅" class="outfit-color-btn w-6 h-6 rounded-full border border-white/25 hover:scale-110 transition" style="background:#8f2d36" title="勃根地紅"></button>
+        <button type="button" data-color="#2d5a43" data-name="森林綠" class="outfit-color-btn w-6 h-6 rounded-full border border-white/25 hover:scale-110 transition" style="background:#2d5a43" title="森林綠"></button>
+        <button type="button" data-color="#c98a2c" data-name="暖琥珀黃" class="outfit-color-btn w-6 h-6 rounded-full border border-white/25 hover:scale-110 transition" style="background:#c98a2c" title="暖琥珀黃"></button>
+        <button type="button" data-color="#553875" data-name="皇家紫" class="outfit-color-btn w-6 h-6 rounded-full border border-white/25 hover:scale-110 transition" style="background:#553875" title="皇家紫"></button>
+        <button type="button" data-color="#2d3138" data-name="炭灰黑" class="outfit-color-btn w-6 h-6 rounded-full border border-white/25 hover:scale-110 transition" style="background:#2d3138" title="炭灰黑"></button>
+        <button type="button" data-color="#3b7ea1" data-name="天空藍" class="outfit-color-btn w-6 h-6 rounded-full border border-white/25 hover:scale-110 transition" style="background:#3b7ea1" title="天空藍"></button>
+      </div>
+    </div>
+
+    <div class="h-px bg-white/10"></div>
+
+    <!-- 3. 髮型款式 -->
+    <div class="flex flex-col gap-1.5">
+      <div class="flex items-center justify-between">
+        <span class="text-[11px] font-semibold text-stone-300">髮型款式</span>
+        <span id="label-hair-name" class="text-[10.5px] font-medium text-amber-300">光滑原木頭</span>
+      </div>
+      <div class="grid grid-cols-3 gap-1" id="hair-style-group">
+        <button type="button" data-hair="none" class="hair-btn px-2 py-1.5 rounded-lg text-[11px] font-bold bg-amber-600 text-white shadow transition">光滑原木</button>
+        <button type="button" data-hair="short" class="hair-btn px-2 py-1.5 rounded-lg text-[11px] font-semibold bg-white/5 text-stone-300 hover:text-white hover:bg-white/10 transition">俐落短髮</button>
+        <button type="button" data-hair="bob" class="hair-btn px-2 py-1.5 rounded-lg text-[11px] font-semibold bg-white/5 text-stone-300 hover:text-white hover:bg-white/10 transition">齊耳鮑伯</button>
+        <button type="button" data-hair="ponytail" class="hair-btn px-2 py-1.5 rounded-lg text-[11px] font-semibold bg-white/5 text-stone-300 hover:text-white hover:bg-white/10 transition">活力馬尾</button>
+        <button type="button" data-hair="spiky" class="hair-btn px-2 py-1.5 rounded-lg text-[11px] font-semibold bg-white/5 text-stone-300 hover:text-white hover:bg-white/10 transition">動漫刺蝟</button>
+        <button type="button" data-hair="bun" class="hair-btn px-2 py-1.5 rounded-lg text-[11px] font-semibold bg-white/5 text-stone-300 hover:text-white hover:bg-white/10 transition">優雅丸子</button>
+      </div>
+    </div>
+
+    <!-- 4. 髮色選擇 -->
+    <div class="flex flex-col gap-1.5">
+      <div class="flex items-center justify-between">
+        <span class="text-[11px] font-semibold text-stone-300">髮色選擇</span>
+        <span id="label-hair-color" class="text-[10.5px] font-medium text-stone-400">自然深棕</span>
+      </div>
+      <div class="grid grid-cols-8 gap-1.5" id="hair-color-group">
+        <button type="button" data-color="#3b271c" data-name="自然深棕" class="hair-color-btn w-6 h-6 rounded-full border-2 border-white ring-2 ring-amber-400 scale-110 transition" style="background:#3b271c" title="自然深棕"></button>
+        <button type="button" data-color="#1c1c21" data-name="烏木黑" class="hair-color-btn w-6 h-6 rounded-full border border-white/25 hover:scale-110 transition" style="background:#1c1c21" title="烏木黑"></button>
+        <button type="button" data-color="#d6b168" data-name="亞麻金" class="hair-color-btn w-6 h-6 rounded-full border border-white/25 hover:scale-110 transition" style="background:#d6b168" title="亞麻金"></button>
+        <button type="button" data-color="#7d3826" data-name="栗子紅棕" class="hair-color-btn w-6 h-6 rounded-full border border-white/25 hover:scale-110 transition" style="background:#7d3826" title="栗子紅棕"></button>
+        <button type="button" data-color="#cfd4dc" data-name="銀白灰" class="hair-color-btn w-6 h-6 rounded-full border border-white/25 hover:scale-110 transition" style="background:#cfd4dc" title="銀白灰"></button>
+        <button type="button" data-color="#24426b" data-name="深海藍" class="hair-color-btn w-6 h-6 rounded-full border border-white/25 hover:scale-110 transition" style="background:#24426b" title="深海藍"></button>
+        <button type="button" data-color="#d9829b" data-name="櫻花粉" class="hair-color-btn w-6 h-6 rounded-full border border-white/25 hover:scale-110 transition" style="background:#d9829b" title="櫻花粉"></button>
+        <button type="button" data-color="#274a3c" data-name="森林墨綠" class="hair-color-btn w-6 h-6 rounded-full border border-white/25 hover:scale-110 transition" style="background:#274a3c" title="森林墨綠"></button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ===================================================================== -->
+  <!-- 底部中央：操作狀態引導條與 Shift 網格吸附徽章 -->
+  <!-- ===================================================================== -->
+  <div class="hidden lg:flex fixed bottom-4 left-1/2 -translate-x-1/2 z-20 pointer-events-none flex-col items-center gap-1.5 max-w-lg">
+    <div id="snap-badge" class="hidden px-3 py-1 rounded-full bg-sky-500/20 border border-sky-400/50 text-sky-200 text-[11px] font-bold tracking-wide shadow-lg backdrop-blur-md">
+      Shift 網格吸附中（0.25m 網格交點對齊）
+    </div>
+    <div class="flex items-center gap-2 px-3.5 py-2 rounded-2xl bg-stone-950/85 backdrop-blur-md border border-amber-400/20 text-stone-100 text-xs font-medium shadow-2xl">
+      <span id="status-dot" class="w-2.5 h-2.5 rounded-full bg-amber-400 shrink-0"></span>
+      <span id="status-msg" class="truncate">橫移模式：可直接拖拉人偶腳下圓圈移動（按住 Shift 吸附 0.25m 網格）</span>
+    </div>
+  </div>
+
+  <!-- ===================================================================== -->
+  <!-- 右下角：即時狀態與效能監測徽章 -->
+  <!-- ===================================================================== -->
+  <aside class="fixed bottom-4 right-4 z-20 pointer-events-auto p-3 rounded-2xl bg-stone-950/90 backdrop-blur-md border border-amber-400/20 shadow-2xl text-[11px] min-w-[228px] flex flex-col gap-2" aria-label="即時狀態與效能監測">
+    <div class="flex items-center justify-between border-b border-white/10 pb-1.5 gap-2">
+      <span id="hud-mode-badge" class="px-2 py-0.5 rounded-md text-[10.5px] font-bold bg-amber-600/30 text-amber-300 border border-amber-400/30">橫移模式 (Strafe)</span>
+      <span class="inline-flex items-center gap-1.5 font-mono text-[10.5px] text-stone-400">
+        <span id="fps-dot" class="w-2 h-2 rounded-full bg-emerald-400"></span>
+        <span id="perf-fps" class="font-bold text-emerald-400">60</span> FPS
+      </span>
+    </div>
+
+    <div class="grid grid-cols-3 gap-1.5 text-center">
+      <div class="bg-white/5 rounded-lg px-1.5 py-1">
+        <div class="text-[9.5px] text-stone-400">速度狀態</div>
+        <div id="hud-speed-state" class="text-xs font-bold text-amber-200">靜止</div>
+      </div>
+      <div class="bg-white/5 rounded-lg px-1.5 py-1">
+        <div class="text-[9.5px] text-stone-400">X 座標</div>
+        <div class="font-mono text-xs font-bold text-stone-100"><span id="pos-x-readout">0.00</span>m</div>
+      </div>
+      <div class="bg-white/5 rounded-lg px-1.5 py-1">
+        <div class="text-[9.5px] text-stone-400">Z 座標</div>
+        <div class="font-mono text-xs font-bold text-stone-100"><span id="pos-z-readout">0.00</span>m</div>
+      </div>
+      <div class="bg-white/5 rounded-lg px-1.5 py-1">
+        <div class="text-[9.5px] text-stone-400">Draw Calls</div>
+        <div id="perf-calls" class="font-mono text-xs font-bold text-stone-100">0</div>
+      </div>
+      <div class="col-span-2 bg-white/5 rounded-lg px-1.5 py-1">
+        <div class="text-[9.5px] text-stone-400">渲染三角面 (Triangles)</div>
+        <div id="perf-tris" class="font-mono text-xs font-bold text-stone-100">0</div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- 非侵入式錯誤提示（絕不使用 alert / confirm） -->
+  <div id="error-toast" class="hidden fixed top-20 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-2xl bg-red-950/95 border border-red-400/50 text-red-100 text-xs font-semibold shadow-2xl"></div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+    /**
+     * 非侵入式錯誤提示（絕不使用 alert / confirm）
+     */
+    function showToastError(msg) {
+      const el = document.getElementById('error-toast');
+      if (el) {
+        el.textContent = msg;
+        el.classList.remove('hidden');
+      }
+    }
+
+    const clamp = THREE.MathUtils.clamp;
+    const degToRad = THREE.MathUtils.degToRad;
+    const radToDeg = THREE.MathUtils.radToDeg;
+
+    function safeNum(v, fallback = 0) {
+      return Number.isFinite(v) ? v : fallback;
+    }
+
+    function safeNormalize(vec, fallback = new THREE.Vector3(0, 1, 0)) {
+      const lenSq = vec.lengthSq();
+      if (!Number.isFinite(lenSq) || lenSq < 1e-8) {
+        return vec.copy(fallback);
+      }
+      return vec.divideScalar(Math.sqrt(lenSq));
+    }
+
+    function shortestAngleLerp(current, target, alpha) {
+      let diff = ((target - current + Math.PI) % (Math.PI * 2)) - Math.PI;
+      if (diff < -Math.PI) diff += Math.PI * 2;
+      return current + diff * alpha;
+    }
+
+    // =========================================================================
+    // 核心可重用模組：WoodenMannequinSkill
+    // 100% 獨立無 DOM/CSS 框架依賴，可直接複製整合至光學或物理模擬
+    // =========================================================================
+    class WoodenMannequinSkill {
+      static sharedResources = null;
+
+      /**
+       * 生成並快取共用程序化木紋貼圖（山毛櫸 & 黑胡桃木）與車削幾何體池
+       */
+      static getSharedResources(threeLib = THREE, maxAnisotropy = 4) {
+        if (WoodenMannequinSkill.sharedResources) {
+          return WoodenMannequinSkill.sharedResources;
+        }
+
+        const T = threeLib;
+
+        const createWoodTextureSet = (palette) => {
+          const width = 512;
+          const height = 512;
+          const colorCanvas = document.createElement('canvas');
+          colorCanvas.width = width;
+          colorCanvas.height = height;
+          const ctx = colorCanvas.getContext('2d');
+
+          const bumpCanvas = document.createElement('canvas');
+          bumpCanvas.width = width;
+          bumpCanvas.height = height;
+          const bCtx = bumpCanvas.getContext('2d');
+
+          const baseGrad = ctx.createLinearGradient(0, 0, width, 0);
+          baseGrad.addColorStop(0.0, palette.c0);
+          baseGrad.addColorStop(0.32, palette.c1);
+          baseGrad.addColorStop(0.64, palette.c2);
+          baseGrad.addColorStop(1.0, palette.c3);
+          ctx.fillStyle = baseGrad;
+          ctx.fillRect(0, 0, width, height);
+
+          bCtx.fillStyle = '#808080';
+          bCtx.fillRect(0, 0, width, height);
+
+          for (let i = 0; i < 240; i++) {
+            const xBase = (i / 240) * width;
+            const waveAmp = 3.5 + Math.sin(i * 0.17) * 4.5;
+            const waveFreq = 0.011 + (i % 6) * 0.002;
+            const phase = i * 0.41;
+            const isDark = i % 3 !== 0;
+
+            ctx.beginPath();
+            bCtx.beginPath();
+            for (let y = 0; y <= height; y += 16) {
+              const x = (xBase + Math.sin(y * waveFreq + phase) * waveAmp + width) % width;
+              if (y === 0) {
+                ctx.moveTo(x, y);
+                bCtx.moveTo(x, y);
+              } else {
+                ctx.lineTo(x, y);
+                bCtx.lineTo(x, y);
+              }
+            }
+            ctx.lineWidth = 0.9 + (i % 3) * 0.5;
+            ctx.strokeStyle = isDark ? palette.darkStreak : palette.lightStreak;
+            ctx.stroke();
+
+            bCtx.lineWidth = ctx.lineWidth;
+            bCtx.strokeStyle = isDark ? 'rgba(95,95,95,0.16)' : 'rgba(170,170,170,0.12)';
+            bCtx.stroke();
+          }
+
+          for (let k = 0; k < 650; k++) {
+            const rx = Math.random() * width;
+            const ry = Math.random() * height;
+            const rLen = 5 + Math.random() * 12;
+            ctx.fillStyle = palette.rayColor;
+            ctx.fillRect(rx, ry, 1.2, rLen);
+          }
+
+          const map = new T.CanvasTexture(colorCanvas);
+          map.colorSpace = T.SRGBColorSpace;
+          map.wrapS = map.wrapT = T.RepeatWrapping;
+          map.anisotropy = maxAnisotropy;
+
+          const bumpMap = new T.CanvasTexture(bumpCanvas);
+          bumpMap.wrapS = bumpMap.wrapT = T.RepeatWrapping;
+          bumpMap.anisotropy = maxAnisotropy;
+
+          return { map, bumpMap, jointTint: palette.jointTint };
+        };
+
+        const woodSets = {
+          beech: createWoodTextureSet({
+            c0: '#e5bd8e',
+            c1: '#d6a772',
+            c2: '#ebc598',
+            c3: '#cfa06b',
+            darkStreak: 'rgba(145, 88, 38, 0.11)',
+            lightStreak: 'rgba(255, 240, 218, 0.11)',
+            rayColor: 'rgba(126, 72, 30, 0.12)',
+            jointTint: 0x9c6638
+          }),
+          walnut: createWoodTextureSet({
+            c0: '#784c30',
+            c1: '#633c24',
+            c2: '#855537',
+            c3: '#57331d',
+            darkStreak: 'rgba(34, 17, 8, 0.22)',
+            lightStreak: 'rgba(186, 134, 96, 0.13)',
+            rayColor: 'rgba(30, 14, 6, 0.2)',
+            jointTint: 0x452817
+          })
+        };
+
+        // 腳底高效能半透明徑向漸層接觸陰影貼圖
+        const shadowCanvas = document.createElement('canvas');
+        shadowCanvas.width = 128;
+        shadowCanvas.height = 128;
+        const sCtx = shadowCanvas.getContext('2d');
+        const sGrad = sCtx.createRadialGradient(64, 64, 6, 64, 64, 62);
+        sGrad.addColorStop(0.0, 'rgba(0, 0, 0, 0.56)');
+        sGrad.addColorStop(0.55, 'rgba(0, 0, 0, 0.22)');
+        sGrad.addColorStop(1.0, 'rgba(0, 0, 0, 0.0)');
+        sCtx.fillStyle = sGrad;
+        sCtx.fillRect(0, 0, 128, 128);
+        const shadowMap = new T.CanvasTexture(shadowCanvas);
+
+        // 車削圓角肢段幾何輔助函數 (LatheGeometry)
+        const createCarvedLimb = (topR, botR, len, segs = 20) => {
+          const bevel = Math.min(topR, botR, len * 0.22) * 0.52;
+          const pts = [new T.Vector2(0, -len)];
+          const steps = 4;
+          for (let i = 1; i <= steps; i++) {
+            const t = (i / steps) * (Math.PI / 2);
+            pts.push(new T.Vector2(Math.sin(t) * botR, -len + (1 - Math.cos(t)) * bevel));
+          }
+          for (let i = 0; i <= steps; i++) {
+            const t = (i / steps) * (Math.PI / 2);
+            pts.push(new T.Vector2(Math.cos(t) * topR, -bevel + Math.sin(t) * bevel));
+          }
+          pts.push(new T.Vector2(0, 0));
+          const g = new T.LatheGeometry(pts, segs);
+          g.computeVertexNormals();
+          return g;
+        };
+
+        // 地面方向指示箭頭幾何（ExtrudeGeometry）
+        const chevronShape = new T.Shape();
+        chevronShape.moveTo(0, 0.24);
+        chevronShape.lineTo(0.24, -0.04);
+        chevronShape.lineTo(0.14, -0.10);
+        chevronShape.lineTo(0, 0.06);
+        chevronShape.lineTo(-0.14, -0.10);
+        chevronShape.lineTo(-0.24, -0.04);
+        chevronShape.closePath();
+        const chevronGeo = new T.ExtrudeGeometry(chevronShape, {
+          depth: 0.022,
+          bevelEnabled: true,
+          bevelThickness: 0.008,
+          bevelSize: 0.008,
+          bevelSegments: 2
+        });
+        chevronGeo.rotateX(Math.PI / 2);
+        chevronGeo.computeVertexNormals();
+
+        const geometries = {
+          sphere: new T.SphereGeometry(1, 20, 16),
+          pelvis: (() => {
+            const pts = [
+              new T.Vector2(0, -0.20),
+              new T.Vector2(0.22, -0.20),
+              new T.Vector2(0.27, -0.15),
+              new T.Vector2(0.37, 0.12),
+              new T.Vector2(0.34, 0.18),
+              new T.Vector2(0, 0.18)
+            ];
+            const g = new T.LatheGeometry(pts, 24);
+            g.computeVertexNormals();
+            return g;
+          })(),
+          torso: (() => {
+            const pts = [
+              new T.Vector2(0, 0.02),
+              new T.Vector2(0.22, 0.03),
+              new T.Vector2(0.25, 0.13),
+              new T.Vector2(0.33, 0.44),
+              new T.Vector2(0.42, 0.76),
+              new T.Vector2(0.40, 0.88),
+              new T.Vector2(0.32, 0.95),
+              new T.Vector2(0, 0.97)
+            ];
+            const g = new T.LatheGeometry(pts, 24);
+            g.computeVertexNormals();
+            return g;
+          })(),
+          head: (() => {
+            const pts = [
+              new T.Vector2(0, 0.0),
+              new T.Vector2(0.088, 0.022),
+              new T.Vector2(0.142, 0.09),
+              new T.Vector2(0.188, 0.20),
+              new T.Vector2(0.212, 0.33),
+              new T.Vector2(0.202, 0.45),
+              new T.Vector2(0.16, 0.55),
+              new T.Vector2(0.088, 0.60),
+              new T.Vector2(0, 0.62)
+            ];
+            const g = new T.LatheGeometry(pts, 24);
+            g.computeVertexNormals();
+            return g;
+          })(),
+          neckCol: createCarvedLimb(0.095, 0.105, 0.13, 18),
+          upperArm: createCarvedLimb(0.135, 0.11, 0.76, 20),
+          forearm: createCarvedLimb(0.11, 0.082, 0.67, 20),
+          palm: createCarvedLimb(0.078, 0.088, 0.19, 18),
+          fingers: createCarvedLimb(0.084, 0.062, 0.17, 18),
+          thumb: createCarvedLimb(0.032, 0.023, 0.115, 14),
+          thigh: createCarvedLimb(0.168, 0.132, 0.87, 22),
+          calf: (() => {
+            const len = 0.83;
+            const pts = [
+              new T.Vector2(0, -len),
+              new T.Vector2(0.086, -len + 0.035),
+              new T.Vector2(0.106, -len * 0.45),
+              new T.Vector2(0.134, -len * 0.24),
+              new T.Vector2(0.130, -0.045),
+              new T.Vector2(0.112, -0.01),
+              new T.Vector2(0, 0)
+            ];
+            const g = new T.LatheGeometry(pts, 22);
+            g.computeVertexNormals();
+            return g;
+          })(),
+          footWedge: createCarvedLimb(0.092, 0.115, 0.40, 20),
+          shadowDisc: new T.CircleGeometry(0.92, 32),
+          groundHitDisc: new T.CircleGeometry(1.12, 48),
+          groundOuterRing: new T.RingGeometry(0.94, 1.12, 48),
+          groundBevelTorus: new T.TorusGeometry(1.03, 0.026, 12, 48),
+          groundInnerRing: new T.RingGeometry(0.76, 0.80, 48),
+          groundChevron: chevronGeo
+        };
+
+        WoodenMannequinSkill.sharedResources = {
+          woodSets,
+          shadowMap,
+          geometries
+        };
+        return WoodenMannequinSkill.sharedResources;
+      }
+
+      /**
+       * 主動釋放全場景共用的貼圖與幾何體記憶體
+       */
+      static disposeShared() {
+        const res = WoodenMannequinSkill.sharedResources;
+        if (!res) return;
+        Object.values(res.woodSets).forEach((s) => {
+          if (s.map) s.map.dispose();
+          if (s.bumpMap) s.bumpMap.dispose();
+        });
+        if (res.shadowMap) res.shadowMap.dispose();
+        if (res.geometries) {
+          Object.values(res.geometries).forEach((geo) => {
+            if (geo && typeof geo.dispose === 'function') geo.dispose();
+          });
+        }
+        WoodenMannequinSkill.sharedResources = null;
+      }
+
+      /**
+       * 預設光學教學與動作姿勢庫（角度單位：度 Degrees）
+       */
+      static PRESETS = {
+        raiseRight: {
+          label: '右手高舉',
+          pelvisBounceY: 0, pelvisRotX: 0, pelvisRotZ: -2,
+          headX: -4, headY: 10, headZ: -6,
+          torsoX: -2, torsoY: 6, torsoZ: -3,
+          lShoulderZ: 14, lShoulderX: 6, lShoulderY: 0, lElbowX: -18,
+          rShoulderZ: -146, rShoulderX: -14, rShoulderY: -8, rElbowX: -34,
+          lHipX: -2, lHipZ: 4, lHipY: 0, lKneeX: 4, lAnkleX: -2,
+          rHipX: 2, rHipZ: -4, rHipY: 0, rKneeX: 0, rAnkleX: 0
+        },
+        pointForward: {
+          label: '向前指物',
+          pelvisBounceY: 0, pelvisRotX: 2, pelvisRotZ: 0,
+          headX: 0, headY: -5, headZ: 0,
+          torsoX: 4, torsoY: 8, torsoZ: 0,
+          lShoulderZ: 12, lShoulderX: 12, lShoulderY: 0, lElbowX: -22,
+          rShoulderZ: -10, rShoulderX: -88, rShoulderY: 0, rElbowX: -10,
+          lHipX: 6, lHipZ: 3, lHipY: 0, lKneeX: 4, lAnkleX: -3,
+          rHipX: -8, rHipZ: -3, rHipY: 0, rKneeX: 6, rAnkleX: -2
+        },
+        stand: {
+          label: '標準站姿',
+          pelvisBounceY: 0, pelvisRotX: 0, pelvisRotZ: 0,
+          headX: 0, headY: 0, headZ: 0,
+          torsoX: 0, torsoY: 0, torsoZ: 0,
+          lShoulderZ: 8, lShoulderX: 0, lShoulderY: 0, lElbowX: -10,
+          rShoulderZ: -8, rShoulderX: 0, rShoulderY: 0, rElbowX: -10,
+          lHipX: 0, lHipZ: 3, lHipY: 0, lKneeX: 0, lAnkleX: 0,
+          rHipX: 0, rHipZ: -3, rHipY: 0, rKneeX: 0, rAnkleX: 0
+        },
+        runFreeze: {
+          label: '跑步定格',
+          pelvisBounceY: 0.08, pelvisRotX: 6, pelvisRotZ: 2,
+          headX: -10, headY: -4, headZ: 0,
+          torsoX: 18, torsoY: -10, torsoZ: 2,
+          lShoulderZ: 14, lShoulderX: 44, lShoulderY: 0, lElbowX: -94,
+          rShoulderZ: -14, rShoulderX: -48, rShoulderY: 0, rElbowX: -88,
+          lHipX: -54, lHipZ: 4, lHipY: 0, lKneeX: 68, lAnkleX: -12,
+          rHipX: 44, rHipZ: -4, rHipY: 0, rKneeX: 84, rAnkleX: 18
+        },
+        thinker: {
+          label: '沉思者',
+          pelvisBounceY: -0.06, pelvisRotX: 8, pelvisRotZ: 0,
+          headX: 22, headY: -10, headZ: 4,
+          torsoX: 22, torsoY: -8, torsoZ: 2,
+          lShoulderZ: 12, lShoulderX: 14, lShoulderY: 0, lElbowX: -36,
+          rShoulderZ: -16, rShoulderX: -68, rShoulderY: -18, rElbowX: -132,
+          lHipX: -22, lHipZ: 5, lHipY: 0, lKneeX: 28, lAnkleX: -6,
+          rHipX: -14, rHipZ: -5, rHipY: 0, rKneeX: 20, rAnkleX: -6
+        },
+        martial: {
+          label: '武術架勢',
+          pelvisBounceY: -0.14, pelvisRotX: 4, pelvisRotZ: 0,
+          headX: -4, headY: 36, headZ: 0,
+          torsoX: 8, torsoY: -28, torsoZ: 0,
+          lShoulderZ: 58, lShoulderX: -32, lShoulderY: 16, lElbowX: -48,
+          rShoulderZ: -26, rShoulderX: 28, rShoulderY: -18, rElbowX: -108,
+          lHipX: -38, lHipZ: 22, lHipY: 22, lKneeX: 52, lAnkleX: -14,
+          rHipX: 26, rHipZ: -24, rHipY: -24, rKneeX: 46, rAnkleX: -12
+        }
+      };
+
+      static OUTFIT_COLORS = [
+        { name: '實驗白', hex: '#f4f1ea' },
+        { name: '海軍藍', hex: '#253b59' },
+        { name: '勃根地紅', hex: '#8f2d36' },
+        { name: '森林綠', hex: '#2d5a43' },
+        { name: '暖琥珀黃', hex: '#c98a2c' },
+        { name: '皇家紫', hex: '#553875' },
+        { name: '炭灰黑', hex: '#2d3138' },
+        { name: '天空藍', hex: '#3b7ea1' }
+      ];
+
+      static HAIR_COLORS = [
+        { name: '自然深棕', hex: '#3b271c' },
+        { name: '烏木黑', hex: '#1c1c21' },
+        { name: '亞麻金', hex: '#d6b168' },
+        { name: '栗子紅棕', hex: '#7d3826' },
+        { name: '銀白灰', hex: '#cfd4dc' },
+        { name: '深海藍', hex: '#24426b' },
+        { name: '櫻花粉', hex: '#d9829b' },
+        { name: '森林墨綠', hex: '#274a3c' }
+      ];
+
+      constructor(options = {}) {
+        const {
+          isImage = false,
+          targetHeight = 2.0,
+          moveMode = 'strafe',
+          woodType = 'beech',
+          outfit = 'none',
+          outfitColor = '#f4f1ea',
+          hairStyle = 'none',
+          hairColor = '#3b271c',
+          maxAnisotropy = 4
+        } = options;
+
+        const res = WoodenMannequinSkill.getSharedResources(THREE, maxAnisotropy);
+        this.geometries = res.geometries;
+        this.woodSets = res.woodSets;
+        this.isImage = Boolean(isImage);
+        this.moveMode = moveMode === 'turn' ? 'turn' : 'strafe';
+        this.woodType = woodType === 'walnut' ? 'walnut' : 'beech';
+
+        const activeWood = this.woodSets[this.woodType];
+
+        // 獨立材質（isImage: true 時自動開啟半透明材質，供光學虛像使用）
+        this.woodMat = new THREE.MeshStandardMaterial({
+          map: activeWood.map,
+          bumpMap: activeWood.bumpMap,
+          bumpScale: 0.012,
+          roughness: 0.45,
+          metalness: 0.04,
+          transparent: this.isImage,
+          opacity: this.isImage ? 0.6 : 1.0
+        });
+
+        this.jointMat = new THREE.MeshStandardMaterial({
+          map: activeWood.map,
+          bumpMap: activeWood.bumpMap,
+          bumpScale: 0.015,
+          color: activeWood.jointTint,
+          roughness: 0.52,
+          metalness: 0.04,
+          transparent: this.isImage,
+          opacity: this.isImage ? 0.6 : 1.0
+        });
+
+        this.shadowMat = new THREE.MeshBasicMaterial({
+          map: res.shadowMap,
+          transparent: true,
+          opacity: this.isImage ? 0.22 : 0.62,
+          depthWrite: false
+        });
+
+        // 服裝與髮型材質（支援獨立配色與光學虛像透明度連動）
+        this.outfitMainMat = new THREE.MeshStandardMaterial({
+          color: new THREE.Color(outfitColor),
+          roughness: 0.68,
+          metalness: 0.04,
+          side: THREE.DoubleSide,
+          transparent: this.isImage,
+          opacity: this.isImage ? 0.6 : 1.0
+        });
+
+        this.outfitTrimMat = new THREE.MeshStandardMaterial({
+          color: 0x334155,
+          roughness: 0.72,
+          metalness: 0.05,
+          side: THREE.DoubleSide,
+          transparent: this.isImage,
+          opacity: this.isImage ? 0.6 : 1.0
+        });
+
+        this.outfitAccentMat = new THREE.MeshStandardMaterial({
+          color: 0xeab308,
+          roughness: 0.32,
+          metalness: 0.65,
+          transparent: this.isImage,
+          opacity: this.isImage ? 0.6 : 1.0
+        });
+
+        this.hairMainMat = new THREE.MeshStandardMaterial({
+          color: new THREE.Color(hairColor),
+          roughness: 0.56,
+          metalness: 0.06,
+          side: THREE.DoubleSide,
+          transparent: this.isImage,
+          opacity: this.isImage ? 0.6 : 1.0
+        });
+
+        this.hairAccessoryMat = new THREE.MeshStandardMaterial({
+          color: 0xf59e0b,
+          roughness: 0.35,
+          metalness: 0.35,
+          transparent: this.isImage,
+          opacity: this.isImage ? 0.6 : 1.0
+        });
+
+        this.ownedGeometries = [];
+        this.outfitGroups = {};
+        this.hairGroups = {};
+        this.capeSegments = [];
+        this.coatSkirtL = null;
+        this.coatSkirtR = null;
+        this.ponytailPivot = null;
+
+        this.appearance = {
+          outfit: 'none',
+          outfitColor: '#f4f1ea',
+          hairStyle: 'none',
+          hairColor: '#3b271c',
+          woodType: this.woodType
+        };
+
+        // 骨骼尺寸常數（站立時腳底精準貼齊 y = 0.000）
+        this.UPPER_ARM_LEN = 0.81;
+        this.FOREARM_LEN = 0.71;
+        this.THIGH_LEN = 0.92;
+        this.CALF_LEN = 0.88;
+        this.BASE_PELVIS_Y = 2.102;
+        this.RAW_HEIGHT = 4.0;
+        this.targetHeight = targetHeight;
+
+        // 根節點：腳底貼齊 y = 0，並正規化為指定 targetHeight
+        this.root = new THREE.Group();
+        this.root.scale.setScalar(targetHeight / this.RAW_HEIGHT);
+
+        // 地面接觸陰影圓片
+        this.contactShadow = new THREE.Mesh(this.geometries.shadowDisc, this.shadowMat);
+        this.contactShadow.rotation.x = -Math.PI / 2;
+        this.contactShadow.position.y = 0.003;
+        this.root.add(this.contactShadow);
+
+        // 建立腳下可拖曳地面定位圓圈（groundHandle）
+        this.groundMeshes = [];
+        this.isGroundHovered = false;
+        this.isGroundDragging = false;
+        this._buildGroundHandle();
+
+        this.interactiveMeshes = [];
+        this.partGroupsMap = {};
+
+        this._buildRig();
+        this._buildHairSystem();
+        this._buildOutfitSystem();
+
+        // 預設採用右手高舉（raiseRight）光學不對稱姿勢
+        this.activeBasePose = { ...WoodenMannequinSkill.PRESETS.raiseRight };
+        this.pose = { ...this.activeBasePose };
+        this.targetPreset = null;
+        this.isTransitioningPreset = false;
+
+        // 走跑、地面圓圈拖曳步行感、單步跨步與次級物理擺動狀態
+        this.joyInput = { x: 0, y: 0 };
+        this.externalDragVel = new THREE.Vector2(0, 0);
+        this.gaitPhase = 0;
+        this.smoothedThrust = 0;
+        this.isPoseLocked = false;
+        this.autoResetPose = true;
+        this.worldBounds = 5.6;
+
+        this._prevWorldPos = new THREE.Vector3();
+        this._capePitch = 0.14;
+        this._capePitchVel = 0;
+        this._capeRoll = 0;
+        this._capeRollVel = 0;
+        this._ponytailPitch = 0;
+        this._ponytailPitchVel = 0;
+
+        this.stepState = {
+          active: false,
+          elapsed: 0,
+          duration: 0.24,
+          startPos: new THREE.Vector3(),
+          targetPos: new THREE.Vector3(),
+          dirX: 0,
+          dirZ: 0,
+          stepSign: 1
+        };
+
+        this.setAppearance({ outfit, outfitColor, hairStyle, hairColor, woodType });
+        this.applyPoseToRig();
+        this._updateGroundHandleAppearance();
+      }
+
+      _trackOwnedGeo(geo) {
+        if (geo) this.ownedGeometries.push(geo);
+        return geo;
+      }
+
+      /**
+       * 建立人偶腳下的可拖曳地面定位圓圈 (groundHandle at y = 0.006)
+       */
+      _buildGroundHandle() {
+        const G = this.geometries;
+        this.groundHandle = new THREE.Group();
+        this.groundHandle.position.set(0, 0.006, 0);
+        this.groundHandle.visible = !this.isImage; // 成像虛像不需互動圓圈
+        this.root.add(this.groundHandle);
+
+        this.groundDiscMat = new THREE.MeshBasicMaterial({
+          color: 0xf59e0b,
+          transparent: true,
+          opacity: 0.14,
+          side: THREE.DoubleSide,
+          depthWrite: false
+        });
+
+        this.groundRingMat = new THREE.MeshStandardMaterial({
+          color: 0xf59e0b,
+          emissive: 0xd97706,
+          emissiveIntensity: 0.45,
+          roughness: 0.35,
+          metalness: 0.25,
+          transparent: true,
+          opacity: 0.92
+        });
+
+        this.groundInnerMat = new THREE.MeshBasicMaterial({
+          color: 0xfde68a,
+          transparent: true,
+          opacity: 0.45,
+          side: THREE.DoubleSide,
+          depthWrite: false
+        });
+
+        const registerGroundMesh = (mesh) => {
+          mesh.userData = {
+            partId: 'groundRing',
+            partName: '地面定位圓圈 (Ground Ring)',
+            dragType: 'groundMove',
+            side: null,
+            isGroundHandle: true
+          };
+          this.groundMeshes.push(mesh);
+          return mesh;
+        };
+
+        // 1. 圓圈內部半透明抓握圓盤（點圓圈內任意處皆可輕鬆拖拉）
+        const hitDisc = new THREE.Mesh(G.groundHitDisc, this.groundDiscMat);
+        hitDisc.rotation.x = -Math.PI / 2;
+        registerGroundMesh(hitDisc);
+        this.groundHandle.add(hitDisc);
+
+        // 2. 外圈刻度環 + 立體斜角圓環
+        const outerRing = new THREE.Mesh(G.groundOuterRing, this.groundRingMat);
+        outerRing.rotation.x = -Math.PI / 2;
+        outerRing.position.y = 0.002;
+        registerGroundMesh(outerRing);
+        this.groundHandle.add(outerRing);
+
+        const bevelTorus = new THREE.Mesh(G.groundBevelTorus, this.groundRingMat);
+        bevelTorus.rotation.x = Math.PI / 2;
+        bevelTorus.position.y = 0.012;
+        registerGroundMesh(bevelTorus);
+        this.groundHandle.add(bevelTorus);
+
+        // 3. 內圈細準星環
+        const innerRing = new THREE.Mesh(G.groundInnerRing, this.groundInnerMat);
+        innerRing.rotation.x = -Math.PI / 2;
+        innerRing.position.y = 0.003;
+        registerGroundMesh(innerRing);
+        this.groundHandle.add(innerRing);
+
+        // 4. 正前方朝向指示箭頭 (+Z 方向)
+        const chevronMesh = new THREE.Mesh(G.groundChevron, this.groundRingMat);
+        chevronMesh.position.set(0, 0.014, 1.24);
+        registerGroundMesh(chevronMesh);
+        this.groundHandle.add(chevronMesh);
+      }
+
+      _updateGroundHandleAppearance() {
+        if (!this.groundRingMat || !this.groundDiscMat) return;
+        const baseHex = this.isPoseLocked ? 0x10b981 : 0xf59e0b;
+        const emissiveHex = this.isPoseLocked ? 0x059669 : 0xd97706;
+        const innerHex = this.isPoseLocked ? 0xa7f3d0 : 0xfde68a;
+
+        this.groundRingMat.color.setHex(baseHex);
+        this.groundRingMat.emissive.setHex(emissiveHex);
+        this.groundDiscMat.color.setHex(baseHex);
+        this.groundInnerMat.color.setHex(innerHex);
+
+        if (this.isGroundDragging) {
+          this.groundRingMat.emissiveIntensity = 1.05;
+          this.groundDiscMat.opacity = 0.30;
+          this.groundInnerMat.opacity = 0.85;
+          this.groundHandle.scale.setScalar(1.04);
+        } else if (this.isGroundHovered) {
+          this.groundRingMat.emissiveIntensity = 0.85;
+          this.groundDiscMat.opacity = 0.24;
+          this.groundInnerMat.opacity = 0.72;
+          this.groundHandle.scale.setScalar(1.025);
+        } else {
+          this.groundRingMat.emissiveIntensity = 0.42;
+          this.groundDiscMat.opacity = 0.14;
+          this.groundInnerMat.opacity = 0.42;
+          this.groundHandle.scale.setScalar(1.0);
+        }
+      }
+
+      setGroundHover(hovered) {
+        const next = Boolean(hovered);
+        if (this.isGroundHovered === next) return;
+        this.isGroundHovered = next;
+        this._updateGroundHandleAppearance();
+      }
+
+      setGroundDragging(dragging) {
+        const next = Boolean(dragging);
+        if (this.isGroundDragging === next) return;
+        this.isGroundDragging = next;
+        if (!next) {
+          this.externalDragVel.set(0, 0);
+        }
+        this._updateGroundHandleAppearance();
+      }
+
+      /**
+       * 外部拖曳地面圓圈時回報水平瞬時速度（世界單位/秒），未鎖定姿勢時自動產生自然小步走動
+       */
+      setExternalDragVelocity(vx, vz) {
+        if (!Number.isFinite(vx) || !Number.isFinite(vz)) return;
+        this.externalDragVel.set(clamp(vx, -5, 5), clamp(vz, -5, 5));
+      }
+
+      _registerPart(mesh, info) {
+        mesh.userData = {
+          partId: info.partId,
+          partName: info.partName,
+          dragType: info.dragType,
+          side: info.side || null,
+          isJointBall: Boolean(info.isJointBall),
+          isClothing: Boolean(info.isClothing),
+          isHair: Boolean(info.isHair)
+        };
+        this.interactiveMeshes.push(mesh);
+        if (!this.partGroupsMap[info.partId]) {
+          this.partGroupsMap[info.partId] = [];
+        }
+        this.partGroupsMap[info.partId].push(mesh);
+        return mesh;
+      }
+
+      _createJointBall(radius, scaleVec, info) {
+        const group = new THREE.Group();
+        const mesh = new THREE.Mesh(this.geometries.sphere, this.jointMat);
+        if (scaleVec) {
+          mesh.scale.set(radius * scaleVec.x, radius * scaleVec.y, radius * scaleVec.z);
+        } else {
+          mesh.scale.setScalar(radius);
+        }
+        this._registerPart(mesh, { ...info, isJointBall: true });
+        group.add(mesh);
+        return group;
+      }
+
+      _buildRig() {
+        const G = this.geometries;
+
+        // 1. 骨盆 (Pelvis)
+        this.pelvisGroup = new THREE.Group();
+        this.pelvisGroup.position.set(0, this.BASE_PELVIS_Y, 0);
+        this.root.add(this.pelvisGroup);
+
+        const pelvisMesh = new THREE.Mesh(G.pelvis, this.woodMat);
+        pelvisMesh.scale.set(1.0, 1.0, 0.64);
+        this._registerPart(pelvisMesh, {
+          partId: 'pelvis',
+          partName: '骨盆 (Pelvis)',
+          dragType: 'pelvis'
+        });
+        this.pelvisGroup.add(pelvisMesh);
+
+        // 2. 腰部球關節與胸廓 (Waist & Torso)
+        this.waistJoint = this._createJointBall(0.195, new THREE.Vector3(1.0, 0.85, 0.72), {
+          partId: 'torso',
+          partName: '腰部球關節 (Waist)',
+          dragType: 'torso'
+        });
+        this.waistJoint.position.set(0, 0.20, 0);
+        this.pelvisGroup.add(this.waistJoint);
+
+        this.torsoGroup = new THREE.Group();
+        this.waistJoint.add(this.torsoGroup);
+
+        const torsoMesh = new THREE.Mesh(G.torso, this.woodMat);
+        torsoMesh.scale.set(1.0, 1.0, 0.62);
+        this._registerPart(torsoMesh, {
+          partId: 'torso',
+          partName: '胸廓軀幹 (Torso)',
+          dragType: 'torso'
+        });
+        this.torsoGroup.add(torsoMesh);
+
+        // 3. 頸部與蛋形木頭 (Neck & Head)
+        this.neckJoint = this._createJointBall(0.112, null, {
+          partId: 'head',
+          partName: '頸部球關節 (Neck)',
+          dragType: 'head'
+        });
+        this.neckJoint.position.set(0, 0.99, 0.01);
+        this.torsoGroup.add(this.neckJoint);
+
+        const neckCol = new THREE.Mesh(G.neckCol, this.woodMat);
+        neckCol.position.set(0, 0.13, 0);
+        this._registerPart(neckCol, {
+          partId: 'head',
+          partName: '頸部 (Neck)',
+          dragType: 'head'
+        });
+        this.neckJoint.add(neckCol);
+
+        this.headGroup = new THREE.Group();
+        this.headGroup.position.set(0, 0.14, 0);
+        this.neckJoint.add(this.headGroup);
+
+        const headMesh = new THREE.Mesh(G.head, this.woodMat);
+        headMesh.scale.set(0.90, 1.0, 1.06);
+        headMesh.position.set(0, -0.02, 0.02);
+        this._registerPart(headMesh, {
+          partId: 'head',
+          partName: '蛋形木頭 (Head)',
+          dragType: 'head'
+        });
+        this.headGroup.add(headMesh);
+
+        // 4. 雙臂 ('L' & 'R')
+        this.leftArm = this._buildArm('L');
+        this.rightArm = this._buildArm('R');
+
+        // 5. 雙腿 ('L' & 'R')
+        this.leftLeg = this._buildLeg('L');
+        this.rightLeg = this._buildLeg('R');
+      }
+
+      _buildArm(side) {
+        const G = this.geometries;
+        const isLeft = side === 'L';
+        const s = isLeft ? 1 : -1;
+        const label = isLeft ? '左' : '右';
+
+        const shoulderJoint = this._createJointBall(0.142, null, {
+          partId: `${side}UpperArm`,
+          partName: `${label}肩球關節`,
+          dragType: 'upperArm',
+          side
+        });
+        shoulderJoint.position.set(s * 0.46, 0.81, 0);
+        this.torsoGroup.add(shoulderJoint);
+
+        const upperArmMesh = new THREE.Mesh(G.upperArm, this.woodMat);
+        upperArmMesh.position.set(0, -0.045, 0);
+        this._registerPart(upperArmMesh, {
+          partId: `${side}UpperArm`,
+          partName: `${label}上臂`,
+          dragType: 'upperArm',
+          side
+        });
+        shoulderJoint.add(upperArmMesh);
+
+        const elbowJoint = this._createJointBall(0.11, null, {
+          partId: `${side}Hand`,
+          partName: `${label}手肘球關節`,
+          dragType: 'handIK',
+          side
+        });
+        elbowJoint.position.set(0, -this.UPPER_ARM_LEN, 0);
+        shoulderJoint.add(elbowJoint);
+
+        const forearmMesh = new THREE.Mesh(G.forearm, this.woodMat);
+        forearmMesh.position.set(0, -0.036, 0);
+        this._registerPart(forearmMesh, {
+          partId: `${side}Hand`,
+          partName: `${label}前臂`,
+          dragType: 'handIK',
+          side
+        });
+        elbowJoint.add(forearmMesh);
+
+        const wristJoint = this._createJointBall(0.08, null, {
+          partId: `${side}Hand`,
+          partName: `${label}手腕`,
+          dragType: 'handIK',
+          side
+        });
+        wristJoint.position.set(0, -this.FOREARM_LEN, 0);
+        elbowJoint.add(wristJoint);
+
+        const handGroup = new THREE.Group();
+        wristJoint.add(handGroup);
+
+        const palmMesh = new THREE.Mesh(G.palm, this.woodMat);
+        palmMesh.scale.set(0.46, 1.0, 1.08);
+        palmMesh.position.set(0, -0.025, 0);
+        this._registerPart(palmMesh, {
+          partId: `${side}Hand`,
+          partName: `${label}木手掌`,
+          dragType: 'handIK',
+          side
+        });
+        handGroup.add(palmMesh);
+
+        const fingersMesh = new THREE.Mesh(G.fingers, this.woodMat);
+        fingersMesh.scale.set(0.40, 1.0, 1.02);
+        fingersMesh.position.set(0, -0.205, 0);
+        fingersMesh.rotation.z = -s * 0.14;
+        this._registerPart(fingersMesh, {
+          partId: `${side}Hand`,
+          partName: `${label}木手掌`,
+          dragType: 'handIK',
+          side
+        });
+        handGroup.add(fingersMesh);
+
+        const thumbMesh = new THREE.Mesh(G.thumb, this.woodMat);
+        thumbMesh.position.set(-s * 0.015, -0.10, 0.075);
+        thumbMesh.rotation.x = 0.45;
+        thumbMesh.rotation.z = -s * 0.25;
+        this._registerPart(thumbMesh, {
+          partId: `${side}Hand`,
+          partName: `${label}拇指`,
+          dragType: 'handIK',
+          side
+        });
+        handGroup.add(thumbMesh);
+
+        return { shoulderJoint, elbowJoint, wristJoint, handGroup };
+      }
+
+      _buildLeg(side) {
+        const G = this.geometries;
+        const isLeft = side === 'L';
+        const s = isLeft ? 1 : -1;
+        const label = isLeft ? '左' : '右';
+
+        const hipJoint = this._createJointBall(0.168, null, {
+          partId: `${side}Thigh`,
+          partName: `${label}髖球關節`,
+          dragType: 'thigh',
+          side
+        });
+        hipJoint.position.set(s * 0.205, -0.18, 0);
+        this.pelvisGroup.add(hipJoint);
+
+        const thighMesh = new THREE.Mesh(G.thigh, this.woodMat);
+        thighMesh.position.set(0, -0.05, 0);
+        this._registerPart(thighMesh, {
+          partId: `${side}Thigh`,
+          partName: `${label}大腿`,
+          dragType: 'thigh',
+          side
+        });
+        hipJoint.add(thighMesh);
+
+        const kneeJoint = this._createJointBall(0.132, null, {
+          partId: `${side}Foot`,
+          partName: `${label}膝蓋球關節`,
+          dragType: 'footIK',
+          side
+        });
+        kneeJoint.position.set(0, -this.THIGH_LEN, 0);
+        hipJoint.add(kneeJoint);
+
+        const calfMesh = new THREE.Mesh(G.calf, this.woodMat);
+        calfMesh.position.set(0, -0.05, 0);
+        this._registerPart(calfMesh, {
+          partId: `${side}Foot`,
+          partName: `${label}小腿`,
+          dragType: 'footIK',
+          side
+        });
+        kneeJoint.add(calfMesh);
+
+        const ankleJoint = this._createJointBall(0.095, null, {
+          partId: `${side}Foot`,
+          partName: `${label}腳踝`,
+          dragType: 'footIK',
+          side
+        });
+        ankleJoint.position.set(0, -this.CALF_LEN, 0);
+        kneeJoint.add(ankleJoint);
+
+        const footGroup = new THREE.Group();
+        ankleJoint.add(footGroup);
+
+        const footWedgeMesh = new THREE.Mesh(G.footWedge, this.woodMat);
+        footWedgeMesh.rotation.x = -Math.PI / 2;
+        footWedgeMesh.scale.set(1.05, 1.0, 0.58);
+        footWedgeMesh.position.set(0, -0.055, -0.08);
+        this._registerPart(footWedgeMesh, {
+          partId: `${side}Foot`,
+          partName: `${label}楔形木腳掌`,
+          dragType: 'footIK',
+          side
+        });
+        footGroup.add(footWedgeMesh);
+
+        const heelMesh = new THREE.Mesh(G.sphere, this.woodMat);
+        heelMesh.scale.set(0.095, 0.081, 0.095);
+        heelMesh.position.set(0, -0.041, -0.035);
+        this._registerPart(heelMesh, {
+          partId: `${side}Foot`,
+          partName: `${label}腳跟`,
+          dragType: 'footIK',
+          side
+        });
+        footGroup.add(heelMesh);
+
+        return { hipJoint, kneeJoint, ankleJoint, footGroup };
+      }
+
+      // =======================================================================
+      // 模組化立體髮型系統（光滑原木 / 俐落短髮 / 齊耳鮑伯 / 活力馬尾 / 動漫刺蝟 / 優雅丸子）
+      // =======================================================================
+      _buildHairSystem() {
+        const G = this.geometries;
+        const headDragInfo = {
+          partId: 'head',
+          partName: '頭部髮型 (Head)',
+          dragType: 'head',
+          isHair: true
+        };
+
+        const addHairMesh = (group, geo, mat, pos, scale, rot) => {
+          const m = new THREE.Mesh(geo, mat);
+          if (pos) m.position.set(pos[0], pos[1], pos[2]);
+          if (scale) m.scale.set(scale[0], scale[1], scale[2]);
+          if (rot) m.rotation.set(rot[0], rot[1], rot[2]);
+          this._registerPart(m, headDragInfo);
+          group.add(m);
+          return m;
+        };
+
+        // 1. 俐落短髮 ('short')
+        const shortGroup = new THREE.Group();
+        shortGroup.visible = false;
+        this.headGroup.add(shortGroup);
+        this.hairGroups.short = shortGroup;
+
+        const shortCapGeo = this._trackOwnedGeo(
+          new THREE.SphereGeometry(0.224, 24, 18, 0, Math.PI * 2, 0, Math.PI * 0.68)
+        );
+        addHairMesh(shortGroup, shortCapGeo, this.hairMainMat, [0, 0.335, -0.005], [0.93, 1.03, 1.08], [-0.18, 0, 0]);
+        // 前額層次瀏海
+        addHairMesh(shortGroup, G.sphere, this.hairMainMat, [-0.075, 0.485, 0.178], [0.095, 0.055, 0.068], [0.35, -0.25, 0.22]);
+        addHairMesh(shortGroup, G.sphere, this.hairMainMat, [0.025, 0.495, 0.186], [0.105, 0.055, 0.068], [0.38, 0.12, -0.15]);
+        addHairMesh(shortGroup, G.sphere, this.hairMainMat, [0.105, 0.468, 0.162], [0.082, 0.052, 0.062], [0.32, 0.35, -0.28]);
+        // 雙側鬢角與後腦收尾
+        addHairMesh(shortGroup, G.sphere, this.hairMainMat, [0.188, 0.30, 0.035], [0.042, 0.11, 0.075], [0.12, 0, -0.1]);
+        addHairMesh(shortGroup, G.sphere, this.hairMainMat, [-0.188, 0.30, 0.035], [0.042, 0.11, 0.075], [0.12, 0, 0.1]);
+        addHairMesh(shortGroup, G.sphere, this.hairMainMat, [0, 0.185, -0.155], [0.145, 0.11, 0.085], [0.25, 0, 0]);
+
+        // 2. 齊耳鮑伯頭 ('bob')
+        const bobGroup = new THREE.Group();
+        bobGroup.visible = false;
+        this.headGroup.add(bobGroup);
+        this.hairGroups.bob = bobGroup;
+
+        const bobShellPts = [
+          new THREE.Vector2(0.215, 0.13),
+          new THREE.Vector2(0.238, 0.22),
+          new THREE.Vector2(0.236, 0.35),
+          new THREE.Vector2(0.218, 0.48),
+          new THREE.Vector2(0.168, 0.575),
+          new THREE.Vector2(0.085, 0.618),
+          new THREE.Vector2(0.0, 0.63)
+        ];
+        // phi = 0 為 +Z 正前方，留出臉部開口
+        const bobShellGeo = this._trackOwnedGeo(
+          new THREE.LatheGeometry(bobShellPts, 26, 0.56, Math.PI * 2 - 1.12)
+        );
+        bobShellGeo.computeVertexNormals();
+        addHairMesh(bobGroup, bobShellGeo, this.hairMainMat, [0, -0.015, 0.015], [0.95, 1.01, 1.09], [0, 0, 0]);
+        addHairMesh(bobGroup, shortCapGeo, this.hairMainMat, [0, 0.34, 0.0], [0.94, 1.03, 1.08], [-0.12, 0, 0]);
+        // 齊瀏海
+        addHairMesh(bobGroup, G.sphere, this.hairMainMat, [0, 0.495, 0.182], [0.165, 0.052, 0.068], [0.28, 0, 0]);
+
+        // 3. 活力高馬尾 ('ponytail')
+        const ponytailGroup = new THREE.Group();
+        ponytailGroup.visible = false;
+        this.headGroup.add(ponytailGroup);
+        this.hairGroups.ponytail = ponytailGroup;
+
+        addHairMesh(ponytailGroup, shortCapGeo, this.hairMainMat, [0, 0.335, -0.005], [0.92, 1.02, 1.07], [-0.15, 0, 0]);
+        addHairMesh(ponytailGroup, G.sphere, this.hairMainMat, [-0.065, 0.485, 0.18], [0.095, 0.052, 0.065], [0.34, -0.2, 0.2]);
+        addHairMesh(ponytailGroup, G.sphere, this.hairMainMat, [0.075, 0.482, 0.176], [0.092, 0.052, 0.065], [0.34, 0.25, -0.22]);
+
+        // 髮圈與動態彈跳高馬尾
+        const tieGeo = this._trackOwnedGeo(new THREE.TorusGeometry(0.055, 0.018, 10, 20));
+        addHairMesh(ponytailGroup, tieGeo, this.hairAccessoryMat, [0, 0.44, -0.195], [1, 1, 1], [0.55, 0, 0]);
+
+        this.ponytailPivot = new THREE.Group();
+        this.ponytailPivot.position.set(0, 0.44, -0.20);
+        ponytailGroup.add(this.ponytailPivot);
+
+        const tailPts = [
+          new THREE.Vector2(0.0, -0.44),
+          new THREE.Vector2(0.032, -0.37),
+          new THREE.Vector2(0.078, -0.24),
+          new THREE.Vector2(0.088, -0.11),
+          new THREE.Vector2(0.048, 0.0),
+          new THREE.Vector2(0.0, 0.01)
+        ];
+        const tailGeo = this._trackOwnedGeo(new THREE.LatheGeometry(tailPts, 18));
+        tailGeo.computeVertexNormals();
+        addHairMesh(this.ponytailPivot, tailGeo, this.hairMainMat, [0, 0, 0], [1.0, 1.0, 1.15], [-0.42, 0, 0]);
+
+        // 4. 動漫刺蝟頭 ('spiky')
+        const spikyGroup = new THREE.Group();
+        spikyGroup.visible = false;
+        this.headGroup.add(spikyGroup);
+        this.hairGroups.spiky = spikyGroup;
+
+        addHairMesh(spikyGroup, shortCapGeo, this.hairMainMat, [0, 0.335, -0.005], [0.92, 1.02, 1.07], [-0.15, 0, 0]);
+        const spikeGeo = this._trackOwnedGeo(new THREE.ConeGeometry(0.068, 0.24, 12));
+        spikeGeo.translate(0, 0.11, 0);
+        const spikes = [
+          { pos: [0, 0.56, 0.04], rot: [0.28, 0, 0], scl: [1.1, 1.15, 1.1] },
+          { pos: [-0.09, 0.54, 0.07], rot: [0.36, 0, 0.38], scl: [1.0, 1.05, 1.0] },
+          { pos: [0.09, 0.54, 0.07], rot: [0.36, 0, -0.38], scl: [1.0, 1.05, 1.0] },
+          { pos: [-0.14, 0.47, 0.12], rot: [0.68, -0.2, 0.55], scl: [0.9, 0.95, 0.9] },
+          { pos: [0.14, 0.47, 0.12], rot: [0.68, 0.2, -0.55], scl: [0.9, 0.95, 0.9] },
+          { pos: [0, 0.54, -0.08], rot: [-0.45, 0, 0], scl: [1.15, 1.2, 1.1] },
+          { pos: [-0.12, 0.49, -0.07], rot: [-0.48, 0, 0.45], scl: [1.0, 1.05, 1.0] },
+          { pos: [0.12, 0.49, -0.07], rot: [-0.48, 0, -0.45], scl: [1.0, 1.05, 1.0] },
+          { pos: [0, 0.41, -0.17], rot: [-1.05, 0, 0], scl: [1.05, 1.1, 1.05] },
+          { pos: [-0.15, 0.38, -0.08], rot: [-0.85, 0, 0.72], scl: [0.9, 0.95, 0.9] },
+          { pos: [0.15, 0.38, -0.08], rot: [-0.85, 0, -0.72], scl: [0.9, 0.95, 0.9] }
+        ];
+        spikes.forEach((sp) => {
+          addHairMesh(spikyGroup, spikeGeo, this.hairMainMat, sp.pos, sp.scl, sp.rot);
+        });
+
+        // 5. 優雅丸子頭 ('bun')
+        const bunGroup = new THREE.Group();
+        bunGroup.visible = false;
+        this.headGroup.add(bunGroup);
+        this.hairGroups.bun = bunGroup;
+
+        addHairMesh(bunGroup, shortCapGeo, this.hairMainMat, [0, 0.335, -0.005], [0.92, 1.02, 1.07], [-0.14, 0, 0]);
+        addHairMesh(bunGroup, G.sphere, this.hairMainMat, [-0.07, 0.485, 0.178], [0.095, 0.05, 0.065], [0.32, -0.22, 0.22]);
+        addHairMesh(bunGroup, G.sphere, this.hairMainMat, [0.07, 0.485, 0.178], [0.095, 0.05, 0.065], [0.32, 0.22, -0.22]);
+        const bunTieGeo = this._trackOwnedGeo(new THREE.TorusGeometry(0.072, 0.016, 10, 22));
+        addHairMesh(bunGroup, bunTieGeo, this.hairAccessoryMat, [0, 0.585, -0.045], [1, 1, 1], [Math.PI / 2 - 0.2, 0, 0]);
+        addHairMesh(bunGroup, G.sphere, this.hairMainMat, [0, 0.655, -0.055], [0.118, 0.105, 0.118], [-0.2, 0, 0]);
+      }
+
+      // =======================================================================
+      // 模組化立體服裝系統（實驗白袍 / 立領夾克 / 英雄披風 / 學院背心）
+      // =======================================================================
+      _buildOutfitSystem() {
+        const registerOutfitMesh = (parent, geo, mat, partInfo, pos, scale, rot) => {
+          const m = new THREE.Mesh(geo, mat);
+          if (pos) m.position.set(pos[0], pos[1], pos[2]);
+          if (scale) m.scale.set(scale[0], scale[1], scale[2]);
+          if (rot) m.rotation.set(rot[0], rot[1], rot[2]);
+          this._registerPart(m, { ...partInfo, isClothing: true });
+          parent.add(m);
+          return m;
+        };
+
+        const torsoInfo = { partId: 'torso', partName: '上身服裝 (Torso)', dragType: 'torso' };
+        const pelvisInfo = { partId: 'pelvis', partName: '腰部服裝 (Pelvis)', dragType: 'pelvis' };
+        const lArmInfo = { partId: 'LUpperArm', partName: '左袖 (Left Sleeve)', dragType: 'upperArm', side: 'L' };
+        const rArmInfo = { partId: 'RUpperArm', partName: '右袖 (Right Sleeve)', dragType: 'upperArm', side: 'R' };
+        const lThighInfo = { partId: 'LThigh', partName: '左褲管 (Left Leg)', dragType: 'thigh', side: 'L' };
+        const rThighInfo = { partId: 'RThigh', partName: '右褲管 (Right Leg)', dragType: 'thigh', side: 'R' };
+
+        // 共用車削輔助：生成貼合軀幹與骨盆的服裝外殼
+        const makeTorsoShell = (radialPad = 0.024, topY = 0.94, openFrontAngle = 0) => {
+          const pts = [
+            new THREE.Vector2(0.22 + radialPad, 0.02),
+            new THREE.Vector2(0.25 + radialPad, 0.13),
+            new THREE.Vector2(0.33 + radialPad, 0.44),
+            new THREE.Vector2(0.42 + radialPad, 0.76),
+            new THREE.Vector2(0.40 + radialPad, 0.88),
+            new THREE.Vector2(0.26 + radialPad, topY)
+          ];
+          const g = openFrontAngle > 0
+            ? new THREE.LatheGeometry(pts, 26, openFrontAngle, Math.PI * 2 - openFrontAngle * 2)
+            : new THREE.LatheGeometry(pts, 26);
+          g.computeVertexNormals();
+          return this._trackOwnedGeo(g);
+        };
+
+        const makePelvisShell = (radialPad = 0.024, openFrontAngle = 0) => {
+          const pts = [
+            new THREE.Vector2(0.23 + radialPad, -0.19),
+            new THREE.Vector2(0.28 + radialPad, -0.14),
+            new THREE.Vector2(0.37 + radialPad, 0.12),
+            new THREE.Vector2(0.34 + radialPad, 0.18)
+          ];
+          const g = openFrontAngle > 0
+            ? new THREE.LatheGeometry(pts, 24, openFrontAngle, Math.PI * 2 - openFrontAngle * 2)
+            : new THREE.LatheGeometry(pts, 24);
+          g.computeVertexNormals();
+          return this._trackOwnedGeo(g);
+        };
+
+        const makeLimbSleeve = (topR, botR, len) => {
+          const pts = [
+            new THREE.Vector2(botR, -len),
+            new THREE.Vector2(botR + 0.006, -len + 0.04),
+            new THREE.Vector2((topR + botR) * 0.5, -len * 0.5),
+            new THREE.Vector2(topR, -0.02),
+            new THREE.Vector2(topR * 0.85, 0)
+          ];
+          const g = new THREE.LatheGeometry(pts, 20);
+          g.computeVertexNormals();
+          return this._trackOwnedGeo(g);
+        };
+
+        const sleeveGeo = makeLimbSleeve(0.156, 0.132, 0.67);
+        const trouserGeo = makeLimbSleeve(0.188, 0.148, 0.81);
+        const buttonGeo = this._trackOwnedGeo(new THREE.CylinderGeometry(0.018, 0.018, 0.012, 12));
+        buttonGeo.rotateX(Math.PI / 2);
+
+        // =====================================================================
+        // 1. 科學家實驗白袍 ('labcoat')
+        // =====================================================================
+        const labcoatParts = [];
+        const addLabPart = (parent, geo, mat, info, pos, scale, rot) => {
+          const m = registerOutfitMesh(parent, geo, mat, info, pos, scale, rot);
+          m.visible = false;
+          labcoatParts.push(m);
+          return m;
+        };
+
+        const coatTorsoGeo = makeTorsoShell(0.026, 0.95, 0.16);
+        const innerShirtGeo = makeTorsoShell(0.012, 0.93, 0);
+        addLabPart(this.torsoGroup, coatTorsoGeo, this.outfitMainMat, torsoInfo, [0, 0, 0], [1.0, 1.0, 0.65]);
+        addLabPart(this.torsoGroup, innerShirtGeo, this.outfitTrimMat, torsoInfo, [0, 0, 0], [0.98, 0.99, 0.61]);
+
+        // 西裝翻領 (Lapels) 與衣領
+        const lapelGeo = this._trackOwnedGeo(new THREE.BoxGeometry(0.065, 0.34, 0.025));
+        addLabPart(this.torsoGroup, lapelGeo, this.outfitMainMat, torsoInfo, [0.082, 0.77, 0.245], [1, 1, 1], [-0.14, 0.18, -0.22]);
+        addLabPart(this.torsoGroup, lapelGeo, this.outfitMainMat, torsoInfo, [-0.082, 0.77, 0.245], [1, 1, 1], [-0.14, -0.18, 0.22]);
+        const collarRingGeo = this._trackOwnedGeo(new THREE.TorusGeometry(0.155, 0.024, 10, 22, Math.PI * 1.45));
+        addLabPart(this.torsoGroup, collarRingGeo, this.outfitMainMat, torsoInfo, [0, 0.95, 0.01], [1.05, 1.0, 0.85], [Math.PI / 2 + 0.12, 0, Math.PI * 0.78]);
+
+        // 前襟鈕扣與胸前口袋
+        [0.54, 0.38, 0.22].forEach((by, i) => {
+          const bz = 0.265 - i * 0.032;
+          addLabPart(this.torsoGroup, buttonGeo, this.outfitTrimMat, torsoInfo, [0.022, by, bz]);
+        });
+        const pocketGeo = this._trackOwnedGeo(new THREE.BoxGeometry(0.095, 0.11, 0.018));
+        addLabPart(this.torsoGroup, pocketGeo, this.outfitTrimMat, torsoInfo, [0.165, 0.65, 0.245], [1, 1, 1], [-0.12, 0.38, -0.05]);
+
+        // 白袍雙袖
+        addLabPart(this.leftArm.shoulderJoint, sleeveGeo, this.outfitMainMat, lArmInfo, [0, -0.04, 0]);
+        addLabPart(this.rightArm.shoulderJoint, sleeveGeo, this.outfitMainMat, rArmInfo, [0, -0.04, 0]);
+
+        // 骨盆白袍中段 + 動態下擺衣襬 (coatSkirtL / coatSkirtR)
+        const coatPelvisGeo = makePelvisShell(0.026, 0.15);
+        addLabPart(this.pelvisGroup, coatPelvisGeo, this.outfitMainMat, pelvisInfo, [0, 0, 0], [1.0, 1.0, 0.66]);
+
+        const skirtPts = [
+          new THREE.Vector2(0.295, -0.54),
+          new THREE.Vector2(0.285, -0.28),
+          new THREE.Vector2(0.255, 0.0)
+        ];
+        const skirtLGeo = this._trackOwnedGeo(new THREE.LatheGeometry(skirtPts, 16, 0.14, Math.PI - 0.24));
+        skirtLGeo.computeVertexNormals();
+        const skirtRGeo = this._trackOwnedGeo(new THREE.LatheGeometry(skirtPts, 16, Math.PI + 0.10, Math.PI - 0.24));
+        skirtRGeo.computeVertexNormals();
+
+        this.coatSkirtL = registerOutfitMesh(this.pelvisGroup, skirtLGeo, this.outfitMainMat, pelvisInfo, [0, -0.14, 0], [1.02, 1.0, 0.68]);
+        this.coatSkirtL.visible = false;
+        labcoatParts.push(this.coatSkirtL);
+
+        this.coatSkirtR = registerOutfitMesh(this.pelvisGroup, skirtRGeo, this.outfitMainMat, pelvisInfo, [0, -0.14, 0], [1.02, 1.0, 0.68]);
+        this.coatSkirtR.visible = false;
+        labcoatParts.push(this.coatSkirtR);
+
+        // 長褲
+        const pelvisTrouserGeo = makePelvisShell(0.014, 0);
+        addLabPart(this.pelvisGroup, pelvisTrouserGeo, this.outfitTrimMat, pelvisInfo, [0, 0, 0], [0.99, 0.99, 0.63]);
+        addLabPart(this.leftLeg.hipJoint, trouserGeo, this.outfitTrimMat, lThighInfo, [0, -0.04, 0]);
+        addLabPart(this.rightLeg.hipJoint, trouserGeo, this.outfitTrimMat, rThighInfo, [0, -0.04, 0]);
+
+        this.outfitGroups.labcoat = labcoatParts;
+
+        // =====================================================================
+        // 2. 休閒立領夾克 ('jacket')
+        // =====================================================================
+        const jacketParts = [];
+        const addJacketPart = (parent, geo, mat, info, pos, scale, rot) => {
+          const m = registerOutfitMesh(parent, geo, mat, info, pos, scale, rot);
+          m.visible = false;
+          jacketParts.push(m);
+          return m;
+        };
+
+        const jacketShellGeo = makeTorsoShell(0.028, 0.95, 0);
+        addJacketPart(this.torsoGroup, jacketShellGeo, this.outfitMainMat, torsoInfo, [0, 0, 0], [1.0, 1.0, 0.65]);
+
+        // 立領與下擺羅紋
+        const standCollarGeo = this._trackOwnedGeo(new THREE.CylinderGeometry(0.155, 0.175, 0.085, 22, 1, true));
+        addJacketPart(this.torsoGroup, standCollarGeo, this.outfitTrimMat, torsoInfo, [0, 0.975, 0.005], [1.0, 1.0, 0.92]);
+        const hemBandGeo = this._trackOwnedGeo(new THREE.CylinderGeometry(0.248, 0.242, 0.065, 22));
+        addJacketPart(this.torsoGroup, hemBandGeo, this.outfitTrimMat, torsoInfo, [0, 0.045, 0], [1.0, 1.0, 0.66]);
+
+        // 中央拉鍊條
+        const zipperGeo = this._trackOwnedGeo(new THREE.BoxGeometry(0.022, 0.88, 0.02));
+        addJacketPart(this.torsoGroup, zipperGeo, this.outfitAccentMat, torsoInfo, [0, 0.49, 0.252], [1, 1, 1], [-0.14, 0, 0]);
+
+        // 夾克雙袖 + 長褲
+        addJacketPart(this.leftArm.shoulderJoint, sleeveGeo, this.outfitMainMat, lArmInfo, [0, -0.04, 0]);
+        addJacketPart(this.rightArm.shoulderJoint, sleeveGeo, this.outfitMainMat, rArmInfo, [0, -0.04, 0]);
+        addJacketPart(this.pelvisGroup, pelvisTrouserGeo, this.outfitTrimMat, pelvisInfo, [0, 0, 0], [1.0, 1.0, 0.64]);
+        addJacketPart(this.leftLeg.hipJoint, trouserGeo, this.outfitTrimMat, lThighInfo, [0, -0.04, 0]);
+        addJacketPart(this.rightLeg.hipJoint, trouserGeo, this.outfitTrimMat, rThighInfo, [0, -0.04, 0]);
+
+        this.outfitGroups.jacket = jacketParts;
+
+        // =====================================================================
+        // 3. 英雄／魔法師披風 ('cape') — 附 4 段慣性物理飄動
+        // =====================================================================
+        const capeParts = [];
+        const addCapePart = (parent, geo, mat, info, pos, scale, rot) => {
+          const m = registerOutfitMesh(parent, geo, mat, info, pos, scale, rot);
+          m.visible = false;
+          capeParts.push(m);
+          return m;
+        };
+
+        // 肩部披肩領與雙金屬扣環
+        const mantlePts = [
+          new THREE.Vector2(0.445, 0.78),
+          new THREE.Vector2(0.415, 0.89),
+          new THREE.Vector2(0.25, 0.96),
+          new THREE.Vector2(0.16, 0.99)
+        ];
+        const mantleGeo = this._trackOwnedGeo(new THREE.LatheGeometry(mantlePts, 24));
+        mantleGeo.computeVertexNormals();
+        addCapePart(this.torsoGroup, mantleGeo, this.outfitMainMat, torsoInfo, [0, 0, 0], [1.02, 1.0, 0.68]);
+
+        const claspGeo = this._trackOwnedGeo(new THREE.CylinderGeometry(0.036, 0.036, 0.018, 16));
+        claspGeo.rotateX(Math.PI / 2);
+        addCapePart(this.torsoGroup, claspGeo, this.outfitAccentMat, torsoInfo, [0.24, 0.86, 0.21], [1, 1, 1], [-0.2, 0.35, 0]);
+        addCapePart(this.torsoGroup, claspGeo, this.outfitAccentMat, torsoInfo, [-0.24, 0.86, 0.21], [1, 1, 1], [-0.2, -0.35, 0]);
+
+        const cordGeo = this._trackOwnedGeo(new THREE.TorusGeometry(0.24, 0.01, 8, 20, Math.PI * 0.75));
+        addCapePart(this.torsoGroup, cordGeo, this.outfitAccentMat, torsoInfo, [0, 0.92, 0.215], [1.0, 0.38, 1.0], [0.2, 0, Math.PI * 1.125]);
+
+        // 4 段階層式物理披風（掛於後肩上方 (0, 0.93, -0.22)）
+        const capeRoot = new THREE.Group();
+        capeRoot.position.set(0, 0.93, -0.22);
+        capeRoot.visible = false;
+        this.torsoGroup.add(capeRoot);
+        capeParts.push(capeRoot);
+
+        this.capeSegments = [];
+        let parentSeg = capeRoot;
+        const segHeights = [0.44, 0.46, 0.48, 0.50];
+        const segTopRadii = [0.36, 0.43, 0.51, 0.59];
+        const segBotRadii = [0.43, 0.51, 0.59, 0.68];
+
+        for (let i = 0; i < 4; i++) {
+          const segPivot = new THREE.Group();
+          if (i > 0) {
+            segPivot.position.set(0, -segHeights[i - 1], 0);
+          }
+          parentSeg.add(segPivot);
+
+          // 圓弧曲面披風布料（面向 -Z 後方展開約 130° 弧度）
+          const arcSpan = 2.15;
+          const segGeo = this._trackOwnedGeo(
+            new THREE.CylinderGeometry(
+              segTopRadii[i],
+              segBotRadii[i],
+              segHeights[i],
+              18,
+              1,
+              true,
+              Math.PI - arcSpan * 0.5,
+              arcSpan
+            )
+          );
+          segGeo.translate(0, -segHeights[i] * 0.5, segTopRadii[i] * 0.85);
+          segGeo.computeVertexNormals();
+
+          const outerMesh = new THREE.Mesh(segGeo, this.outfitMainMat);
+          this._registerPart(outerMesh, { ...torsoInfo, partName: '英雄披風 (Cape)', isClothing: true });
+          segPivot.add(outerMesh);
+
+          // 內襯撞色層（稍微向 +Z 偏移 0.008）
+          const innerMesh = new THREE.Mesh(segGeo, this.outfitTrimMat);
+          innerMesh.position.z = 0.008;
+          this._registerPart(innerMesh, { ...torsoInfo, partName: '英雄披風 (Cape)', isClothing: true });
+          segPivot.add(innerMesh);
+
+          this.capeSegments.push(segPivot);
+          parentSeg = segPivot;
+        }
+
+        this.outfitGroups.cape = capeParts;
+
+        // =====================================================================
+        // 4. 學院背心裝 ('tunic') — 無袖設計，完整保留原木肩肘關節美感
+        // =====================================================================
+        const tunicParts = [];
+        const addTunicPart = (parent, geo, mat, info, pos, scale, rot) => {
+          const m = registerOutfitMesh(parent, geo, mat, info, pos, scale, rot);
+          m.visible = false;
+          tunicParts.push(m);
+          return m;
+        };
+
+        const vestGeo = makeTorsoShell(0.022, 0.90, 0);
+        addTunicPart(this.torsoGroup, vestGeo, this.outfitMainMat, torsoInfo, [0, 0, 0], [0.99, 0.99, 0.64]);
+
+        // V 領飾條與腰帶扣環
+        const vTrimGeo = this._trackOwnedGeo(new THREE.BoxGeometry(0.032, 0.28, 0.022));
+        addTunicPart(this.torsoGroup, vTrimGeo, this.outfitAccentMat, torsoInfo, [0.068, 0.80, 0.242], [1, 1, 1], [-0.14, 0.15, -0.28]);
+        addTunicPart(this.torsoGroup, vTrimGeo, this.outfitAccentMat, torsoInfo, [-0.068, 0.80, 0.242], [1, 1, 1], [-0.14, -0.15, 0.28]);
+
+        const beltGeo = this._trackOwnedGeo(new THREE.CylinderGeometry(0.248, 0.252, 0.068, 22));
+        addTunicPart(this.torsoGroup, beltGeo, this.outfitTrimMat, torsoInfo, [0, 0.045, 0], [1.0, 1.0, 0.66]);
+        const buckleGeo = this._trackOwnedGeo(new THREE.BoxGeometry(0.085, 0.078, 0.026));
+        addTunicPart(this.torsoGroup, buckleGeo, this.outfitAccentMat, torsoInfo, [0, 0.045, 0.165]);
+
+        // 短衣襬 + 長褲
+        addTunicPart(this.pelvisGroup, pelvisTrouserGeo, this.outfitTrimMat, pelvisInfo, [0, 0, 0], [1.0, 1.0, 0.64]);
+        addTunicPart(this.leftLeg.hipJoint, trouserGeo, this.outfitTrimMat, lThighInfo, [0, -0.04, 0]);
+        addTunicPart(this.rightLeg.hipJoint, trouserGeo, this.outfitTrimMat, rThighInfo, [0, -0.04, 0]);
+
+        this.outfitGroups.tunic = tunicParts;
+      }
+
+      /**
+       * 依服裝主色自動推導協調的衣領/長褲/內襯配色
+       */
+      _deriveOutfitTrimColor(hex) {
+        const c = new THREE.Color(hex);
+        const hsl = { h: 0, s: 0, l: 0 };
+        c.getHSL(hsl);
+        if (hsl.l > 0.78) {
+          // 亮白色系（如實驗白袍）搭配深石板藍灰長褲與內襯
+          return new THREE.Color('#334155');
+        }
+        if (hsl.l < 0.25) {
+          // 深炭黑系搭配暖金屬灰內襯
+          return new THREE.Color('#64748b');
+        }
+        // 彩色系自動調暗並微調飽和度作為協調深色褲裝/內襯
+        const trim = new THREE.Color();
+        trim.setHSL(hsl.h, clamp(hsl.s * 0.72, 0.12, 0.65), clamp(hsl.l * 0.48, 0.14, 0.34));
+        return trim;
+      }
+
+      /**
+       * 統一設定人偶外型（服裝、服裝配色、髮型、髮色、木質紋理）
+       * 可隨時呼叫或於建立實例時透過 options 傳入
+       */
+      setAppearance(opts = {}) {
+        if (!opts || typeof opts !== 'object') return;
+
+        if (opts.woodType === 'beech' || opts.woodType === 'walnut') {
+          this.setWoodType(opts.woodType);
+          this.appearance.woodType = opts.woodType;
+        }
+
+        if (typeof opts.outfit === 'string') {
+          const validOutfits = ['none', 'labcoat', 'jacket', 'cape', 'tunic'];
+          const nextOutfit = validOutfits.includes(opts.outfit) ? opts.outfit : 'none';
+          this.appearance.outfit = nextOutfit;
+          Object.entries(this.outfitGroups).forEach(([key, parts]) => {
+            const show = key === nextOutfit;
+            parts.forEach((p) => {
+              p.visible = show;
+            });
+          });
+        }
+
+        if (typeof opts.outfitColor === 'string') {
+          try {
+            this.outfitMainMat.color.set(opts.outfitColor);
+            this.outfitTrimMat.color.copy(this._deriveOutfitTrimColor(opts.outfitColor));
+            this.appearance.outfitColor = opts.outfitColor;
+          } catch (_) {}
+        }
+
+        if (typeof opts.hairStyle === 'string') {
+          const validHair = ['none', 'short', 'bob', 'ponytail', 'spiky', 'bun'];
+          const nextHair = validHair.includes(opts.hairStyle) ? opts.hairStyle : 'none';
+          this.appearance.hairStyle = nextHair;
+          Object.entries(this.hairGroups).forEach(([key, grp]) => {
+            grp.visible = key === nextHair;
+          });
+        }
+
+        if (typeof opts.hairColor === 'string') {
+          try {
+            this.hairMainMat.color.set(opts.hairColor);
+            this.appearance.hairColor = opts.hairColor;
+          } catch (_) {}
+        }
+      }
+
+      /**
+       * 從另一隻木偶同步完整外型設定（供光學模擬成像人偶即時鏡像同步）
+       */
+      syncAppearanceFrom(sourceMannequin) {
+        if (!sourceMannequin || !sourceMannequin.appearance) return;
+        this.setAppearance({ ...sourceMannequin.appearance });
+      }
+
+      /**
+       * 切換木頭材質：'beech'（山毛櫸）或 'walnut'（黑胡桃木）
+       */
+      setWoodType(type) {
+        const key = type === 'walnut' ? 'walnut' : 'beech';
+        this.woodType = key;
+        this.appearance.woodType = key;
+        const set = this.woodSets[key];
+        this.woodMat.map = set.map;
+        this.woodMat.bumpMap = set.bumpMap;
+        this.woodMat.needsUpdate = true;
+
+        this.jointMat.map = set.map;
+        this.jointMat.bumpMap = set.bumpMap;
+        this.jointMat.color.setHex(set.jointTint);
+        this.jointMat.needsUpdate = true;
+
+        this.interactiveMeshes.forEach((m) => {
+          if (m.userData && m.userData.clonedMat && m.material && !m.userData.isClothing && !m.userData.isHair) {
+            m.material.map = set.map;
+            m.material.bumpMap = set.bumpMap;
+            if (m.userData.isJointBall) {
+              m.material.color.setHex(set.jointTint);
+            }
+            m.material.needsUpdate = true;
+          }
+        });
+      }
+
+      /**
+       * 切換移動模式：'strafe'（橫移模式）或 'turn'（轉向模式）
+       */
+      setMoveMode(mode) {
+        if (mode === 'turn' || mode === 'strafe') {
+          this.moveMode = mode;
+        }
+      }
+
+      /**
+       * 調整材質透明度（包含木頭、服裝與髮型，供光學虛像或焦點附近淡出使用）
+       */
+      setOpacity(alpha) {
+        const clamped = clamp(safeNum(alpha, 1), 0, 1);
+        const needTrans = clamped < 0.999 || this.isImage;
+        const allMats = [
+          this.woodMat,
+          this.jointMat,
+          this.outfitMainMat,
+          this.outfitTrimMat,
+          this.outfitAccentMat,
+          this.hairMainMat,
+          this.hairAccessoryMat
+        ];
+        allMats.forEach((mat) => {
+          if (!mat) return;
+          mat.transparent = needTrans;
+          mat.opacity = clamped;
+        });
+        this.shadowMat.opacity = clamp(clamped * 0.62, 0.05, 0.72);
+      }
+
+      /**
+       * 從另一隻木偶同步所有關節角度與外型（供光學模擬成像人偶即時鏡像同步）
+       */
+      syncPoseFrom(sourceMannequin) {
+        if (!sourceMannequin || !sourceMannequin.pose) return;
+        this.pose = { ...sourceMannequin.pose };
+        this.activeBasePose = { ...sourceMannequin.activeBasePose };
+        this.applyPoseToRig();
+      }
+
+      /**
+       * 將目前姿勢角度套用至所有關節與接觸陰影
+       */
+      applyPoseToRig() {
+        const p = this.pose;
+        const bounce = safeNum(p.pelvisBounceY, 0);
+
+        this.pelvisGroup.position.set(0, this.BASE_PELVIS_Y + bounce, 0);
+        this.pelvisGroup.rotation.set(
+          degToRad(safeNum(p.pelvisRotX, 0)),
+          0,
+          degToRad(safeNum(p.pelvisRotZ, 0))
+        );
+
+        const shadowScale = clamp(1.0 - bounce * 0.75, 0.65, 1.15);
+        this.contactShadow.scale.setScalar(shadowScale);
+        this.shadowMat.opacity = clamp((this.isImage ? 0.25 : 0.62) - bounce * 0.5, 0.15, 0.72);
+
+        this.torsoGroup.rotation.set(
+          degToRad(safeNum(p.torsoX, 0)),
+          degToRad(safeNum(p.torsoY, 0)),
+          degToRad(safeNum(p.torsoZ, 0))
+        );
+        this.headGroup.rotation.set(
+          degToRad(safeNum(p.headX, 0)),
+          degToRad(safeNum(p.headY, 0)),
+          degToRad(safeNum(p.headZ, 0))
+        );
+
+        this.leftArm.shoulderJoint.rotation.set(
+          degToRad(safeNum(p.lShoulderX, 0)),
+          degToRad(safeNum(p.lShoulderY, 0)),
+          degToRad(safeNum(p.lShoulderZ, 8))
+        );
+        this.leftArm.elbowJoint.rotation.x = degToRad(safeNum(p.lElbowX, -10));
+
+        this.rightArm.shoulderJoint.rotation.set(
+          degToRad(safeNum(p.rShoulderX, 0)),
+          degToRad(safeNum(p.rShoulderY, 0)),
+          degToRad(safeNum(p.rShoulderZ, -8))
+        );
+        this.rightArm.elbowJoint.rotation.x = degToRad(safeNum(p.rElbowX, -10));
+
+        this.leftLeg.hipJoint.rotation.set(
+          degToRad(safeNum(p.lHipX, 0)),
+          degToRad(safeNum(p.lHipY, 0)),
+          degToRad(safeNum(p.lHipZ, 3))
+        );
+        this.leftLeg.kneeJoint.rotation.x = degToRad(safeNum(p.lKneeX, 0));
+        this.leftLeg.ankleJoint.rotation.x = degToRad(safeNum(p.lAnkleX, 0));
+
+        this.rightLeg.hipJoint.rotation.set(
+          degToRad(safeNum(p.rHipX, 0)),
+          degToRad(safeNum(p.rHipY, 0)),
+          degToRad(safeNum(p.rHipZ, -3))
+        );
+        this.rightLeg.kneeJoint.rotation.x = degToRad(safeNum(p.rKneeX, 0));
+        this.rightLeg.ankleJoint.rotation.x = degToRad(safeNum(p.rAnkleX, 0));
+      }
+
+      /**
+       * 設定是否鎖定位置進入「手動拖曳姿勢模式」（不顯示任何浮動點，直接拖曳肢體或地面圓圈）
+       */
+      setPositionLocked(locked) {
+        this.isPoseLocked = Boolean(locked);
+        if (this.isPoseLocked) {
+          this.joyInput.x = 0;
+          this.joyInput.y = 0;
+          this.smoothedThrust = 0;
+          this.stepState.active = false;
+          this.activeBasePose = { ...this.pose };
+        }
+        this._updateGroundHandleAppearance();
+      }
+
+      /**
+       * 觸發一次平滑的單步跨步（0.24 秒）
+       */
+      step(dirX, dirZ, stepDistance = 0.25) {
+        if (this.isPoseLocked) return false;
+        const mag = Math.hypot(dirX, dirZ);
+        if (!Number.isFinite(mag) || mag < 1e-5) return false;
+
+        const nx = dirX / mag;
+        const nz = dirZ / mag;
+
+        const basePos = this.root.position.clone();
+        const targetX = clamp(basePos.x + nx * stepDistance, -this.worldBounds, this.worldBounds);
+        const targetZ = clamp(basePos.z + nz * stepDistance, -this.worldBounds, this.worldBounds);
+
+        this.isTransitioningPreset = false;
+        this.stepState.active = true;
+        this.stepState.elapsed = 0;
+        this.stepState.duration = 0.24;
+        this.stepState.startPos.copy(basePos);
+        this.stepState.targetPos.set(targetX, 0, targetZ);
+        this.stepState.dirX = nx;
+        this.stepState.dirZ = nz;
+        this.stepState.stepSign *= -1;
+        return true;
+      }
+
+      // =======================================================================
+      // 數學防溢位 2-Bone IK 核心解算器 (solveTwoBoneIK / solveArmIK / solveLegIK)
+      // =======================================================================
+      solveTwoBoneIK({
+        parentGroup,
+        rootJoint,
+        L1,
+        L2,
+        targetWorldPos,
+        poleHint,
+        bendSign,
+        minMidRad,
+        maxMidRad
+      }) {
+        if (!parentGroup || !rootJoint || !targetWorldPos || !poleHint) return null;
+        if (![targetWorldPos.x, targetWorldPos.y, targetWorldPos.z].every(Number.isFinite)) {
+          return null;
+        }
+
+        parentGroup.updateMatrixWorld(true);
+        const rootLocal = rootJoint.position.clone();
+        const targetLocal = parentGroup.worldToLocal(targetWorldPos.clone());
+        const toTarget = targetLocal.sub(rootLocal);
+
+        const lenSq = toTarget.lengthSq();
+        if (!Number.isFinite(lenSq) || lenSq < 1e-8) return null;
+
+        const rawDist = Math.sqrt(lenSq);
+        const targetDir = toTarget.clone().divideScalar(rawDist);
+
+        const maxReach = (L1 + L2) * 0.992;
+        const minReach = Math.abs(L1 - L2) + 0.08;
+        const dist = clamp(rawDist, minReach, maxReach);
+
+        // 余弦定理求近端偏角 alpha 與中關節內角 beta（嚴格 clamp 至 [-0.9999, 0.9999] 杜絕 NaN）
+        const cosAlpha = Math.max(
+          -0.9999,
+          Math.min(0.9999, (L1 * L1 + dist * dist - L2 * L2) / (2 * L1 * dist))
+        );
+        const alpha = Math.acos(cosAlpha);
+
+        const cosBeta = Math.max(
+          -0.9999,
+          Math.min(0.9999, (L1 * L1 + L2 * L2 - dist * dist) / (2 * L1 * L2))
+        );
+        const beta = Math.acos(cosBeta);
+
+        // bendSign = -1 時手肘向前彎（局部繞 X 負轉）；bendSign = +1 時膝蓋向後彎（局部繞 X 正轉）
+        const midBendRad = clamp(bendSign * (Math.PI - beta), minMidRad, maxMidRad);
+
+        // 將極向量投影至垂直於 targetDir 的平面，防止共線退化
+        const hintUnit = safeNormalize(poleHint.clone(), new THREE.Vector3(0, 0, 1));
+        const polePerp = hintUnit.clone().addScaledVector(targetDir, -hintUnit.dot(targetDir));
+        if (polePerp.lengthSq() < 1e-8) {
+          const fallbackAxis = Math.abs(targetDir.x) < 0.9
+            ? new THREE.Vector3(1, 0, 0)
+            : new THREE.Vector3(0, 0, 1);
+          polePerp.crossVectors(fallbackAxis, targetDir);
+        }
+        safeNormalize(polePerp, new THREE.Vector3(0, 0, 1));
+
+        // 計算近端骨骼（上臂或大腿）單位方向向量
+        const unitUpperDir = targetDir
+          .clone()
+          .multiplyScalar(Math.cos(alpha))
+          .addScaledVector(polePerp, Math.sin(alpha));
+        safeNormalize(unitUpperDir, targetDir);
+
+        // 建構近端關節正交基底矩陣：
+        // -Y 軸沿骨骼向下延伸至中關節；+Z 軸對齊中關節彎曲參考面
+        const yAxis = unitUpperDir.clone().negate();
+        const zAxis = bendSign < 0 ? polePerp.clone().negate() : polePerp.clone();
+        zAxis.addScaledVector(yAxis, -zAxis.dot(yAxis));
+        if (zAxis.lengthSq() < 1e-8) {
+          zAxis.set(0, 0, 1).addScaledVector(yAxis, -yAxis.z);
+        }
+        safeNormalize(zAxis, new THREE.Vector3(0, 0, 1));
+
+        const xAxis = new THREE.Vector3().crossVectors(yAxis, zAxis);
+        if (xAxis.lengthSq() < 1e-8) {
+          xAxis.set(1, 0, 0);
+        }
+        safeNormalize(xAxis, new THREE.Vector3(1, 0, 0));
+
+        zAxis.crossVectors(xAxis, yAxis);
+        safeNormalize(zAxis, new THREE.Vector3(0, 0, 1));
+
+        const rotMatrix = new THREE.Matrix4().makeBasis(xAxis, yAxis, zAxis);
+        const euler = new THREE.Euler().setFromRotationMatrix(rotMatrix, 'XYZ');
+
+        const rootXDeg = radToDeg(euler.x);
+        const rootYDeg = radToDeg(euler.y);
+        const rootZDeg = radToDeg(euler.z);
+        const midXDeg = radToDeg(midBendRad);
+
+        if (![rootXDeg, rootYDeg, rootZDeg, midXDeg].every(Number.isFinite)) {
+          return null;
+        }
+
+        return { rootXDeg, rootYDeg, rootZDeg, midXDeg };
+      }
+
+      /**
+       * 套用預設姿勢（支援平滑過渡或立即切換）
+       */
+      setPose(presetName, immediate = false) {
+        const preset = WoodenMannequinSkill.PRESETS[presetName];
+        if (!preset) return false;
+        this.stepState.active = false;
+        this.activeBasePose = { ...preset };
+        if (immediate) {
+          this.isTransitioningPreset = false;
+          this.targetPreset = null;
+          this.pose = { ...preset };
+          this.applyPoseToRig();
+        } else {
+          this.targetPreset = { ...preset };
+          this.isTransitioningPreset = true;
+        }
+        return true;
+      }
+
+      /**
+       * 手臂 2-Bone IK 解算（自動連動肩膀與手肘自然彎曲）
+       */
+      solveArmIK(side, targetWorldPos) {
+        const isLeft = side === 'L';
+        const arm = isLeft ? this.leftArm : this.rightArm;
+        if (!arm) return false;
+
+        const poleHint = new THREE.Vector3(isLeft ? 0.45 : -0.45, -0.25, -0.85);
+        const res = this.solveTwoBoneIK({
+          parentGroup: this.torsoGroup,
+          rootJoint: arm.shoulderJoint,
+          L1: this.UPPER_ARM_LEN,
+          L2: this.FOREARM_LEN,
+          targetWorldPos,
+          poleHint,
+          bendSign: -1,
+          minMidRad: degToRad(-155),
+          maxMidRad: degToRad(-2)
+        });
+        if (!res) return false;
+
+        if (isLeft) {
+          this.pose.lShoulderX = clamp(res.rootXDeg, -175, 95);
+          this.pose.lShoulderY = clamp(res.rootYDeg, -95, 95);
+          this.pose.lShoulderZ = clamp(res.rootZDeg, -40, 175);
+          this.pose.lElbowX = clamp(res.midXDeg, -155, -2);
+        } else {
+          this.pose.rShoulderX = clamp(res.rootXDeg, -175, 95);
+          this.pose.rShoulderY = clamp(res.rootYDeg, -95, 95);
+          this.pose.rShoulderZ = clamp(res.rootZDeg, -175, 40);
+          this.pose.rElbowX = clamp(res.midXDeg, -155, -2);
+        }
+        this.applyPoseToRig();
+        return true;
+      }
+
+      /**
+       * 腿部 2-Bone IK 解算（自動連動髖關節、膝蓋與腳踝平貼角度）
+       */
+      solveLegIK(side, targetWorldPos) {
+        const isLeft = side === 'L';
+        const leg = isLeft ? this.leftLeg : this.rightLeg;
+        if (!leg) return false;
+
+        const poleHint = new THREE.Vector3(isLeft ? 0.28 : -0.28, 0.0, 0.95);
+        const res = this.solveTwoBoneIK({
+          parentGroup: this.pelvisGroup,
+          rootJoint: leg.hipJoint,
+          L1: this.THIGH_LEN,
+          L2: this.CALF_LEN,
+          targetWorldPos,
+          poleHint,
+          bendSign: 1,
+          minMidRad: degToRad(0),
+          maxMidRad: degToRad(150)
+        });
+        if (!res) return false;
+
+        if (isLeft) {
+          const hipX = clamp(res.rootXDeg, -130, 80);
+          const kneeX = clamp(res.midXDeg, 0, 150);
+          this.pose.lHipX = hipX;
+          this.pose.lHipY = clamp(res.rootYDeg, -65, 65);
+          this.pose.lHipZ = clamp(res.rootZDeg, -30, 85);
+          this.pose.lKneeX = kneeX;
+          this.pose.lAnkleX = clamp(-(hipX + kneeX) * 0.45, -45, 45);
+        } else {
+          const hipX = clamp(res.rootXDeg, -130, 80);
+          const kneeX = clamp(res.midXDeg, 0, 150);
+          this.pose.rHipX = hipX;
+          this.pose.rHipY = clamp(res.rootYDeg, -65, 65);
+          this.pose.rHipZ = clamp(res.rootZDeg, -85, 30);
+          this.pose.rKneeX = kneeX;
+          this.pose.rAnkleX = clamp(-(hipX + kneeX) * 0.45, -45, 45);
+        }
+        this.applyPoseToRig();
+        return true;
+      }
+
+      /**
+       * 計算行走、跑步與橫移的混合關節步態（preserveUpper 為 true 時保留上半身基準姿勢）
+       */
+      _computeLocomotionPose(fwdRatio, sideRatio, runRatio, sinP, cosP, preserveUpper = false) {
+        const base = this.activeBasePose || WoodenMannequinSkill.PRESETS.raiseRight;
+        const absFwd = Math.abs(fwdRatio);
+        const absSide = Math.abs(sideRatio);
+        const activity = clamp(Math.hypot(fwdRatio, sideRatio), 0, 1);
+
+        // 大腿前後擺幅與側向開合（側向僅向外側打開，避免左右腿交叉穿模）
+        const legSwingAmp = 34 * fwdRatio + 24 * runRatio * fwdRatio;
+        const sideStepAmp = 24 * absSide;
+        const stepOutL = Math.max(0, sinP) * sideStepAmp;
+        const stepOutR = Math.max(0, -sinP) * sideStepAmp;
+
+        const lHipX = -sinP * legSwingAmp;
+        const rHipX = sinP * legSwingAmp;
+        const lHipZ = 3 + stepOutL;
+        const rHipZ = -3 - stepOutR;
+        const lHipY = sinP * 4 * fwdRatio;
+        const rHipY = -sinP * 4 * fwdRatio;
+
+        // 膝蓋抬腿彎曲與腳踝防穿地補償
+        const kneeLiftAmp = 44 * absFwd + 42 * runRatio * absFwd;
+        const lKneeX = Math.max(0, cosP) * kneeLiftAmp + stepOutL * 1.15;
+        const rKneeX = Math.max(0, -cosP) * kneeLiftAmp + stepOutR * 1.15;
+        const lAnkleX = clamp(-lKneeX * 0.25 - lHipX * 0.12, -28, 22);
+        const rAnkleX = clamp(-rKneeX * 0.25 - rHipX * 0.12, -28, 22);
+
+        // 骨盆垂直彈跳與微幅搖擺
+        const pelvisBounceY = Math.abs(sinP) * (0.025 + runRatio * 0.065) * activity;
+        const pelvisRotX = 2 * activity + runRatio * 5 * Math.max(0, fwdRatio);
+        const pelvisRotZ = -sinP * (2.2 * absFwd + 2.5 * sideRatio);
+
+        if (preserveUpper) {
+          const sway = sinP * 2.5 * activity;
+          return {
+            pelvisBounceY,
+            pelvisRotX,
+            pelvisRotZ,
+            headX: safeNum(base.headX, 0) - pelvisRotX * 0.5,
+            headY: safeNum(base.headY, 0),
+            headZ: safeNum(base.headZ, 0) - pelvisRotZ * 0.5,
+            torsoX: safeNum(base.torsoX, 0) + 1.5 * activity,
+            torsoY: safeNum(base.torsoY, 0) + sway,
+            torsoZ: safeNum(base.torsoZ, 0) - pelvisRotZ * 0.6,
+            lShoulderZ: safeNum(base.lShoulderZ, 12) + stepOutL * 0.35,
+            lShoulderX: safeNum(base.lShoulderX, 0) + sway * 1.2,
+            lShoulderY: safeNum(base.lShoulderY, 0),
+            lElbowX: safeNum(base.lElbowX, -16),
+            rShoulderZ: safeNum(base.rShoulderZ, -12) - stepOutR * 0.35,
+            rShoulderX: safeNum(base.rShoulderX, 0) - sway * 1.2,
+            rShoulderY: safeNum(base.rShoulderY, 0),
+            rElbowX: safeNum(base.rElbowX, -16),
+            lHipX,
+            lHipZ,
+            lHipY,
+            lKneeX,
+            lAnkleX,
+            rHipX,
+            rHipZ,
+            rHipY,
+            rKneeX,
+            rAnkleX
+          };
+        }
+
+        // 轉向走跑或全速衝刺時：雙臂與雙腿自然交叉擺動
+        const armSwingAmp = 28 * fwdRatio + 28 * runRatio * fwdRatio;
+        const elbowBase = -18 - runRatio * 68;
+        const torsoTwist = sinP * (7 + runRatio * 7) * fwdRatio;
+        const forwardLean = 3 * absFwd + runRatio * 14 * Math.max(0, fwdRatio);
+
+        return {
+          pelvisBounceY,
+          pelvisRotX,
+          pelvisRotZ,
+          headX: -forwardLean * 0.55,
+          headY: -torsoTwist * 0.45,
+          headZ: -pelvisRotZ * 0.4,
+          torsoX: forwardLean,
+          torsoY: torsoTwist,
+          torsoZ: -pelvisRotZ * 0.65,
+          lShoulderZ: 10 + runRatio * 5 + stepOutL * 0.45,
+          lShoulderX: sinP * armSwingAmp,
+          lShoulderY: 0,
+          lElbowX: elbowBase - Math.max(0, -sinP) * 18 * runRatio,
+          rShoulderZ: -10 - runRatio * 5 - stepOutR * 0.45,
+          rShoulderX: -sinP * armSwingAmp,
+          rShoulderY: 0,
+          rElbowX: elbowBase - Math.max(0, sinP) * 18 * runRatio,
+          lHipX,
+          lHipZ,
+          lHipY,
+          lKneeX,
+          lAnkleX,
+          rHipX,
+          rHipZ,
+          rHipY,
+          rKneeX,
+          rAnkleX
+        };
+      }
+
+      /**
+       * 更新披風、實驗白袍下擺與高馬尾的次級物理慣性擺動
+       */
+      _updateSecondaryDynamics(dt, elapsed) {
+        const safeDt = clamp(dt, 0.001, 0.05);
+        const worldVx = clamp((this.root.position.x - this._prevWorldPos.x) / safeDt, -6, 6);
+        const worldVz = clamp((this.root.position.z - this._prevWorldPos.z) / safeDt, -6, 6);
+        this._prevWorldPos.copy(this.root.position);
+
+        const yaw = this.root.rotation.y;
+        const fwdX = Math.sin(yaw);
+        const fwdZ = Math.cos(yaw);
+        const leftX = Math.cos(yaw);
+        const leftZ = -Math.sin(yaw);
+
+        const localFwdVel = worldVx * fwdX + worldVz * fwdZ;
+        const localSideVel = worldVx * leftX + worldVz * leftZ;
+        const speedMag = Math.hypot(localFwdVel, localSideVel);
+        const bounce = safeNum(this.pose.pelvisBounceY, 0);
+
+        // 1. 英雄披風 4 段慣性飄動
+        if (this.appearance.outfit === 'cape' && this.capeSegments.length === 4) {
+          const torsoPitch = degToRad(safeNum(this.pose.torsoX, 0));
+          const targetPitch = clamp(
+            0.14 + Math.max(0, localFwdVel) * 0.22 - Math.min(0, localFwdVel) * 0.05 + Math.max(0, -torsoPitch) * 0.35 + bounce * 1.1,
+            0.06,
+            1.18
+          );
+          const targetRoll = clamp(-localSideVel * 0.14, -0.42, 0.42);
+
+          this._capePitchVel += (targetPitch - this._capePitch) * 44 * safeDt;
+          this._capePitchVel *= Math.exp(-9.5 * safeDt);
+          this._capePitch = clamp(this._capePitch + this._capePitchVel * safeDt, 0.05, 1.25);
+
+          this._capeRollVel += (targetRoll - this._capeRoll) * 40 * safeDt;
+          this._capeRollVel *= Math.exp(-9.0 * safeDt);
+          this._capeRoll = clamp(this._capeRoll + this._capeRollVel * safeDt, -0.45, 0.45);
+
+          const waveAmp = 0.025 + clamp(speedMag / 4.5, 0, 1) * 0.085;
+          const weights = [0.42, 0.28, 0.18, 0.12];
+          for (let i = 0; i < 4; i++) {
+            const seg = this.capeSegments[i];
+            const wave = Math.sin(elapsed * (5.2 + speedMag * 1.4) - i * 0.85) * waveAmp;
+            seg.rotation.x = this._capePitch * weights[i] * 2.1 + wave;
+            seg.rotation.z = this._capeRoll * weights[i] * 1.8;
+          }
+        }
+
+        // 2. 實驗白袍下擺隨大腿擺動防穿模
+        if (this.appearance.outfit === 'labcoat' && this.coatSkirtL && this.coatSkirtR) {
+          const lHipX = degToRad(safeNum(this.pose.lHipX, 0));
+          const rHipX = degToRad(safeNum(this.pose.rHipX, 0));
+          const lHipZ = degToRad(safeNum(this.pose.lHipZ, 3));
+          const rHipZ = degToRad(safeNum(this.pose.rHipZ, -3));
+
+          this.coatSkirtL.rotation.x = clamp(lHipX * 0.62, -0.75, 0.42);
+          this.coatSkirtR.rotation.x = clamp(rHipX * 0.62, -0.75, 0.42);
+          this.coatSkirtL.rotation.z = clamp((lHipZ - 0.05) * 0.55 + bounce * 0.35, 0, 0.45);
+          this.coatSkirtR.rotation.z = clamp((rHipZ + 0.05) * 0.55 - bounce * 0.35, -0.45, 0);
+        }
+
+        // 3. 高馬尾隨步伐與垂直彈跳擺動
+        if (this.appearance.hairStyle === 'ponytail' && this.ponytailPivot) {
+          const headPitch = degToRad(safeNum(this.pose.headX, 0));
+          const targetTailPitch = clamp(
+            -headPitch * 0.55 + Math.max(0, localFwdVel) * 0.14 + bounce * 2.2,
+            -0.35,
+            0.78
+          );
+          this._ponytailPitchVel += (targetTailPitch - this._ponytailPitch) * 58 * safeDt;
+          this._ponytailPitchVel *= Math.exp(-8.5 * safeDt);
+          this._ponytailPitch = clamp(this._ponytailPitch + this._ponytailPitchVel * safeDt, -0.4, 0.85);
+          this.ponytailPivot.rotation.x = this._ponytailPitch;
+          this.ponytailPivot.rotation.z = clamp(-localSideVel * 0.09, -0.28, 0.28);
+        }
+      }
+
+      /**
+       * 每幀更新：驅動單步跨步、地面圓圈拖曳步行感、搖桿走跑與預設姿勢過渡
+       */
+      update(dt, cameraAzimuth = 0, elapsed = 0) {
+        const finalize = (res) => {
+          this._updateSecondaryDynamics(dt, elapsed);
+          return res;
+        };
+
+        // 外部地面拖曳速度指數衰減（滑鼠停住時腳步平滑停下）
+        const extDecay = Math.exp(-14 * dt);
+        this.externalDragVel.multiplyScalar(extDecay);
+        if (this.externalDragVel.lengthSq() < 1e-4) {
+          this.externalDragVel.set(0, 0);
+        }
+
+        if (this.isTransitioningPreset && this.targetPreset) {
+          const alpha = 1 - Math.exp(-10.0 * dt);
+          let maxDiff = 0;
+          Object.keys(this.targetPreset).forEach((k) => {
+            if (typeof this.targetPreset[k] === 'number') {
+              const cur = safeNum(this.pose[k], 0);
+              const diff = this.targetPreset[k] - cur;
+              this.pose[k] = cur + diff * alpha;
+              if (Math.abs(diff) > maxDiff) maxDiff = Math.abs(diff);
+            }
+          });
+          this.applyPoseToRig();
+          if (maxDiff < 0.05) {
+            Object.keys(this.targetPreset).forEach((k) => {
+              if (typeof this.targetPreset[k] === 'number') {
+                this.pose[k] = this.targetPreset[k];
+              }
+            });
+            this.applyPoseToRig();
+            this.isTransitioningPreset = false;
+          }
+          return finalize({ stateLabel: '姿勢過渡', thrustPercent: 0 });
+        }
+
+        // 鎖定擺姿勢模式：完全保留當前精確關節角度（即使正在拖曳地面圓圈也不破壞姿勢）
+        if (this.isPoseLocked) {
+          return finalize({
+            stateLabel: this.isGroundDragging ? '地面平移' : '已鎖定',
+            thrustPercent: 0
+          });
+        }
+
+        const rawThrust = clamp(Math.hypot(this.joyInput.x, this.joyInput.y), 0, 1);
+        const isJoyActive = rawThrust > 0.02;
+        if (isJoyActive) {
+          this.stepState.active = false;
+          this.isTransitioningPreset = false;
+        }
+
+        // 1. 處理單步跨步動畫
+        if (this.stepState.active) {
+          this.stepState.elapsed += dt;
+          const u = clamp(this.stepState.elapsed / this.stepState.duration, 0, 1);
+          const easePos = u * u * (3 - 2 * u);
+          this.root.position.lerpVectors(this.stepState.startPos, this.stepState.targetPos, easePos);
+
+          let fwdRatio = 1;
+          let sideRatio = 0;
+          if (this.moveMode === 'turn') {
+            const targetYaw = Math.atan2(this.stepState.dirX, this.stepState.dirZ);
+            this.root.rotation.y = shortestAngleLerp(this.root.rotation.y, targetYaw, 1 - Math.exp(-18 * dt));
+          } else {
+            const yaw = this.root.rotation.y;
+            const fwdX = Math.sin(yaw);
+            const fwdZ = Math.cos(yaw);
+            const leftX = Math.cos(yaw);
+            const leftZ = -Math.sin(yaw);
+            fwdRatio = this.stepState.dirX * fwdX + this.stepState.dirZ * fwdZ;
+            sideRatio = this.stepState.dirX * leftX + this.stepState.dirZ * leftZ;
+          }
+
+          const halfWave = Math.sin(u * Math.PI) * this.stepState.stepSign;
+          const liftWave = -Math.sin(u * Math.PI);
+          const stepPose = this._computeLocomotionPose(
+            fwdRatio * 0.85,
+            sideRatio * 0.95,
+            0,
+            halfWave,
+            liftWave,
+            true
+          );
+
+          const blend = 1 - Math.exp(-22 * dt);
+          Object.keys(stepPose).forEach((k) => {
+            const cur = safeNum(this.pose[k], 0);
+            this.pose[k] = cur + (stepPose[k] - cur) * blend;
+          });
+          this.applyPoseToRig();
+
+          if (u >= 1) {
+            this.stepState.active = false;
+            if (this.autoResetPose) {
+              this.pose = { ...this.activeBasePose };
+              this.applyPoseToRig();
+            }
+          }
+          return finalize({ stateLabel: '單步跨步', thrustPercent: 25 });
+        }
+
+        // 2. 處理未鎖定姿勢下的「地面圓圈拖曳」自然小步走動
+        const extSpeed = this.externalDragVel.length();
+        if (!isJoyActive && (this.isGroundDragging || extSpeed > 0.05)) {
+          const dragThrust = clamp(extSpeed / 3.8, 0, 0.48);
+          this.smoothedThrust += (dragThrust - this.smoothedThrust) * (1 - Math.exp(-12 * dt));
+
+          if (this.smoothedThrust > 0.02 && extSpeed > 0.04) {
+            const nx = this.externalDragVel.x / extSpeed;
+            const nz = this.externalDragVel.y / extSpeed;
+
+            let fwdRatio = this.smoothedThrust;
+            let sideRatio = 0;
+            if (this.moveMode === 'turn') {
+              const targetYaw = Math.atan2(nx, nz);
+              this.root.rotation.y = shortestAngleLerp(this.root.rotation.y, targetYaw, 1 - Math.exp(-10 * dt));
+            } else {
+              const yaw = this.root.rotation.y;
+              const fwdX = Math.sin(yaw);
+              const fwdZ = Math.cos(yaw);
+              const leftX = Math.cos(yaw);
+              const leftZ = -Math.sin(yaw);
+              fwdRatio = (nx * fwdX + nz * fwdZ) * this.smoothedThrust;
+              sideRatio = (nx * leftX + nz * leftZ) * this.smoothedThrust;
+            }
+
+            this.gaitPhase += dt * (4.5 + this.smoothedThrust * 9.0);
+            const walkGait = this._computeLocomotionPose(
+              fwdRatio,
+              sideRatio,
+              0,
+              Math.sin(this.gaitPhase),
+              Math.cos(this.gaitPhase),
+              true
+            );
+
+            const blendAlpha = 1 - Math.exp(-16 * dt);
+            Object.keys(walkGait).forEach((k) => {
+              const cur = safeNum(this.pose[k], 0);
+              this.pose[k] = cur + (walkGait[k] - cur) * blendAlpha;
+            });
+            this.applyPoseToRig();
+          } else if (this.autoResetPose) {
+            const base = this.activeBasePose;
+            const returnAlpha = 1 - Math.exp(-10.0 * dt);
+            Object.keys(base).forEach((k) => {
+              if (typeof base[k] === 'number') {
+                const cur = safeNum(this.pose[k], 0);
+                this.pose[k] = cur + (base[k] - cur) * returnAlpha;
+              }
+            });
+            this.applyPoseToRig();
+          }
+
+          return finalize({
+            stateLabel: '地面拖移',
+            thrustPercent: Math.round(this.smoothedThrust * 100)
+          });
+        }
+
+        // 3. 連續搖桿推力平滑阻尼
+        const thrustLerp = 1 - Math.exp(-10 * dt);
+        this.smoothedThrust += (rawThrust - this.smoothedThrust) * thrustLerp;
+
+        if (!isJoyActive && this.smoothedThrust < 0.015) {
+          this.smoothedThrust = 0;
+          if (this.autoResetPose) {
+            const base = this.activeBasePose;
+            const returnAlpha = 1 - Math.exp(-9.0 * dt);
+            Object.keys(base).forEach((k) => {
+              if (typeof base[k] === 'number') {
+                const cur = safeNum(this.pose[k], 0);
+                this.pose[k] = cur + (base[k] - cur) * returnAlpha;
+              }
+            });
+            this.applyPoseToRig();
+            return finalize({ stateLabel: '靜止', thrustPercent: 0 });
+          }
+          return finalize({ stateLabel: '定格步伐', thrustPercent: 0 });
+        }
+
+        // 4. 1%–50% 慢走 -> 51%–100% 快跑無段步態
+        const t = this.smoothedThrust;
+        const walkRatio = clamp(t / 0.5, 0, 1);
+        const runRatio = clamp((t - 0.5) / 0.5, 0, 1);
+        const moveSpeed = walkRatio * 1.85 + runRatio * 2.95;
+
+        const cosA = Math.cos(cameraAzimuth);
+        const sinA = Math.sin(cameraAzimuth);
+        const worldDirX = this.joyInput.x * cosA - this.joyInput.y * sinA;
+        const worldDirZ = -this.joyInput.x * sinA - this.joyInput.y * cosA;
+        const dirMag = Math.hypot(worldDirX, worldDirZ);
+        const nx = dirMag > 1e-5 ? worldDirX / dirMag : 0;
+        const nz = dirMag > 1e-5 ? worldDirZ / dirMag : 0;
+
+        this.root.position.x = clamp(
+          this.root.position.x + nx * moveSpeed * dt,
+          -this.worldBounds,
+          this.worldBounds
+        );
+        this.root.position.z = clamp(
+          this.root.position.z + nz * moveSpeed * dt,
+          -this.worldBounds,
+          this.worldBounds
+        );
+
+        let fwdRatio = t;
+        let sideRatio = 0;
+        if (this.moveMode === 'turn') {
+          if (isJoyActive && dirMag > 1e-5) {
+            const worldTargetYaw = Math.atan2(nx, nz);
+            const turnAlpha = 1 - Math.exp(-12 * dt);
+            this.root.rotation.y = shortestAngleLerp(this.root.rotation.y, worldTargetYaw, turnAlpha);
+          }
+        } else {
+          const yaw = this.root.rotation.y;
+          const fwdX = Math.sin(yaw);
+          const fwdZ = Math.cos(yaw);
+          const leftX = Math.cos(yaw);
+          const leftZ = -Math.sin(yaw);
+          fwdRatio = (nx * fwdX + nz * fwdZ) * t;
+          sideRatio = (nx * leftX + nz * leftZ) * t;
+        }
+
+        const strideFreq = 4.6 + walkRatio * 3.0 + runRatio * 7.2;
+        this.gaitPhase += dt * strideFreq;
+
+        const preserveUpper = this.moveMode === 'strafe' && runRatio < 0.25;
+        const targetGait = this._computeLocomotionPose(
+          fwdRatio,
+          sideRatio,
+          runRatio,
+          Math.sin(this.gaitPhase),
+          Math.cos(this.gaitPhase),
+          preserveUpper
+        );
+
+        const blendAlpha = 1 - Math.exp(-14 * dt);
+        Object.keys(targetGait).forEach((k) => {
+          const cur = safeNum(this.pose[k], 0);
+          this.pose[k] = cur + (targetGait[k] - cur) * blendAlpha;
+        });
+
+        this.applyPoseToRig();
+
+        const pct = Math.round(rawThrust * 100);
+        const stateLabel = pct === 0 ? '靜止' : pct <= 50 ? '慢走' : '快跑';
+        return finalize({ stateLabel, thrustPercent: pct });
+      }
+
+      dispose() {
+        this.woodMat.dispose();
+        this.jointMat.dispose();
+        this.shadowMat.dispose();
+        this.outfitMainMat.dispose();
+        this.outfitTrimMat.dispose();
+        this.outfitAccentMat.dispose();
+        this.hairMainMat.dispose();
+        this.hairAccessoryMat.dispose();
+        if (this.groundDiscMat) this.groundDiscMat.dispose();
+        if (this.groundRingMat) this.groundRingMat.dispose();
+        if (this.groundInnerMat) this.groundInnerMat.dispose();
+        this.ownedGeometries.forEach((g) => {
+          if (g && typeof g.dispose === 'function') g.dispose();
+        });
+        this.ownedGeometries = [];
+        this.interactiveMeshes.forEach((m) => {
+          if (m.userData && m.userData.clonedMat && m.material) {
+            m.material.dispose();
+          }
+        });
+      }
+
+      reset() {
+        this.root.position.set(0, 0, 0);
+        this.root.rotation.set(0, 0, 0);
+        this._prevWorldPos.set(0, 0, 0);
+        this.joyInput.x = 0;
+        this.joyInput.y = 0;
+        this.externalDragVel.set(0, 0);
+        this.smoothedThrust = 0;
+        this.gaitPhase = 0;
+        this._capePitch = 0.14;
+        this._capePitchVel = 0;
+        this._capeRoll = 0;
+        this._capeRollVel = 0;
+        this._ponytailPitch = 0;
+        this._ponytailPitchVel = 0;
+        this.stepState.active = false;
+        this.isTransitioningPreset = false;
+        this.targetPreset = null;
+        this.activeBasePose = { ...WoodenMannequinSkill.PRESETS.raiseRight };
+        this.pose = { ...this.activeBasePose };
+        this.applyPoseToRig();
+      }
+    }
+
+    /**
+     * 程序化繪製簡潔純淨的地面網格貼圖（0.25m 細網格、1.0m 主網格與原點十字標記）
+     */
+    function createSimpleGridTexture(maxAnisotropy = 4) {
+      const size = 1024;
+      const canvas = document.createElement('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d');
+
+      const bgGrad = ctx.createRadialGradient(size * 0.5, size * 0.5, 40, size * 0.5, size * 0.5, size * 0.72);
+      bgGrad.addColorStop(0, '#271f18');
+      bgGrad.addColorStop(0.55, '#1f1812');
+      bgGrad.addColorStop(1, '#16100c');
+      ctx.fillStyle = bgGrad;
+      ctx.fillRect(0, 0, size, size);
+
+      const worldSpan = 12;
+      const pxPerMeter = size / worldSpan;
+      const half = size / 2;
+
+      // 0.25m 細網格與 1.0m 主網格
+      const stepSub = 0.25 * pxPerMeter;
+      ctx.lineWidth = 1;
+      for (let p = 0; p <= size; p += stepSub) {
+        const distFromCenter = Math.abs(p - half);
+        const isOneMeter = Math.abs(distFromCenter / pxPerMeter - Math.round(distFromCenter / pxPerMeter)) < 0.01;
+        ctx.strokeStyle = isOneMeter ? 'rgba(251, 191, 36, 0.17)' : 'rgba(255, 255, 255, 0.048)';
+        ctx.beginPath();
+        ctx.moveTo(p, 0);
+        ctx.lineTo(p, size);
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.moveTo(0, p);
+        ctx.lineTo(size, p);
+        ctx.stroke();
+      }
+
+      // 原點 (0, 0) 簡潔十字標記
+      const crossArm = pxPerMeter * 0.35;
+      ctx.strokeStyle = 'rgba(251, 191, 36, 0.45)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(half - crossArm, half);
+      ctx.lineTo(half + crossArm, half);
+      ctx.moveTo(half, half - crossArm);
+      ctx.lineTo(half, half + crossArm);
+      ctx.stroke();
+
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.anisotropy = maxAnisotropy;
+      return tex;
+    }
+
+    // =========================================================================
+    // 主應用程式初始化
+    // =========================================================================
+    function initApp() {
+      const container = document.getElementById('canvas-container');
+      if (!container) throw new Error('找不到畫布容器');
+
+      const scene = new THREE.Scene();
+      scene.fog = new THREE.FogExp2(0x16110d, 0.022);
+
+      const camera = new THREE.PerspectiveCamera(
+        40,
+        window.innerWidth / window.innerHeight,
+        0.1,
+        120
+      );
+      camera.position.set(2.8, 2.75, 6.2);
+
+      const renderer = new THREE.WebGLRenderer({
+        antialias: true,
+        alpha: true,
+        powerPreference: 'high-performance'
+      });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      renderer.shadowMap.enabled = false;
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.15;
+      container.appendChild(renderer.domElement);
+
+      const controls = new OrbitControls(camera, renderer.domElement);
+      controls.target.set(0, 1.15, 0);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.07;
+      controls.minDistance = 2.0;
+      controls.maxDistance = 18;
+      controls.maxPolarAngle = Math.PI * 0.492;
+      controls.update();
+
+      // 三點工作室燈光
+      const hemiLight = new THREE.HemisphereLight(0xfff5e4, 0x3b2d22, 1.05);
+      scene.add(hemiLight);
+
+      const keyLight = new THREE.DirectionalLight(0xffe7c4, 2.2);
+      keyLight.position.set(5, 9, 6);
+      scene.add(keyLight);
+
+      const fillLight = new THREE.DirectionalLight(0xcbd5e1, 0.8);
+      fillLight.position.set(-6, 4, 3);
+      scene.add(fillLight);
+
+      const rimLight = new THREE.DirectionalLight(0xf59e0b, 1.15);
+      rimLight.position.set(-3, 6, -6);
+      scene.add(rimLight);
+
+      // 簡潔純淨的 0.25m / 1.0m 地面網格
+      const maxAniso = renderer.capabilities.getMaxAnisotropy();
+      const benchTex = createSimpleGridTexture(maxAniso);
+      const benchGeo = new THREE.PlaneGeometry(12, 12);
+      const benchMat = new THREE.MeshStandardMaterial({
+        map: benchTex,
+        roughness: 0.82,
+        metalness: 0.05
+      });
+      const benchMesh = new THREE.Mesh(benchGeo, benchMat);
+      benchMesh.rotation.x = -Math.PI / 2;
+      scene.add(benchMesh);
+
+      const outerFloor = new THREE.Mesh(
+        new THREE.RingGeometry(8.4, 24, 64),
+        new THREE.MeshStandardMaterial({ color: 0x18120e, roughness: 0.92 })
+      );
+      outerFloor.rotation.x = -Math.PI / 2;
+      outerFloor.position.y = -0.002;
+      scene.add(outerFloor);
+
+      // 初始化木頭人偶 Skill 實例
+      const mannequin = new WoodenMannequinSkill({
+        isImage: false,
+        targetHeight: 2.0,
+        moveMode: 'strafe',
+        woodType: 'beech',
+        maxAnisotropy: maxAniso
+      });
+      mannequin.worldBounds = 5.6;
+      scene.add(mannequin.root);
+
+      // 3D 肢體拖曳輔助視覺環與偏移線
+      const dragVisualGroup = new THREE.Group();
+      dragVisualGroup.visible = false;
+      scene.add(dragVisualGroup);
+
+      const dragRing = new THREE.Mesh(
+        new THREE.RingGeometry(0.20, 0.24, 36),
+        new THREE.MeshBasicMaterial({
+          color: 0x10b981,
+          side: THREE.DoubleSide,
+          transparent: true,
+          opacity: 0.85,
+          depthTest: false
+        })
+      );
+      dragRing.renderOrder = 998;
+      dragVisualGroup.add(dragRing);
+
+      const dragLineGeom = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(),
+        new THREE.Vector3()
+      ]);
+      const dragLine = new THREE.Line(
+        dragLineGeom,
+        new THREE.LineBasicMaterial({
+          color: 0x34d399,
+          transparent: true,
+          opacity: 0.9,
+          depthTest: false
+        })
+      );
+      dragLine.renderOrder = 998;
+      dragVisualGroup.add(dragLine);
+
+      // =======================================================================
+      // 復原 / 重做 (Undo / Redo) 歷史堆疊
+      // =======================================================================
+      const undoStack = [];
+      const redoStack = [];
+      const btnUndo = document.getElementById('btn-undo');
+      const btnRedo = document.getElementById('btn-redo');
+
+      function updateUndoRedoButtons() {
+        if (btnUndo) btnUndo.disabled = undoStack.length === 0;
+        if (btnRedo) btnRedo.disabled = redoStack.length === 0;
+      }
+
+      function pushUndoSnapshot(poseSnapshot) {
+        undoStack.push({ ...poseSnapshot });
+        if (undoStack.length > 40) undoStack.shift();
+        redoStack.length = 0;
+        updateUndoRedoButtons();
+      }
+
+      function performUndo() {
+        if (undoStack.length === 0) return;
+        redoStack.push({ ...mannequin.pose });
+        const prev = undoStack.pop();
+        mannequin.isTransitioningPreset = false;
+        mannequin.pose = { ...prev };
+        mannequin.activeBasePose = { ...prev };
+        mannequin.applyPoseToRig();
+        updateUndoRedoButtons();
+      }
+
+      function performRedo() {
+        if (redoStack.length === 0) return;
+        undoStack.push({ ...mannequin.pose });
+        const next = redoStack.pop();
+        mannequin.isTransitioningPreset = false;
+        mannequin.pose = { ...next };
+        mannequin.activeBasePose = { ...next };
+        mannequin.applyPoseToRig();
+        updateUndoRedoButtons();
+      }
+
+      if (btnUndo) btnUndo.addEventListener('click', performUndo);
+      if (btnRedo) btnRedo.addEventListener('click', performRedo);
+
+      // =======================================================================
+      // 零誤觸虛擬搖桿（連續拖曳走跑 ＋ <180ms & <6px 輕點單步跨步）與鍵盤控制
+      // =======================================================================
+      const joystickBase = document.getElementById('joystick-base');
+      const joystickKnob = document.getElementById('joystick-knob');
+      const joystickLockedOverlay = document.getElementById('joystick-locked-overlay');
+      const gaitBadge = document.getElementById('gait-badge');
+      const thrustPercentEl = document.getElementById('thrust-percent');
+      const posXReadout = document.getElementById('pos-x-readout');
+      const posZReadout = document.getElementById('pos-z-readout');
+      const snapBadge = document.getElementById('snap-badge');
+
+      const pulseEls = {
+        up: document.getElementById('joy-pulse-up'),
+        down: document.getElementById('joy-pulse-down'),
+        left: document.getElementById('joy-pulse-left'),
+        right: document.getElementById('joy-pulse-right')
+      };
+
+      let joyPointerId = null;
+      let joyDownTime = 0;
+      let joyDownX = 0;
+      let joyDownY = 0;
+      let hasDraggedJoystick = false;
+      let joyVec = { x: 0, y: 0 };
+
+      const wasdDown = new Set();
+      let wasdHoldTime = 0;
+
+      function triggerQuadrantPulse(quadrant) {
+        const el = pulseEls[quadrant];
+        if (!el) return;
+        el.classList.add('active');
+        setTimeout(() => {
+          el.classList.remove('active');
+        }, 220);
+      }
+
+      function triggerScreenStep(sx, sy, quadrantName = null) {
+        if (mannequin.isPoseLocked) return;
+        const camAzimuth = controls.getAzimuthalAngle();
+        const cosA = Math.cos(camAzimuth);
+        const sinA = Math.sin(camAzimuth);
+        const worldDirX = sx * cosA - sy * sinA;
+        const worldDirZ = -sx * sinA - sy * cosA;
+        const stepped = mannequin.step(worldDirX, worldDirZ, 0.25);
+        if (stepped && quadrantName) {
+          triggerQuadrantPulse(quadrantName);
+        }
+      }
+
+      function updateJoystickVisual(nx, ny, isDragging = false) {
+        if (!joystickBase || !joystickKnob) return;
+        if (isDragging) {
+          joystickKnob.classList.add('is-dragging');
+        } else {
+          joystickKnob.classList.remove('is-dragging');
+        }
+        const maxRadius = joystickBase.clientWidth * 0.34;
+        const px = nx * maxRadius;
+        const py = -ny * maxRadius;
+        joystickKnob.style.transform = `translate3d(${px.toFixed(1)}px, ${py.toFixed(1)}px, 0)`;
+      }
+
+      function computeJoystickFromPointer(clientX, clientY) {
+        if (!joystickBase) return;
+        const rect = joystickBase.getBoundingClientRect();
+        const cx = rect.left + rect.width / 2;
+        const cy = rect.top + rect.height / 2;
+        const maxRadius = Math.max(1, rect.width * 0.36);
+
+        let dx = (clientX - cx) / maxRadius;
+        let dy = -(clientY - cy) / maxRadius;
+        const mag = Math.hypot(dx, dy);
+        if (mag > 1) {
+          dx /= mag;
+          dy /= mag;
+        }
+        joyVec.x = dx;
+        joyVec.y = dy;
+        updateJoystickVisual(dx, dy, true);
+      }
+
+      function releaseJoystick(clientX = null, clientY = null) {
+        if (joyPointerId !== null) {
+          const elapsedMs = performance.now() - joyDownTime;
+          const wasTap = !hasDraggedJoystick && elapsedMs < 180 && clientX !== null && clientY !== null;
+
+          try {
+            if (joystickBase && joystickBase.hasPointerCapture(joyPointerId)) {
+              joystickBase.releasePointerCapture(joyPointerId);
+            }
+          } catch (_) {}
+
+          if (wasTap && joystickBase && !mannequin.isPoseLocked) {
+            const rect = joystickBase.getBoundingClientRect();
+            const cx = rect.left + rect.width / 2;
+            const cy = rect.top + rect.height / 2;
+            const dx = clientX - cx;
+            const dy = clientY - cy;
+            if (Math.hypot(dx, dy) > 4) {
+              if (Math.abs(dx) >= Math.abs(dy)) {
+                if (dx >= 0) triggerScreenStep(1, 0, 'right');
+                else triggerScreenStep(-1, 0, 'left');
+              } else {
+                if (dy < 0) triggerScreenStep(0, 1, 'up');
+                else triggerScreenStep(0, -1, 'down');
+              }
+            }
+          }
+
+          joyPointerId = null;
+        }
+        hasDraggedJoystick = false;
+        joyVec.x = 0;
+        joyVec.y = 0;
+        updateJoystickVisual(0, 0, false);
+      }
+
+      if (joystickBase) {
+        joystickBase.addEventListener('pointerdown', (e) => {
+          if (mannequin.isPoseLocked) return;
+          e.preventDefault();
+          e.stopPropagation();
+          joyPointerId = e.pointerId;
+          joyDownTime = performance.now();
+          joyDownX = e.clientX;
+          joyDownY = e.clientY;
+          hasDraggedJoystick = false;
+          try {
+            joystickBase.setPointerCapture(e.pointerId);
+          } catch (_) {}
+        });
+      }
+
+      window.addEventListener('keydown', (e) => {
+        if (e.target && e.target.tagName === 'INPUT') return;
+        const code = e.code;
+
+        if ((e.ctrlKey || e.metaKey) && code === 'KeyZ') {
+          e.preventDefault();
+          if (e.shiftKey) performRedo();
+          else performUndo();
+          return;
+        }
+        if ((e.ctrlKey || e.metaKey) && code === 'KeyY') {
+          e.preventDefault();
+          performRedo();
+          return;
+        }
+
+        if (['KeyW', 'KeyA', 'KeyS', 'KeyD'].includes(code)) {
+          wasdDown.add(code);
+        } else if (code === 'ArrowUp') {
+          e.preventDefault();
+          triggerScreenStep(0, 1, 'up');
+        } else if (code === 'ArrowDown') {
+          e.preventDefault();
+          triggerScreenStep(0, -1, 'down');
+        } else if (code === 'ArrowLeft') {
+          e.preventDefault();
+          triggerScreenStep(-1, 0, 'left');
+        } else if (code === 'ArrowRight') {
+          e.preventDefault();
+          triggerScreenStep(1, 0, 'right');
+        } else if (code === 'KeyM' && !e.ctrlKey && !e.metaKey) {
+          setMoveModeUI(mannequin.moveMode === 'strafe' ? 'turn' : 'strafe');
+        } else if (code === 'KeyL' && !e.ctrlKey && !e.metaKey) {
+          setInteractionMode(!mannequin.isPoseLocked);
+        } else if (code === 'KeyC' && !e.ctrlKey && !e.metaKey) {
+          toggleAppearanceDrawer();
+        } else if (code === 'ShiftLeft' || code === 'ShiftRight') {
+          if (isDraggingGroundRing && snapBadge) {
+            snapBadge.classList.remove('hidden');
+          }
+        }
+      });
+
+      window.addEventListener('keyup', (e) => {
+        wasdDown.delete(e.code);
+        if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') {
+          if (snapBadge) snapBadge.classList.add('hidden');
+        }
+      });
+
+      function updateKeyboardInput(dt) {
+        if (mannequin.isPoseLocked || joyPointerId !== null) {
+          wasdHoldTime = 0;
+          return;
+        }
+        let kx = 0;
+        let ky = 0;
+        if (wasdDown.has('KeyW')) ky += 1;
+        if (wasdDown.has('KeyS')) ky -= 1;
+        if (wasdDown.has('KeyA')) kx -= 1;
+        if (wasdDown.has('KeyD')) kx += 1;
+
+        if (kx !== 0 || ky !== 0) {
+          const len = Math.hypot(kx, ky);
+          kx /= len;
+          ky /= len;
+          wasdHoldTime += dt;
+          const ramp = clamp(0.42 + (wasdHoldTime / 0.65) * 0.50, 0.42, 0.92);
+          joyVec.x = kx * ramp;
+          joyVec.y = ky * ramp;
+          updateJoystickVisual(joyVec.x, joyVec.y, false);
+        } else if (wasdHoldTime > 0) {
+          wasdHoldTime = 0;
+          joyVec.x = 0;
+          joyVec.y = 0;
+          updateJoystickVisual(0, 0, false);
+        }
+      }
+
+      // =======================================================================
+      // 3D 互動系統：
+      // 1. 地面圓圈拖移 (Ground Positioning Ring) — 自由移動 & 鎖定擺姿勢雙模式皆可用
+      // 2. 肢體關節與 IK 控制球拖曳 — 鎖定擺姿勢模式下可用
+      // =======================================================================
+      let isDraggingGroundRing = false;
+      let groundPointerId = null;
+      const groundPlaneY0 = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+      const groundGrabOffset = new THREE.Vector3();
+      const groundLastPos = new THREE.Vector3();
+      let groundLastMoveTime = 0;
+
+      let isDraggingLimb = false;
+      let limbPointerId = null;
+      let activeLimbDrag = null;
+      let hoveredPartId = null;
+
+      const raycaster = new THREE.Raycaster();
+      const pointerNDC = new THREE.Vector2();
+      const dragPlane = new THREE.Plane();
+      const planeHit = new THREE.Vector3();
+
+      function updateNDC(clientX, clientY) {
+        const rect = renderer.domElement.getBoundingClientRect();
+        pointerNDC.x = ((clientX - rect.left) / Math.max(1, rect.width)) * 2 - 1;
+        pointerNDC.y = -((clientY - rect.top) / Math.max(1, rect.height)) * 2 + 1;
+      }
+
+      function setHoveredPart(partId) {
+        if (hoveredPartId === partId) return;
+        if (hoveredPartId && mannequin.partGroupsMap[hoveredPartId]) {
+          mannequin.partGroupsMap[hoveredPartId].forEach((m) => {
+            if (m.userData.clonedMat) {
+              m.material.emissive.setHex(0x000000);
+              m.material.emissiveIntensity = 0;
+            }
+          });
+        }
+        hoveredPartId = partId;
+        if (partId && mannequin.partGroupsMap[partId]) {
+          mannequin.partGroupsMap[partId].forEach((m) => {
+            if (!m.userData.clonedMat) {
+              m.material = m.material.clone();
+              m.userData.clonedMat = true;
+            }
+            m.material.emissive.setHex(0x10b981);
+            m.material.emissiveIntensity = 0.32;
+          });
+        }
+      }
+
+      function startGroundRingDrag(clientX, clientY, pointerId, shiftKey) {
+        updateNDC(clientX, clientY);
+        raycaster.setFromCamera(pointerNDC, camera);
+        if (!raycaster.ray.intersectPlane(groundPlaneY0, planeHit)) return;
+
+        isDraggingGroundRing = true;
+        groundPointerId = pointerId;
+        controls.enabled = false;
+        mannequin.stepState.active = false;
+        mannequin.setGroundDragging(true);
+        renderer.domElement.style.cursor = 'grabbing';
+
+        try {
+          renderer.domElement.setPointerCapture(pointerId);
+        } catch (_) {}
+
+        // 抓握點偏移補償（Grab-offset compensation），點擊圓圈任意處皆零跳動
+        groundGrabOffset.subVectors(mannequin.root.position, planeHit);
+        groundGrabOffset.y = 0;
+        groundLastPos.copy(mannequin.root.position);
+        groundLastMoveTime = performance.now();
+
+        if (shiftKey && snapBadge) {
+          snapBadge.classList.remove('hidden');
+        }
+
+        updateStatusBanner(
+          '正在拖移地面定位圓圈（按住 Shift 可自動吸附 0.25m 網格交點）',
+          'dragging'
+        );
+      }
+
+      function moveGroundRingDrag(clientX, clientY, shiftKey) {
+        if (!isDraggingGroundRing) return;
+        updateNDC(clientX, clientY);
+        raycaster.setFromCamera(pointerNDC, camera);
+        if (!raycaster.ray.intersectPlane(groundPlaneY0, planeHit)) return;
+
+        let targetX = clamp(planeHit.x + groundGrabOffset.x, -mannequin.worldBounds, mannequin.worldBounds);
+        let targetZ = clamp(planeHit.z + groundGrabOffset.z, -mannequin.worldBounds, mannequin.worldBounds);
+
+        if (shiftKey) {
+          targetX = clamp(Math.round(targetX / 0.25) * 0.25, -mannequin.worldBounds, mannequin.worldBounds);
+          targetZ = clamp(Math.round(targetZ / 0.25) * 0.25, -mannequin.worldBounds, mannequin.worldBounds);
+          if (snapBadge) snapBadge.classList.remove('hidden');
+        } else if (snapBadge) {
+          snapBadge.classList.add('hidden');
+        }
+
+        const now = performance.now();
+        const dtSec = clamp((now - groundLastMoveTime) / 1000, 0.008, 0.06);
+        groundLastMoveTime = now;
+
+        const dx = targetX - mannequin.root.position.x;
+        const dz = targetZ - mannequin.root.position.z;
+
+        mannequin.root.position.x = targetX;
+        mannequin.root.position.z = targetZ;
+
+        // 未鎖定姿勢時，依拖曳速度驅動自然小步走動
+        if (!mannequin.isPoseLocked) {
+          mannequin.setExternalDragVelocity(dx / dtSec, dz / dtSec);
+        }
+
+        groundLastPos.copy(mannequin.root.position);
+      }
+
+      function endGroundRingDrag() {
+        if (groundPointerId !== null) {
+          try {
+            if (renderer.domElement.hasPointerCapture(groundPointerId)) {
+              renderer.domElement.releasePointerCapture(groundPointerId);
+            }
+          } catch (_) {}
+          groundPointerId = null;
+        }
+        if (!isDraggingGroundRing) return;
+        isDraggingGroundRing = false;
+        mannequin.setGroundDragging(false);
+        controls.enabled = true;
+        if (snapBadge) snapBadge.classList.add('hidden');
+        renderer.domElement.style.cursor = mannequin.isGroundHovered || hoveredPartId ? 'grab' : 'default';
+
+        if (mannequin.isPoseLocked) {
+          updateStatusBanner('已鎖定擺姿勢・可直接拖曳任意身體部位調整動作，或拖拉地面圓圈平移位置', 'locked');
+        } else {
+          setMoveModeUI(mannequin.moveMode);
+        }
+      }
+
+      function startLimbDrag(hit, clientX, clientY, pointerId) {
+        const data = hit.object.userData;
+        isDraggingLimb = true;
+        limbPointerId = pointerId;
+        mannequin.isTransitioningPreset = false;
+        controls.enabled = false;
+        renderer.domElement.style.cursor = 'grabbing';
+
+        try {
+          renderer.domElement.setPointerCapture(pointerId);
+        } catch (_) {}
+
+        let effector = hit.object;
+        if (data.dragType === 'handIK') {
+          effector = (data.side === 'L' ? mannequin.leftArm : mannequin.rightArm).wristJoint;
+        } else if (data.dragType === 'footIK') {
+          effector = (data.side === 'L' ? mannequin.leftLeg : mannequin.rightLeg).ankleJoint;
+        } else if (data.dragType === 'head') {
+          effector = mannequin.headGroup;
+        } else if (data.dragType === 'torso') {
+          effector = mannequin.torsoGroup;
+        } else if (data.dragType === 'upperArm') {
+          effector = (data.side === 'L' ? mannequin.leftArm : mannequin.rightArm).elbowJoint;
+        } else if (data.dragType === 'thigh') {
+          effector = (data.side === 'L' ? mannequin.leftLeg : mannequin.rightLeg).kneeJoint;
+        } else if (data.dragType === 'pelvis') {
+          effector = mannequin.pelvisGroup;
+        }
+
+        const effectorPos = new THREE.Vector3();
+        effector.getWorldPosition(effectorPos);
+
+        const camDir = new THREE.Vector3();
+        camera.getWorldDirection(camDir);
+        safeNormalize(camDir, new THREE.Vector3(0, 0, -1));
+        dragPlane.setFromNormalAndCoplanarPoint(camDir.clone().negate(), hit.point);
+
+        activeLimbDrag = {
+          partName: data.partName,
+          dragType: data.dragType,
+          side: data.side,
+          effector,
+          ikTargetWorld: effectorPos.clone(),
+          lastPlanePoint: hit.point.clone(),
+          lastX: clientX,
+          lastY: clientY,
+          beforePose: { ...mannequin.pose }
+        };
+
+        dragVisualGroup.visible = true;
+        dragRing.position.copy(effectorPos);
+        dragRing.quaternion.copy(camera.quaternion);
+        dragLineGeom.setFromPoints([effectorPos, effectorPos]);
+
+        updateStatusBanner(
+          `正在調整：${data.partName}（${
+            data.dragType === 'handIK' || data.dragType === 'footIK'
+              ? '2-Bone IK 連動｜按住 Shift 前後推拉深度'
+              : data.dragType === 'pelvis'
+              ? '上下拖曳調整骨盆高度｜按住 Shift 微調傾斜'
+              : 'FK 關節旋轉｜按住 Shift 微調扭轉'
+          }）`,
+          'dragging'
+        );
+      }
+
+      function moveLimbDrag(clientX, clientY, shiftKey) {
+        if (!isDraggingLimb || !activeLimbDrag) return;
+        const dx = clientX - activeLimbDrag.lastX;
+        const dy = clientY - activeLimbDrag.lastY;
+        activeLimbDrag.lastX = clientX;
+        activeLimbDrag.lastY = clientY;
+
+        updateNDC(clientX, clientY);
+        raycaster.setFromCamera(pointerNDC, camera);
+
+        const worldDelta = new THREE.Vector3();
+        if (raycaster.ray.intersectPlane(dragPlane, planeHit)) {
+          worldDelta.copy(planeHit).sub(activeLimbDrag.lastPlanePoint);
+          activeLimbDrag.lastPlanePoint.copy(planeHit);
+        }
+
+        const camForward = new THREE.Vector3();
+        camera.getWorldDirection(camForward);
+        safeNormalize(camForward, new THREE.Vector3(0, 0, -1));
+
+        const { dragType, side } = activeLimbDrag;
+        const p = mannequin.pose;
+
+        if (dragType === 'handIK' || dragType === 'footIK') {
+          if (shiftKey) {
+            const depthStep = -dy * 0.0085;
+            activeLimbDrag.ikTargetWorld.addScaledVector(camForward, depthStep);
+            dragPlane.translate(camForward.clone().multiplyScalar(depthStep));
+          } else {
+            activeLimbDrag.ikTargetWorld.add(worldDelta);
+          }
+
+          if (dragType === 'handIK') {
+            mannequin.solveArmIK(side, activeLimbDrag.ikTargetWorld);
+          } else {
+            mannequin.solveLegIK(side, activeLimbDrag.ikTargetWorld);
+          }
+
+          const curEffPos = new THREE.Vector3();
+          activeLimbDrag.effector.getWorldPosition(curEffPos);
+          dragRing.position.copy(activeLimbDrag.ikTargetWorld);
+          dragRing.quaternion.copy(camera.quaternion);
+          dragLineGeom.setFromPoints([curEffPos, activeLimbDrag.ikTargetWorld]);
+        } else if (dragType === 'pelvis') {
+          const rotSpeed = 0.45;
+          const viewSign = camForward.z <= 0 ? 1 : -1;
+          if (shiftKey) {
+            p.pelvisRotZ = clamp(safeNum(p.pelvisRotZ) - dx * rotSpeed * viewSign, -30, 30);
+            p.pelvisRotX = clamp(safeNum(p.pelvisRotX) + dy * rotSpeed, -35, 35);
+          } else {
+            p.pelvisBounceY = clamp(safeNum(p.pelvisBounceY) - dy * 0.0065, -0.65, 0.55);
+          }
+          mannequin.applyPoseToRig();
+          const curEffPos = new THREE.Vector3();
+          activeLimbDrag.effector.getWorldPosition(curEffPos);
+          dragRing.position.copy(curEffPos);
+          dragRing.quaternion.copy(camera.quaternion);
+          dragLineGeom.setFromPoints([curEffPos, curEffPos]);
+        } else {
+          const rotSpeed = 0.5;
+          const viewSign = camForward.z <= 0 ? 1 : -1;
+
+          if (dragType === 'head') {
+            if (shiftKey) {
+              p.headZ = clamp(safeNum(p.headZ) - dx * rotSpeed * viewSign, -40, 40);
+            } else {
+              p.headY = clamp(safeNum(p.headY) + dx * rotSpeed, -75, 75);
+              p.headX = clamp(safeNum(p.headX) + dy * rotSpeed, -55, 55);
+            }
+          } else if (dragType === 'torso') {
+            if (shiftKey) {
+              p.torsoZ = clamp(safeNum(p.torsoZ) - dx * rotSpeed * viewSign, -35, 35);
+            } else {
+              p.torsoY = clamp(safeNum(p.torsoY) + dx * rotSpeed, -55, 55);
+              p.torsoX = clamp(safeNum(p.torsoX) + dy * rotSpeed, -40, 60);
+            }
+          } else if (dragType === 'upperArm') {
+            if (side === 'L') {
+              p.lShoulderZ = clamp(safeNum(p.lShoulderZ) + dx * rotSpeed * viewSign, -35, 170);
+              p.lShoulderX = clamp(safeNum(p.lShoulderX) + dy * rotSpeed * viewSign, -170, 85);
+            } else {
+              p.rShoulderZ = clamp(safeNum(p.rShoulderZ) + dx * rotSpeed * viewSign, -170, 35);
+              p.rShoulderX = clamp(safeNum(p.rShoulderX) + dy * rotSpeed * viewSign, -170, 85);
+            }
+          } else if (dragType === 'thigh') {
+            if (side === 'L') {
+              p.lHipZ = clamp(safeNum(p.lHipZ) + dx * rotSpeed * viewSign, -30, 80);
+              p.lHipX = clamp(safeNum(p.lHipX) + dy * rotSpeed * viewSign, -125, 75);
+            } else {
+              p.rHipZ = clamp(safeNum(p.rHipZ) + dx * rotSpeed * viewSign, -80, 30);
+              p.rHipX = clamp(safeNum(p.rHipX) + dy * rotSpeed * viewSign, -125, 75);
+            }
+          }
+
+          mannequin.applyPoseToRig();
+          const curEffPos = new THREE.Vector3();
+          activeLimbDrag.effector.getWorldPosition(curEffPos);
+          dragRing.position.copy(curEffPos);
+          dragRing.quaternion.copy(camera.quaternion);
+          dragLineGeom.setFromPoints([curEffPos, curEffPos]);
+        }
+      }
+
+      function endLimbDrag() {
+        if (limbPointerId !== null) {
+          try {
+            if (renderer.domElement.hasPointerCapture(limbPointerId)) {
+              renderer.domElement.releasePointerCapture(limbPointerId);
+            }
+          } catch (_) {}
+          limbPointerId = null;
+        }
+        if (!isDraggingLimb) return;
+        isDraggingLimb = false;
+
+        if (activeLimbDrag && activeLimbDrag.beforePose) {
+          const changed = Object.keys(mannequin.pose).some((k) => {
+            if (typeof mannequin.pose[k] !== 'number') return false;
+            return Math.abs(mannequin.pose[k] - safeNum(activeLimbDrag.beforePose[k], 0)) > 0.05;
+          });
+          if (changed) {
+            pushUndoSnapshot(activeLimbDrag.beforePose);
+          }
+        }
+
+        activeLimbDrag = null;
+        mannequin.activeBasePose = { ...mannequin.pose };
+        dragVisualGroup.visible = false;
+        controls.enabled = true;
+        renderer.domElement.style.cursor = hoveredPartId || mannequin.isGroundHovered ? 'grab' : 'default';
+        updateStatusBanner('已鎖定擺姿勢・可直接拖曳任意身體部位調整動作，或拖拉地面圓圈平移位置', 'locked');
+      }
+
+      // 畫布指標按下：同時支援「地面定位圓圈拖移」與「鎖定擺姿勢模式下的肢體拖曳」
+      renderer.domElement.addEventListener('pointerdown', (e) => {
+        if (e.button !== 0) return;
+        updateNDC(e.clientX, e.clientY);
+        raycaster.setFromCamera(pointerNDC, camera);
+
+        if (mannequin.isPoseLocked) {
+          // 鎖定擺姿勢模式下，優先偵測身體關節/IK 控制球，其次偵測地面定位圓圈
+          const bodyTargets = mannequin.interactiveMeshes.filter((m) => m.visible);
+          const allTargets = [...bodyTargets, ...mannequin.groundMeshes];
+          const hits = raycaster.intersectObjects(allTargets, false);
+          if (hits.length > 0) {
+            e.stopPropagation();
+            const topHit = hits[0];
+            if (topHit.object.userData.isGroundHandle) {
+              mannequin.setGroundHover(true);
+              startGroundRingDrag(e.clientX, e.clientY, e.pointerId, e.shiftKey);
+            } else {
+              setHoveredPart(topHit.object.userData.partId);
+              startLimbDrag(topHit, e.clientX, e.clientY, e.pointerId);
+            }
+          }
+        } else {
+          // 自由移動模式下，點擊人偶腳下的地面圓圈即可直接拖移位置
+          const groundHits = raycaster.intersectObjects(mannequin.groundMeshes, false);
+          if (groundHits.length > 0) {
+            e.stopPropagation();
+            mannequin.setGroundHover(true);
+            startGroundRingDrag(e.clientX, e.clientY, e.pointerId, e.shiftKey);
+          }
+        }
+      });
+
+      // 全局 window 指標綁定，杜絕任何拖曳卡死
+      window.addEventListener('pointermove', (e) => {
+        if (joyPointerId !== null && e.pointerId === joyPointerId) {
+          const moveDist = Math.hypot(e.clientX - joyDownX, e.clientY - joyDownY);
+          if (!hasDraggedJoystick && moveDist >= 6) {
+            hasDraggedJoystick = true;
+          }
+          if (hasDraggedJoystick) {
+            computeJoystickFromPointer(e.clientX, e.clientY);
+          }
+          return;
+        }
+        if (isDraggingGroundRing && e.pointerId === groundPointerId) {
+          moveGroundRingDrag(e.clientX, e.clientY, e.shiftKey);
+          return;
+        }
+        if (isDraggingLimb && e.pointerId === limbPointerId) {
+          moveLimbDrag(e.clientX, e.clientY, e.shiftKey);
+          return;
+        }
+
+        // 懸停高亮偵測
+        if (e.target === renderer.domElement) {
+          updateNDC(e.clientX, e.clientY);
+          raycaster.setFromCamera(pointerNDC, camera);
+
+          if (mannequin.isPoseLocked) {
+            const bodyTargets = mannequin.interactiveMeshes.filter((m) => m.visible);
+            const allTargets = [...bodyTargets, ...mannequin.groundMeshes];
+            const hits = raycaster.intersectObjects(allTargets, false);
+            if (hits.length > 0) {
+              const topHit = hits[0];
+              if (topHit.object.userData.isGroundHandle) {
+                setHoveredPart(null);
+                mannequin.setGroundHover(true);
+              } else {
+                mannequin.setGroundHover(false);
+                setHoveredPart(topHit.object.userData.partId);
+              }
+              renderer.domElement.style.cursor = 'grab';
+            } else {
+              setHoveredPart(null);
+              mannequin.setGroundHover(false);
+              renderer.domElement.style.cursor = 'default';
+            }
+          } else {
+            if (hoveredPartId) setHoveredPart(null);
+            const groundHits = raycaster.intersectObjects(mannequin.groundMeshes, false);
+            if (groundHits.length > 0) {
+              mannequin.setGroundHover(true);
+              renderer.domElement.style.cursor = 'grab';
+            } else {
+              mannequin.setGroundHover(false);
+              renderer.domElement.style.cursor = 'default';
+            }
+          }
+        } else {
+          if (hoveredPartId) setHoveredPart(null);
+          if (mannequin.isGroundHovered) mannequin.setGroundHover(false);
+        }
+      });
+
+      window.addEventListener('pointerup', (e) => {
+        if (joyPointerId !== null && e.pointerId === joyPointerId) {
+          releaseJoystick(e.clientX, e.clientY);
+        }
+        if (isDraggingGroundRing && e.pointerId === groundPointerId) {
+          endGroundRingDrag();
+        }
+        if (isDraggingLimb && e.pointerId === limbPointerId) {
+          endLimbDrag();
+        }
+      });
+
+      window.addEventListener('pointercancel', () => {
+        releaseJoystick();
+        endGroundRingDrag();
+        endLimbDrag();
+      });
+
+      window.addEventListener('blur', () => {
+        releaseJoystick();
+        endGroundRingDrag();
+        endLimbDrag();
+        wasdDown.clear();
+        if (snapBadge) snapBadge.classList.add('hidden');
+      });
+
+      // =======================================================================
+      // UI 控制與模式切換同步
+      // =======================================================================
+      const btnMoveStrafe = document.getElementById('btn-movemode-strafe');
+      const btnMoveTurn = document.getElementById('btn-movemode-turn');
+      const btnToggleLock = document.getElementById('btn-toggle-lock');
+      const btnReleaseMode = document.getElementById('btn-release-mode');
+      const labelReleaseMode = document.getElementById('label-release-mode');
+      const iconLockOpen = document.getElementById('icon-lock-open');
+      const iconLockClosed = document.getElementById('icon-lock-closed');
+      const labelLockBtn = document.getElementById('label-lock-btn');
+      const hudModeBadge = document.getElementById('hud-mode-badge');
+      const hudSpeedState = document.getElementById('hud-speed-state');
+      const statusDot = document.getElementById('status-dot');
+      const statusMsg = document.getElementById('status-msg');
+
+      const SEG_ACTIVE_CLS = 'bg-amber-600 text-white font-bold shadow';
+      const SEG_INACTIVE_CLS = 'text-stone-300 font-semibold hover:text-white hover:bg-white/10';
+
+      function setSegmentActive(btn, isActive) {
+        if (!btn) return;
+        SEG_ACTIVE_CLS.split(' ').forEach((c) => btn.classList.toggle(c, isActive));
+        SEG_INACTIVE_CLS.split(' ').forEach((c) => btn.classList.toggle(c, !isActive));
+      }
+
+      function updateStatusBanner(text, mode = 'move') {
+        if (statusMsg) statusMsg.textContent = text;
+        if (statusDot) {
+          statusDot.className = 'w-2.5 h-2.5 rounded-full shrink-0';
+          if (mode === 'dragging') {
+            statusDot.classList.add('bg-emerald-300', 'shadow-[0_0_10px_#34d399]');
+          } else if (mode === 'locked') {
+            statusDot.classList.add('bg-emerald-400');
+          } else {
+            statusDot.classList.add('bg-amber-400');
+          }
+        }
+      }
+
+      function setMoveModeUI(mode) {
+        mannequin.setMoveMode(mode);
+        if (mode === 'strafe') {
+          setSegmentActive(btnMoveStrafe, true);
+          setSegmentActive(btnMoveTurn, false);
+          if (!mannequin.isPoseLocked) {
+            if (hudModeBadge) {
+              hudModeBadge.textContent = '橫移模式 (Strafe)';
+              hudModeBadge.className = 'px-2 py-0.5 rounded-md text-[10.5px] font-bold bg-amber-600/30 text-amber-300 border border-amber-400/30';
+            }
+            updateStatusBanner('橫移模式：可直接拖拉人偶腳下圓圈移動（按住 Shift 吸附 0.25m 網格）', 'move');
+          }
+        } else {
+          setSegmentActive(btnMoveTurn, true);
+          setSegmentActive(btnMoveStrafe, false);
+          if (!mannequin.isPoseLocked) {
+            if (hudModeBadge) {
+              hudModeBadge.textContent = '轉向模式 (Turn)';
+              hudModeBadge.className = 'px-2 py-0.5 rounded-md text-[10.5px] font-bold bg-sky-600/30 text-sky-300 border border-sky-400/30';
+            }
+            updateStatusBanner('轉向模式：自動轉向移動方向・可直接拖拉腳下圓圈或用搖桿走跑', 'move');
+          }
+        }
+      }
+
+      function setInteractionMode(isLockedPoseMode) {
+        releaseJoystick();
+        endGroundRingDrag();
+        endLimbDrag();
+        setHoveredPart(null);
+        mannequin.setPositionLocked(isLockedPoseMode);
+
+        if (isLockedPoseMode) {
+          btnToggleLock.classList.remove('bg-stone-800/90', 'hover:bg-stone-700', 'text-stone-200', 'border-white/15');
+          btnToggleLock.classList.add('bg-emerald-600', 'hover:bg-emerald-500', 'text-white', 'font-bold', 'border-emerald-300/50', 'shadow-lg');
+          if (iconLockOpen) iconLockOpen.classList.add('hidden');
+          if (iconLockClosed) iconLockClosed.classList.remove('hidden');
+          if (labelLockBtn) labelLockBtn.textContent = '已鎖定擺姿勢 (按 L 解除)';
+          if (joystickLockedOverlay) joystickLockedOverlay.classList.remove('hidden');
+          if (hudModeBadge) {
+            hudModeBadge.textContent = '鎖定擺姿勢 (IK/FK)';
+            hudModeBadge.className = 'px-2 py-0.5 rounded-md text-[10.5px] font-bold bg-emerald-600/35 text-emerald-300 border border-emerald-400/35';
+          }
+          updateStatusBanner('已鎖定擺姿勢・可直接拖曳任意身體部位調整動作，或拖拉地面圓圈平移位置', 'locked');
+        } else {
+          btnToggleLock.classList.remove('bg-emerald-600', 'hover:bg-emerald-500', 'text-white', 'font-bold', 'border-emerald-300/50', 'shadow-lg');
+          btnToggleLock.classList.add('bg-stone-800/90', 'hover:bg-stone-700', 'text-stone-200', 'border-white/15');
+          if (iconLockOpen) iconLockOpen.classList.remove('hidden');
+          if (iconLockClosed) iconLockClosed.classList.add('hidden');
+          if (labelLockBtn) labelLockBtn.textContent = '自由移動 / 鎖定擺姿勢 (L)';
+          if (joystickLockedOverlay) joystickLockedOverlay.classList.add('hidden');
+          renderer.domElement.style.cursor = 'default';
+          setMoveModeUI(mannequin.moveMode);
+        }
+      }
+
+      if (btnMoveStrafe) btnMoveStrafe.addEventListener('click', () => setMoveModeUI('strafe'));
+      if (btnMoveTurn) btnMoveTurn.addEventListener('click', () => setMoveModeUI('turn'));
+      if (btnToggleLock) btnToggleLock.addEventListener('click', () => setInteractionMode(!mannequin.isPoseLocked));
+
+      // 放開自動回站姿 vs 放開定格當前步伐
+      if (btnReleaseMode) {
+        btnReleaseMode.addEventListener('click', () => {
+          mannequin.autoResetPose = !mannequin.autoResetPose;
+          if (labelReleaseMode) {
+            labelReleaseMode.textContent = mannequin.autoResetPose ? '放開自動回站姿' : '放開定格當前步伐';
+          }
+        });
+      }
+
+      // 預設姿勢按鈕
+      document.querySelectorAll('.quick-pose-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const poseKey = btn.dataset.pose;
+          pushUndoSnapshot(mannequin.pose);
+          mannequin.setPose(poseKey, false);
+
+          document.querySelectorAll('.quick-pose-btn').forEach((b) => {
+            setSegmentActive(b, b === btn);
+          });
+        });
+      });
+
+      // 木紋材質切換（山毛櫸 / 黑胡桃木）
+      document.querySelectorAll('.wood-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const woodKey = btn.dataset.wood;
+          mannequin.setWoodType(woodKey);
+          document.querySelectorAll('.wood-btn').forEach((b) => {
+            setSegmentActive(b, b === btn);
+          });
+        });
+      });
+
+      // 外型裝扮面板收合與服裝/髮型/配色互動綁定
+      const appearanceDrawer = document.getElementById('appearance-drawer');
+      const btnToggleDrawer = document.getElementById('btn-toggle-drawer');
+      const btnCloseDrawer = document.getElementById('btn-close-drawer');
+      const labelOutfitName = document.getElementById('label-outfit-name');
+      const labelOutfitColor = document.getElementById('label-outfit-color');
+      const labelHairName = document.getElementById('label-hair-name');
+      const labelHairColor = document.getElementById('label-hair-color');
+
+      const OUTFIT_LABELS = {
+        none: '經典原木素體',
+        labcoat: '科學家實驗白袍',
+        jacket: '休閒立領夾克',
+        cape: '英雄／魔法師披風',
+        tunic: '學院背心裝'
+      };
+
+      const HAIR_LABELS = {
+        none: '光滑原木頭',
+        short: '俐落短髮',
+        bob: '齊耳鮑伯頭',
+        ponytail: '活力高馬尾',
+        spiky: '動漫刺蝟頭',
+        bun: '優雅丸子頭'
+      };
+
+      function toggleAppearanceDrawer(forceState = null) {
+        if (!appearanceDrawer) return;
+        const willHide = forceState !== null ? !forceState : !appearanceDrawer.classList.contains('hidden');
+        appearanceDrawer.classList.toggle('hidden', willHide);
+      }
+
+      if (btnToggleDrawer) btnToggleDrawer.addEventListener('click', () => toggleAppearanceDrawer());
+      if (btnCloseDrawer) btnCloseDrawer.addEventListener('click', () => toggleAppearanceDrawer(false));
+
+      document.querySelectorAll('.outfit-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const outfitKey = btn.dataset.outfit;
+          mannequin.setAppearance({ outfit: outfitKey });
+          if (labelOutfitName) labelOutfitName.textContent = OUTFIT_LABELS[outfitKey] || outfitKey;
+          document.querySelectorAll('.outfit-btn').forEach((b) => {
+            const active = b === btn;
+            b.className = active
+              ? 'outfit-btn px-2 py-1.5 rounded-lg text-[11px] font-bold bg-amber-600 text-white shadow transition'
+              : 'outfit-btn px-2 py-1.5 rounded-lg text-[11px] font-semibold bg-white/5 text-stone-300 hover:text-white hover:bg-white/10 transition';
+          });
+        });
+      });
+
+      document.querySelectorAll('.outfit-color-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const hex = btn.dataset.color;
+          const name = btn.dataset.name;
+          mannequin.setAppearance({ outfitColor: hex });
+          if (labelOutfitColor) labelOutfitColor.textContent = name || hex;
+          document.querySelectorAll('.outfit-color-btn').forEach((b) => {
+            const active = b === btn;
+            b.className = active
+              ? 'outfit-color-btn w-6 h-6 rounded-full border-2 border-white ring-2 ring-amber-400 scale-110 transition'
+              : 'outfit-color-btn w-6 h-6 rounded-full border border-white/25 hover:scale-110 transition';
+          });
+        });
+      });
+
+      document.querySelectorAll('.hair-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const hairKey = btn.dataset.hair;
+          mannequin.setAppearance({ hairStyle: hairKey });
+          if (labelHairName) labelHairName.textContent = HAIR_LABELS[hairKey] || hairKey;
+          document.querySelectorAll('.hair-btn').forEach((b) => {
+            const active = b === btn;
+            b.className = active
+              ? 'hair-btn px-2 py-1.5 rounded-lg text-[11px] font-bold bg-amber-600 text-white shadow transition'
+              : 'hair-btn px-2 py-1.5 rounded-lg text-[11px] font-semibold bg-white/5 text-stone-300 hover:text-white hover:bg-white/10 transition';
+          });
+        });
+      });
+
+      document.querySelectorAll('.hair-color-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const hex = btn.dataset.color;
+          const name = btn.dataset.name;
+          mannequin.setAppearance({ hairColor: hex });
+          if (labelHairColor) labelHairColor.textContent = name || hex;
+          document.querySelectorAll('.hair-color-btn').forEach((b) => {
+            const active = b === btn;
+            b.className = active
+              ? 'hair-color-btn w-6 h-6 rounded-full border-2 border-white ring-2 ring-amber-400 scale-110 transition'
+              : 'hair-color-btn w-6 h-6 rounded-full border border-white/25 hover:scale-110 transition';
+          });
+        });
+      });
+
+      // 鏡頭跟隨與視角預設
+      let followMannequinCam = true;
+      const optFollowCam = document.getElementById('opt-follow-cam');
+      if (optFollowCam) {
+        optFollowCam.addEventListener('change', (e) => {
+          followMannequinCam = e.target.checked;
+        });
+      }
+
+      let camTransition = null;
+      const CAM_OFFSETS = {
+        classic: new THREE.Vector3(2.8, 2.75, 6.2),
+        front: new THREE.Vector3(0, 2.1, 6.5),
+        side: new THREE.Vector3(6.5, 2.1, 0),
+        back: new THREE.Vector3(0, 2.1, -6.5)
+      };
+
+      document.querySelectorAll('.cam-preset-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const key = btn.dataset.cam;
+          const offset = CAM_OFFSETS[key];
+          if (!offset) return;
+          const baseCenter = new THREE.Vector3(mannequin.root.position.x, 1.15, mannequin.root.position.z);
+          camTransition = {
+            pos: baseCenter.clone().add(offset).sub(new THREE.Vector3(0, 1.15, 0)),
+            target: baseCenter
+          };
+          document.querySelectorAll('.cam-preset-btn').forEach((b) => {
+            setSegmentActive(b, b === btn);
+          });
+        });
+      });
+
+      // 重設按鈕
+      const btnResetAll = document.getElementById('btn-reset-all');
+      if (btnResetAll) {
+        btnResetAll.addEventListener('click', () => {
+          releaseJoystick();
+          endGroundRingDrag();
+          endLimbDrag();
+          pushUndoSnapshot(mannequin.pose);
+          mannequin.reset();
+          document.querySelectorAll('.quick-pose-btn').forEach((b) => {
+            setSegmentActive(b, b.dataset.pose === 'raiseRight');
+          });
+          document.querySelectorAll('.cam-preset-btn').forEach((b) => {
+            setSegmentActive(b, b.dataset.cam === 'classic');
+          });
+          camTransition = {
+            pos: new THREE.Vector3(2.8, 2.75, 6.2),
+            target: new THREE.Vector3(0, 1.15, 0)
+          };
+        });
+      }
+
+      // =======================================================================
+      // 視窗自適應與主渲染迴圈（含即時 FPS / Draw Calls / Triangles 監測）
+      // =======================================================================
+      window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      });
+
+      const clock = new THREE.Clock();
+      const prevMannequinPos = new THREE.Vector3();
+      const deltaMannequinPos = new THREE.Vector3();
+
+      const perfFpsEl = document.getElementById('perf-fps');
+      const fpsDotEl = document.getElementById('fps-dot');
+      const perfCallsEl = document.getElementById('perf-calls');
+      const perfTrisEl = document.getElementById('perf-tris');
+      let frameCount = 0;
+      let fpsAccumTime = 0;
+
+      function animate() {
+        requestAnimationFrame(animate);
+
+        const dt = Math.min(clock.getDelta(), 0.05);
+        const elapsed = clock.elapsedTime;
+
+        updateKeyboardInput(dt);
+        mannequin.joyInput.x = joyVec.x;
+        mannequin.joyInput.y = joyVec.y;
+
+        prevMannequinPos.copy(mannequin.root.position);
+        const camAzimuth = controls.getAzimuthalAngle();
+        const status = mannequin.update(dt, camAzimuth, elapsed);
+
+        if (gaitBadge && thrustPercentEl) {
+          gaitBadge.textContent = status.stateLabel;
+          thrustPercentEl.textContent = `${status.thrustPercent}%`;
+          gaitBadge.className = 'px-2 py-0.5 rounded-md text-[11px] font-bold transition';
+          if (status.stateLabel === '快跑') {
+            gaitBadge.classList.add('bg-amber-400', 'text-stone-950');
+          } else if (status.stateLabel === '慢走' || status.stateLabel === '單步跨步' || status.stateLabel === '地面拖移') {
+            gaitBadge.classList.add('bg-amber-600', 'text-white');
+          } else if (status.stateLabel === '已鎖定' || status.stateLabel === '地面平移') {
+            gaitBadge.classList.add('bg-emerald-600', 'text-white');
+          } else {
+            gaitBadge.classList.add('bg-stone-700', 'text-stone-200');
+          }
+        }
+        if (hudSpeedState) hudSpeedState.textContent = status.stateLabel;
+        if (posXReadout) posXReadout.textContent = mannequin.root.position.x.toFixed(2);
+        if (posZReadout) posZReadout.textContent = mannequin.root.position.z.toFixed(2);
+
+        if (camTransition) {
+          const camAlpha = 1 - Math.exp(-8 * dt);
+          camera.position.lerp(camTransition.pos, camAlpha);
+          controls.target.lerp(camTransition.target, camAlpha);
+          controls.update();
+          if (
+            camera.position.distanceTo(camTransition.pos) < 0.02 &&
+            controls.target.distanceTo(camTransition.target) < 0.02
+          ) {
+            camTransition = null;
+          }
+        } else {
+          // 拖曳地面圓圈時不強制移動鏡頭，方便使用者看著地面網格精準對位
+          if (followMannequinCam && !mannequin.isPoseLocked && !isDraggingGroundRing) {
+            deltaMannequinPos.subVectors(mannequin.root.position, prevMannequinPos);
+            camera.position.add(deltaMannequinPos);
+            controls.target.add(deltaMannequinPos);
+          }
+          if (controls.enabled) {
+            controls.update();
+          }
+        }
+
+        renderer.render(scene, camera);
+
+        frameCount++;
+        fpsAccumTime += dt;
+        if (fpsAccumTime >= 0.3) {
+          const fps = Math.round(frameCount / fpsAccumTime);
+          const colorHex = fps >= 50 ? '#34d399' : fps >= 30 ? '#fbbf24' : '#f87171';
+          if (perfFpsEl) {
+            perfFpsEl.textContent = String(fps);
+            perfFpsEl.style.color = colorHex;
+          }
+          if (fpsDotEl) {
+            fpsDotEl.style.background = colorHex;
+          }
+          if (perfCallsEl) {
+            perfCallsEl.textContent = String(renderer.info.render.calls);
+          }
+          if (perfTrisEl) {
+            perfTrisEl.textContent = renderer.info.render.triangles.toLocaleString();
+          }
+          frameCount = 0;
+          fpsAccumTime = 0;
+        }
+      }
+
+      animate();
+    }
+
+    window.addEventListener('load', () => {
+      try {
+        initApp();
+      } catch (err) {
+        console.error('初始化失敗:', err);
+        showToastError('WebGL 3D 環境啟動異常，請確認瀏覽器支援硬體加速。');
+      }
+    });
+  </script>
+</body>
+</html>
