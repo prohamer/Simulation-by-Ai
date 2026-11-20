@@ -1,5 +1,5 @@
 <!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
-<title>光學實驗台V12</title>
+<title>光學實驗台V14</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
@@ -864,7 +864,16 @@ SCENES.push({id:'refraction',ch:'4-3',name:'光的折射',bounds:[-40,40,-27,27]
     {type:'select',key:'bot',label:'下方物體的材質',options:Object.entries(MEDIA).map(([k,v])=>[k,v.name+'（n = '+v.n.toFixed(2)+'）'])},
     {type:'seg',key:'from',label:'雷射筆位置',options:[['top','在上方'],['bot','在下方']],onInput:aimRefr},
     {type:'slider',key:'i',label:'入射角（設定後雷射對準界面中央）',min:0,max:89,step:1,unit:'°',onInput:aimRefr},
-    {type:'toggle',key:'car',label:'小車比喻動畫（輪子條紋顯示轉速）',onInput:()=>startCar()}],
+    {type:'seg',key:'src',label:'光源',options:[['laser','雷射筆'],['beam','平行光束']],get:()=>S().src||'laser',set:v=>{S().src=v;}},
+    ...(S().src==='beam'?[{type:'slider',key:'bw',label:'光束寬度',min:2,max:24,step:0.5,unit:'cm',get:()=>S().bw??10,set:v=>{S().bw=v;}},
+      {type:'slider',key:'bn',label:'光線（小車）數量',min:2,max:9,step:1,get:()=>S().bn??5,set:v=>{S().bn=v;}}]:[]),
+    {type:'toggle',key:'car',label:'小車比喻動畫（履帶條紋顯示轉速）',rebuild:true,onInput:s=>{if(s.car)carsReset();}},
+    ...(S().car?[{type:'toggle',key:'carCont',label:'持續發車（每 1.6 秒發出一批小車）',onInput:s=>{const K=app.cars;if(!K)return;if(s.carCont){K.next=K.tEnd+0.3;if(!K.playing)carPlay();}}}]:[]),
+    ...(S().car?[{type:'buttons',label:'小車播放控制',items:[
+      {label:'⏮ 步退',onClick:()=>carStep(-1),rebuild:true},
+      {label:app.cars&&app.cars.playing?'⏸ 暫停':'▶ 播放',primary:true,onClick:()=>carPlay(),rebuild:true},
+      {label:'步進 ⏭',onClick:()=>carStep(1),rebuild:true},
+      {label:'↺ 重新開始',onClick:()=>carsReset(),rebuild:true}]}]:[])],
   build(st,b){
     const P=[], top=MEDIA[st.top], bot=MEDIA[st.bot], poly=refrPoly(st.shape), nOut=top.n, nIn=bot.n;
     const nAt=q=>pip(q,poly)?nIn:nOut, nameOf=n=>n===nIn&&n!==nOut?bot.name:n===nOut&&n!==nIn?top.name:bot.name;
@@ -875,9 +884,10 @@ SCENES.push({id:'refraction',ch:'4-3',name:'光的折射',bounds:[-40,40,-27,27]
     P.push({t:'label',x:-38,y:24.5,text:top.name+'　n = '+top.n.toFixed(2),c:C.text,align:'left',size:13});
     P.push({t:'line',pts:st.shape==='half'?[[-600,0],[600,0]]:[...poly,poly[0]],c:'rgba(200,220,240,0.55)',w:1.2});
     const optics=[{kind:'region',pts:big,n:nOut},{kind:'region',pts:poly,n:nIn}];
-    const S=[st.lx,st.ly], d=dirOf(st.la);
-    P.push({t:'laser',x:S[0],y:S[1],dir:d});
-    const objects=[{id:'laser',x:S[0],y:S[1],ang:st.la,label:'雷射筆',move:(x,y)=>{st.lx=clamp(x,-300,300);st.ly=clamp(y,-300,300);},rotate:a=>{st.la=a}}];
+    const S=[st.lx,st.ly], d=dirOf(st.la), beam=st.src==='beam', pp=[-d[1],d[0]];
+    const starts=beam?lin(-(st.bw??10)/2,(st.bw??10)/2,st.bn??5).map(o=>[add(S,mul(pp,o)),d]):[[S,d]];
+    if(beam) P.push({t:'beamSrc',x:S[0],y:S[1],ang:st.la,w:st.bw??10,c:C.laser}); else P.push({t:'laser',x:S[0],y:S[1],dir:d});
+    const objects=[{id:'laser',x:S[0],y:S[1],ang:st.la,label:beam?'平行光束':'雷射筆',move:(x,y)=>{st.lx=clamp(x,-300,300);st.ly=clamp(y,-300,300);},rotate:a=>{st.la=a}}];
     // branching trace: every boundary splits into refracted (1-R) and reflected (R); total internal reflection keeps all the light
     const segs=[], events=[], E=poly.length;
     const tr=(p,dd,I,depth,main)=>{
@@ -894,7 +904,8 @@ SCENES.push({id:'refraction',ch:'4-3',name:'光的折射',bounds:[-40,40,-27,27]
       if(r.tir) tr(q,r.d,I,depth+1,main);
       else{tr(q,r.d,I*(1-r.R),depth+1,main); if(I*r.R>0.03) tr(q,r.refl,I*r.R,depth+1,false);}
     };
-    tr(S,d,1,0,true);
+    // the centre ray carries the angle labels; the other beam rays are traced too
+    const mid=Math.floor(starts.length/2); starts.forEach(([p0,d0],k)=>tr(p0,d0,1,0,k===mid));
     for(const sg of segs) P.push({t:'ray',pts:[sg.a,sg.b],c:C.laser,w:1.2+1.0*Math.min(1,sg.I*1.4),a:clamp(sg.I*1.25,0.08,1),arrow:sg.I>0.3});
     const key=events.find(e=>Math.abs(e.q[1])<1e-6)||events[0];
     events.slice(0,3).forEach((e,k)=>{
@@ -918,7 +929,7 @@ SCENES.push({id:'refraction',ch:'4-3',name:'光的折射',bounds:[-40,40,-27,27]
       <dt>光速（${top.name}）</dt><dd>${v(nOut)}</dd><dt>光速（${bot.name}）</dt><dd>${v(nIn)}</dd></dl>
       <p><span class="pill ${tirE?'warn':''}">${tirE&&tirE!==key?'光在物體內發生全反射':bend}</span></p>
       <p class="note-sm">${st.shape==='slab'?'光穿過長方形磚時折射兩次，射出的光與入射光平行，但位置平移了。':st.shape==='semi'?'光沿半徑射入半圓形磚的弧面時不偏折；在平面處由玻璃射向空氣，入射角超過臨界角就全反射。':'線條粗細與亮度代表光的強弱，部分光在界面被反射。'}</p>`;
-    return {prims:P,handles:[],objects,optics,info,carEnv:{nAt},
+    return {prims:P,handles:[],objects,optics,info,carEnv:{nAt,starts},
       meta:{hit:!!key,i:key?key.i:null,keyN:key?[key.n1,key.n2]:null,above:S[1]>0,tir:!!(key&&key.r.tir),tirI:tirE?tirE.i:null}};
   },
   notes:['光從一種介質斜射入另一種介質時，行進方向會改變，這叫做折射。','光從空氣進入水或玻璃（光速變慢）時，折射光偏向法線；反過來則偏離法線。小車進入沙地時，先進去的輪子變慢，車子就轉向。','光穿過玻璃磚時折射兩次；兩面平行時，射出光與入射光平行。','光從水或玻璃射向空氣、且入射角大於臨界角時，光全部反射回來，稱為全反射（光纖、鑽石閃亮的原理）。']
@@ -1687,19 +1698,19 @@ reflection:[
 refraction:[
   {id:'rf-1',title:'偏向法線',goal:'讓雷射從空氣斜射入水中，入射角在 40° 以上，觀察折射光往哪邊偏。',
     hints:['上方介質選空氣、下方選水，雷射筆放在上方。','入射角滑桿調到 40° 以上。'],
-    setup:st=>{st.shape='half';st.top='air';st.bot='water';st.from='top';st.i=20;st.lx=-1;aimRefr(st);},
+    setup:st=>{st.src='laser';st.shape='half';st.top='air';st.bot='water';st.from='top';st.i=20;st.lx=-1;aimRefr(st);},
     check:({st,out})=>st.top==='air'&&st.bot==='water'&&st.from==='top'&&out.meta&&out.meta.hit&&out.meta.i>=40,
     quiz:{q:'光從空氣斜射入水中時，下列何者正確？（可複選）',opts:['折射光偏向法線','折射光偏離法線','折射角小於入射角','光在水中的速度變慢','垂直入射時也會偏折'],ans:[0,2,3]},
     explain:'光從空氣進入水（光速變慢），折射光偏向法線，折射角小於入射角。'},
   {id:'rf-2',title:'找出臨界角',goal:'上方空氣、下方水，雷射筆在水中（下方）。用右側的「入射角」滑桿一度一度加大入射角，找出「剛好」開始發生全反射的角度（誤差 1° 以內）。',
     hints:['全反射發生時，射進空氣的折射光會消失。','每次調一度，放開滑桿後觀察折射光還在不在。'],
-    setup:st=>{st.shape='half';st.top='air';st.bot='water';st.from='bot';st.i=30;st.lx=-1;aimRefr(st);},
+    setup:st=>{st.src='laser';st.shape='half';st.top='air';st.bot='water';st.from='bot';st.i=30;st.lx=-1;aimRefr(st);},
     check:({st,out})=>st.top==='air'&&st.bot==='water'&&st.from==='bot'&&out.meta&&out.meta.tir&&out.meta.i<=49.8,
     quiz:{q:'關於全反射，下列何者正確？（可複選）',opts:['光要從水（或玻璃）射向空氣才會發生','光從空氣射向水也會發生','入射角大於臨界角時發生','發生時折射光消失，光全部反射','水射向空氣的臨界角約 49°'],ans:[0,2,3,4]},
     explain:'水射向空氣的臨界角約 48.8°，入射角大於臨界角就發生全反射。'},
   {id:'rf-3',title:'半圓形磚的全反射',goal:'下方物體是玻璃半圓形磚。雷射從下方沿半徑射向平面中心，慢慢加大入射角，讓光在平面處全部反射回玻璃中。',
     hints:['光沿半徑射入弧面時不會偏折，所以只要看平面那一次。','玻璃射向空氣的臨界角約 42°，入射角要比它大。'],
-    setup:st=>{st.shape='semi';st.top='air';st.bot='glass';st.from='bot';st.i=20;st.lx=-1;aimRefr(st);},
+    setup:st=>{st.src='laser';st.shape='semi';st.top='air';st.bot='glass';st.from='bot';st.i=20;st.lx=-1;aimRefr(st);},
     check:({st,out})=>st.shape==='semi'&&out.meta&&out.meta.tirI!=null,
     quiz:{q:'光沿半徑射入半圓形玻璃磚時，下列何者正確？（可複選）',opts:['在弧面不偏折，因為是垂直入射','在弧面一定會偏折','在平面處入射角超過約 42° 就發生全反射','光纖就是利用全反射傳光'],ans:[0,2,3]},
     explain:'玻璃射向空氣的臨界角約 41.8°。入射角超過臨界角時，光完全反射回玻璃，光纖就是利用這個原理傳光。'}],
@@ -2110,46 +2121,109 @@ function addExtras(out){
   }
 }
 
-/* ================= car analogy for refraction (two wheels, each rolls at the speed of its own medium) ================= */
-function startCar(){
-  if(app.carRaf) return; app.car=null; let last=performance.now();
-  const step=now=>{
-    const sc=cur(), st=S();
-    if(sc.id!=='refraction'||!st.car){app.car=null;app.carRaf=null;if(app.mode==='2d'&&app.out)draw2D();return;}
-    const dt=Math.min(0.05,(now-last)/1000); last=now;
-    const env=app.out&&app.out.carEnv; if(!env){app.carRaf=requestAnimationFrame(step);return;}
-    const K=6, HW=2;
-    if(!app.car){const d=dirOf(st.la);app.car={m:add([st.lx,st.ly],mul(d,3)),h:d,a:[d[1],-d[0]],phL:0,phR:0,t:0,tt:0,trail:[],vL:K,vR:K};}
-    const car=app.car, L=add(car.m,mul(car.a,-HW)), R=add(car.m,mul(car.a,HW));
-    const vL=K/env.nAt(L), vR=K/env.nAt(R), L2=add(L,mul(car.h,vL*dt)), R2=add(R,mul(car.h,vR*dt));
-    car.m=mul(add(L2,R2),0.5); car.a=nrm(sub(R2,L2)); let h=[-car.a[1],car.a[0]]; if(dot(h,car.h)<0) h=mul(h,-1); car.h=h;
-    car.phL+=vL*dt; car.phR+=vR*dt; car.vL=vL; car.vR=vR; car.t+=dt; car.tt+=dt;
-    if(car.tt>0.15){car.trail.push(car.m);car.tt=0;if(car.trail.length>240)car.trail.shift();}
-    const b=bounds(), span=Math.max(b[1]-b[0],b[3]-b[2]);
-    if(car.t>30||Math.abs(car.m[0])>span||Math.abs(car.m[1])>span) app.car=null;
-    if(app.mode==='2d') draw2D();
-    app.carRaf=requestAnimationFrame(step);
-  };
-  app.carRaf=requestAnimationFrame(step);
-}
+/* ================= car analogy for refraction: each track rolls at the speed of its own medium =================
+   fixed time step + recorded history, so the animation can play, pause, step forward and step back */
+const CAR={DT:1/60,K:6,HW:2,REC:9,STEP:6,MAX:2400,KEEP:900,EVERY:1.6};
+function carStarts(){
+  const st=S(), env=app.out&&app.out.carEnv; if(!env) return [];
+  const list=[...(env.starts||[])];
+  for(const s of st.sources||[]){const d=dirOf(s.ang);
+    if(s.type==='laser') list.push([[s.x,s.y],d]);
+    else if(s.type==='beam'){const pp=[-d[1],d[0]];for(const o of lin(-s.w/2,s.w/2,s.n)) list.push([add([s.x,s.y],mul(pp,o)),d]);}
+    else if(s.type==='point'){for(let i=0;i<s.n;i++) list.push([[s.x,s.y],dirOf(s.ang+i*2*Math.PI/s.n)]);}}
+  return list.slice(0,30);}
+function carScale(starts){let md=1e9;for(let i=0;i<starts.length;i++)for(let j=i+1;j<starts.length;j++){const d=len(sub(starts[i][0],starts[j][0]));if(d>0.01)md=Math.min(md,d);}return clamp(md/5.8,0.3,1);}
+const carSig=starts=>starts.map(([p,d])=>[p[0],p[1],d[0],d[1]].map(v=>v.toFixed(2)).join(',')).join(';');
+function carsReset(){
+  const starts=carStarts();
+  const cars=carWave(starts);
+  app.cars={hist:[cars],idx:0,base:0,playing:true,sig:carSig(starts),starts,last:0,acc:0,sc:carScale(starts),tEnd:0,next:CAR.EVERY};
+  carLoop(); carBtn();}
+const carWave=starts=>starts.map(([p,d])=>({m:add(p,mul(d,3)),h:d,a:[d[1],-d[0]],phL:0,phR:0,vL:CAR.K,vR:CAR.K,on:true}));
+function carSim(prev){
+  const env=app.out&&app.out.carEnv; if(!env) return prev;
+  const b=bounds(), mg=12, dt=CAR.DT;
+  return prev.map(c=>{if(!c.on) return c;
+    const hw=CAR.HW*(app.cars?app.cars.sc:1), L=add(c.m,mul(c.a,-hw)), R=add(c.m,mul(c.a,hw)), vL=CAR.K/env.nAt(L), vR=CAR.K/env.nAt(R);
+    const L2=add(L,mul(c.h,vL*dt)), R2=add(R,mul(c.h,vR*dt)), m=mul(add(L2,R2),0.5), a=nrm(sub(R2,L2));
+    let h=[-a[1],a[0]]; if(dot(h,c.h)<0) h=mul(h,-1);
+    return {m,h,a,phL:c.phL+vL*dt,phR:c.phR+vR*dt,vL,vR,on:m[0]>b[0]-mg&&m[0]<b[1]+mg&&m[1]>b[2]-mg&&m[1]<b[3]+mg};}).filter(c=>c.on);}
+function carAdvance(n){
+  const K=app.cars; if(!K) return;
+  for(let k=0;k<n;k++){
+    if(K.idx<K.hist.length-1){K.idx++;continue;}
+    const cur=K.hist[K.idx], cont=!!S().carCont;
+    if(!cont&&(!cur.length||K.hist.length>=CAR.MAX)){K.playing=false;return;}
+    let nx=carSim(cur); K.tEnd+=CAR.DT;
+    // continuous mode: a new wave of cars every CAR.EVERY seconds; only the recent history is kept
+    if(cont&&K.tEnd>=K.next){nx=nx.concat(carWave(K.starts));K.next+=CAR.EVERY;}
+    K.hist.push(nx); K.idx++;
+    if(cont&&K.hist.length>CAR.KEEP){K.hist.shift();K.idx--;K.base++;}}}
+function carBtn(){const K=app.cars;els.controls.querySelectorAll('button').forEach(bt=>{if(/^(▶ 播放|⏸ 暫停)$/.test(bt.textContent))bt.textContent=K&&K.playing?'⏸ 暫停':'▶ 播放';});}
+function carRedraw(){if(app.mode==='2d'){if(app.out) draw2D();} else render3D();}
+function carLoop(){
+  if(app.carRaf) return;
+  const tick=now=>{
+    app.carRaf=null; const K=app.cars, st=S();
+    if(!K||cur().id!=='refraction'||!st.car){carRedraw();return;}
+    if(!K.playing){carRedraw();return;}
+    const dt=K.last?Math.min(0.1,(now-K.last)/1000):0; K.last=now; K.acc+=dt;
+    const n=Math.min(6,Math.floor(K.acc/CAR.DT)); K.acc-=n*CAR.DT; carAdvance(n);
+    carRedraw(); if(K.playing) app.carRaf=requestAnimationFrame(tick); else carBtn();};
+  app.carRaf=requestAnimationFrame(tick);}
+function carPlay(){const K=app.cars; if(!K){carsReset();return;}
+  if(K.playing){K.playing=false;carBtn();return;}
+  const cur=K.hist[K.idx]; if(K.idx>=K.hist.length-1&&!cur.length&&!S().carCont){carsReset();return;}
+  K.playing=true; K.last=0; K.acc=0; carLoop(); carBtn();}
+function carStep(dir){const K=app.cars; if(!K) return; K.playing=false; carBtn();
+  if(dir<0) K.idx=Math.max(0,K.idx-CAR.STEP); else carAdvance(CAR.STEP); carRedraw();}
+// called after every refresh: (re)start when the light sources change
+function carsEnsure(){
+  const st=S();
+  if(cur().id!=='refraction'||!st.car){if(app.cars){app.cars=null;}return;}
+  const sig=carSig(carStarts());
+  if(!app.cars||app.cars.sig!==sig) carsReset(); else if(app.cars.playing) carLoop();}
+function carNow(){const K=app.cars; if(!K||cur().id!=='refraction'||!S().car) return null; return K;}
 function drawCar(T){
-  const car=app.car; if(!car||cur().id!=='refraction') return;
+  const K=carNow(); if(!K) return; const cars=K.hist[K.idx], s=T.s*(K.sc||1);
   ctx.save(); ctx.fillStyle='rgba(255,255,255,0.4)';
-  for(const p of car.trail){ctx.beginPath();ctx.arc(T.X(p[0]),T.Y(p[1]),1.6,0,7);ctx.fill();}
-  const s=T.s; ctx.translate(T.X(car.m[0]),T.Y(car.m[1])); ctx.rotate(Math.atan2(-car.h[1],car.h[0]));
-  ctx.fillStyle='rgba(61,139,253,0.92)'; ctx.strokeStyle='#d6e7ff'; ctx.lineWidth=1.2;
-  ctx.beginPath(); ctx.rect(-4.8*s,-1.5*s,5.4*s,3*s); ctx.fill(); ctx.stroke();
-  ctx.fillStyle='#d6e7ff'; ctx.beginPath(); ctx.moveTo(1.2*s,0); ctx.lineTo(0.2*s,-0.8*s); ctx.lineTo(0.2*s,0.8*s); ctx.closePath(); ctx.fill();
-  for(const [side,ph] of [[1,car.phR],[-1,car.phL]]){
-    // after the rotation canvas +y is the car's right-hand side (car.a), where the R wheel sits
-    const wl=2.8*s, ww=1.0*s, y=side*2*s, sp=0.8, off=((ph%sp)+sp)%sp;
-    ctx.save(); ctx.beginPath(); ctx.rect(-wl/2,y-ww/2,wl,ww); ctx.clip();
-    ctx.fillStyle='#15181d'; ctx.fillRect(-wl/2,y-ww/2,wl,ww); ctx.fillStyle='#ffd166';
-    for(let k=-3;k<=3;k++){const x=(k*sp-off)*s; ctx.fillRect(x-0.15*s,y-ww/2,0.3*s,ww);}
-    ctx.restore(); ctx.strokeStyle='#8b97a8'; ctx.lineWidth=1; ctx.strokeRect(-wl/2,y-ww/2,wl,ww);
-  }
-  ctx.restore();
-}
+  for(let j=(CAR.REC-K.base%CAR.REC)%CAR.REC;j<=K.idx;j+=CAR.REC) K.hist[j].forEach(c=>{ctx.beginPath();ctx.arc(T.X(c.m[0]),T.Y(c.m[1]),1.5,0,7);ctx.fill();});
+  for(const car of cars){if(!car.on) continue;
+    ctx.save(); ctx.translate(T.X(car.m[0]),T.Y(car.m[1])); ctx.rotate(Math.atan2(-car.h[1],car.h[0]));
+    // tracks (crawler belts) along both sides; stripes move at each side's own speed
+    for(const [side,ph] of [[1,car.phR],[-1,car.phL]]){
+      const x0=-5*s, tl=5.6*s, ww=1.1*s, y=side*2.05*s, sp=0.8, off=((ph%sp)+sp)%sp;
+      ctx.save(); ctx.beginPath(); ctx.rect(x0,y-ww/2,tl,ww); ctx.clip();
+      ctx.fillStyle='#15181d'; ctx.fillRect(x0,y-ww/2,tl,ww); ctx.fillStyle='#ffd166';
+      for(let k=-1;k<=8;k++){const x=x0+(k*sp+off)*s; ctx.fillRect(x-0.14*s,y-ww/2,0.28*s,ww);}
+      ctx.restore(); ctx.strokeStyle='#8b97a8'; ctx.lineWidth=1; ctx.strokeRect(x0,y-ww/2,tl,ww);}
+    ctx.fillStyle='rgba(61,139,253,0.92)'; ctx.strokeStyle='#d6e7ff'; ctx.lineWidth=1.2;
+    ctx.beginPath(); ctx.rect(-4.6*s,-1.45*s,5.2*s,2.9*s); ctx.fill(); ctx.stroke();
+    ctx.fillStyle='#d6e7ff'; ctx.beginPath(); ctx.moveTo(0.9*s,0); ctx.lineTo(-0.1*s,-0.8*s); ctx.lineTo(-0.1*s,0.8*s); ctx.closePath(); ctx.fill();
+    ctx.restore();}
+  ctx.restore();}
+// 3D: same cars as flat tracked vehicles in the light plane (kept in their own group, refreshed every frame)
+const CAR3={};
+function syncCars3D(){
+  if(!T3.ok) return;
+  if(T3.carGroup){T3.scene.remove(T3.carGroup);T3.carGroup=null;}
+  const K=carNow(); if(!K) return;
+  if(!CAR3.body){CAR3.body=new THREE.BoxGeometry(5.2,2.9,1.4);CAR3.track=new THREE.BoxGeometry(5.6,1.1,1.0);CAR3.stripe=new THREE.BoxGeometry(0.28,1.12,1.04);CAR3.nose=new THREE.ConeGeometry(0.8,1.2,12);
+    CAR3.mBody=new THREE.MeshPhongMaterial({color:0x3d8bfd,shininess:60});CAR3.mTrack=new THREE.MeshPhongMaterial({color:0x15181d});CAR3.mStripe=new THREE.MeshBasicMaterial({color:0xffd166});CAR3.mNose=new THREE.MeshBasicMaterial({color:0xd6e7ff});}
+  const g=new THREE.Group(), cars=K.hist[K.idx], tp=[];
+  for(let j=(CAR.REC-K.base%CAR.REC)%CAR.REC;j<=K.idx;j+=CAR.REC) K.hist[j].forEach(c=>tp.push(c.m[0],c.m[1],0));
+  if(tp.length){const pg=new THREE.BufferGeometry();pg.setAttribute('position',new THREE.Float32BufferAttribute(tp,3));g.add(new THREE.Points(pg,new THREE.PointsMaterial({color:0xffffff,size:0.6,transparent:true,opacity:0.5})));}
+  for(const car of cars){if(!car.on) continue;
+    const cg=new THREE.Group(); cg.position.set(car.m[0],car.m[1],0); cg.rotation.z=Math.atan2(car.h[1],car.h[0]); cg.scale.setScalar(K.sc||1);
+    const body=new THREE.Mesh(CAR3.body,CAR3.mBody); body.position.set(-2,0,0.9); cg.add(body);
+    const nose=new THREE.Mesh(CAR3.nose,CAR3.mNose); nose.rotation.z=-Math.PI/2; nose.position.set(0.3,0,1.7); cg.add(nose);
+    // car.a points to the car's right; in the rotated frame that is −y
+    for(const [side,ph] of [[-1,car.phR],[1,car.phL]]){
+      const tr=new THREE.Mesh(CAR3.track,CAR3.mTrack); tr.position.set(-2.2,side*2.05,0.5); cg.add(tr);
+      const sp=0.8, off=((ph%sp)+sp)%sp;
+      for(let k=0;k<=6;k++){const x=-5+(k*sp+off); if(x<-4.9||x>0.5) continue; const st2=new THREE.Mesh(CAR3.stripe,CAR3.mStripe); st2.position.set(x,side*2.05,0.5); cg.add(st2);}}
+    g.add(cg);}
+  T3.carGroup=g; T3.scene.add(g);}
 /* ================= handles & gizmo ================= */
 function gizmoScale(){return app.mode==='2d'?1/makeT().s:(T3.orb?T3.orb.dist*0.0011:0.1);}
 function selObjData(){return (app.out&&app.out.objects||[]).find(o=>o.id===app.selObj)||null;}
@@ -2586,7 +2660,7 @@ function render3D(){
   if(!T3.ok) return; const o=T3.orb,t=V3(...o.t);
   T3.cam.aspect=W/Math.max(Hh,1);T3.cam.updateProjectionMatrix();
   T3.cam.position.set(t.x+o.dist*Math.sin(o.phi)*Math.sin(o.theta),t.y+o.dist*Math.cos(o.phi),t.z+o.dist*Math.sin(o.phi)*Math.cos(o.theta));
-  T3.cam.lookAt(t);T3.cam.updateMatrixWorld();T3.r.render(T3.scene,T3.cam);
+  T3.cam.lookAt(t);T3.cam.updateMatrixWorld();syncCars3D();T3.r.render(T3.scene,T3.cam);
 }
 function project3(x,y){const v=V3(x,y,0).project(T3.cam);return [(v.x+1)/2*W,(1-v.y)/2*Hh,v.z];}
 function world3(px,py){if(!T3.ok)return null;T3.ray.setFromCamera(new THREE.Vector2(px/W*2-1,-(py/Hh)*2+1),T3.cam);
@@ -2992,7 +3066,7 @@ function refresh(){
   app.sync.forEach(f=>f());
   updateToolbar();
   redraw();
-  if(cur().id==='refraction'&&st.car&&!app.carRaf) startCar();
+  carsEnsure();
 }
 function setMode(m){
   if(m==='3d'&&!ensure3D()){els.err3d.hidden=false;els.cv2.hidden=true;els.cv3.hidden=true;app.mode='3d';}
