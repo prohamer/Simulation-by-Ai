@@ -1,5 +1,5 @@
 <!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
-<title>光學實驗台V15</title>
+<title>光學實驗台V16</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
@@ -848,6 +848,8 @@ SCENES.push({id:'curved-mirror',ch:'4-2',name:'凹面鏡與凸面鏡',bounds:[-6
 });
 
 /* ---------- 4-3 折射 ---------- */
+// light speed in a medium: v = c / n (c = 3.00 × 10⁸ m/s)
+const vTxt=n=>'光速 '+(3/n).toFixed(2)+'×10⁸ m/s';
 function refrPoly(shape){
   if(shape==='slab') return [[-30,-12],[30,-12],[30,0],[-30,0]];
   if(shape==='semi'){const R=18,pts=[];for(let i=0;i<=72;i++){const a=Math.PI+Math.PI*i/72;pts.push([R*Math.cos(a),R*Math.sin(a)]);}pts[0]=[-R,0];pts[72]=[R,0];return pts;}
@@ -860,8 +862,8 @@ SCENES.push({id:'refraction',ch:'4-3',name:'光的折射',bounds:[-40,40,-27,27]
   controls:()=>[
     {type:'seg',key:'shape',label:'下方物體的形狀',options:[['half','整片介質'],['slab','長方形磚'],['semi','半圓形磚']],
       onInput:s=>{if(s.shape==='semi'){s.bot=s.bot==='air'?'glass':s.bot;s.from='bot';s.i=30;s.lx=-1;aimRefr(s);}else if(s.shape==='slab'){s.from='top';s.lx=-1;aimRefr(s);}}},
-    {type:'select',key:'top',label:'周圍介質',options:Object.entries(MEDIA).map(([k,v])=>[k,v.name+'（n = '+v.n.toFixed(2)+'）'])},
-    {type:'select',key:'bot',label:'下方物體的材質',options:Object.entries(MEDIA).map(([k,v])=>[k,v.name+'（n = '+v.n.toFixed(2)+'）'])},
+    {type:'select',key:'top',label:'周圍介質',options:Object.entries(MEDIA).map(([k,v])=>[k,v.name+'（n = '+v.n.toFixed(2)+'，'+vTxt(v.n)+'）'])},
+    {type:'select',key:'bot',label:'下方物體的材質',options:Object.entries(MEDIA).map(([k,v])=>[k,v.name+'（n = '+v.n.toFixed(2)+'，'+vTxt(v.n)+'）'])},
     {type:'seg',key:'from',label:'雷射筆位置',options:[['top','在上方'],['bot','在下方']],onInput:aimRefr},
     {type:'slider',key:'i',label:'入射角（設定後雷射對準界面中央）',min:0,max:89,step:0.5,unit:'°',fmt:v=>(+v).toFixed(1)+'°',onInput:aimRefr},
     {type:'seg',key:'src',label:'光源',options:[['laser','雷射筆'],['beam','平行光束']],get:()=>S().src||'laser',set:v=>{S().src=v;}},
@@ -879,9 +881,9 @@ SCENES.push({id:'refraction',ch:'4-3',name:'光的折射',bounds:[-40,40,-27,27]
     const nAt=q=>pip(q,poly)?nIn:nOut, nameOf=n=>n===nIn&&n!==nOut?bot.name:n===nOut&&n!==nIn?top.name:bot.name;
     const big=[[-600,-600],[600,-600],[600,600],[-600,600]];
     P.push({t:'fill',pts:big,c:top.fill});
-    const lab={half:[-38,-24],slab:[-28,-10.4],semi:[-7,-8]}[st.shape];
-    P.push({t:'medium',pts:poly,c:bot.fill,label:bot.name+'　n = '+bot.n.toFixed(2),lx:lab[0],ly:lab[1]});
-    P.push({t:'label',x:-38,y:24.5,text:top.name+'　n = '+top.n.toFixed(2),c:C.text,align:'left',size:13});
+    const lab={half:[-26,-24],slab:[-28,-10.4],semi:[-15,-21]}[st.shape];
+    P.push({t:'medium',pts:poly,c:bot.fill,label:bot.name+'　n = '+bot.n.toFixed(2)+'　'+vTxt(bot.n),lx:lab[0],ly:lab[1]});
+    P.push({t:'label',x:-26,y:24.5,text:top.name+'　n = '+top.n.toFixed(2)+'　'+vTxt(top.n),c:C.text,align:'left',size:13});
     P.push({t:'line',pts:st.shape==='half'?[[-600,0],[600,0]]:[...poly,poly[0]],c:'rgba(200,220,240,0.55)',w:1.2});
     const optics=[{kind:'region',pts:big,n:nOut},{kind:'region',pts:poly,n:nIn}];
     const S=[st.lx,st.ly], d=dirOf(st.la), beam=st.src==='beam', pp=[-d[1],d[0]];
@@ -937,6 +939,21 @@ SCENES.push({id:'refraction',ch:'4-3',name:'光的折射',bounds:[-40,40,-27,27]
 });
 
 /* ---------- 4-3 水中的物體看起來變淺 ---------- */
+// task helper: a laser fixed on the chopstick under water; its beam refracts at the surface (y = 0)
+function adLaser(st,data){
+  const D=st.D, B=[st.cx,-D+0.6], T=[st.cx-16,10], tw=(0-T[1])/(B[1]-T[1]), W=[T[0]+(B[0]-T[0])*tw,0];
+  const Pp=add(W,mul(sub(B,W),data.fr)), d=dirOf(data.a*D2R), E=[st.ex,st.ey], pts=[Pp];
+  let ok=false, miss=null, out=null, tir=false;
+  if(d[1]>1e-6){const t=-Pp[1]/d[1], S0=add(Pp,mul(d,t));
+    if(Math.abs(S0[0])<26){pts.push(S0);const r=refractDir(d,[0,1],1.33,1);
+      if(r.tir){tir=true;pts.push(add(S0,mul(r.d,30)));}
+      else{out=r.d;const w=sub(E,S0),along=dot(w,out);miss=along>0?Math.abs(w[0]*out[1]-w[1]*out[0]):99;ok=miss<=1.2;
+        // the cup wall (x = ±26, up to y = 5) stops a beam that leaves the water too flat
+        let L=Math.max(along,0)+25;if(Math.abs(out[0])>1e-9){const tw=(Math.sign(out[0])*26-S0[0])/out[0],yw=S0[1]+out[1]*tw;if(tw>0&&yw<5&&tw<L){L=tw;if(tw<along)ok=false;}}
+        pts.push(add(S0,mul(out,L)));}}
+    else pts.push(add(Pp,mul(d,(Math.sign(d[0])*26-Pp[0])/d[0])));}
+  else pts.push(add(Pp,mul(d,12)));
+  return {P:Pp,d,pts,ok,miss,out,tir,E};}
 SCENES.push({id:'apparent-depth',ch:'4-3',name:'水中物體的位置',bounds:[-40,40,-30,28],
   tools:{image:'showImg'},
   init:()=>({D:15,obj:'coin',cx:4,ex:-22,ey:20,showImg:true}),
@@ -946,7 +963,7 @@ SCENES.push({id:'apparent-depth',ch:'4-3',name:'水中物體的位置',bounds:[-
   build(st,b){
     const P=[], D=st.D, nw=1.33, E=[st.ex,st.ey];
     const water=[[-26,-D],[26,-D],[26,0],[-26,0]];
-    P.push({t:'medium',pts:water,c:MEDIA.water.fill,label:'水 n = 1.33',lx:-24.5,ly:-D+1.6});
+    P.push({t:'medium',pts:water,c:MEDIA.water.fill,label:'水　n = 1.33　'+vTxt(1.33),lx:-24.5,ly:-D+1.6});
     P.push({t:'cup',x0:-26,x1:26,y0:-D-0.8,y1:5});
     const optics=[{kind:'region',pts:water,n:nw},{kind:'absorb',pts:[[-26,5],[-26,-D-0.8],[26,-D-0.8],[26,5]]}];
     const surfPt=(Q,Ei)=>{let lo=Math.min(Q[0],Ei[0]),hi=Math.max(Q[0],Ei[0]);
@@ -977,7 +994,7 @@ SCENES.push({id:'apparent-depth',ch:'4-3',name:'水中物體的位置',bounds:[-
     P.push({t:'stick',pts:[W,B],c:'#d9a066',a:st.showImg?0.35:1,dash:st.showImg});
     if(st.showImg) P.push({t:'stick',pts:ghost,c:'#d9a066'});
     const ap=apparent(B);
-    for(const [S,Ei] of [[ap.S1,ap.E1],[ap.S2,ap.E2]]){P.push({t:'ray',pts:[B,S,Ei],c:'#ffd166',w:1.3,a:0.85});if(st.showImg)P.push({t:'ray',pts:[S,ap.A],c:'#ffd166',w:1,a:0.6,dash:true});}
+    if(!taskHides('rays')) for(const [S,Ei] of [[ap.S1,ap.E1],[ap.S2,ap.E2]]){P.push({t:'ray',pts:[B,S,Ei],c:'#ffd166',w:1.3,a:0.85});if(st.showImg)P.push({t:'ray',pts:[S,ap.A],c:'#ffd166',w:1,a:0.6,dash:true});}
     if(st.showImg) P.push({t:'label',x:ghost[ghost.length-1][0]+2,y:ghost[ghost.length-1][1]+1.5,text:'看到的筷子',c:C.text,align:'left'});
     P.push({t:'eye',x:E[0],y:E[1],dir:nrm(sub(ap.S0,E))});
     return {prims:P,handles:[eyeH,{x:B[0],y:B[1],cursor:'ew-resize',drag:x=>{st.cx=clamp(x,-10,23)}}],optics,
@@ -1772,7 +1789,21 @@ refraction:[
     hints:['斜著看，物體看起來更淺。','把眼睛移低、移遠，從很斜的角度看。'],setup:st=>{st.obj='coin';st.showImg=true;},
     check:({out})=>out.meta&&out.meta.ratio!=null&&out.meta.ratio<0.5,
     quiz:{q:'從水面上看水中的物體，下列何者正確？（可複選）',opts:['看起來比實際淺','看起來比實際深','視線愈斜，看起來愈淺','因為光從水射入空氣時偏離法線','因為光的反射'],ans:[0,2,3]},
-    explain:'視線愈斜，折射造成的偏折愈大，物體看起來就愈淺。'}],
+    explain:'視線愈斜，折射造成的偏折愈大，物體看起來就愈淺。'},
+  {id:'ad-3',title:'讓雷射射進眼睛',goal:'筷子在水中的某一點裝了一支雷射筆（紅點）。眼睛和筷子已固定。拖曳雷射筆前方的白色圓點轉動雷射，讓光從水面射出後，正好射進觀察者的眼睛。',
+    freeze:true,hide:['rays'],lock:['image'],reveal:['image'],keepExtra:true,
+    hints:['光從水射入空氣時，會偏離法線（變得比較斜）。','先直接對準眼睛，再讓雷射往「更陡、更靠近垂直」的方向轉一點。'],
+    setup:(st,data)=>{st.obj='stick';st.D=15;st.cx=4;st.ex=-24;st.ey=18;data.fr=0.45+Math.random()*0.45;data.a=95;},
+    extra:(st,data)=>{const L=adLaser(st,data),done=!acting();
+      const P=[{t:'ray',pts:L.pts,c:'#ff4d4d',w:2},{t:'point',x:L.P[0],y:L.P[1],c:'#ff4d4d'},{t:'label',x:L.P[0]+2,y:L.P[1]-1.6,text:'雷射筆',c:'#ff8f8f',align:'left'}];
+      if(L.pts.length>2) P.push({t:'line',pts:[[L.pts[1][0],-6],[L.pts[1][0],6]],c:C.dim,dash:true});
+      if(done&&L.out){const S0=L.pts[1];P.push({t:'ray',pts:[S0,add(S0,mul(L.out,-22))],c:'#ff8f8f',w:1.2,a:0.7,dash:true});
+        P.push({t:'label',x:S0[0]-L.out[0]*22,y:S0[1]-L.out[1]*22-1.5,text:'眼睛覺得光從這裡來',c:'#ff8f8f',align:'center'});}
+      const K=add(L.P,mul(L.d,5));
+      return {prims:P,handles:done?[]:[{x:K[0],y:K[1],cursor:'grab',drag:(x,y)=>{data.a=Math.round(Math.atan2(y-L.P[1],x-L.P[0])*R2D*10)/10;}}]};},
+    check:({st,data})=>adLaser(st,data).ok,
+    quiz:{q:'把水中的雷射射進眼睛時，下列何者正確？（可複選）',opts:['光從水射入空氣時，折射光偏離法線','雷射要比「直直對準眼睛」的方向更陡（更靠近法線）','光直線前進，直接對準眼睛就能射進去','眼睛會覺得筷子上這一點比實際的位置淺'],ans:[0,1,3]},
+    explain:'光出水面時偏離法線，所以雷射要瞄得比直線更陡，光才會彎進眼睛。眼睛沿著射進來的光往回看（虛線），覺得光來自比較淺的地方，所以水中的筷子看起來被折彎、變淺。'}],
 'lens-rays':[
   {id:'lr-1',freeze:true,freezeHide:true,title:'量出焦距',goal:'用平行光照射凸透鏡，再用「量尺」從透鏡中心量到光線會聚的點。量尺長度要等於焦距（誤差 0.5 cm 以內）。',
     hints:['工具列選「量尺」，從透鏡中心（主軸上）拖到光線會聚點。','光線要平行主軸射入（傾斜角度 0°）。'],
@@ -2650,8 +2681,11 @@ function build3D(){
     case 'eye':{mesh(new THREE.SphereGeometry(1.4,20,14),phong(0xf2f4f7),[p.x,p.y,0]);const ir=add([p.x,p.y],mul(p.dir,1.05));mesh(new THREE.SphereGeometry(0.6,14,10),phong(0x2f6fb3),[ir[0],ir[1],0]);
       const pu=add([p.x,p.y],mul(p.dir,1.4));mesh(new THREE.SphereGeometry(0.25,10,8),new THREE.MeshBasicMaterial({color:0x000000}),[pu[0],pu[1],0]);break;}
     case 'coin': mesh(new THREE.CylinderGeometry(1.6,1.6,0.35,28),phong(0xe0b54a,{transparent:!!p.ghost,opacity:p.ghost?0.35:1,shininess:90}),[p.x,p.y,0]);break;
-    case 'stick': if(!p.dash&&p.pts.length===2){orient(mesh(new THREE.CylinderGeometry(0.4,0.4,len(sub(p.pts[1],p.pts[0])),10),phong(0xd9a066)),p.pts[0],p.pts[1]);}
-      else if(!p.dash) line3(p.pts,p.c,false,0.7);break;
+    case 'stick':{// solid rod along the points (a bent rod becomes a smooth tube); faded when it is the "real" part behind an apparent image
+      const op=p.dash?Math.min(p.a??0.35,0.4):(p.a??1), mat=phong(hexOnly(p.c||'#d9a066'),{transparent:op<1,opacity:op,depthWrite:op>=1});
+      if(p.pts.length===2) orient(mesh(new THREE.CylinderGeometry(0.4,0.4,len(sub(p.pts[1],p.pts[0])),12),mat),p.pts[0],p.pts[1]);
+      else{const cv=new THREE.CatmullRomCurve3(p.pts.map(q=>V3(q[0],q[1],0)));mesh(new THREE.TubeGeometry(cv,Math.max(16,p.pts.length*4),0.4,10,false),mat);}
+      break;}
     case 'eyeball':{const m=mesh(new THREE.SphereGeometry(1,32,20),phong(0xdfe6ee,{transparent:true,opacity:0.12,depthWrite:false,side:THREE.DoubleSide}),[p.cx,0,0]);m.scale.set(p.rx,p.ry,p.ry);
       const pts=lin(-0.85,0.85,30).map(a=>[p.cx+p.rx*Math.cos(a),p.ry*Math.sin(a)]);line3(pts,'#ff7a7a',false,1);sprite('視網膜','#ff9a9a',p.cx+p.rx+4,p.ry*0.6,0,span*0.022);
       if(p.hj){const ph=Math.asin(p.hj/p.Rc),cap=mesh(new THREE.SphereGeometry(p.Rc,32,12,0,Math.PI*2,0,ph),phong(0x9fd0ff,{transparent:true,opacity:0.22,depthWrite:false,side:THREE.DoubleSide}),[p.Rc,0,0]);cap.rotation.z=Math.PI/2;
