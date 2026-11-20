@@ -1,5 +1,5 @@
 <!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
-<title>光學實驗台V14</title>
+<title>光學實驗台V15</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
@@ -863,7 +863,7 @@ SCENES.push({id:'refraction',ch:'4-3',name:'光的折射',bounds:[-40,40,-27,27]
     {type:'select',key:'top',label:'周圍介質',options:Object.entries(MEDIA).map(([k,v])=>[k,v.name+'（n = '+v.n.toFixed(2)+'）'])},
     {type:'select',key:'bot',label:'下方物體的材質',options:Object.entries(MEDIA).map(([k,v])=>[k,v.name+'（n = '+v.n.toFixed(2)+'）'])},
     {type:'seg',key:'from',label:'雷射筆位置',options:[['top','在上方'],['bot','在下方']],onInput:aimRefr},
-    {type:'slider',key:'i',label:'入射角（設定後雷射對準界面中央）',min:0,max:89,step:1,unit:'°',onInput:aimRefr},
+    {type:'slider',key:'i',label:'入射角（設定後雷射對準界面中央）',min:0,max:89,step:0.5,unit:'°',fmt:v=>(+v).toFixed(1)+'°',onInput:aimRefr},
     {type:'seg',key:'src',label:'光源',options:[['laser','雷射筆'],['beam','平行光束']],get:()=>S().src||'laser',set:v=>{S().src=v;}},
     ...(S().src==='beam'?[{type:'slider',key:'bw',label:'光束寬度',min:2,max:24,step:0.5,unit:'cm',get:()=>S().bw??10,set:v=>{S().bw=v;}},
       {type:'slider',key:'bn',label:'光線（小車）數量',min:2,max:9,step:1,get:()=>S().bn??5,set:v=>{S().bn=v;}}]:[]),
@@ -906,16 +906,17 @@ SCENES.push({id:'refraction',ch:'4-3',name:'光的折射',bounds:[-40,40,-27,27]
     };
     // the centre ray carries the angle labels; the other beam rays are traced too
     const mid=Math.floor(starts.length/2); starts.forEach(([p0,d0],k)=>tr(p0,d0,1,0,k===mid));
-    for(const sg of segs) P.push({t:'ray',pts:[sg.a,sg.b],c:C.laser,w:1.2+1.0*Math.min(1,sg.I*1.4),a:clamp(sg.I*1.25,0.08,1),arrow:sg.I>0.3});
+    const hideR=taskHides('refr');
+    for(const sg of segs){if(hideR&&nAt(add(sg.a,mul(nrm(sub(sg.b,sg.a)),1e-3)))!==nAt(S))continue;P.push({t:'ray',pts:[sg.a,sg.b],c:C.laser,w:1.2+1.0*Math.min(1,sg.I*1.4),a:clamp(sg.I*1.25,0.08,1),arrow:sg.I>0.3});}
     const key=events.find(e=>Math.abs(e.q[1])<1e-6)||events[0];
     events.slice(0,3).forEach((e,k)=>{
       const sc=k===0?1:0.8;
       P.push({t:'line',pts:[add(e.q,mul(e.nv,9*sc)),add(e.q,mul(e.nv,-9*sc))],c:C.dim,dash:true});
-      if(e.i>2.5||(k===0&&e.i>0.5)){P.push({t:'arc',x:e.q[0],y:e.q[1],r:6*sc,v1:e.nv,v2:mul(e.d,-1),c:'#ffd166',label:(k?'':'入射角 ')+e.i.toFixed(0)+'°'});
+      if(!hideR&&(e.i>2.5||(k===0&&e.i>0.5))){P.push({t:'arc',x:e.q[0],y:e.q[1],r:6*sc,v1:e.nv,v2:mul(e.d,-1),c:'#ffd166',label:(k?'':'入射角 ')+e.i.toFixed(1)+'°'});
         if(e.r.tir) P.push({t:'arc',x:e.q[0],y:e.q[1],r:8.5*sc,v1:e.nv,v2:e.r.d,c:'#ff9f43',label:'全反射'});
         else{const td=Math.asin(clamp(e.n1/e.n2*Math.sin(e.i*D2R),-1,1))*R2D;P.push({t:'arc',x:e.q[0],y:e.q[1],r:8.5*sc,v1:mul(e.nv,-1),v2:e.r.d,c:'#7ee0a0',label:(k?'':'折射角 ')+td.toFixed(1)+'°'});}}
     });
-    if(key){st.i=Math.round(key.i);st.from=S[1]>0?'top':'bot';}
+    if(key){st.i=Math.round(key.i*2)/2;st.from=S[1]>0?'top':'bot';}
     const v=n=>(3/n).toFixed(2)+' × 10⁸ m/s';
     let rows='';
     events.slice(0,4).forEach((e,k)=>{const td=e.r.tir?null:Math.asin(clamp(e.n1/e.n2*Math.sin(e.i*D2R),-1,1))*R2D;
@@ -930,7 +931,7 @@ SCENES.push({id:'refraction',ch:'4-3',name:'光的折射',bounds:[-40,40,-27,27]
       <p><span class="pill ${tirE?'warn':''}">${tirE&&tirE!==key?'光在物體內發生全反射':bend}</span></p>
       <p class="note-sm">${st.shape==='slab'?'光穿過長方形磚時折射兩次，射出的光與入射光平行，但位置平移了。':st.shape==='semi'?'光沿半徑射入半圓形磚的弧面時不偏折；在平面處由玻璃射向空氣，入射角超過臨界角就全反射。':'線條粗細與亮度代表光的強弱，部分光在界面被反射。'}</p>`;
     return {prims:P,handles:[],objects,optics,info,carEnv:{nAt,starts},
-      meta:{hit:!!key,i:key?key.i:null,keyN:key?[key.n1,key.n2]:null,above:S[1]>0,tir:!!(key&&key.r.tir),tirI:tirE?tirE.i:null}};
+      meta:{hit:!!key,i:key?key.i:null,r:key&&!key.r.tir?Math.asin(clamp(key.n1/key.n2*Math.sin(key.i*D2R),-1,1))*R2D:null,keyN:key?[key.n1,key.n2]:null,above:S[1]>0,tir:!!(key&&key.r.tir),tirI:tirE?tirE.i:null}};
   },
   notes:['光從一種介質斜射入另一種介質時，行進方向會改變，這叫做折射。','光從空氣進入水或玻璃（光速變慢）時，折射光偏向法線；反過來則偏離法線。小車進入沙地時，先進去的輪子變慢，車子就轉向。','光穿過玻璃磚時折射兩次；兩面平行時，射出光與入射光平行。','光從水或玻璃射向空氣、且入射角大於臨界角時，光全部反射回來，稱為全反射（光纖、鑽石閃亮的原理）。']
 });
@@ -1696,6 +1697,54 @@ reflection:[
     setup:st=>{st.type='convex';st.src='object';st.ox=-30;st.oh=6;},choices:['倒立、縮小的實像','正立、縮小的虛像','正立、放大的虛像'],answer:1,
     explain:'凸面鏡永遠成正立、縮小的虛像，看到的範圍較廣，所以用在道路轉角。'}],
 refraction:[
+  {id:'rf-s1',title:'小車會往哪轉？',goal:'光從空氣斜射入水中，水中的光線先藏起來了。小車就像光：先預測小車進入水中後車頭會往哪轉，再按「▶ 播放」觀察，直到小車整台開進水裡。',
+    hide:['refr'],hideInfo:true,carTask:true,carHold:true,choices:['偏向法線（轉得比較陡）','偏離法線（轉得比較平）','直直前進，不轉彎'],answer:0,
+    afterChoose:'預測正確！現在按右側的「▶ 播放」，看小車整台開進水裡。',
+    hints:['哪一側的履帶先碰到水？','先進水的那一側變慢，另一側還在空氣中跑得快。'],
+    setup:st=>{st.src='laser';st.shape='half';st.top='air';st.bot='water';st.from='top';st.i=40;st.lx=-1;aimRefr(st);st.car=true;st.carCont=false;st.sources=[];},
+    check:()=>carIn(true),
+    quiz:{q:'小車進入水中後偏向法線，原因是什麼？（可複選）',opts:['先進入水中的那一側履帶先變慢','水把小車往下拉','兩側履帶同時變慢','速度改變讓行進方向改變'],ans:[0,3]},
+    explain:'斜斜進入水中時，一側先進水先變慢，另一側還快，車頭就轉向法線。光也一樣：進入光速較慢的水中，折射光偏向法線。'},
+  {id:'rf-s2',title:'直直撞進去',goal:'把入射角調成 0°（雷射沿著法線射入），打開小車，看小車進入水中時會不會轉彎。',
+    carTask:true,
+    hints:['兩側履帶會在什麼時候碰到水？','入射角滑桿拉到 0°，讓光沿法線射入。'],
+    setup:st=>{st.src='laser';st.shape='half';st.top='air';st.bot='water';st.from='top';st.i=30;st.lx=-1;aimRefr(st);st.car=false;st.carCont=false;st.sources=[];},
+    check:({st,out})=>st.top==='air'&&st.bot==='water'&&st.from==='top'&&out.meta&&out.meta.hit&&out.meta.i<=1&&st.car&&carIn(true),
+    quiz:{q:'光垂直射入水中時，下列何者正確？（可複選）',opts:['光速改變','行進方向不變','光速不變','兩側履帶同時變慢'],ans:[0,1,3]},
+    explain:'垂直入射時兩側同時進水、同時變慢，所以只變慢、不轉彎。光速改變，但行進方向不變。'},
+  {id:'rf-s3',title:'慢多少，就轉多少',goal:'入射角保持 45°，依序把「下方物體的材質」換成水、玻璃、鑽石，比較右側的光速和折射角。',
+    hints:['哪一種材質裡的光速最慢？','每換一種材質，看右側「光速」和「入 45° → 折 ?°」兩欄。'],
+    setup:(st,data)=>{st.src='laser';st.shape='half';st.top='air';st.bot='water';st.from='top';st.i=45;st.lx=-1;aimRefr(st);st.car=false;st.sources=[];data.v={};},
+    check:({st,out,data})=>{if(st.top==='air'&&st.from==='top'&&out.meta&&out.meta.hit&&Math.abs(out.meta.i-45)<=1&&['water','glass','diamond'].includes(st.bot)&&st.shape==='half')data.v[st.bot]=1;
+      return !!(data.v.water&&data.v.glass&&data.v.diamond);},
+    quiz:{q:'入射角相同時，下列何者正確？（可複選）',opts:['介質中光速愈慢，折射角愈小','鑽石讓光偏折得最多','偏折多少和材質無關','速度變化愈大，偏折愈明顯'],ans:[0,1,3]},
+    explain:'入射角 45° 時，水的折射角約 32°、玻璃約 28°、鑽石只有約 17°。光速變得愈慢，轉得愈多，折射角就愈小。'},
+  {id:'rf-s4',title:'入射角變大，折射角呢？',goal:'空氣射入水中。把入射角拉到 10° 以下放開，再拉到 70° 以上放開，觀察兩個角怎麼一起變化。（可以把 30°、45°、60° 對應的折射角記在學習單上。）',
+    hints:['兩個角是不是一起變大？它們的差距一樣嗎？','先拉到 10° 以下放開，再拉到 70° 以上放開，分別看右側的數字。'],
+    setup:(st,data)=>{st.src='laser';st.shape='half';st.top='air';st.bot='water';st.from='top';st.i=20;st.lx=-1;aimRefr(st);st.car=false;st.sources=[];data.lo=false;data.hi=false;},
+    check:({st,out,data})=>{if(st.top==='air'&&st.bot==='water'&&st.from==='top'&&out.meta&&out.meta.hit){if(out.meta.i<=10)data.lo=true;if(out.meta.i>=70)data.hi=true;}return data.lo&&data.hi;},
+    quiz:{q:'光從空氣射入水中時，下列何者正確？（可複選）',opts:['入射角變大，折射角也變大','折射角一直比入射角小','入射角和折射角的差距固定不變','入射角 0° 時，折射角也是 0°'],ans:[0,1,3]},
+    explain:'入射角愈大，折射角也愈大，但折射角一直比入射角小，而且兩者的差距愈來愈大（30°→22°、60°→41°）。'},
+  {id:'rf-s5',title:'光變快的時候',goal:'讓雷射從水中（下方）射向空氣，入射角在 15°～40° 之間，打開小車，看小車開出水面後怎麼轉。',
+    carTask:true,
+    hints:['開出水面時，哪一側的履帶先變快？','右側「雷射筆位置」切換成「在下方」，再打開小車。'],
+    setup:st=>{st.src='laser';st.shape='half';st.top='air';st.bot='water';st.from='top';st.i=20;st.lx=-1;aimRefr(st);st.car=false;st.carCont=false;st.sources=[];},
+    check:({st,out})=>st.top==='air'&&st.bot==='water'&&st.from==='bot'&&out.meta&&out.meta.hit&&out.meta.i>=15&&out.meta.i<=40&&st.car&&carIn(false),
+    quiz:{q:'光從水射入空氣時，下列何者正確？（可複選）',opts:['光速變快','折射光偏離法線','折射角比入射角小','入射角愈大，折射光愈靠近水面'],ans:[0,1,3]},
+    explain:'從水進入空氣，先出水的一側先變快，車頭轉離法線，折射角比入射角大。入射角再大一些，折射光會貼近水面，最後發生全反射。'},
+  {id:'rf-s6',title:'車隊變密了',goal:'光源已改成平行光束。打開「小車比喻動畫」和「持續發車」，觀察車隊進入水中後的排列和方向。',
+    carTask:true,
+    hints:['比較空氣中和水中，前後兩台車的距離。','小車在水中變慢，後面的車追上來，距離會怎樣？'],
+    setup:st=>{st.src='beam';st.bw=st.bw??10;st.bn=st.bn??5;st.shape='half';st.top='air';st.bot='water';st.from='top';st.i=40;st.lx=-1;aimRefr(st);st.car=false;st.carCont=false;st.sources=[];},
+    check:({st})=>st.src==='beam'&&st.car&&st.carCont&&carIn(true),
+    quiz:{q:'平行光（車隊）進入水中時，下列何者正確？（可複選）',opts:['前後車的距離變短','整排車隊一起轉向','小車速度變快','每台車轉的角度都相同'],ans:[0,1,3]},
+    explain:'進入水中變慢，前後車距被壓縮，整排車隊同時轉向，而且每台轉的角度都一樣。光進入水中也是這樣：速度變慢、波長變短、方向偏折。'},
+  {id:'rf-s7',title:'調出指定的折射角（挑戰）',goal:'光從空氣射入玻璃。調整入射角，讓折射角等於畫面上的目標角度（誤差 0.5° 以內）。',
+    hints:['想讓折射角變大一點，入射角要調大還是調小？','用入射角滑桿慢慢調，每格 0.5°，看右側的折射角。'],
+    setup:(st,data)=>{st.src='laser';st.shape='half';st.top='air';st.bot='glass';st.from='top';st.i=10;st.lx=-1;aimRefr(st);st.car=false;st.sources=[];data.tgt=15+Math.floor(Math.random()*41)/2;},
+    extra:(st,data)=>({prims:[{t:'label',x:6,y:-20,text:'目標折射角 '+data.tgt.toFixed(1)+'°',c:'#7ee0a0',size:15,align:'left'}],handles:[]}),
+    check:({st,out,data})=>st.top==='air'&&st.bot==='glass'&&st.from==='top'&&st.shape==='half'&&out.meta&&out.meta.r!=null&&Math.abs(out.meta.r-data.tgt)<=0.5,
+    explain:'入射角愈大，折射角愈大；光進入玻璃變慢，所以折射角總是比入射角小。'},
   {id:'rf-1',title:'偏向法線',goal:'讓雷射從空氣斜射入水中，入射角在 40° 以上，觀察折射光往哪邊偏。',
     hints:['上方介質選空氣、下方選水，雷射筆放在上方。','入射角滑桿調到 40° 以上。'],
     setup:st=>{st.src='laser';st.shape='half';st.top='air';st.bot='water';st.from='top';st.i=20;st.lx=-1;aimRefr(st);},
@@ -2138,6 +2187,7 @@ function carsReset(){
   const starts=carStarts();
   const cars=carWave(starts);
   app.cars={hist:[cars],idx:0,base:0,playing:true,sig:carSig(starts),starts,last:0,acc:0,sc:carScale(starts),tEnd:0,next:CAR.EVERY};
+  {const tk=taskOf();if(tk&&acting()&&tk.carHold&&!app.task.chosen)app.cars.playing=false;}
   carLoop(); carBtn();}
 const carWave=starts=>starts.map(([p,d])=>({m:add(p,mul(d,3)),h:d,a:[d[1],-d[0]],phL:0,phR:0,vL:CAR.K,vR:CAR.K,on:true}));
 function carSim(prev){
@@ -2168,14 +2218,16 @@ function carLoop(){
     if(!K||cur().id!=='refraction'||!st.car){carRedraw();return;}
     if(!K.playing){carRedraw();return;}
     const dt=K.last?Math.min(0.1,(now-K.last)/1000):0; K.last=now; K.acc+=dt;
-    const n=Math.min(6,Math.floor(K.acc/CAR.DT)); K.acc-=n*CAR.DT; carAdvance(n);
+    const n=Math.min(6,Math.floor(K.acc/CAR.DT)); K.acc-=n*CAR.DT; carAdvance(n); carTaskCheck();
     carRedraw(); if(K.playing) app.carRaf=requestAnimationFrame(tick); else carBtn();};
   app.carRaf=requestAnimationFrame(tick);}
-function carPlay(){const K=app.cars; if(!K){carsReset();return;}
+function carPlay(){const tk=taskOf(); if(tk&&acting()&&tk.carHold&&!app.task.chosen){toast('先在任務卡選好你的預測，再播放小車');return;}
+  const K=app.cars; if(!K){carsReset();return;}
   if(K.playing){K.playing=false;carBtn();return;}
   const cur=K.hist[K.idx]; if(K.idx>=K.hist.length-1&&!cur.length&&!S().carCont){carsReset();return;}
   K.playing=true; K.last=0; K.acc=0; carLoop(); carBtn();}
-function carStep(dir){const K=app.cars; if(!K) return; K.playing=false; carBtn();
+function carStep(dir){const tk=taskOf(); if(tk&&acting()&&tk.carHold&&!app.task.chosen){toast('先在任務卡選好你的預測，再播放小車');return;}
+  const K=app.cars; if(!K) return; K.playing=false; carBtn(); setTimeout(carTaskCheck,0);
   if(dir<0) K.idx=Math.max(0,K.idx-CAR.STEP); else carAdvance(CAR.STEP); carRedraw();}
 // called after every refresh: (re)start when the light sources change
 function carsEnsure(){
@@ -2183,6 +2235,11 @@ function carsEnsure(){
   if(cur().id!=='refraction'||!st.car){if(app.cars){app.cars=null;}return;}
   const sig=carSig(carStarts());
   if(!app.cars||app.cars.sig!==sig) carsReset(); else if(app.cars.playing) carLoop();}
+function carTaskCheck(){const tk=taskOf(),T=app.task;if(!tk||!tk.carTask||!acting()||app.sliding||gesture||(tk.choices&&!T.chosen))return;
+  let ok=false;try{ok=tk.check({st:S(),out:app.out,data:T.data});}catch(err){} if(ok) actDone();}
+// does any car sit completely in the lower (true) or upper (false) medium?
+function carIn(lower){const K=carNow(),env=app.out&&app.out.carEnv;if(!K||!env)return false;const nTop=MEDIA[S().top].n;
+  return K.hist[K.idx].some(c=>{const rear=sub(c.m,mul(c.h,5*(K.sc||1)));const a=env.nAt(c.m)!==nTop,b=env.nAt(rear)!==nTop;return lower?a&&b:!a&&!b&&K.idx>30;});}
 function carNow(){const K=app.cars; if(!K||cur().id!=='refraction'||!S().car) return null; return K;}
 function drawCar(T){
   const K=carNow(); if(!K) return; const cars=K.hist[K.idx], s=T.s*(K.sc||1);
@@ -2881,7 +2938,7 @@ function saveDone(){try{localStorage.setItem(TASK_KEY,JSON.stringify([...app.don
 function taskOf(){const t=app.task;if(!t||t.sid!==cur().id)return null;return (TASKS[t.sid]||[]).find(x=>x.id===t.id)||null;}
 const acting=()=>!!(app.task&&app.task.phase==='act');
 function lockedTool(id){const tk=taskOf();return !!(tk&&acting()&&tk.lock&&tk.lock.includes(id));}
-function taskHides(k){const tk=taskOf();return !!(tk&&acting()&&tk.hide&&tk.hide.includes(k));}
+function taskHides(k){const tk=taskOf();return !!(tk&&acting()&&tk.hide&&tk.hide.includes(k)&&!(tk.choices&&app.task.chosen));}
 function setTaskOpen(open){app.taskOpen=open;document.getElementById('taskHead').setAttribute('aria-expanded',open?'true':'false');document.getElementById('taskBody').hidden=!open;
   resize();if(app.out){buildHandles();redraw();}}
 document.getElementById('taskHead').onclick=()=>setTaskOpen(!app.taskOpen);
@@ -2904,7 +2961,7 @@ function completeTask(){
   toast('任務完成！'); renderTasks(); requestAnimationFrame(()=>{renderPanel();refresh();pushHist();});
 }
 function chooseTask(k){const t=taskOf();if(!t||!acting())return;
-  if(k===t.answer) actDone(); else{if(!app.task.wrong.includes(k))app.task.wrong.push(k);app.task.msg=t.wrong||'再想想看，回到實驗觀察後再選一次。';renderTasks();}}
+  if(k===t.answer){if(t.check){app.task.chosen=true;app.task.msg=t.afterChoose||'預測正確！';renderTasks();refresh();}else actDone();} else{if(!app.task.wrong.includes(k))app.task.wrong.push(k);app.task.msg=t.wrong||'再想想看，回到實驗觀察後再選一次。';renderTasks();}}
 function submitTask(){const t=taskOf();if(!t||!acting())return;let ok=false;try{ok=t.check({st:S(),out:app.out,data:app.task.data});}catch(err){}
   if(ok) actDone(); else{app.task.msg=t.wrong||'還不對，再試試看。';renderTasks();}}
 function submitQuiz(){const t=taskOf();if(!t||app.task.phase!=='quiz')return;const a=new Set(t.quiz.ans),s=app.task.sel;
@@ -2928,7 +2985,7 @@ function taskAfter(st,b){
   if(T.showAns&&tk.answerPrims){try{app.out.prims.push(...tk.answerPrims(st,T.data,app.out));}catch(err){}}
   // judge only once the student lets go (no drag / drawing / slider in progress)
   const busy=app.sliding||(gesture&&['drag','moveDraw','draw','pinch'].includes(gesture.type));
-  if(acting()&&!busy&&tk.check&&!tk.submit&&!tk.choices){let ok=false;try{ok=tk.check({st,out:app.out,data:T.data});}catch(err){} if(ok) actDone();}
+  if(acting()&&!busy&&tk.check&&!tk.submit&&(!tk.choices||T.chosen)){let ok=false;try{ok=tk.check({st,out:app.out,data:T.data});}catch(err){} if(ok) actDone();}
 }
 function renderTasks(){
   const list=TASKS[cur().id]||[], body=document.getElementById('taskBody'), tk=taskOf();
@@ -2957,11 +3014,11 @@ function renderTasks(){
         B('check','確認答案',submitQuiz,'primary');B('x','結束任務',endTask);
       }else{
         const g=el('p','goal'); g.textContent=t.goal; card.appendChild(g);
-        if(t.choices&&T.phase==='act'){const ch=el('div','choices');t.choices.forEach((c,k)=>{const bt=el('button','btn');bt.type='button';bt.textContent=c;
+        if(t.choices&&T.phase==='act'){const ch=el('div','choices');t.choices.forEach((c,k)=>{const bt=el('button','btn');bt.type='button';bt.textContent=c;if(T.chosen){bt.disabled=true;if(k===t.answer)bt.classList.add('right');}
           if(T.wrong.includes(k))bt.classList.add('wrong');bt.onclick=()=>chooseTask(k);ch.appendChild(bt);});card.appendChild(ch);}
         if(T.phase==='done'&&t.choices){const ch=el('div','choices');t.choices.forEach((c,k)=>{const bt=el('button','btn');bt.type='button';bt.textContent=c;bt.disabled=true;if(k===t.answer)bt.classList.add('right');ch.appendChild(bt);});card.appendChild(ch);}
         if(T.hintN&&t.hints&&T.phase==='act'){const ul=el('ul','hints');t.hints.slice(0,T.hintN).forEach(h=>{const li=el('li');li.textContent=h;ul.appendChild(li);});card.appendChild(ul);}
-        if(T.msg){const m=el('div','msg '+(T.phase==='done'?'ok':'no'));m.textContent=(T.phase==='done'?'完成！':'')+T.msg;card.appendChild(m);}
+        if(T.msg){const m=el('div','msg '+(T.phase==='done'||T.chosen?'ok':'no'));m.textContent=(T.phase==='done'?'完成！':'')+T.msg;card.appendChild(m);}
         if(T.phase==='act'){
           if(t.submit) B('check','送出答案',submitTask,'primary');
           if(t.hints&&t.hints.length) B('hint',T.hintN<t.hints.length?'提示':'提示已全部顯示',()=>{T.hintN=Math.min(t.hints.length,T.hintN+1);renderTasks();},'',T.hintN>=t.hints.length);
@@ -3126,7 +3183,7 @@ window.addEventListener('hashchange',()=>{const i=fromHash();if(i>=0&&i!==app.id
 const hi=fromHash(); app.idx=hi>=0?hi:SCENES.findIndex(s=>s.id==='lens-image');
 buildToolbar(); loadSnaps(); renderSnaps(); renderTasks(); resize(); renderRail(); renderPanel(); reset3DCamera(); setMode('2d');
 if(document.fonts&&document.fonts.ready) document.fonts.ready.then(()=>{if(app.mode==='2d')draw2D();});
-window.__optics={drawFeedback,eyeAxial,traceGeneric,renderPanel,pgAsphK,pgLensGeom,app,SCENES,setMode,selectScene,refresh,imageOf,S,setTool,toWorld,handlePx,startTask,endTask,chooseTask,submitTask,submitQuiz};window.__TASKS=TASKS;window.__aim=aimRefl;window.__aimR=aimRefr;
+window.__optics={carPlay,drawFeedback,eyeAxial,traceGeneric,renderPanel,pgAsphK,pgLensGeom,app,SCENES,setMode,selectScene,refresh,imageOf,S,setTool,toWorld,handlePx,startTask,endTask,chooseTask,submitTask,submitQuiz};window.__TASKS=TASKS;window.__aim=aimRefl;window.__aimR=aimRefr;
 })();
 </script>
 
