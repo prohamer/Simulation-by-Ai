@@ -1,5 +1,5 @@
 <!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
-<title>槓桿力矩實驗台V9</title>
+<title>槓桿力矩實驗台V10</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Noto+Sans+TC:wght@400;500;700&display=swap">
@@ -1047,12 +1047,12 @@ const PROF_KEY='leverProfiles_v1';
 const PR=(()=>{let o=null;try{o=JSON.parse(localStorage.getItem(PROF_KEY)||'null')}catch(_){}
   if(!o||typeof o!=='object')o={};if(!o.profiles)o.profiles={};if(!o.guest)o.guest={stars:{},sec:0};
   if(!o.migrated){try{const old=JSON.parse(localStorage.getItem('leverTasks_v1')||'null');if(old)Object.assign(o.guest.stars,old);o.guest.sec+=(+localStorage.getItem('leverTime_v1')||0)}catch(_){}o.migrated=true}
-  if(o.current&&!o.profiles[o.current])o.current=null;return o})();
+  o.current=null;return o})();
 function hashCode(str){let h=5381;for(const c of str)h=((h<<5)+h+c.codePointAt(0))>>>0;return h.toString(36).toUpperCase().padStart(7,'0').slice(-6)}
 function curProf(){return PR.current?PR.profiles[PR.current]:PR.guest}
 function savePR(){try{localStorage.setItem(PROF_KEY,JSON.stringify(PR))}catch(_){}}
 function maskName(n){const a=[...n];if(a.length<=1)return'○';if(a.length===2)return a[0]+'○';return a[0]+'○'.repeat(a.length-2)+a[a.length-1]}
-function useProfile(name){PR.current=name;if(name){PR.profiles[name].updated=Date.now()}tkStore=curProf().stars;savePR();renderTask()}
+function useProfile(name){TK.skipMerge=false;PR.current=name;if(name){PR.profiles[name].updated=Date.now()}tkStore=curProf().stars;savePR();renderTask()}
 function countDone(st){let d=0,t=0;TASKS.forEach(x=>(x.type==='A'?x.steps.map((_,i)=>x.id+'.'+i):[x.id]).forEach(k=>{t++;if(st[k])d++}));return[d,t]}
 function b64e(str){let b='';new TextEncoder().encode(str).forEach(c=>b+=String.fromCharCode(c));return btoa(b)}
 function b64d(b){return new TextDecoder().decode(Uint8Array.from(atob(b),c=>c.charCodeAt(0)))}
@@ -1061,11 +1061,14 @@ function parseCode(code){const m=/^LV1-([A-Za-z0-9+/=]+)-([0-9A-Z]{6})$/.exec(co
   let j;try{j=b64d(m[1])}catch(_){return null}if(hashCode('lever|'+j)!==m[2])return null;try{const o=JSON.parse(j);return o&&o.n&&o.s?o:null}catch(_){return null}}
 function fmtDT(d){const z=n=>String(n).padStart(2,'0');return`${d.getFullYear()}/${z(d.getMonth()+1)}/${z(d.getDate())} ${z(d.getHours())}:${z(d.getMinutes())}:${z(d.getSeconds())}`}
 function modal(id){let m=$('#'+id);if(!m){m=document.createElement('div');m.id=id;m.className='certm';document.body.appendChild(m);m.addEventListener('click',e=>{if(e.target===m)m.hidden=true})}m.hidden=false;return m}
+function guestHas(){return Object.keys(PR.guest.stars||{}).length>0}
+function mergeGuest(n){const p=PR.profiles[n],g=PR.guest;Object.entries(g.stars).forEach(([k,v])=>{if(!p.stars[k]||v<p.stars[k])p.stars[k]=v});p.sec=(p.sec||0)+(g.sec||0);PR.guest={stars:{},sec:0};tkStore=curProf().stars;savePR();renderTask()}
 function openRecords(msg){const m=modal('recModal'),cur=PR.current,names=Object.keys(PR.profiles);
   const list=names.length?names.map(n=>{const[d,t]=countDone(PR.profiles[n].stars),u=PR.profiles[n].updated?new Date(PR.profiles[n].updated):null;
     return`<li class="recli"><span class="recn">${esc(maskName(n))}${n===cur?'（目前）':''}</span><span class="recm">完成 ${d}/${t}${u?`　${u.getMonth()+1}/${u.getDate()}`:''}</span><button class="btn sm danger" data-rec="askdel" data-n="${esc(n)}">清除</button></li>`}).join(''):'<li class="tk-intro">這台裝置還沒有任何紀錄。</li>';
   m.innerHTML=`<div class="certbox" role="dialog" aria-label="紀錄管理"><div class="certhead"><b>紀錄管理</b><button data-rec="close" aria-label="關閉">×</button></div>
     ${msg?`<p class="tk-msg ${msg.ok?'ok':'warn'}">${msg.t}</p>`:''}
+    ${cur&&guestHas()&&!TK.skipMerge?(()=>{const[d]=countDone(PR.guest.stars);return`<div class="tk-msg tip"><b>訪客區有 ${d} 項進度。</b>要把訪客的進度併入 ${esc(cur)} 的紀錄嗎？每一項會保留比較好的星等，學習時間也會加進去，訪客區隨後清空。<div class="certrow" style="margin-top:6px"><button class="btn sm primary" data-rec="merge">併入</button><button class="btn sm" data-rec="nomerge">不要</button></div></div>`})():''}
     <p class="tk-todo">${cur?`目前開啟的是 <b>${esc(cur)}</b> 的紀錄。開啟後姓名不能修改。`:'目前是<b>訪客</b>，進度只存在這台裝置的訪客區。開啟自己的紀錄，進度和證書才會用你的姓名。'}</p>
     <div class="recsec"><b>開啟或建立紀錄</b><p class="tk-intro">輸入完整姓名就能開啟；這台裝置沒有這個姓名時，會建立新紀錄。</p>
       <div class="certrow"><input id="recName" class="tx" maxlength="20" placeholder="輸入完整姓名"><button class="btn primary" data-rec="open">開啟紀錄</button>${cur?'<button class="btn sm" data-rec="logout">關閉紀錄（回到訪客）</button>':''}</div></div>
@@ -1080,6 +1083,8 @@ function openRecords(msg){const m=modal('recModal'),cur=PR.current,names=Object.
     if(a==='close'){m.hidden=true;renderTask()}
     else if(a==='open'){const n=$('#recName').value.trim();if(!n){openRecords({t:'請輸入姓名。'});return}
       const isNew=!PR.profiles[n];if(isNew)PR.profiles[n]={stars:{},sec:0,created:Date.now()};useProfile(n);openRecords({ok:true,t:isNew?`已建立並開啟 ${esc(n)} 的紀錄。`:`已開啟 ${esc(n)} 的紀錄。`})}
+    else if(a==='merge'){const[d]=countDone(PR.guest.stars);mergeGuest(PR.current);openRecords({ok:true,t:`已把訪客的 ${d} 項進度併入 ${esc(PR.current)} 的紀錄。`})}
+    else if(a==='nomerge'){TK.skipMerge=true;openRecords({ok:true,t:'訪客的進度保留在訪客區。'})}
     else if(a==='logout'){useProfile(null);openRecords({ok:true,t:'已關閉紀錄，回到訪客。'})}
     else if(a==='askdel'){const n=b.dataset.n;$('#recDel').innerHTML=`<div class="certrow"><span class="tk-intro">清除 ${esc(maskName(n))}：</span><input id="recDelName" class="tx" placeholder="輸入完整姓名確認"><button class="btn sm danger" data-rec="del" data-n="${esc(n)}">確認清除</button></div>`;$('#recDelName').addEventListener('keydown',e=>e.stopPropagation());$('#recDelName').focus()}
     else if(a==='del'){const n=b.dataset.n;if($('#recDelName').value.trim()!==n){openRecords({t:'姓名不符，沒有清除。'});return}delete PR.profiles[n];if(PR.current===n){PR.current=null;tkStore=curProf().stars}savePR();renderTask();openRecords({ok:true,t:'已清除這份紀錄。'})}
@@ -1516,6 +1521,7 @@ function toolBtns(tools){const lk=predLocked()?' disabled':'';return'<div class=
 function renderTask(){const box=$('#taskPane');if(!box)return;
   if(!TK.on){const item=(t,sub,stars)=>{const has=taskKeys(t).some(k=>tkStore[k]);return`<div class="tk-row"><button class="tk-item" data-tk="start" data-id="${t.id}"><span class="tk-id">${t.id}</span><span class="tk-tt"><b>${t.title}</b>${sub?`<small>${sub}</small>`:''}</span><span class="tk-stars">${stars}</span></button>${has?`<button class="btn sm tk-redo" data-tk="askreset" data-id="${t.id}">${TK.askReset===t.id?'確定清除並重來？':'重新挑戰'}</button>`:''}</div>`};
     box.innerHTML=`<div class="tk-rec"><span>${PR.current?`紀錄：<b>${esc(PR.current)}</b>`:'訪客（未開啟紀錄）'}</span><span style="display:flex;gap:6px"><button class="btn sm" data-tk="records">紀錄管理</button><button class="btn sm primary" data-tk="cert">我的證書</button></span></div>
+    ${PR.current?'':'<p class="tk-msg warn">目前是訪客，闖關前請先按『紀錄管理』輸入姓名、建立或開啟自己的紀錄，進度和證書才會記在你的名下。</p>'}
     <p class="tk-intro">先做探究卡建立概念，再用挑戰卡檢驗自己有沒有學會。進入任務後，畫面會換成任務的場景。</p>
     <p class="tk-h">探究步驟卡</p>${TASKS.filter(t=>t.type==='A').map(t=>item(t,t.steps.length+' 個步驟',t.steps.map((_,i)=>starHTML(t.id+'.'+i)).join(''))).join('')}
     <p class="tk-h">挑戰任務卡</p>${TASKS.filter(t=>t.type==='B').map(t=>item(t,'',starHTML(t.id))).join('')}
