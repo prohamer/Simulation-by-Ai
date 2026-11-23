@@ -1,5 +1,5 @@
 <!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
-<title>槓桿力矩實驗台</title>
+<title>槓桿力矩實驗台V2</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Noto+Sans+TC:wght@400;500;700&display=swap">
@@ -209,6 +209,7 @@ details.adv h3{font-size:13px;margin:14px 0 6px;color:var(--ink)}
         <button data-tool-btn="draw" aria-pressed="false">畫力</button>
       </div>
       <button class="btn tog" id="snapBtn" aria-pressed="true">吸附：開</button>
+      <button class="btn tog" id="lockBtn" aria-pressed="false" title="拖曳力的端點時只改變方向，大小不變">鎖定大小：關</button>
       <button class="btn tog" id="annBtn" aria-pressed="false">標註工具</button>
       <button class="btn tog" id="panelBtn" aria-pressed="true">設定面板</button>
     </div>
@@ -334,7 +335,7 @@ const defAdv=()=>({formula:false,cross:false,unit:'gw',perGrid:10,grid:5,rodSnap
 
 const S={mode:'torque',tool:'select',snap:true,rod:{L:80,pivotPos:40,theta:0},forces:[],selected:null,open:new Set(),
   show:{torque:false,net:false,arm:false,comp:false,equiv:false},adv:defAdv(),
-  sim:{running:false,omega:0,saved:null},anim:{t:2,playing:false},drag:null,dragInfo:null,ptype:'mouse',ann:[],annOpen:false,annTool:'pen',annColor:'f1',annW:4};
+  sim:{running:false,omega:0,saved:null},anim:{t:2,playing:false},drag:null,dragInfo:null,ptype:'mouse',lockMag:false,ann:[],annOpen:false,annTool:'pen',annColor:'f1',annW:4};
 let annIdc=1;
 const V={zoom:1,px:0,py:0};let baseK=7;const PTRS=new Map();let pinch=null;
 let K=7,CX=400,CY=250,W=800,H=500,idc=1;
@@ -609,7 +610,7 @@ function dragOverlay(){const di=S.dragInfo;let A,abs,tip,mag;
   const R=34,n=Math.max(4,Math.ceil(rel/5));let d='';for(let i=0;i<=n;i++){const a=rad(th+rel*i/n);d+=(i?'L':'M')+f1(ax+R*Math.cos(a))+','+f1(ay-R*Math.sin(a))}
   s+=`<path d="${d}" style="fill:none;stroke:var(--accent);stroke-width:2px"/>`;
   const ma=rad(th+rel/2);s+=txt(ax+(R+20)*Math.cos(ma),ay-(R+20)*Math.sin(ma),`${ff(rel)}°`,'var(--accent)',{cls:'mono'});
-  s+=txt(X(tip.x)+16,Y(tip.y)-18,`${ff(mag)} ${U().f}${di.snapped?' · 吸附':''}`,'var(--accent)',{cls:'sm',anchor:'start'});
+  s+=txt(X(tip.x)+16,Y(tip.y)-18,`${ff(mag)} ${U().f}${S.lockMag&&di.f!=null?' · 大小已鎖定':''}${di.snapped?' · 吸附':''}`,'var(--accent)',{cls:'sm',anchor:'start'});
   return s}
 function updateChrome(){const nt=netTau(),st=tauState(nt),uu=U();
   let h=`<div class="ro-l">合力矩</div><div class="ro-v">${ft(Math.abs(nt))} <span>${uu.t}</span></div><div class="pill ${st.cls}">${st.long}</div>`;
@@ -852,11 +853,12 @@ function moveHandle(d,p,thr){const f=byId(d.id);if(!f)return;const e=fEnds(f);
     if(s!==null){f.s=snapS(s);S.dragInfo={f:f.id,snapped:true};return}
     const abs=fAbs(f),dv=dirV(abs),L=fLen(f);f.attached=false;f.abs=abs;
     if(d.which==='tail'){f.x=p.x;f.y=p.y}else{f.x=p.x-dv.x*L;f.y=p.y-dv.y*L}S.dragInfo={f:f.id};return}
-  const fixed=d.which==='tail'?e.H:e.T;let q=null,snapped=false;
-  if(!f.attached){const s=nearRod(p,thr);if(s!==null){q=rodPt(snapS(s));snapped=true}}
+  const fixed=d.which==='tail'?e.H:e.T;let q=null,snapped=false;const m0=f.mag;
+  if(!f.attached&&!S.lockMag){const s=nearRod(p,thr);if(s!==null){q=rodPt(snapS(s));snapped=true}}
   if(!q){const r=snapFree(p,fixed);q=r.p;snapped=r.snapped}
+  if(S.lockMag){const L=fLen(f),v={x:q.x-fixed.x,y:q.y-fixed.y},m=Math.hypot(v.x,v.y);if(m>1e-6)q={x:fixed.x+v.x/m*L,y:fixed.y+v.y/m*L}}
   const T=d.which==='tail'?q:fixed,Hh=d.which==='head'?q:fixed;
-  setFromEnds(f,T,Hh,f.attached?f.end:d.which);S.dragInfo={f:f.id,snapped}}
+  setFromEnds(f,T,Hh,f.attached?f.end:d.which);if(S.lockMag)f.mag=m0;S.dragInfo={f:f.id,snapped}}
 function moveBody(d,p,thr){const f=byId(d.id);if(!f)return;const dx=p.x-d.p0.x,dy=p.y-d.p0.y;
   if(d.wasAttached){const np={x:d.P0.x+dx,y:d.P0.y+dy},s=nearRod(np,thr*1.5);
     if(s!==null){if(!f.attached){f.attached=true;f.end=d.end;f.rel=norm(d.abs-S.rod.theta)}f.s=snapS(s);return}
@@ -922,6 +924,7 @@ $$('[data-aw]').forEach(b=>b.addEventListener('click',()=>{S.annW=+b.dataset.aw;
 $('#annClear').addEventListener('click',()=>{if(!S.ann.length)return;S.ann=[];render();commit()});
 $('#undoBtn').addEventListener('click',undo);$('#redoBtn').addEventListener('click',redo);
 $('#snapBtn').addEventListener('click',e=>{S.snap=!S.snap;e.currentTarget.setAttribute('aria-pressed',S.snap);e.currentTarget.textContent=S.snap?'吸附：開':'吸附：關'});
+$('#lockBtn').addEventListener('click',e=>{S.lockMag=!S.lockMag;e.currentTarget.setAttribute('aria-pressed',S.lockMag);e.currentTarget.textContent=S.lockMag?'鎖定大小：開':'鎖定大小：關'});
 $('#relBtn').addEventListener('click',()=>{if(S.sim.running){pauseSim();render();syncPanel();commit();return}
   if(!S.sim.saved)S.sim.saved={theta:S.rod.theta,rels:S.forces.map(f=>[f.id,f.rel])};S.sim.running=true;S.sim.omega=0;kick();render()});
 $('#resetBtn').addEventListener('click',()=>{pauseSim();const sv=S.sim.saved;
