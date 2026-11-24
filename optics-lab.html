@@ -1,5 +1,4 @@
-<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
-<title>光學實驗台V16</title>
+<title>光學實驗台V17</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
@@ -130,6 +129,8 @@ button,select,input{font:inherit;color:inherit}
 .tcard:not(.active) .goal{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .tcard .hints{margin:0;padding-left:18px;font-size:12.5px;color:var(--ink-2)}
 [hidden]{display:none!important}
+.pngmenu{position:fixed;z-index:60;width:240px;display:flex;flex-direction:column;gap:8px;padding:12px;border-radius:12px;background:var(--surface);color:var(--ink);border:1px solid var(--line);box-shadow:0 10px 30px rgba(0,0,0,.25)}
+.pngmenu .pm-t{font-weight:700;font-size:14px}.pngmenu .pm-n{margin:0;font-size:12px;opacity:.75;line-height:1.5}.pngmenu .btn{justify-content:center}
 .selnote{font-weight:700;font-size:13px;padding:8px 10px;border-radius:8px;background:color-mix(in srgb,var(--accent,#2aa198) 14%,transparent)}
 .frozenbox{position:relative}.frozennote{display:flex;gap:8px;align-items:center;font-size:12.5px;color:var(--warn);background:color-mix(in srgb,var(--warn) 12%,transparent);border-radius:8px;padding:7px 10px;margin:0 0 10px}
 .frozennote svg{width:16px;height:16px;flex:none;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}.frozenctl{opacity:.45;pointer-events:none;filter:grayscale(.4)}.frozenbox.hidevals output{visibility:hidden}
@@ -2101,6 +2102,7 @@ const ICON={
   undo:'<path d="M7 4L3 8l4 4"/><path d="M3 8h9a4.5 4.5 0 010 9H8"/>',
   clear:'<path d="M8 17h9"/><path d="M3.5 12.5l7-7a1.5 1.5 0 012 0l3 3a1.5 1.5 0 010 2L10 16H6.5z"/><path d="M7 9l5 5"/>',
   snap:'<path d="M3 6.5h3l1.5-2h5L14 6.5h3v10H3z"/><circle cx="10" cy="11.5" r="3"/>',
+  png:'<rect x="3" y="3.5" width="14" height="13" rx="1.5"/><circle cx="7.5" cy="8" r="1.4"/><path d="M3.5 15l4.5-4.5 3 3 2-2 3.5 3.5"/>',
   fold:'<path d="M12 4l-6 6 6 6"/>',
   redo:'<path d="M13 4l4 4-4 4"/><path d="M17 8H8a4.5 4.5 0 000 9h4"/>',
   import:'<path d="M10 3v10M6 9l4 4 4-4"/><path d="M3 14v3h14v-3"/>',
@@ -2121,7 +2123,7 @@ const TOOLBAR=[
   [['point','mode','自訂發光點：點畫面放置'],['laser','mode','自訂光線（雷射）：點畫面放置'],['beam','mode','平行光源：點畫面放置'],['delete','action','刪除選取的光源或繪圖　Delete']],
   [['top','toggle','頂端光線'],['bottom','toggle','底部光線'],['r1','toggle','平行主軸光線'],['r2','toggle','穿過鏡心光線'],['r3','toggle','通過焦點光線'],['image','toggle','成像'],['screen','toggle','屏幕'],['eye','toggle','觀察者眼睛']],
   [['pen','mode','畫筆'],['line','mode','手繪光線（拖曳畫出箭頭）'],['ruler','mode','量尺（拖曳量距離）'],['color','action','畫筆顏色（點一下換色）'],['clear','action','清除所有繪圖']],
-  [['undo','action','復原　Ctrl+Z'],['redo','action','重做　Ctrl+Shift+Z'],['snap','action','儲存情境快照']]
+  [['undo','action','復原　Ctrl+Z'],['redo','action','重做　Ctrl+Shift+Z'],['snap','action','儲存情境快照'],['png','action','匯出畫面為 PNG 圖片']]
 ];
 const tbtns={};
 function buildToolbar(){
@@ -2159,6 +2161,7 @@ function toolClick(id,kind){
   else if(id==='clear'){st.draw=[];if(String(app.selObj||'').startsWith('d')){app.selObj=null;renderPanel();}commit();}
   else if(id==='color'){app.color=DRAW_COLORS[(DRAW_COLORS.indexOf(app.color)+1)%DRAW_COLORS.length];const d=selDraw();if(d){d.c=app.color;renderPanel();commit();}else updateToolbar();}
   else if(id==='snap') saveSnapshot();
+  else if(id==='png') pngMenu();
   else if(id==='fold'){const f=els.tools.classList.toggle('folded');const t=f?'展開工具列':'收合工具列';tbtns.fold.tip=t;tbtns.fold.bt.querySelector('.tip').textContent=t;tbtns.fold.bt.setAttribute('aria-label',t);}
 }
 function setTool(t){app.tool=t;updateToolbar();setHint();const cvs=[els.cv2,els.cv3];cvs.forEach(c=>c.style.cursor=t==='select'?'default':'crosshair');}
@@ -2372,8 +2375,8 @@ function resize(){const r=els.stage.getBoundingClientRect();DPR=Math.min(window.
 const ORDER={fill:0,medium:1,cup:1,prism:2,axis:2,line:3,eyeball:3,arc:4,lens:5,mirror:5,plate:5,block:5,screen:5,ray:6,blurArrow:7,stick:7,coin:8,arrowObj:8,laser:9,lamp:9,lampBar:9,beamSrc:9,eye:9,point:10,mark:10,label:11};
 function draw2D(){
   const out=app.out, T=makeT();
-  ctx.setTransform(DPR,0,0,DPR,0,0); ctx.fillStyle=C.bg; ctx.fillRect(0,0,W,Hh);
-  drawGrid(T);
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  if(app.pngClear) ctx.clearRect(0,0,W,Hh); else{ctx.fillStyle=C.bg; ctx.fillRect(0,0,W,Hh); drawGrid(T);}
   if(out.custom==='mix') drawMix(T); else if(out.custom==='object') drawObjects(T);
   const prims=[...out.prims].sort((a,b2)=>(ORDER[a.t]??5)-(ORDER[b2.t]??5));
   for(const p of prims) drawPrim(p,T);
@@ -2583,7 +2586,7 @@ const T3={ok:false,orb:null,hm:[]};
 function ensure3D(){
   if(T3.ok) return true; if(!window.THREE) return false;
   try{
-    const R=new THREE.WebGLRenderer({canvas:els.cv3,antialias:true});R.setPixelRatio(Math.min(window.devicePixelRatio||1,2));R.setSize(W,Hh,false);
+    const R=new THREE.WebGLRenderer({canvas:els.cv3,antialias:true,alpha:true});R.setPixelRatio(Math.min(window.devicePixelRatio||1,2));R.setSize(W,Hh,false);
     T3.r=R;T3.scene=new THREE.Scene();T3.scene.background=new THREE.Color(0x070b12);
     T3.cam=new THREE.PerspectiveCamera(38,1,0.5,3000);T3.root=new THREE.Group();T3.scene.add(T3.root);
     T3.amb=new THREE.AmbientLight(0xffffff,0.55);T3.dir=new THREE.DirectionalLight(0xffffff,0.75);T3.dir.position.set(40,90,70);
@@ -2866,6 +2869,43 @@ function stamp(d=new Date()){const p=n=>String(n).padStart(2,'0');return `${d.ge
 let toastT=null;
 function toast(msg,undo){const t=document.getElementById('toast'),b=document.getElementById('toastUndo');document.getElementById('toastMsg').textContent=msg;
   b.hidden=!undo;b.onclick=()=>{t.hidden=true;if(undo)undo();};t.hidden=false;clearTimeout(toastT);toastT=setTimeout(()=>{t.hidden=true;},undo?6000:2600);}
+// save a generated file: downloads capability → share sheet (iPad) → browser download
+async function saveBlob(name,blob,okMsg){
+  if(DL){try{await DL.save({filename:name,data:blob});toast(okMsg);return true;}catch(err){const c=err&&err.code;if(c==='declined')return false;if(c==='rate_limited'){toast('上一個儲存視窗還沒關閉，請稍後再試');return false;}}}
+  try{const f=new File([blob],name,{type:blob.type});if(navigator.canShare&&navigator.canShare({files:[f]})){await navigator.share({files:[f],title:name});return true;}}catch(err){if(err&&err.name==='AbortError')return false;}
+  try{const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),4000);toast(okMsg);return true;}
+  catch(err){toast('這個檢視不允許直接下載');return false;}}
+// export the stage (2D or 3D, without handles) as a PNG with a caption strip
+// small chooser under the toolbar button: dark background with caption, or transparent background
+function pngMenu(){
+  let m=document.getElementById('pngMenu');
+  if(m){m.remove();return;}
+  m=document.createElement('div');m.id='pngMenu';m.className='pngmenu';
+  m.innerHTML='<div class="pm-t">匯出 PNG 圖片</div><button class="btn primary" data-k="0">深色背景（含說明列）</button><button class="btn" data-k="1">透明背景</button><p class="pm-n">透明背景會去掉黑底和網格，方便疊在簡報或學習單上；文字和光線是亮色，放在白底上請注意對比。</p>';
+  const bt=tbtns.png&&tbtns.png.bt, r=bt?bt.getBoundingClientRect():{right:80,top:80};
+  m.style.left=Math.round(r.right+8)+'px';m.style.top=Math.round(Math.max(8,Math.min(r.top-40,innerHeight-220)))+'px';
+  m.querySelectorAll('button').forEach(b=>b.onclick=()=>{m.remove();exportPNG(b.dataset.k==='1');});
+  document.body.appendChild(m);
+  setTimeout(()=>document.addEventListener('pointerdown',function off(e){if(!m.contains(e.target)&&!(bt&&bt.contains(e.target))){m.remove();}if(!document.body.contains(m))document.removeEventListener('pointerdown',off,true);},true),0);}
+async function exportPNG(clear=false){
+  let c=null;
+  app.capturing=true; app.pngClear=clear;
+  const bg3=T3.ok?T3.scene.background:null; if(clear&&T3.ok){T3.scene.background=null;T3.r.setClearColor(0x000000,0);}
+  try{redraw();const src=app.mode==='2d'?els.cv2:els.cv3,w=src.width,h=src.height,fh=clear?0:Math.round(34*DPR);
+    c=document.createElement('canvas');c.width=w;c.height=h+fh;const g=c.getContext('2d');
+    if(!clear){g.fillStyle=C.bg;g.fillRect(0,0,w,h+fh);}g.drawImage(src,0,0);
+    if(!clear){
+    g.fillStyle='#0e141d';g.fillRect(0,h,w,fh);g.fillStyle='#c9d6e8';g.font=`${Math.round(13*DPR)}px "Noto Sans TC",sans-serif`;g.textBaseline='middle';
+    const d=new Date(),p=n=>String(n).padStart(2,'0');
+    g.fillText('光學實驗台　'+cur().ch+' '+cur().name+(app.mode==='3d'?'（3D）':''),Math.round(12*DPR),h+fh/2);
+    g.textAlign='right';g.fillStyle='#7f90a8';g.fillText(`${d.getFullYear()}/${p(d.getMonth()+1)}/${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`,w-Math.round(12*DPR),h+fh/2);}}
+  catch(err){c=null;}
+  if(T3.ok&&clear){T3.scene.background=bg3;T3.r.setClearColor(0x000000,1);}
+  app.capturing=false; app.pngClear=false; redraw();
+  if(!c){toast('無法匯出圖片');return;}
+  const blob=await new Promise(r=>c.toBlob(r,'image/png'));
+  if(!blob){toast('無法匯出圖片');return;}
+  await saveBlob('光學實驗台-'+cur().name+(clear?'-透明':'')+'-'+stamp()+'.png',blob,clear?'已匯出透明背景的 PNG 圖片':'已匯出 PNG 圖片');}
 function captureThumb(){
   let url=null; app.capturing=true;
   try{redraw();const src=app.mode==='2d'?els.cv2:els.cv3;const c=document.createElement('canvas'),w=240,h=Math.max(1,Math.round(240*src.height/Math.max(src.width,1)));
@@ -3220,5 +3260,3 @@ if(document.fonts&&document.fonts.ready) document.fonts.ready.then(()=>{if(app.m
 window.__optics={carPlay,drawFeedback,eyeAxial,traceGeneric,renderPanel,pgAsphK,pgLensGeom,app,SCENES,setMode,selectScene,refresh,imageOf,S,setTool,toWorld,handlePx,startTask,endTask,chooseTask,submitTask,submitQuiz};window.__TASKS=TASKS;window.__aim=aimRefl;window.__aimR=aimRefr;
 })();
 </script>
-
-</body></html>
