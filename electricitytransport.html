@@ -1,0 +1,3771 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>台電電力系統架構與電磁感應互動模擬 (3D 空間版)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Inter', 'Noto Sans TC', sans-serif;
+      background-color: #0b1120;
+      color: #e2e8f0;
+      overflow-x: hidden;
+    }
+    .font-mono-num {
+      font-family: 'JetBrains Mono', monospace;
+      font-variant-numeric: tabular-nums;
+    }
+    input[type="range"] {
+      -webkit-appearance: none;
+      background: transparent;
+      cursor: pointer;
+    }
+    input[type="range"]::-webkit-slider-runnable-track {
+      height: 6px;
+      border-radius: 999px;
+      background: #1e293b;
+      border: 1px solid #334155;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      height: 16px;
+      width: 16px;
+      border-radius: 50%;
+      background: #38bdf8;
+      border: 2px solid #0f172a;
+      margin-top: -6px;
+      box-shadow: 0 0 8px rgba(56, 189, 248, 0.6);
+    }
+    .canvas-container {
+      position: relative;
+      width: 100%;
+      border-radius: 0.75rem;
+      overflow: hidden;
+      background: radial-gradient(circle at 50% 25%, #131c31 0%, #090d16 100%);
+      border: 1px solid #1e293b;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      touch-action: none;
+    }
+    .collapsible-arrow {
+      transition: transform 0.2s ease;
+    }
+    .collapsible-collapsed .collapsible-arrow {
+      transform: rotate(-90deg);
+    }
+    .collapsible-collapsed .collapsible-body {
+      display: none;
+    }
+    #right-sidebar {
+      transition: width 0.25s ease, min-width 0.25s ease;
+    }
+    #right-sidebar.sidebar-collapsed {
+      width: 44px;
+      min-width: 44px;
+    }
+    #right-sidebar.sidebar-collapsed .sidebar-content {
+      display: none;
+    }
+    .label-3d {
+      position: absolute;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      user-select: none;
+      white-space: nowrap;
+      text-shadow: 0 2px 4px rgba(0, 0, 0, 0.9);
+      transition: opacity 0.15s ease;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+  <!-- ==================== 頂部全域導航與系統能源儀表板 ==================== -->
+  <header class="bg-slate-900/95 border-b border-slate-800 sticky top-0 z-30 backdrop-blur-md">
+    <div class="max-w-[1600px] mx-auto px-3 sm:px-5 py-2">
+      <div class="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-800/80">
+        <div class="flex items-center gap-2.5">
+          <div class="w-8 h-8 rounded-lg bg-sky-500/20 border border-sky-400/40 flex items-center justify-center text-sky-400 font-bold">
+            🧊
+          </div>
+          <div>
+            <h1 class="text-sm sm:text-base font-bold text-slate-100 tracking-wide">台電電力系統架構與電磁感應模擬 (3D 空間版)</h1>
+            <p class="text-[11px] text-slate-400 hidden sm:block">3D 立體拓撲與成對繞組結構 · 拖曳旋轉視角 · 滾輪縮放 · 點擊 3D 設備互動</p>
+          </div>
+        </div>
+
+        <nav class="flex flex-wrap items-center gap-1.5" id="nav-tabs">
+          <button data-tab="panorama" class="tab-btn px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all bg-sky-500 text-slate-950 font-bold shadow-lg shadow-sky-500/25">
+            🌐 3D 台電系統全景
+          </button>
+          <button data-tab="gen" class="tab-btn px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all bg-slate-800 text-slate-300 hover:bg-slate-700">
+            1. 3D 發電機繞組與波形
+          </button>
+          <button data-tab="trans" class="tab-btn px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all bg-slate-800 text-slate-300 hover:bg-slate-700">
+            2. 多級變電與線損分析
+          </button>
+          <button data-tab="home" class="tab-btn px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all bg-slate-800 text-slate-300 hover:bg-slate-700">
+            3. 家庭單相三線配電
+          </button>
+        </nav>
+      </div>
+
+      <!-- 全域即時能源流儀表板 -->
+      <div class="grid grid-cols-2 sm:grid-cols-5 gap-2 pt-2 text-xs">
+        <div class="bg-slate-950/70 border border-slate-800 rounded-lg px-3 py-1">
+          <div class="text-slate-400 text-[10px]">① 一次能源總輸入</div>
+          <div class="font-mono-num text-sm font-bold text-amber-400" id="hud-input-power">1000.0 MW</div>
+          <div class="text-[10px] text-slate-500" id="hud-gen-type-label">火力發電 (2極蒸汽渦輪)</div>
+        </div>
+
+        <div class="bg-slate-950/70 border border-slate-800 rounded-lg px-3 py-1">
+          <div class="text-slate-400 text-[10px]">② 發電轉換率 / 輸出</div>
+          <div class="font-mono-num text-sm font-bold text-emerald-400">
+            <span id="hud-gen-eff">40%</span> · <span id="hud-gen-out">400.0 MW</span>
+          </div>
+          <div class="text-[10px] text-slate-500" id="hud-gen-freq">電網頻率: 60.0 Hz</div>
+        </div>
+
+        <div class="bg-slate-950/70 border border-slate-800 rounded-lg px-3 py-1">
+          <div class="text-slate-400 text-[10px]">③ 輸配電熱耗損 (I²R)</div>
+          <div class="font-mono-num text-sm font-bold text-rose-400" id="hud-line-loss">2.1 MW (1.1%)</div>
+          <div class="text-[10px] text-slate-500" id="hud-line-params">345→161→11.4kV</div>
+        </div>
+
+        <div class="bg-slate-950/70 border border-slate-800 rounded-lg px-3 py-1">
+          <div class="text-slate-400 text-[10px]">④ 工業與低壓總負載</div>
+          <div class="font-mono-num text-sm font-bold text-sky-400" id="hud-community-demand">60.0 MW</div>
+          <div class="text-[10px] text-slate-500" id="hud-home-kw">低壓用戶示範: 0.30 kW</div>
+        </div>
+
+        <div class="col-span-2 sm:col-span-1 bg-slate-950/70 border border-slate-800 rounded-lg px-3 py-1">
+          <div class="text-slate-400 text-[10px]">⑤ 全網端到端總效率</div>
+          <div class="font-mono-num text-sm font-bold text-purple-400" id="hud-total-eff">39.5%</div>
+          <div class="text-[10px]" id="hud-grid-status">
+            <span class="text-emerald-400">● 供電穩定 (三段系統正常)</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ==================== 主工作區：左側 3D/2D 主舞台 + 右側整合可收合工具列 ==================== -->
+  <div class="flex-1 max-w-[1600px] w-full mx-auto px-3 sm:px-5 py-3 flex flex-col lg:flex-row gap-3 items-stretch">
+
+    <main class="flex-1 min-w-0 flex flex-col gap-3">
+      <div id="system-banner" class="hidden rounded-xl px-4 py-2 text-xs font-medium border flex items-center justify-between gap-3">
+        <span id="system-banner-text"></span>
+        <button onclick="document.getElementById('system-banner').classList.add('hidden')" class="px-2 py-0.5 rounded bg-white/10 hover:bg-white/20 text-xs">關閉</button>
+      </div>
+
+      <!-- VIEW 0: 3D 台電三段式電力系統全景拓撲 -->
+      <section id="view-panorama" class="view-section flex-1 flex flex-col">
+        <div class="canvas-container flex-1 min-h-[540px] sm:min-h-[620px] shadow-2xl" id="wrap-panorama-3d">
+          <canvas id="canvas-panorama-3d"></canvas>
+          <div id="labels-panorama-3d" class="absolute inset-0 pointer-events-none overflow-hidden"></div>
+          <div class="absolute top-3 left-3 flex flex-wrap gap-1.5 z-10">
+            <button onclick="setPanoCameraPreset('iso')" class="px-2.5 py-1 rounded-lg bg-slate-900/85 hover:bg-sky-500 hover:text-slate-950 border border-slate-700 text-xs font-medium backdrop-blur">
+              🎥 3D 立體斜角
+            </button>
+            <button onclick="setPanoCameraPreset('top')" class="px-2.5 py-1 rounded-lg bg-slate-900/85 hover:bg-sky-500 hover:text-slate-950 border border-slate-700 text-xs font-medium backdrop-blur">
+              🗺️ 俯視拓撲圖
+            </button>
+            <button onclick="setPanoCameraPreset('low')" class="px-2.5 py-1 rounded-lg bg-slate-900/85 hover:bg-sky-500 hover:text-slate-950 border border-slate-700 text-xs font-medium backdrop-blur">
+              🗼 鐵塔平視角
+            </button>
+          </div>
+          <div class="absolute bottom-3 left-3 bg-slate-900/80 border border-slate-800 rounded-lg px-3 py-1.5 text-[11px] text-slate-300 backdrop-blur pointer-events-none">
+            🖱️ 左鍵拖曳旋轉 · 滾輪縮放 · 點擊 3D 發電廠進入機組內部 · 點擊變電所切換參數
+          </div>
+        </div>
+      </section>
+
+      <!-- VIEW 1: 模組 1 - 3D 擬真發電機成對繞組與三相示波器 -->
+      <section id="view-gen" class="view-section hidden flex-1 flex flex-col gap-3">
+        <div class="grid grid-cols-1 xl:grid-cols-2 gap-3 flex-1">
+          <div class="canvas-container min-h-[380px] sm:min-h-[480px]" id="wrap-gen-3d">
+            <canvas id="canvas-gen-3d"></canvas>
+            <div class="absolute top-3 left-3 flex flex-wrap gap-1.5 z-10">
+              <button onclick="setGenCameraPreset('oblique')" class="px-2.5 py-1 rounded-lg bg-slate-900/85 hover:bg-amber-500 hover:text-slate-950 border border-slate-700 text-xs font-medium backdrop-blur">
+                🔄 3D 成對繞組斜角
+              </button>
+              <button onclick="setGenCameraPreset('front')" class="px-2.5 py-1 rounded-lg bg-slate-900/85 hover:bg-amber-500 hover:text-slate-950 border border-slate-700 text-xs font-medium backdrop-blur">
+                🎯 正面剖視角
+              </button>
+              <button onclick="setGenCameraPreset('side')" class="px-2.5 py-1 rounded-lg bg-slate-900/85 hover:bg-amber-500 hover:text-slate-950 border border-slate-700 text-xs font-medium backdrop-blur">
+                📐 側面軸向視角
+              </button>
+            </div>
+            <!-- 3D 繞組圖例 -->
+            <div class="absolute top-3 right-3 bg-slate-950/85 border border-slate-700/80 rounded-lg px-2.5 py-2 text-[10px] space-y-1 backdrop-blur pointer-events-none">
+              <div class="font-bold text-slate-200 border-b border-slate-800 pb-1">成對繞組同心分層</div>
+              <div class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-[#ff2a2a] inline-block"></span><span class="text-slate-300">U相 (U₁-U₂ 內環 · R出)</span></div>
+              <div class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-[#00e676] inline-block"></span><span class="text-slate-300">V相 (V₁-V₂ 中環 · S出)</span></div>
+              <div class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-[#2979ff] inline-block"></span><span class="text-slate-300">W相 (W₁-W₂ 外環 · T出)</span></div>
+              <div class="text-amber-300 pt-0.5">左端: Y接中性點 ⏚ | 右端: R/S/T</div>
+              <div class="text-sky-300 border-t border-slate-800 pt-1 font-mono-num" id="gen-3d-voltage-badge">出口電壓: 22 kV → 升壓併網</div>
+            </div>
+            <div class="absolute bottom-3 left-3 bg-slate-900/85 border border-slate-800 rounded-lg px-3 py-1.5 text-[11px] text-slate-300 pointer-events-none">
+              提示：每相皆為對稱 180° 電氣角之成對多匝線圈，串聯跨接於不同半徑外環，頭端接出 R/S/T、尾端匯集 Y 接接地！
+            </div>
+          </div>
+          <div class="canvas-container min-h-[380px] sm:min-h-[480px]" id="wrap-gen-scope">
+            <canvas id="canvas-gen-scope"></canvas>
+            <!-- 示波器探棒與相位獨立控制列 -->
+            <div class="absolute top-2.5 left-3 right-3 flex flex-wrap items-center justify-between gap-1.5 z-10 pointer-events-auto">
+              <div class="flex items-center gap-1 bg-slate-950/90 border border-slate-700/80 rounded-lg p-1 backdrop-blur">
+                <span class="text-[10px] text-slate-400 px-1">量測端點:</span>
+                <button data-smode="phase" class="gen-scope-mode-btn px-2 py-0.5 rounded text-[11px] font-bold bg-sky-500 text-slate-950 transition">對N (相電壓)</button>
+                <button data-smode="line" class="gen-scope-mode-btn px-2 py-0.5 rounded text-[11px] font-medium bg-slate-800 text-slate-300 hover:bg-slate-700 transition">火線間 (√3倍)</button>
+              </div>
+              <div class="flex items-center gap-1 bg-slate-950/90 border border-slate-700/80 rounded-lg p-1 backdrop-blur">
+                <span class="text-[10px] text-slate-400 px-1">通道:</span>
+                <button data-sch="u" id="btn-gen-ch-u" class="gen-scope-ch-btn px-2 py-0.5 rounded text-[11px] font-mono-num font-bold bg-[#ff2a2a] text-white transition">U-N</button>
+                <button data-sch="v" id="btn-gen-ch-v" class="gen-scope-ch-btn px-2 py-0.5 rounded text-[11px] font-mono-num font-medium bg-slate-800 text-slate-400 transition">V-N</button>
+                <button data-sch="w" id="btn-gen-ch-w" class="gen-scope-ch-btn px-2 py-0.5 rounded text-[11px] font-mono-num font-medium bg-slate-800 text-slate-400 transition">W-N</button>
+                <button id="btn-scope-avr" class="ml-1 px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-600 text-white transition" title="切換 AVR 自動穩壓 (ON: 電廠穩壓 / OFF: 轉速連動電壓)">AVR: ON</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- VIEW 2: 模組 2 - 多級變電站與輸電線損 (3D 地理分布版) -->
+      <section id="view-trans" class="view-section hidden flex-1 flex flex-col">
+        <div class="canvas-container flex-1 min-h-[460px] sm:min-h-[560px] shadow-2xl" id="wrap-trans-3d">
+          <canvas id="canvas-trans-3d"></canvas>
+          <div id="labels-trans-3d" class="absolute inset-0 pointer-events-none overflow-hidden"></div>
+          <div class="absolute top-3 left-3 flex flex-wrap gap-1.5 z-10">
+            <button onclick="setTransCameraPreset('iso')" class="px-2.5 py-1 rounded-lg bg-slate-900/85 hover:bg-sky-500 hover:text-slate-950 border border-slate-700 text-xs font-medium backdrop-blur">
+              🏔️ 3D 地形鳥瞰
+            </button>
+            <button onclick="setTransCameraPreset('top')" class="px-2.5 py-1 rounded-lg bg-slate-900/85 hover:bg-sky-500 hover:text-slate-950 border border-slate-700 text-xs font-medium backdrop-blur">
+              🗺️ 區域電網地圖
+            </button>
+            <button onclick="setTransCameraPreset('tower')" class="px-2.5 py-1 rounded-lg bg-slate-900/85 hover:bg-sky-500 hover:text-slate-950 border border-slate-700 text-xs font-medium backdrop-blur">
+              🗼 跨山脈鐵塔視角
+            </button>
+          </div>
+          <div class="absolute bottom-3 left-3 bg-slate-900/80 border border-slate-800 rounded-lg px-3 py-1.5 text-[11px] text-slate-300 backdrop-blur pointer-events-none">
+            🖱️ 拖曳旋轉地形 · 滾輪縮放 · 點擊地圖上任一 3D 變電所切換輸出電壓並即時更新下游電流與線損
+          </div>
+        </div>
+      </section>
+
+      <!-- VIEW 3: 模組 3 - 家庭單相三線配電 (110V / 220V) 與雙通道示波器 -->
+      <section id="view-home" class="view-section hidden flex-1 flex flex-col gap-2.5">
+        <!-- 故障模擬與盤面快速操作列 -->
+        <div class="bg-slate-900/90 border border-slate-800 rounded-xl px-3 py-2 flex flex-col gap-1.5 text-xs">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <div class="flex flex-wrap items-center gap-1.5">
+              <span class="text-slate-400 font-bold text-[11px] mr-1">🧪 故障安全實驗：</span>
+              <button id="btn-fault-leak" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-emerald-600/80 border border-slate-700 text-emerald-300 font-bold text-[11px] transition">
+                ⚡ 模擬潮濕區漏電 (ELCB)
+              </button>
+              <button id="btn-fault-l1" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-amber-600/80 border border-slate-700 text-amber-300 font-bold text-[11px] transition">
+                ✂️ 模擬 L1 欠相
+              </button>
+              <button id="btn-fault-n" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-rose-600/80 border border-slate-700 text-rose-300 font-bold text-[11px] transition">
+                ⚠️ 模擬中性線 N 斷線
+              </button>
+            </div>
+            <button id="btn-home-reset-all" class="px-2.5 py-1 rounded-lg bg-sky-500/20 hover:bg-sky-500 hover:text-slate-950 border border-sky-500/50 text-sky-300 font-bold text-[11px] transition">
+              🔄 全部復歸正常
+            </button>
+          </div>
+
+          <!-- 下層線路顯示濾鏡（教學簡化亮顯特定線組） -->
+          <div class="flex flex-wrap items-center justify-between gap-2 pt-1.5 border-t border-slate-800/80">
+            <div class="flex flex-wrap items-center gap-1.5">
+              <span class="text-slate-400 font-bold text-[11px] mr-0.5">👁️ 下層線路顯色：</span>
+              <button id="btn-wfilter-all" class="px-2 py-0.5 rounded bg-slate-700 hover:bg-slate-600 text-slate-100 font-bold text-[11px] transition">全部亮顯</button>
+              <button data-wfilter="l1" id="btn-wfilter-l1" class="home-wfilter-btn px-2 py-0.5 rounded bg-red-600 text-white font-bold text-[11px] transition">L1 紅火線</button>
+              <button data-wfilter="l2" id="btn-wfilter-l2" class="home-wfilter-btn px-2 py-0.5 rounded bg-sky-500 text-slate-950 font-bold text-[11px] transition">L2 藍火線</button>
+              <button data-wfilter="n"  id="btn-wfilter-n"  class="home-wfilter-btn px-2 py-0.5 rounded bg-slate-200 text-slate-950 font-bold text-[11px] transition">N 白中性線</button>
+              <button data-wfilter="e"  id="btn-wfilter-e"  class="home-wfilter-btn px-2 py-0.5 rounded bg-emerald-500 text-slate-950 font-bold text-[11px] transition">E 綠接地線</button>
+            </div>
+            <span class="text-[10.5px] text-slate-400">💡 點擊開關／電器旁的電線接點 (<span class="text-amber-300 font-bold">●</span>) 可斷開或重接線路</span>
+          </div>
+        </div>
+
+        <div class="canvas-container flex-1 min-h-[380px] sm:min-h-[430px]">
+          <canvas id="canvas-home" class="cursor-pointer"></canvas>
+        </div>
+        <div class="canvas-container h-[200px] sm:h-[220px]" id="wrap-home-scope">
+          <canvas id="canvas-home-scope"></canvas>
+          <!-- 單相三線 110V / 220V 探棒開關列 -->
+          <div class="absolute top-2.5 left-3 right-3 flex flex-wrap items-center justify-between gap-1.5 z-10">
+            <span class="text-[11px] font-bold text-slate-200 bg-slate-950/85 border border-slate-700/80 rounded-lg px-2.5 py-1 backdrop-blur">
+              📈 單相三線 (1Ø3W) 同步波形示波器
+            </span>
+            <div class="flex flex-wrap items-center gap-1 bg-slate-950/90 border border-slate-700/80 rounded-lg p-1 backdrop-blur">
+              <span class="text-[10px] text-slate-400 px-1">點選探棒:</span>
+              <button data-hch="l1" id="btn-home-ch-l1" class="home-scope-ch-btn px-2 py-0.5 rounded text-[11px] font-mono-num font-bold bg-red-500 text-white transition">L1-N (110V)</button>
+              <button data-hch="l2" id="btn-home-ch-l2" class="home-scope-ch-btn px-2 py-0.5 rounded text-[11px] font-mono-num font-bold bg-sky-500 text-slate-950 transition">L2-N (反相110V)</button>
+              <button data-hch="l12" id="btn-home-ch-l12" class="home-scope-ch-btn px-2 py-0.5 rounded text-[11px] font-mono-num font-medium bg-slate-800 text-slate-400 transition">L1-L2 (220V)</button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- ==================== 右側整合式可收合工具側板 ==================== -->
+    <aside id="right-sidebar" class="w-full lg:w-[370px] lg:min-w-[370px] bg-slate-900/95 border border-slate-800 rounded-xl flex flex-col overflow-hidden shadow-xl">
+      <div class="bg-slate-950 border-b border-slate-800 px-3 py-2.5 flex items-center justify-between">
+        <span class="sidebar-content text-xs font-bold text-sky-400 tracking-wider">🛠️ 系統參數與 3D 模擬工具列</span>
+        <button id="btn-toggle-sidebar" title="收合/展開整個右側工具列" class="px-2 py-1 rounded-lg bg-slate-800 hover:bg-sky-500 hover:text-slate-950 text-slate-300 text-xs font-bold transition-all ml-auto">
+          <span id="sidebar-toggle-icon">⇥ 收合</span>
+        </button>
+      </div>
+
+      <div class="sidebar-content flex-1 overflow-y-auto p-3 space-y-3 max-h-[calc(100vh-150px)]">
+
+        <!-- 面板 A：3D 全景圖節點檢視 -->
+        <div class="collapsible-card bg-slate-950/70 border border-slate-800 rounded-xl p-3">
+          <button type="button" class="collapsible-toggle w-full flex items-center justify-between text-left border-b border-slate-800/80 pb-2">
+            <span class="text-xs font-bold text-cyan-400">🗺️ 3D 全景節點與系統層級</span>
+            <span class="text-[11px] text-slate-400"><span class="collapsible-arrow inline-block">▼</span></span>
+          </button>
+          <div class="collapsible-body pt-2.5 space-y-2 text-xs">
+            <div class="bg-slate-900 border border-slate-800 rounded-lg p-2.5">
+              <div class="text-[11px] text-slate-400 mb-1">目前 3D 選中節點：</div>
+              <div class="font-bold text-amber-300" id="pano-selected-node-title">大型核能 / 火力 / 水力發電廠 (345 kV)</div>
+              <div class="text-[11px] text-slate-400 mt-1 leading-relaxed" id="pano-selected-node-desc">
+                點擊左側 3D 場景中的任一「發電廠群」可進入機組內部，點擊「變電所建築」可即時切換電壓等級並觀察電力光球潮流。
+              </div>
+            </div>
+            <div class="grid grid-cols-2 gap-1.5">
+              <button onclick="switchTab('gen')" class="py-1.5 px-2 rounded-lg bg-slate-800 hover:bg-amber-500 hover:text-slate-950 text-amber-300 font-semibold text-[11px] transition">
+                檢視 3D 發電機 →
+              </button>
+              <button onclick="switchTab('trans')" class="py-1.5 px-2 rounded-lg bg-slate-800 hover:bg-sky-500 hover:text-slate-950 text-sky-300 font-semibold text-[11px] transition">
+                變電所 3D 地圖 →
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 面板 B：發電系統與機組參數 -->
+        <div class="collapsible-card bg-slate-950/70 border border-slate-800 rounded-xl p-3">
+          <button type="button" class="collapsible-toggle w-full flex items-center justify-between text-left border-b border-slate-800/80 pb-2">
+            <span class="text-xs font-bold text-amber-400">🏭 1. 發電機組與能量轉換</span>
+            <span class="text-[11px] text-slate-400"><span class="collapsible-arrow inline-block">▼</span></span>
+          </button>
+          <div class="collapsible-body pt-2.5 space-y-2.5 text-xs">
+            <div class="grid grid-cols-2 gap-1.5" id="gen-type-buttons">
+              <button data-gentype="thermal" class="gen-type-btn px-2 py-1.5 rounded-lg text-[11px] font-bold bg-amber-500 text-slate-950 transition-all">
+                🔥 火力 (2極 · 40%)
+              </button>
+              <button data-gentype="hydro" class="gen-type-btn px-2 py-1.5 rounded-lg text-[11px] font-medium bg-slate-800 text-slate-300 hover:bg-slate-700 transition-all">
+                💧 水力 (12極 · 88%)
+              </button>
+              <button data-gentype="wind" class="gen-type-btn px-2 py-1.5 rounded-lg text-[11px] font-medium bg-slate-800 text-slate-300 hover:bg-slate-700 transition-all">
+                🌬️ 風力 (24極 · 42%)
+              </button>
+              <button data-gentype="solar" class="gen-type-btn px-2 py-1.5 rounded-lg text-[11px] font-medium bg-slate-800 text-slate-300 hover:bg-slate-700 transition-all">
+                ☀️ 太陽能 (DC · 20%)
+              </button>
+            </div>
+
+            <div class="space-y-1.5">
+              <div id="inverter-control-box" class="flex items-center justify-between bg-slate-900 px-2.5 py-1.5 rounded-lg border border-slate-800">
+                <span class="text-[11px] text-slate-400" id="inverter-label">併網變頻器：</span>
+                <button id="btn-toggle-inverter" class="px-2 py-0.5 rounded bg-slate-800 text-slate-500 text-[11px] font-bold" disabled>
+                  同步直連
+                </button>
+              </div>
+              <div id="avr-control-box" class="flex items-center justify-between bg-slate-900 px-2.5 py-1.5 rounded-lg border border-emerald-500/60">
+                <span class="text-[11px] text-emerald-300 font-bold" id="avr-label">AVR 自動穩壓：</span>
+                <button id="btn-toggle-avr" class="px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold transition">
+                  ON (電廠穩壓)
+                </button>
+              </div>
+              <div class="flex items-center justify-between bg-slate-900 px-2.5 py-1.5 rounded-lg border border-slate-800">
+                <span class="text-[11px] text-slate-400">繞組與波形：</span>
+                <button id="btn-phase-mode" class="px-2 py-0.5 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] font-bold">
+                  單相交流 (U相)
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <div class="flex justify-between text-[11px] mb-1">
+                <span class="text-slate-300" id="gen-rpm-label">渦輪轉速 (RPM)</span>
+                <span class="font-mono-num font-bold text-amber-400" id="gen-rpm-val">3600 RPM → 60.0Hz</span>
+              </div>
+              <input type="range" id="slider-gen-rpm" min="2400" max="4200" step="30" value="3600" class="w-full" />
+              <div class="flex justify-between text-[10px] text-slate-500 mt-0.5">
+                <span id="gen-rpm-min">2400</span>
+                <button id="btn-snap-60hz" class="text-sky-400 hover:underline">校準至 60Hz 額定轉速</button>
+                <span id="gen-rpm-max">4200</span>
+              </div>
+            </div>
+
+            <div>
+              <div class="flex justify-between text-[11px] mb-1">
+                <span class="text-slate-300" id="gen-fuel-label">一次能源輸入 (MW)</span>
+                <span class="font-mono-num font-bold text-emerald-400" id="gen-fuel-val">1000 MW → 400 MW</span>
+              </div>
+              <input type="range" id="slider-gen-input" min="200" max="2000" step="50" value="1000" class="w-full" />
+            </div>
+
+            <div class="bg-slate-900 border border-slate-800 rounded-lg p-2 text-[11px] font-mono-num text-center text-sky-300" id="gen-formula-live">
+              f = (2 × 3600) / 120 = 60.0 Hz
+            </div>
+          </div>
+        </div>
+
+        <!-- 面板 C：慢動作時間縮放與相位步進 -->
+        <div class="collapsible-card bg-slate-950/70 border border-slate-800 rounded-xl p-3">
+          <button type="button" class="collapsible-toggle w-full flex items-center justify-between text-left border-b border-slate-800/80 pb-2">
+            <span class="text-xs font-bold text-purple-400">⏱️ 2. 播放速度縮放與相位步進</span>
+            <span class="text-[11px] text-slate-400"><span class="collapsible-arrow inline-block">▼</span></span>
+          </button>
+          <div class="collapsible-body pt-2.5 space-y-2.5 text-xs">
+            <div class="flex justify-between text-[11px]">
+              <span class="text-slate-300">時間縮放 (60/50 刻度吸附)</span>
+              <span class="font-mono-num text-purple-300 font-bold" id="timescale-fraction-text">1 / 60 x</span>
+            </div>
+            <input type="range" id="slider-timescale" min="0" max="100" step="1" value="35" class="w-full" />
+            <div class="flex flex-wrap gap-1">
+              <button data-denom="240" class="snap-ts-btn px-1.5 py-1 rounded text-[10px] font-mono-num bg-slate-800 text-slate-300">1/240</button>
+              <button data-denom="180" class="snap-ts-btn px-1.5 py-1 rounded text-[10px] font-mono-num bg-slate-800 text-slate-300">1/180</button>
+              <button data-denom="120" class="snap-ts-btn px-1.5 py-1 rounded text-[10px] font-mono-num bg-slate-800 text-slate-300">1/120</button>
+              <button data-denom="60" class="snap-ts-btn px-1.5 py-1 rounded text-[10px] font-mono-num bg-purple-600 text-white font-bold">1/60</button>
+              <button data-denom="50" class="snap-ts-btn px-1.5 py-1 rounded text-[10px] font-mono-num bg-slate-800 text-slate-300">1/50</button>
+              <button data-denom="30" class="snap-ts-btn px-1.5 py-1 rounded text-[10px] font-mono-num bg-slate-800 text-slate-300">1/30</button>
+            </div>
+            <div class="grid grid-cols-3 gap-1.5">
+              <button id="btn-step-back" class="py-1.5 px-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-[11px]">⏮ -15°</button>
+              <button id="btn-play-pause" class="py-1.5 px-2 rounded-lg bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold text-[11px]">⏸ 暫停</button>
+              <button id="btn-step-forward" class="py-1.5 px-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-[11px]">+15° ⏭</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 面板 D：輸供電變電所階梯與線路參數 -->
+        <div class="collapsible-card bg-slate-950/70 border border-slate-800 rounded-xl p-3">
+          <button type="button" class="collapsible-toggle w-full flex items-center justify-between text-left border-b border-slate-800/80 pb-2">
+            <span class="text-xs font-bold text-sky-400">⚡ 3. 變電所階梯與線損參數</span>
+            <span class="text-[11px] text-slate-400"><span class="collapsible-arrow inline-block">▼</span></span>
+          </button>
+          <div class="collapsible-body pt-2.5 space-y-2.5 text-xs">
+            <div class="bg-slate-900 border border-sky-500/40 rounded-lg p-2">
+              <div class="text-[11px] font-bold text-sky-300 mb-1.5" id="selected-substation-title">📍 超高壓變電所 (345/161 kV)</div>
+              <div class="flex flex-wrap gap-1.5" id="substation-voltage-options"></div>
+            </div>
+
+            <div>
+              <div class="flex justify-between text-[11px] mb-1">
+                <span class="text-slate-300">輸電主幹總距離 (L)</span>
+                <span class="font-mono-num font-bold text-sky-400" id="trans-dist-val">150 km</span>
+              </div>
+              <input type="range" id="slider-trans-dist" min="10" max="300" step="10" value="150" class="w-full" />
+            </div>
+
+            <div class="grid grid-cols-3 gap-1" id="wire-buttons">
+              <button data-wire="thin_al" class="wire-btn py-1.5 px-1 rounded text-[10px] bg-slate-800 text-slate-300 border border-slate-700">細鋁線</button>
+              <button data-wire="acsr" class="wire-btn py-1.5 px-1 rounded text-[10px] bg-sky-500 text-slate-950 font-bold border border-sky-400">鋼芯鋁線</button>
+              <button data-wire="thick_cu" class="wire-btn py-1.5 px-1 rounded text-[10px] bg-slate-800 text-slate-300 border border-slate-700">粗銅線</button>
+            </div>
+
+            <div class="space-y-1 text-[11px] bg-slate-900 p-2 rounded-lg border border-slate-800">
+              <div class="flex justify-between"><span class="text-slate-400">主幹電流 I₁：</span><span class="font-mono-num text-sky-400 font-bold" id="calc-trans-i">100.4 A</span></div>
+              <div class="flex justify-between"><span class="text-slate-400">下游電流 I₂·I₃：</span><span class="font-mono-num text-amber-400" id="calc-trans-i-down">215A · 3038A</span></div>
+              <div class="flex justify-between"><span class="text-slate-400">全網熱損耗：</span><span class="font-mono-num text-rose-400 font-bold" id="calc-trans-loss">2.10 MW (1.1%)</span></div>
+              <div class="flex justify-between"><span class="text-slate-400">低壓用戶端電壓：</span><span class="font-mono-num text-emerald-400 font-bold" id="calc-home-actual-v">110V / 220V</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 面板 E：家庭單相三線負載 (110V / 220V) -->
+        <div class="collapsible-card bg-slate-950/70 border border-slate-800 rounded-xl p-3">
+          <button type="button" class="collapsible-toggle w-full flex items-center justify-between text-left border-b border-slate-800/80 pb-2">
+            <span class="text-xs font-bold text-emerald-400">🏠 4. 家庭新式銅排配電與負載</span>
+            <span class="text-[11px] text-slate-400"><span class="collapsible-arrow inline-block">▼</span></span>
+          </button>
+          <div class="collapsible-body pt-2.5 space-y-2 text-xs">
+            <button id="btn-nfb-reset" class="hidden w-full py-1.5 rounded bg-rose-600 hover:bg-rose-500 text-white text-[11px] font-bold">
+              ⚠️ 斷路器跳脫！點擊全部復歸
+            </button>
+            <div class="grid grid-cols-3 gap-1 text-[10px] font-mono-num bg-slate-900 border border-slate-800 rounded-lg p-1.5 text-center">
+              <div><span class="text-red-400">I_L1</span><div class="font-bold text-slate-100" id="home-il1-amp">0.9A</div></div>
+              <div><span class="text-sky-400">I_L2</span><div class="font-bold text-slate-100" id="home-il2-amp">3.6A</div></div>
+              <div><span class="text-slate-300">I_N</span><div class="font-bold text-amber-300" id="home-in-amp">2.7A</div></div>
+            </div>
+            <div class="text-[10.5px] font-bold text-amber-300 pt-1">① 220V 專用迴路 (L1+L2 · <span id="home-220v-amp">0.0 A</span> / 20A)</div>
+            <div class="space-y-1" id="appliances-220v"></div>
+            <div class="text-[10.5px] font-bold text-red-300 pt-1">② 110V-A 一般插座 (L1+N · <span id="home-110a-amp">0.9 A</span> / 20A)</div>
+            <div class="space-y-1" id="appliances-110a"></div>
+            <div class="text-[10.5px] font-bold text-sky-300 pt-1">③ 110V-B 潮濕區 ELCB (L2+N · <span id="home-110b-amp">3.6 A</span> / 20A)</div>
+            <div class="space-y-1" id="appliances-110b"></div>
+          </div>
+        </div>
+
+      </div>
+    </aside>
+  </div>
+
+  <script>
+    /**
+     * ============================================================================
+     * 第一部分：核心物理與台電三段式電力系統運算引擎
+     * ============================================================================
+     */
+    class PowerGridEngine {
+      constructor() {
+        this.generatorSpecs = {
+          thermal: {
+            name: '火力發電',
+            machineName: '高速蒸汽渦輪發電機 (隱極式)',
+            genVoltageText: '22 kV',
+            ratedVoltageNum: 22.0,
+            voltageUnit: 'kV',
+            stepUpNote: '出口 22 kV → 廠內主變升壓至 345 kV',
+            poles: 2,
+            ratedRpm: 3600,
+            minRpm: 2400,
+            maxRpm: 4200,
+            rpmStep: 30,
+            efficiency: 0.40,
+            hasInverter: false,
+            isDC: false,
+            rpmLabel: '蒸汽閥門開度 / 渦輪轉速 (RPM)',
+            fuelLabel: '燃煤/燃氣熱功率輸入 (MW)'
+          },
+          hydro: {
+            name: '水力發電',
+            machineName: '低速水輪發電機 (凸極式大轉盤)',
+            genVoltageText: '13.8 kV',
+            ratedVoltageNum: 13.8,
+            voltageUnit: 'kV',
+            stepUpNote: '出口 13.8 kV → 廠內升壓至 161 kV',
+            poles: 12,
+            ratedRpm: 600,
+            minRpm: 360,
+            maxRpm: 720,
+            rpmStep: 10,
+            efficiency: 0.88,
+            hasInverter: false,
+            isDC: false,
+            rpmLabel: '水庫水閘門開度 / 水輪轉速 (RPM)',
+            fuelLabel: '水力位能流率輸入 (MW)'
+          },
+          wind: {
+            name: '風力發電',
+            machineName: '直驅多極變速風力機 + 變頻器',
+            genVoltageText: '690 V',
+            ratedVoltageNum: 690,
+            voltageUnit: 'V',
+            stepUpNote: '機艙 690 V → 塔底升壓至 22.8/69 kV',
+            poles: 24,
+            ratedRpm: 15,
+            minRpm: 6,
+            maxRpm: 24,
+            rpmStep: 1,
+            efficiency: 0.42,
+            hasInverter: true,
+            isDC: false,
+            rpmLabel: '風速帶動葉片轉速 (RPM)',
+            fuelLabel: '風力動能截獲功率 (MW)'
+          },
+          solar: {
+            name: '太陽能光電',
+            machineName: '矽晶太陽光電陣列 + 併網逆變器',
+            genVoltageText: '800 V DC',
+            ratedVoltageNum: 800,
+            voltageUnit: 'V DC',
+            stepUpNote: '組串 800V DC → 逆變 380V AC 升壓併網',
+            poles: 0,
+            ratedRpm: 0,
+            minRpm: 0,
+            maxRpm: 0,
+            rpmStep: 1,
+            efficiency: 0.20,
+            hasInverter: true,
+            isDC: true,
+            rpmLabel: '無機械轉子 (光電效應純直流)',
+            fuelLabel: '太陽輻射日照總功率 (MW)'
+          }
+        };
+
+        this.genType = 'thermal';
+        this.rpm = 3600;
+        this.inputPowerMW = 1000;
+        this.inverterEnabled = true;
+        this.avrEnabled = true; // false: 永磁物理 (E ∝ 轉速); true: 電廠 AVR 自動穩壓
+        this.showThreePhase = false;
+
+        // 示波器探棒與通道狀態（支援教師自由複選）
+        this.scopeMeasureMode = 'phase'; // 'phase' (對中性點 N) | 'line' (火線間 √3倍)
+        this.scopeChannels = { u: true, v: false, w: false };
+        this.homeScopeChannels = { l1: true, l2: true, l12: false };
+
+        this.timeScaleDenom = 60;
+        this.isPlaying = true;
+        this.electricalAngleRad = 0;
+
+        this.maxHistoryPoints = 240;
+        this.scopeHistory = [];
+
+        this.selectedSubstation = 'stepup';
+        this.substations = {
+          stepup: {
+            id: 'stepup',
+            name: '超高壓變電所 (E/S)',
+            shortName: '超高壓變電所',
+            role: '345 / 161 kV',
+            voltageKV: 345,
+            options: [
+              { val: 345, label: '345 kV (標準超高壓)' },
+              { val: 161, label: '161 kV (降壓測試)' },
+              { val: 69, label: '69 kV (低壓高損測試)' }
+            ]
+          },
+          primary: {
+            id: 'primary',
+            name: '一次變電所 (P/S)',
+            shortName: '一次變電所',
+            role: '161 / 69 kV',
+            voltageKV: 161,
+            options: [
+              { val: 161, label: '161 kV (區域輸電幹線)' },
+              { val: 69, label: '69 kV (二次輸電級)' },
+              { val: 22.8, label: '22.8 kV (高電流測試)' }
+            ]
+          },
+          dist: {
+            id: 'dist',
+            name: '一次配電 / 二次變電所',
+            shortName: '配電變電所',
+            role: '161·69 / 22-11 kV',
+            voltageKV: 11.4,
+            options: [
+              { val: 22.8, label: '22 kV (高壓配電饋線)' },
+              { val: 11.4, label: '11 kV (市區配電饋線)' },
+              { val: 3.3, label: '3.3 kV (低壓高損測試)' }
+            ]
+          },
+          pole: {
+            id: 'pole',
+            name: '亭置式 / 桿上變壓器',
+            shortName: '配電變壓器',
+            role: '110V / 220V 單相三線',
+            voltageKV: 0.11,
+            options: [
+              { val: 0.12, label: '120V / 240V (升壓補償)' },
+              { val: 0.11, label: '110V / 220V (標準單相三線)' },
+              { val: 0.095, label: '95V / 190V (壓降異常)' }
+            ]
+          }
+        };
+
+        this.panoSelectedNode = {
+          title: '大型核能 / 火力 / 水力發電廠 (345 kV)',
+          desc: '大型基載與水力機組經廠內主變壓器升壓至 345 kV，透過超高壓輸電鐵塔送往「超高壓變電所」。'
+        };
+
+        this.transVoltageKV = 345;
+        this.transDistanceKm = 150;
+        this.wireType = 'acsr';
+        this.wireOhmPerKm = {
+          thin_al: 0.12,
+          acsr: 0.05,
+          thick_cu: 0.025
+        };
+
+        // 家庭新式銅排配電盤：三組子迴路 (220V / 110V-A 接 L1 / 110V-B 潮濕區 ELCB 接 L2)
+        this.appliances = [
+          { id: 'ac',          name: '變頻冷氣機',   watts: 2500, branch: '220',  circuit: 220, icon: '❄️', on: false },
+          { id: 'heater',      name: '瞬熱電熱水器', watts: 4000, branch: '220',  circuit: 220, icon: '🚿', on: false },
+          { id: 'led',         name: '客廳 LED 照明', watts: 100,  branch: '110A', circuit: 110, icon: '💡', on: true  },
+          { id: 'cooker',      name: '大同電鍋',     watts: 800,  branch: '110A', circuit: 110, icon: '🍚', on: false },
+          { id: 'microwave',   name: '微波爐',       watts: 1000, branch: '110A', circuit: 110, icon: '🍲', on: false },
+          { id: 'toaster',     name: '電烤箱',       watts: 1200, branch: '110A', circuit: 110, icon: '🍞', on: false },
+          { id: 'washer',      name: '洗衣機',       watts: 400,  branch: '110B', circuit: 110, icon: '🧺', on: true  },
+          { id: 'hairdryer',   name: '浴室吹風機',   watts: 1200, branch: '110B', circuit: 110, icon: '💨', on: false },
+          { id: 'bathheater',  name: '浴室暖風機',   watts: 1100, branch: '110B', circuit: 110, icon: '♨️', on: false }
+        ];
+
+        // 斷路器與故障模擬狀態
+        this.breakers = {
+          main:  { on: true, tripped: false, ratedA: 50 },
+          b220:  { on: true, tripped: false, ratedA: 20 },
+          b110A: { on: true, tripped: false, ratedA: 20 },
+          b110B: { on: true, tripped: false, ratedA: 20, leakTripped: false }
+        };
+        this.faultL1Open = false;
+        this.faultL2Open = false;
+        this.faultNOpen = false;
+        this.faultLeakage = false;
+        this.leakageTimer = 0;
+        this.overloadTimers = { main: 0, b220: 0, b110A: 0, b110B: 0 };
+        this.homeHitBoxes = [];
+        // 可點擊斷開的電線節點狀態 & 下層線路顯色濾鏡
+        this.disconnectedWires = {};
+        this.homeWireFilter = { l1: true, l2: true, n: true, e: true };
+
+        this.nfbTripped = false;
+        this.kwhMeterReading = 1284.50;
+        this.meterDiscAngle = 0;
+
+        this.prefillScopeHistory();
+      }
+
+      setGeneratorType(type) {
+        if (!this.generatorSpecs[type]) return;
+        this.genType = type;
+        const spec = this.generatorSpecs[type];
+        this.rpm = spec.ratedRpm;
+        this.inverterEnabled = true;
+        this.electricalAngleRad = 0;
+        this.prefillScopeHistory();
+        if (typeof rebuild3DGeneratorStator === 'function') {
+          rebuild3DGeneratorStator();
+        }
+      }
+
+      prefillScopeHistory() {
+        this.scopeHistory = [];
+        const gen = this.getGenMetrics();
+        const isDCWave = gen.spec.isDC && !this.inverterEnabled;
+        const amp = gen.waveAmp;
+
+        for (let i = 0; i < this.maxHistoryPoints; i++) {
+          const backSteps = this.maxHistoryPoints - 1 - i;
+          const stepRad = (2 * Math.PI * (gen.outputFreqHz || 60)) * (0.016 / 60);
+          const ang = this.electricalAngleRad - backSteps * stepRad;
+          if (isDCWave) {
+            this.scopeHistory.push({ u: amp * 0.85, v: 0, w: 0, isDCWave: true });
+          } else {
+            this.scopeHistory.push({
+              u: amp * Math.sin(ang),
+              v: amp * Math.sin(ang - (2 * Math.PI) / 3),
+              w: amp * Math.sin(ang - (4 * Math.PI) / 3),
+              isDCWave: false
+            });
+          }
+        }
+      }
+
+      manualStepAngle(deg) {
+        this.isPlaying = false;
+        const rad = (deg * Math.PI) / 180;
+        this.electricalAngleRad += rad;
+        this.pushScopePoint();
+      }
+
+      pushScopePoint() {
+        const gen = this.getGenMetrics();
+        const isDCWave = gen.spec.isDC && !this.inverterEnabled;
+        const amp = gen.waveAmp;
+        if (isDCWave) {
+          this.scopeHistory.push({ u: amp * 0.85, v: 0, w: 0, isDCWave: true });
+        } else {
+          this.scopeHistory.push({
+            u: amp * Math.sin(this.electricalAngleRad),
+            v: amp * Math.sin(this.electricalAngleRad - (2 * Math.PI) / 3),
+            w: amp * Math.sin(this.electricalAngleRad - (4 * Math.PI) / 3),
+            isDCWave: false
+          });
+        }
+        if (this.scopeHistory.length > this.maxHistoryPoints) {
+          this.scopeHistory.shift();
+        }
+      }
+
+      step(dtSec) {
+        const gen = this.getGenMetrics();
+        const home = this.getHomeMetrics();
+
+        if (home.totalWatts > 0) {
+          const kw = home.totalWatts / 1000;
+          this.meterDiscAngle += dtSec * kw * 3.2;
+          this.kwhMeterReading += (kw * dtSec) / 360;
+        }
+
+        const showBanner = (msg, isDanger = true) => {
+          const banner = document.getElementById('system-banner');
+          const bannerText = document.getElementById('system-banner-text');
+          if (banner && bannerText) {
+            banner.className = `rounded-xl px-4 py-2 text-xs font-medium border flex items-center justify-between gap-3 ${
+              isDanger ? 'bg-rose-950/90 border-rose-500 text-rose-100' : 'bg-amber-950/90 border-amber-500 text-amber-100'
+            }`;
+            bannerText.textContent = msg;
+          }
+        };
+
+        // 1. ELCB 漏電偵測：若潮濕區有電且發生漏電 (I_E > 30mA)，0.4秒內瞬間跳脫
+        if (this.faultLeakage && this.breakers.main.on && this.breakers.b110B.on && home.v110B > 10) {
+          this.leakageTimer += dtSec;
+          if (this.leakageTimer > 0.4) {
+            this.breakers.b110B.on = false;
+            this.breakers.b110B.tripped = true;
+            this.breakers.b110B.leakTripped = true;
+            this.leakageTimer = 0;
+            showBanner('⚡ 漏電保護啟動！潮濕區部分電流經綠色接地線流向大地（進出電流差 > 30mA），ELCB 已瞬間跳脫斷電！');
+            syncUI();
+          }
+        } else {
+          this.leakageTimer = 0;
+        }
+
+        // 2. 各級無熔絲開關 (NFB) 過載偵測
+        const checkTrip = (key, currentA, label) => {
+          const br = this.breakers[key];
+          if (br.on && currentA > br.ratedA) {
+            this.overloadTimers[key] += dtSec;
+            if (this.overloadTimers[key] > 1.0) {
+              br.on = false;
+              br.tripped = true;
+              this.overloadTimers[key] = 0;
+              showBanner(`⚠️ 過載跳電警報！${label} 電流 (${currentA.toFixed(1)}A) 超過額定 ${br.ratedA}A，斷路器已自動跳脫！`);
+              syncUI();
+            }
+          } else {
+            this.overloadTimers[key] = 0;
+          }
+        };
+
+        checkTrip('b220', home.i220, '子開關 ① (220V 專用迴路)');
+        checkTrip('b110A', home.i110A, '子開關 ② (110V-A 一般插座)');
+        checkTrip('b110B', home.i110B, '子開關 ③ (110V-B 潮濕區)');
+        checkTrip('main', Math.max(home.iL1, home.iL2), '總開關 (2P 50A)');
+
+        this.nfbTripped = this.breakers.main.tripped || this.breakers.b220.tripped || this.breakers.b110A.tripped || this.breakers.b110B.tripped;
+
+        if (!this.isPlaying) return;
+
+        const effectiveHz = gen.outputFreqHz > 0 ? gen.outputFreqHz : 60;
+        const omega = 2 * Math.PI * effectiveHz;
+        this.electricalAngleRad += (omega * dtSec) / this.timeScaleDenom;
+        this.pushScopePoint();
+      }
+
+      getGenMetrics() {
+        const spec = this.generatorSpecs[this.genType];
+        const rawFreqHz = spec.isDC ? 0 : (spec.poles * this.rpm) / 120;
+        let outputFreqHz = rawFreqHz;
+        if (spec.hasInverter && this.inverterEnabled) {
+          outputFreqHz = 60.0;
+        }
+        const outputPowerMW = this.inputPowerMW * spec.efficiency;
+
+        // 法拉第感應電動勢 E ∝ 轉速；若開啟 AVR 自動穩壓則由激磁電流鎖定在 100% 額定電壓
+        let voltageRatio = 1.0;
+        if (!spec.isDC && !this.avrEnabled && spec.ratedRpm > 0) {
+          voltageRatio = this.rpm / spec.ratedRpm;
+        }
+        const liveVoltageVal = spec.ratedVoltageNum * voltageRatio;
+        const liveVoltageStr = spec.voltageUnit === 'kV'
+          ? `${liveVoltageVal.toFixed(1)} kV`
+          : `${Math.round(liveVoltageVal)} ${spec.voltageUnit}`;
+        // 示波器基準額定振幅為 0.72，保留上方餘裕呈現超速過壓與線電壓 √3 倍
+        const waveAmp = spec.isDC
+          ? Math.min(1.0, Math.max(0.28, this.inputPowerMW / 1200))
+          : Math.min(1.18, Math.max(0.16, 0.72 * voltageRatio));
+
+        const currentWave = {
+          u: Math.sin(this.electricalAngleRad),
+          v: Math.sin(this.electricalAngleRad - (2 * Math.PI) / 3),
+          w: Math.sin(this.electricalAngleRad - (4 * Math.PI) / 3)
+        };
+        return { spec, rawFreqHz, outputFreqHz, outputPowerMW, currentWave, voltageRatio, liveVoltageStr, waveAmp };
+      }
+
+      getTransMetrics() {
+        const gen = this.getGenMetrics();
+        const home = this.getHomeMetrics();
+        const v1 = this.substations.stepup.voltageKV;
+        const v2 = this.substations.primary.voltageKV;
+        const v3 = this.substations.dist.voltageKV;
+        const v4Base = Math.round(this.substations.pole.voltageKV * 1000);
+        this.transVoltageKV = v1;
+
+        const transmittedMW = Math.min(gen.outputPowerMW, Math.max(40, home.communityDemandMW));
+        const rPerKm = this.wireOhmPerKm[this.wireType] || 0.05;
+
+        const r1 = rPerKm * (this.transDistanceKm * 0.7);
+        const i1 = (transmittedMW * 1e6) / (Math.sqrt(3) * v1 * 1e3);
+        const loss1MW = (3 * i1 * i1 * r1) / 1e6;
+
+        const pAfter1 = Math.max(1, transmittedMW - loss1MW);
+        const r2 = rPerKm * (this.transDistanceKm * 0.25);
+        const i2 = (pAfter1 * 1e6) / (Math.sqrt(3) * v2 * 1e3);
+        const loss2MW = (3 * i2 * i2 * r2) / 1e6;
+
+        const pAfter2 = Math.max(1, pAfter1 - loss2MW);
+        const r3 = rPerKm * Math.max(1, this.transDistanceKm * 0.05);
+        const i3 = (pAfter2 * 1e6) / (Math.sqrt(3) * v3 * 1e3);
+        const loss3MW = (3 * i3 * i3 * r3) / 1e6;
+
+        const lossMW = loss1MW + loss2MW + loss3MW;
+        const lossPercent = transmittedMW > 0 ? Math.min(99.9, (lossMW / transmittedMW) * 100) : 0;
+
+        const dropFactor = Math.max(0.75, 1 - (lossPercent / 100) * 0.45);
+        const actualHomeV110 = v4Base * dropFactor;
+        const actualHomeV220 = actualHomeV110 * 2;
+
+        return {
+          v1, v2, v3, v4Base,
+          i1, i2, i3,
+          loss1MW, loss2MW, loss3MW,
+          transmittedMW,
+          totalResistanceOhm: r1 + r2 + r3,
+          lineCurrentA: i1,
+          lossMW,
+          lossPercent,
+          actualHomeV110,
+          actualHomeV220
+        };
+      }
+
+      getHomeMetrics() {
+        const v110 = this.substations ? Math.round(this.substations.pole.voltageKV * 1000) : 110;
+        const v220 = v110 * 2;
+        const dw = this.disconnectedWires || {};
+
+        // 檢查各子開關下端出線是否遭點擊斷開
+        const br220Wired  = !dw['brk_220_l1'] && !dw['brk_220_l2'];
+        const br110AWired = !dw['brk_110A_l1'];
+        const br110BWired = !dw['brk_110B_l2'] && !dw['brk_110B_n'];
+
+        const isAppWired = (app) => !dw[`app_${app.id}_hot`] && !dw[`app_${app.id}_ret`];
+
+        // 計算各分路「開啟且接線完整之電器」額定總功率 (供 N 斷線分壓計算用)
+        let nomW220 = 0, nomW110A = 0, nomW110B = 0;
+        this.appliances.forEach(a => {
+          if (!a.on || !isAppWired(a)) return;
+          if (a.branch === '220' && br220Wired) nomW220 += a.watts;
+          else if (a.branch === '110A' && br110AWired) nomW110A += a.watts;
+          else if (a.branch === '110B' && br110BWired) nomW110B += a.watts;
+        });
+
+        const mainOn = this.breakers.main.on;
+        let v220Eff = 0, v110A = 0, v110B = 0;
+
+        if (mainOn) {
+          if (this.faultL1Open && this.faultL2Open) {
+            v220Eff = 0;
+            v110A = 0;
+            v110B = 0;
+          } else if (this.faultL1Open) {
+            // L1 欠相：L1 進屋線斷開無電，220V 無法形成電位差，僅 L2 對 N (110V-B) 正常供電
+            v220Eff = 0;
+            v110A = 0;
+            v110B = this.faultNOpen ? 0 : v110;
+          } else if (this.faultL2Open) {
+            // L2 欠相：L2 進屋線斷開無電，220V 無法形成電位差，僅 L1 對 N (110V-A) 正常供電
+            v220Eff = 0;
+            v110A = this.faultNOpen ? 0 : v110;
+            v110B = 0;
+          } else if (this.faultNOpen) {
+            // 台電進屋中性線 N 斷線：220V 正常，但兩組 110V 迴路透過屋內 N 銅排串聯跨接在 220V 之間造成分壓失衡！
+            v220Eff = v220;
+            const pA = (this.breakers.b110A.on && br110AWired) ? nomW110A : 0;
+            const pB = (this.breakers.b110B.on && br110BWired) ? nomW110B : 0;
+            if (pA > 0 && pB > 0) {
+              v110A = v220 * (pB / (pA + pB));
+              v110B = v220 * (pA / (pA + pB));
+            } else {
+              v110A = 0;
+              v110B = 0;
+            }
+          } else {
+            // 正常單相三線供電
+            v220Eff = v220;
+            v110A = v110;
+            v110B = v110;
+          }
+        }
+
+        const active220  = mainOn && this.breakers.b220.on  && br220Wired  && v220Eff > 0;
+        const active110A = mainOn && this.breakers.b110A.on && br110AWired && v110A > 0;
+        const active110B = mainOn && this.breakers.b110B.on && br110BWired && v110B > 0;
+
+        // 逐一計算每台電器的實際狀態與電流 (未開啟或斷線者嚴格為 0A)
+        const appStates = {};
+        let w220 = 0, w110A = 0, w110B = 0;
+        let i220 = 0, i110A = 0, i110B = 0;
+
+        this.appliances.forEach(a => {
+          const wired = isAppWired(a);
+          let brActive = false, brV = 0, nomV = 110, brWired = true;
+          if (a.branch === '220') {
+            brActive = active220; brV = v220Eff; nomV = v220; brWired = br220Wired;
+          } else if (a.branch === '110A') {
+            brActive = active110A; brV = v110A; nomV = v110; brWired = br110AWired;
+          } else {
+            brActive = active110B; brV = v110B; nomV = v110; brWired = br110BWired;
+          }
+
+          const running = a.on && wired && brActive;
+          const actualW = running ? a.watts * Math.pow(brV / nomV, 2) : 0;
+          const actualA = running ? actualW / Math.max(1, brV) : 0;
+
+          appStates[a.id] = {
+            running,
+            wired,
+            brWired,
+            brV,
+            nomV,
+            actualW,
+            currentA: actualA
+          };
+
+          if (a.branch === '220') { w220 += actualW; i220 += actualA; }
+          else if (a.branch === '110A') { w110A += actualW; i110A += actualA; }
+          else { w110B += actualW; i110B += actualA; }
+        });
+
+        // 銅排匯流排電流與中性線電流抵消公式：I_N = |I_110A - I_110B|
+        const iL1 = i220 + i110A;
+        const iL2 = i220 + i110B;
+        const iN = this.faultNOpen ? 0 : Math.abs(i110A - i110B);
+        const iE = (this.faultLeakage && mainOn && this.breakers.b110B.on && !dw['brk_110B_l2'] && v110B > 0) ? 0.08 : 0;
+
+        const watts110 = w110A + w110B;
+        const watts220 = w220;
+        const amp110 = i110A + i110B;
+        const amp220 = i220;
+        const totalWatts = watts110 + watts220;
+        const totalAmp = Math.max(iL1, iL2);
+        const communityDemandMW = Math.max(20, (totalWatts * 200000) / 1e6);
+
+        return {
+          v110, v220, v220Eff, v110A, v110B,
+          w220, w110A, w110B,
+          i220, i110A, i110B,
+          iL1, iL2, iN, iE,
+          br220Wired, br110AWired, br110BWired,
+          appStates,
+          watts110, watts220, amp110, amp220,
+          totalWatts, totalAmp, communityDemandMW
+        };
+      }
+    }
+
+    const engine = new PowerGridEngine();
+    let activeTab = 'panorama';
+    let flowOffset = 0;
+
+    /**
+     * ============================================================================
+     * 第二部分：Three.js 3D 台電系統拓撲全景引擎
+     * ============================================================================
+     */
+    const pano3D = {
+      scene: null,
+      camera: null,
+      renderer: null,
+      orbit: { theta: 0.08, phi: 0.72, radius: 34, target: new THREE.Vector3(0, 0, 0), isDragging: false, prevX: 0, prevY: 0, moved: false },
+      interactables: [],
+      flowLines: [],
+      windBlades: [],
+      labelAnchors: [],
+      selectionRing: null,
+      raycaster: new THREE.Raycaster(),
+      mouse: new THREE.Vector2()
+    };
+
+    function initPano3D() {
+      const container = document.getElementById('wrap-panorama-3d');
+      const canvas = document.getElementById('canvas-panorama-3d');
+      const labelContainer = document.getElementById('labels-panorama-3d');
+
+      pano3D.scene = new THREE.Scene();
+      pano3D.scene.background = new THREE.Color(0x090f1d);
+      pano3D.scene.fog = new THREE.FogExp2(0x090f1d, 0.011);
+
+      pano3D.camera = new THREE.PerspectiveCamera(42, container.clientWidth / container.clientHeight, 0.1, 200);
+      updateOrbitCamera(pano3D.camera, pano3D.orbit);
+
+      pano3D.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+      pano3D.renderer.setSize(container.clientWidth, container.clientHeight);
+      pano3D.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      pano3D.renderer.shadowMap.enabled = true;
+
+      const ambient = new THREE.AmbientLight(0x94a3b8, 0.85);
+      pano3D.scene.add(ambient);
+
+      const dirLight = new THREE.DirectionalLight(0xffffff, 1.15);
+      dirLight.position.set(16, 28, 18);
+      dirLight.castShadow = true;
+      pano3D.scene.add(dirLight);
+
+      const rimLight = new THREE.DirectionalLight(0x38bdf8, 0.45);
+      rimLight.position.set(-20, 12, -16);
+      pano3D.scene.add(rimLight);
+
+      const grid = new THREE.GridHelper(64, 32, 0x1e293b, 0x131c31);
+      grid.position.y = -0.05;
+      pano3D.scene.add(grid);
+
+      // 豐富化地景布置：沿海海域、中央山脈丘陵、河川與防風林
+      const seaGeo = new THREE.PlaneGeometry(24, 64, 16, 32);
+      const seaMat = new THREE.MeshStandardMaterial({ color: 0x0c4a6e, roughness: 0.25, metalness: 0.45 });
+      const seaMesh = new THREE.Mesh(seaGeo, seaMat);
+      seaMesh.rotation.x = -Math.PI / 2;
+      seaMesh.position.set(-22, -0.02, 0);
+      pano3D.scene.add(seaMesh);
+
+      const riverGeo = new THREE.PlaneGeometry(36, 1.4, 24, 4);
+      const riverMat = new THREE.MeshStandardMaterial({ color: 0x0284c7, roughness: 0.2, metalness: 0.5 });
+      const riverMesh = new THREE.Mesh(riverGeo, riverMat);
+      riverMesh.rotation.x = -Math.PI / 2;
+      riverMesh.position.set(-2, -0.01, -4.2);
+      pano3D.scene.add(riverMesh);
+
+      const mountainCoords = [
+        [-6.5, -8.5, 2.8, 3.2], [-4.8, -9.2, 2.2, 2.6], [-5.5, 4.2, 2.4, 2.8],
+        [4.2, -9.5, 2.6, 3.0], [5.8, 8.8, 2.3, 2.6], [-15.2, -7.8, 3.0, 3.5]
+      ];
+      mountainCoords.forEach(([mx, mz, mr, mh]) => {
+        const mGeo = new THREE.ConeGeometry(mr, mh, 16, 4);
+        const mMat = new THREE.MeshStandardMaterial({ color: 0x1e3a2f, roughness: 0.85, flatShading: false });
+        const mMesh = new THREE.Mesh(mGeo, mMat);
+        mMesh.position.set(mx, mh / 2 - 0.05, mz);
+        pano3D.scene.add(mMesh);
+      });
+
+      const treeSpots = [
+        [-8.8, -2.2], [-8.4, 3.8], [-6.2, 6.2], [6.8, -4.5], [7.2, 4.8], [14.2, 5.2], [14.5, -3.5]
+      ];
+      treeSpots.forEach(([tx, tz]) => {
+        const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.12, 0.45, 10), new THREE.MeshStandardMaterial({ color: 0x78350f }));
+        trunk.position.set(tx, 0.22, tz);
+        const crown = new THREE.Mesh(new THREE.IcosahedronGeometry(0.45, 2), new THREE.MeshStandardMaterial({ color: 0x15803d, roughness: 0.7 }));
+        crown.position.set(tx, 0.65, tz);
+        pano3D.scene.add(trunk, crown);
+      });
+
+      const addLabel = (pos, text, cls) => {
+        const el = document.createElement('div');
+        el.className = `label-3d px-2 py-0.5 rounded border text-[10px] font-bold ${cls}`;
+        el.textContent = text;
+        labelContainer.appendChild(el);
+        pano3D.labelAnchors.push({ pos: pos.clone(), el });
+      };
+
+      const registerClickable = (meshGroup, targetPos, onClick) => {
+        const box = new THREE.Box3().setFromObject(meshGroup);
+        const size = new THREE.Vector3();
+        box.getSize(size);
+        const center = new THREE.Vector3();
+        box.getCenter(center);
+        const hitMesh = new THREE.Mesh(
+          new THREE.BoxGeometry(Math.max(1.8, size.x + 0.6), Math.max(1.8, size.y + 0.6), Math.max(1.8, size.z + 0.6)),
+          new THREE.MeshBasicMaterial({ visible: false })
+        );
+        hitMesh.position.copy(center);
+        hitMesh.userData = { onClick, targetPos: targetPos.clone() };
+        pano3D.scene.add(hitMesh);
+        pano3D.interactables.push(hitMesh);
+      };
+
+      pano3D.selectionRing = new THREE.Mesh(
+        new THREE.RingGeometry(1.5, 1.85, 36),
+        new THREE.MeshBasicMaterial({ color: 0xfacc15, side: THREE.DoubleSide })
+      );
+      pano3D.selectionRing.rotation.x = -Math.PI / 2;
+      pano3D.selectionRing.position.set(-11.5, 0.3, -5.5);
+      pano3D.scene.add(pano3D.selectionRing);
+
+      // 1. 三大系統立體底座平台
+      const makeZoneBase = (x, z, w, d, colorHex, titleText) => {
+        const geo = new THREE.BoxGeometry(w, 0.4, d, 4, 1, 4);
+        const mat = new THREE.MeshStandardMaterial({ color: colorHex, roughness: 0.65, metalness: 0.15 });
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.position.set(x, 0, z);
+        mesh.receiveShadow = true;
+        pano3D.scene.add(mesh);
+
+        const edge = new THREE.LineSegments(
+          new THREE.EdgesGeometry(geo),
+          new THREE.LineBasicMaterial({ color: 0x475569 })
+        );
+        edge.position.copy(mesh.position);
+        pano3D.scene.add(edge);
+
+        addLabel(new THREE.Vector3(x, 0.8, z - d / 2 - 0.8), titleText, 'bg-slate-900/90 border-slate-600 text-slate-100 text-xs');
+      };
+
+      makeZoneBase(-11.5, 0, 7.2, 20, 0x2a1218, '🔴 發電系統');
+      makeZoneBase(-1.2, 0, 11.4, 20, 0x291d0e, '🟠 輸供電系統');
+      makeZoneBase(10.2, 0, 9.2, 20, 0x0d262b, '🔵 配電系統');
+
+      // 2. 左側三層級發電廠 3D 模型
+      const genLarge = new THREE.Group();
+      genLarge.position.set(-11.5, 0.25, -5.5);
+      const plantBase = new THREE.Mesh(
+        new THREE.BoxGeometry(3.2, 1.1, 2.2, 4, 2, 4),
+        new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.45 })
+      );
+      plantBase.position.y = 0.55;
+      genLarge.add(plantBase);
+
+      [-0.8, 0.0].forEach(cx => {
+        const stack = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.18, 0.26, 2.5, 32, 4),
+          new THREE.MeshStandardMaterial({ color: 0xef4444 })
+        );
+        stack.position.set(cx, 1.8, -0.4);
+        genLarge.add(stack);
+      });
+      const dome = new THREE.Mesh(
+        new THREE.SphereGeometry(0.65, 32, 24, 0, Math.PI * 2, 0, Math.PI / 2),
+        new THREE.MeshStandardMaterial({ color: 0x94a3b8, metalness: 0.45, roughness: 0.3 })
+      );
+      dome.position.set(0.95, 1.1, 0.2);
+      genLarge.add(dome);
+      pano3D.scene.add(genLarge);
+      addLabel(new THREE.Vector3(-11.5, 3.2, -5.5), '大型核/火/水力電廠 (22kV→345kV)', 'bg-red-950/90 border-red-500/70 text-red-200');
+      registerClickable(genLarge, new THREE.Vector3(-11.5, 0.3, -5.5), () => {
+        engine.setGeneratorType('thermal');
+        engine.panoSelectedNode = {
+          title: '核能及大型火、水力發電廠 (發電機 22 kV → 升壓 345 kV)',
+          desc: '大型發電機出口約 18~26 kV（本機組 22 kV），經廠內主變壓器升壓至 345 kV 併網。已進入電廠內部！'
+        };
+        syncUI();
+        switchTab('gen');
+      });
+
+      const genMed = new THREE.Group();
+      genMed.position.set(-11.5, 0.25, 1.2);
+      const damWall = new THREE.Mesh(
+        new THREE.BoxGeometry(2.6, 1.4, 1.2, 4, 2, 2),
+        new THREE.MeshStandardMaterial({ color: 0x0284c7, roughness: 0.4 })
+      );
+      damWall.position.set(-0.4, 0.7, 0);
+      genMed.add(damWall);
+      const turbineHall = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.55, 0.55, 0.9, 32, 2),
+        new THREE.MeshStandardMaterial({ color: 0x38bdf8, metalness: 0.5 })
+      );
+      turbineHall.position.set(0.95, 0.45, 0);
+      genMed.add(turbineHall);
+      pano3D.scene.add(genMed);
+      addLabel(new THREE.Vector3(-11.5, 2.3, 1.2), '中型水力/再生能源 (13.8kV→161kV)', 'bg-orange-950/90 border-orange-500/70 text-orange-200');
+      registerClickable(genMed, new THREE.Vector3(-11.5, 0.3, 1.2), () => {
+        engine.setGeneratorType('hydro');
+        engine.panoSelectedNode = {
+          title: '中型水力與大型再生能源電廠 (發電機 13.8 kV → 升壓 161 kV)',
+          desc: '水輪發電機出口約 11~16.5 kV（本機組 13.8 kV），經升壓併入 161 kV 區域輸電網。'
+        };
+        syncUI();
+        switchTab('gen');
+      });
+
+      const genSmall = new THREE.Group();
+      genSmall.position.set(-11.5, 0.25, 7.0);
+      [-0.7, 0.7].forEach(wx => {
+        const tower = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.08, 0.14, 2.2, 24, 2),
+          new THREE.MeshStandardMaterial({ color: 0xe2e8f0 })
+        );
+        tower.position.set(wx, 1.1, 0);
+        genSmall.add(tower);
+
+        const hub = new THREE.Group();
+        hub.position.set(wx, 2.2, 0.15);
+        for (let b = 0; b < 3; b++) {
+          const blade = new THREE.Mesh(
+            new THREE.BoxGeometry(0.11, 0.95, 0.04, 2, 6, 1),
+            new THREE.MeshStandardMaterial({ color: 0x38bdf8 })
+          );
+          blade.position.y = 0.45;
+          const pivot = new THREE.Group();
+          pivot.rotation.z = (b * Math.PI * 2) / 3;
+          pivot.add(blade);
+          hub.add(pivot);
+        }
+        genSmall.add(hub);
+        pano3D.windBlades.push(hub);
+      });
+      pano3D.scene.add(genSmall);
+      addLabel(new THREE.Vector3(-11.5, 3.3, 7.0), '風力/小型再生能源 (690V→69kV)', 'bg-amber-950/90 border-amber-500/70 text-amber-200');
+      registerClickable(genSmall, new THREE.Vector3(-11.5, 0.3, 7.0), () => {
+        engine.setGeneratorType('wind');
+        engine.panoSelectedNode = {
+          title: '小型水力與風力再生能源 (機艙 690 V → 升壓 69 kV)',
+          desc: '風力發電機艙出口約 690 V，經塔底變壓器升壓集電後併入 69 kV 電網。'
+        };
+        syncUI();
+        switchTab('gen');
+      });
+
+      // 3. 變電所 3D 立體模型
+      const buildSubstation3D = (subKey, x, z, title, colorHex) => {
+        const grp = new THREE.Group();
+        grp.position.set(x, 0.25, z);
+
+        const pad = new THREE.Mesh(
+          new THREE.BoxGeometry(2.1, 0.22, 1.6, 4, 1, 4),
+          new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.7 })
+        );
+        pad.position.y = 0.11;
+        grp.add(pad);
+
+        [-0.45, 0.45].forEach((tx, idx) => {
+          const tank = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.36, 0.36, 1.05, 32, 3),
+            new THREE.MeshStandardMaterial({
+              color: idx === 0 ? 0x64748b : colorHex,
+              emissive: colorHex,
+              emissiveIntensity: 0.28,
+              metalness: 0.55,
+              roughness: 0.3
+            })
+          );
+          tank.position.set(tx, 0.74, 0);
+          grp.add(tank);
+
+          const bushing = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.06, 0.1, 0.45, 16, 2),
+            new THREE.MeshStandardMaterial({ color: 0xe2e8f0 })
+          );
+          bushing.position.set(tx, 1.45, 0);
+          grp.add(bushing);
+        });
+
+        pano3D.scene.add(grp);
+        addLabel(new THREE.Vector3(x, 2.2, z), title, 'bg-slate-900/90 border-sky-500/60 text-sky-200');
+        registerClickable(grp, new THREE.Vector3(x, 0.3, z), () => {
+          const sub = engine.substations[subKey];
+          engine.selectedSubstation = subKey;
+          engine.panoSelectedNode = {
+            title: `${sub.name} (${sub.role})`,
+            desc: `目前設定輸出電壓：${sub.voltageKV >= 1 ? sub.voltageKV + ' kV' : Math.round(sub.voltageKV * 1000) + ' V'}。可直接在右側面板切換電壓等級或進入「2. 多級變電與線損分析」查看 3D 地形分布。`
+          };
+          syncUI();
+        });
+      };
+
+      buildSubstation3D('stepup',  -4.2, -1.2, '超高壓變電所 (345/161kV)', 0xdc2626);
+      buildSubstation3D('primary', -0.4, -1.2, '一次變電所 (161/69kV)', 0xea580c);
+      buildSubstation3D('dist',    -0.4,  4.8, '一次配電變電所 (161/22-11kV)', 0x84cc16);
+      buildSubstation3D('dist',     7.4, -1.2, '二次變電所 (69/22-11kV)', 0xf59e0b);
+      buildSubstation3D('pole',    12.0,  3.2, '亭置/桿上變壓器 (110V/220V)', 0x10b981);
+
+      // 4. 直供特高壓與低壓用戶建築群
+      const buildUserCluster = (x, z, title, colorHex, badgeCls) => {
+        const grp = new THREE.Group();
+        grp.position.set(x, 0.25, z);
+        for (let i = 0; i < 3; i++) {
+          const bh = 0.7 + (i % 2) * 0.6;
+          const b = new THREE.Mesh(
+            new THREE.BoxGeometry(0.65, bh, 0.65, 2, 2, 2),
+            new THREE.MeshStandardMaterial({ color: 0x334155, emissive: colorHex, emissiveIntensity: 0.2 })
+          );
+          b.position.set((i - 1) * 0.85, bh / 2, (i % 2) * 0.3 - 0.15);
+          grp.add(b);
+        }
+        pano3D.scene.add(grp);
+        addLabel(new THREE.Vector3(x, 2.0, z), title, badgeCls);
+      };
+
+      buildUserCluster(-4.2, -7.2, '🚄 捷運 · 高鐵 (161kV直供)', 0xea580c, 'bg-orange-950/90 border-orange-500/70 text-orange-200');
+      buildUserCluster( 1.6, -7.2, '🏭 工業區 · 科學園區 (69kV直供)', 0xf59e0b, 'bg-amber-950/90 border-amber-500/70 text-amber-200');
+      buildUserCluster( 9.8, -7.2, '🏢 中小型工業用戶 (22/11kV)', 0x84cc16, 'bg-lime-950/90 border-lime-500/70 text-lime-200');
+      buildUserCluster(11.6,  7.4, '🏘️ 家庭低壓用戶 (110V/220V)', 0x10b981, 'bg-emerald-950/90 border-emerald-500/70 text-emerald-200');
+
+      // 5. 超高壓輸電鐵塔 3D 模型
+      const buildTower3D = (x, z, h) => {
+        const g = new THREE.Group();
+        g.position.set(x, 0.25, z);
+        const mat = new THREE.MeshStandardMaterial({ color: 0x64748b, metalness: 0.65, roughness: 0.35 });
+        const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.38, h, 8, 4), mat);
+        mast.position.y = h / 2;
+        g.add(mast);
+        [h * 0.72, h * 0.88].forEach(ay => {
+          const arm = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.08, 0.12, 2, 1, 1), mat);
+          arm.position.y = ay;
+          g.add(arm);
+        });
+        pano3D.scene.add(g);
+      };
+
+      buildTower3D(-7.5, -5.5, 2.4);
+      buildTower3D(-6.8,  1.2, 2.3);
+      buildTower3D(-2.3,  7.0, 2.2);
+      buildTower3D( 3.2,  1.8, 2.2);
+
+      // 6. 立體 3D 輸配電匯流排導線與流動光球
+      const addFlowTube = (points, colorHex, radius = 0.08, dotCount = 5) => {
+        const vecs = points.map(p => new THREE.Vector3(p[0], p[1], p[2]));
+        const curve = new THREE.CatmullRomCurve3(vecs, false, 'catmullrom', 0.05);
+        const tubeGeo = new THREE.TubeGeometry(curve, 32, radius, 10, false);
+        const tubeMat = new THREE.MeshStandardMaterial({ color: colorHex, emissive: colorHex, emissiveIntensity: 0.45 });
+        const tubeMesh = new THREE.Mesh(tubeGeo, tubeMat);
+        pano3D.scene.add(tubeMesh);
+
+        const dots = [];
+        const dotGeo = new THREE.SphereGeometry(radius * 2.1, 10, 10);
+        const dotMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+        for (let i = 0; i < dotCount; i++) {
+          const d = new THREE.Mesh(dotGeo, dotMat);
+          pano3D.scene.add(d);
+          dots.push({ mesh: d, offset: i / dotCount });
+        }
+        pano3D.flowLines.push({ curve, dots });
+      };
+
+      addFlowTube([[-10.0, 1.6, -5.5], [-7.5, 2.1, -5.5], [-4.2, 1.6, -5.5], [-4.2, 1.6, -2.0]], 0xdc2626, 0.09, 5);
+      addFlowTube([[-10.0, 1.5, 1.2], [-6.8, 2.0, 1.2], [-2.3, 1.5, 1.2], [-2.3, 1.5, -6.5]], 0xea580c, 0.085, 6);
+      addFlowTube([[-2.3, 1.5, 1.2], [-2.3, 1.5, 4.8], [-1.5, 1.5, 4.8]], 0xea580c, 0.085, 4);
+      addFlowTube([[-3.1, 1.5, -1.2], [-1.5, 1.5, -1.2]], 0xea580c, 0.08, 2);
+      addFlowTube([[-10.0, 1.4, 7.0], [-2.3, 1.9, 7.0], [3.2, 1.4, 7.0], [3.2, 1.4, -6.5]], 0xf59e0b, 0.08, 7);
+      addFlowTube([[0.7, 1.4, -1.2], [6.3, 1.4, -1.2]], 0xf59e0b, 0.08, 4);
+      addFlowTube([[0.7, 1.3, 4.8], [3.2, 2.45, 4.8], [9.8, 1.3, 4.8], [9.8, 1.3, -6.5]], 0x84cc16, 0.085, 7);
+      addFlowTube([[8.5, 1.3, -1.2], [9.8, 1.3, -1.2]], 0x84cc16, 0.08, 2);
+      addFlowTube([[9.8, 1.3, 3.2], [10.9, 1.3, 3.2]], 0x84cc16, 0.08, 2);
+      addFlowTube([[12.0, 1.2, 4.1], [12.0, 1.2, 6.6]], 0x10b981, 0.085, 3);
+
+      attachOrbitAndClickEvents(canvas, pano3D, (hit) => {
+        if (hit && hit.userData && hit.userData.onClick) {
+          pano3D.selectionRing.position.set(hit.userData.targetPos.x, 0.3, hit.userData.targetPos.z);
+          hit.userData.onClick();
+        }
+      });
+    }
+
+    function setPanoCameraPreset(mode) {
+      if (mode === 'top') {
+        pano3D.orbit.theta = 0.0;
+        pano3D.orbit.phi = 0.08;
+        pano3D.orbit.radius = 35;
+      } else if (mode === 'low') {
+        pano3D.orbit.theta = -0.35;
+        pano3D.orbit.phi = 1.25;
+        pano3D.orbit.radius = 27;
+      } else {
+        pano3D.orbit.theta = 0.08;
+        pano3D.orbit.phi = 0.72;
+        pano3D.orbit.radius = 34;
+      }
+      updateOrbitCamera(pano3D.camera, pano3D.orbit);
+    }
+
+    function updatePano3DScene(dtSec) {
+      if (!pano3D.renderer || activeTab !== 'panorama') return;
+      const trans = engine.getTransMetrics();
+      const spd = Math.min(1.4, Math.max(0.25, trans.transmittedMW / 260));
+
+      pano3D.windBlades.forEach(hub => {
+        hub.rotation.z -= dtSec * 1.8;
+      });
+
+      pano3D.flowLines.forEach(line => {
+        line.dots.forEach(d => {
+          d.offset = (d.offset + dtSec * spd * 0.28) % 1;
+          const pt = line.curve.getPointAt(d.offset);
+          d.mesh.position.copy(pt);
+        });
+      });
+
+      const container = document.getElementById('wrap-panorama-3d');
+      const cw = container.clientWidth;
+      const ch = container.clientHeight;
+      pano3D.labelAnchors.forEach(item => {
+        const v = item.pos.clone().project(pano3D.camera);
+        if (v.z > 1) {
+          item.el.style.opacity = '0';
+        } else {
+          item.el.style.opacity = '1';
+          item.el.style.left = `${(v.x * 0.5 + 0.5) * cw}px`;
+          item.el.style.top = `${(-v.y * 0.5 + 0.5) * ch}px`;
+        }
+      });
+
+      pano3D.renderer.render(pano3D.scene, pano3D.camera);
+    }
+
+    /**
+     * ============================================================================
+     * 第三部分：Three.js 3D 擬真發電機「成對對置多匝繞組 + 同心外環跨接」引擎
+     * ============================================================================
+     */
+    const gen3D = {
+      scene: null,
+      camera: null,
+      renderer: null,
+      orbit: { theta: 0.65, phi: 1.05, radius: 13.0, target: new THREE.Vector3(0.4, 0, 0), isDragging: false, prevX: 0, prevY: 0, moved: false },
+      rotorGroup: null,
+      statorGroup: null,
+      coilEntries: []
+    };
+
+    function initGen3D() {
+      const container = document.getElementById('wrap-gen-3d');
+      const canvas = document.getElementById('canvas-gen-3d');
+
+      gen3D.scene = new THREE.Scene();
+      gen3D.scene.background = new THREE.Color(0x090e1a);
+
+      gen3D.camera = new THREE.PerspectiveCamera(42, Math.max(1, container.clientWidth) / Math.max(1, container.clientHeight), 0.1, 100);
+      updateOrbitCamera(gen3D.camera, gen3D.orbit);
+
+      gen3D.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+      gen3D.renderer.setSize(Math.max(1, container.clientWidth), Math.max(1, container.clientHeight));
+      gen3D.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+      gen3D.scene.add(new THREE.AmbientLight(0x94a3b8, 0.92));
+      const keyLight = new THREE.DirectionalLight(0xffffff, 1.2);
+      keyLight.position.set(8, 12, 10);
+      gen3D.scene.add(keyLight);
+
+      const fillLight = new THREE.DirectionalLight(0x38bdf8, 0.55);
+      fillLight.position.set(-10, -6, -8);
+      gen3D.scene.add(fillLight);
+
+      gen3D.rotorGroup = new THREE.Group();
+      gen3D.scene.add(gen3D.rotorGroup);
+
+      gen3D.statorGroup = new THREE.Group();
+      gen3D.scene.add(gen3D.statorGroup);
+
+      rebuild3DGeneratorStator();
+      attachOrbitAndClickEvents(canvas, gen3D, null);
+    }
+
+    /**
+     * 將線圈局部座標 (lx:軸向, ly:徑向, lz:切向) 轉換到定子圓周角度 ang
+     */
+    function localToRadialWorld(lx, ly, lz, ang) {
+      return new THREE.Vector3(
+        lx,
+        ly * Math.cos(ang) - lz * Math.sin(ang),
+        ly * Math.sin(ang) + lz * Math.cos(ang)
+      );
+    }
+
+    /**
+     * 建立繞製於單一定子矽鋼鐵芯齒極上的多匝立體線圈路徑點
+     */
+    function buildToothWindingPoints(ang, rInner, rOuter, turns, axialHalfLen, tanHalfW, reverseDir) {
+      const pts = [];
+      const dir = reverseDir ? -1 : 1;
+      for (let t = 0; t < turns; t++) {
+        const frac = turns > 1 ? t / (turns - 1) : 0.5;
+        const r = rInner + (rOuter - rInner) * frac;
+        const c1 = localToRadialWorld( axialHalfLen, r, -tanHalfW * dir, ang);
+        const c2 = localToRadialWorld( axialHalfLen, r,  tanHalfW * dir, ang);
+        const c3 = localToRadialWorld(-axialHalfLen, r,  tanHalfW * dir, ang);
+        const c4 = localToRadialWorld(-axialHalfLen, r, -tanHalfW * dir, ang);
+        pts.push(c1, c2, c3, c4);
+      }
+      return pts;
+    }
+
+    function rebuild3DGeneratorStator() {
+      if (!gen3D.rotorGroup || !gen3D.statorGroup) return;
+
+      while (gen3D.rotorGroup.children.length > 0) {
+        gen3D.rotorGroup.remove(gen3D.rotorGroup.children[0]);
+      }
+      while (gen3D.statorGroup.children.length > 0) {
+        gen3D.statorGroup.remove(gen3D.statorGroup.children[0]);
+      }
+      gen3D.coilEntries = [];
+
+      const spec = engine.generatorSpecs[engine.genType];
+
+      // 太陽能光電模式 (DC 陣列 + 逆變器 3D 展示)
+      if (spec.isDC) {
+        const panelBase = new THREE.Mesh(
+          new THREE.BoxGeometry(4.6, 0.16, 3.2),
+          new THREE.MeshStandardMaterial({ color: 0x0c4a6e, metalness: 0.5, roughness: 0.25 })
+        );
+        panelBase.rotation.z = 0.28;
+        gen3D.statorGroup.add(panelBase);
+
+        const gridEdge = new THREE.LineSegments(
+          new THREE.EdgesGeometry(new THREE.BoxGeometry(4.62, 0.18, 3.22, 6, 1, 4)),
+          new THREE.LineBasicMaterial({ color: 0x38bdf8 })
+        );
+        gridEdge.rotation.z = 0.28;
+        gen3D.statorGroup.add(gridEdge);
+
+        const invBox = new THREE.Mesh(
+          new THREE.BoxGeometry(1.1, 1.4, 1.1),
+          new THREE.MeshStandardMaterial({ color: 0x1e293b, emissive: 0x7c3aed, emissiveIntensity: 0.25 })
+        );
+        invBox.position.set(3.4, -0.3, 0);
+        gen3D.statorGroup.add(invBox);
+        return;
+      }
+
+      // 1. 中央高強度金屬轉軸
+      const shaft = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.38, 0.38, 4.6, 24),
+        new THREE.MeshStandardMaterial({ color: 0x94a3b8, metalness: 0.8, roughness: 0.25 })
+      );
+      shaft.rotation.z = Math.PI / 2;
+      gen3D.rotorGroup.add(shaft);
+
+      // 2. 內轉子旋轉磁極 (深紅 N 極 / 深靛藍 S 極)
+      const poles = spec.poles;
+      const polePairs = Math.max(1, poles / 2);
+      const sliceAng = (Math.PI * 2) / poles;
+      for (let p = 0; p < poles; p++) {
+        const isN = p % 2 === 0;
+        const pGeo = new THREE.CylinderGeometry(1.52, 1.52, 2.35, 28, 3, false, p * sliceAng - sliceAng * 0.44, sliceAng * 0.88);
+        const pMat = new THREE.MeshStandardMaterial({
+          color: isN ? 0x991b1b : 0x1e3a8a,
+          emissive: isN ? 0x450a0a : 0x172554,
+          emissiveIntensity: 0.28,
+          roughness: 0.45
+        });
+        const pMesh = new THREE.Mesh(pGeo, pMat);
+        pMesh.rotation.z = Math.PI / 2;
+        gen3D.rotorGroup.add(pMesh);
+      }
+
+      // 3. 半透明定子鐵芯外殼 (包覆在所有定子鐵芯齒極外側)
+      const shellGeo = new THREE.CylinderGeometry(2.96, 2.96, 2.45, 48, 1, true);
+      const shellMat = new THREE.MeshStandardMaterial({
+        color: 0x334155,
+        transparent: true,
+        opacity: 0.14,
+        side: THREE.DoubleSide,
+        depthWrite: false
+      });
+      const shellMesh = new THREE.Mesh(shellGeo, shellMat);
+      shellMesh.rotation.z = Math.PI / 2;
+      gen3D.statorGroup.add(shellMesh);
+
+      // 4. 左側 Y 接星形中性點匯流銅環 (X = -2.85) 與綠色大地接地極 (⏚)
+      const neutralX = -2.85;
+      const neutralRing = new THREE.Mesh(
+        new THREE.TorusGeometry(0.55, 0.08, 16, 36),
+        new THREE.MeshStandardMaterial({ color: 0xfacc15, emissive: 0xca8a04, emissiveIntensity: 0.4, metalness: 0.75 })
+      );
+      neutralRing.rotation.y = Math.PI / 2;
+      neutralRing.position.set(neutralX, 0, 0);
+      gen3D.statorGroup.add(neutralRing);
+
+      const gndStem = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.05, 0.05, 2.6, 12),
+        new THREE.MeshStandardMaterial({ color: 0x10b981, emissive: 0x059669, emissiveIntensity: 0.35 })
+      );
+      gndStem.position.set(neutralX, -1.85, 0);
+      gen3D.statorGroup.add(gndStem);
+      [0.85, 0.56, 0.28].forEach((gw, gi) => {
+        const gBar = new THREE.Mesh(
+          new THREE.BoxGeometry(0.08, 0.06, gw),
+          new THREE.MeshStandardMaterial({ color: 0x10b981, emissive: 0x10b981, emissiveIntensity: 0.45 })
+        );
+        gBar.position.set(neutralX, -3.15 - gi * 0.2, 0);
+        gen3D.statorGroup.add(gBar);
+      });
+
+      // 5. 右側高壓 R / S / T 輸出接線端子座 (X = +3.55)
+      const termX = 3.55;
+      const terminalBox = new THREE.Mesh(
+        new THREE.BoxGeometry(0.32, 3.8, 1.3),
+        new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.45, metalness: 0.45 })
+      );
+      terminalBox.position.set(termX, 0, 0);
+      gen3D.statorGroup.add(terminalBox);
+
+      // 6. 建立定子三相「成對對置多匝線圈」+「同心分層串聯外環跨接」+「高反差三原色」
+      const phases = [
+        { key: 'u', color: 0xff2a2a, offsetDeg: 0,   busR: 3.18, jumperX: -1.85, outY:  1.45 }, // 內層：高飽和純紅 (U1-U2)
+        { key: 'v', color: 0x00e676, offsetDeg: 120, busR: 3.56, jumperX: -2.15, outY:  0.00 }, // 中層：高飽和純綠 (V1-V2)
+        { key: 'w', color: 0x2979ff, offsetDeg: 240, busR: 3.94, jumperX: -2.45, outY: -1.45 }  // 外層：高飽和純藍 (W1-W2)
+      ];
+
+      // 依極對數自動調整每顆定子齒極線圈的寬度、匝數與線徑，確保多極機組也清晰對稱
+      const turnsPerCoil = polePairs === 1 ? 3 : 2;
+      const tanHalfW = polePairs === 1 ? 0.52 : (polePairs <= 6 ? 0.16 : 0.08);
+      const axialHalfLen = 1.08;
+      const tubeR = polePairs === 1 ? 0.072 : (polePairs <= 6 ? 0.042 : 0.026);
+      const toothMat = new THREE.MeshStandardMaterial({ color: 0x475569, metalness: 0.65, roughness: 0.35 });
+
+      phases.forEach(ph => {
+        const coilMat = new THREE.MeshStandardMaterial({
+          color: ph.color,
+          emissive: ph.color,
+          emissiveIntensity: 0.35,
+          metalness: 0.35,
+          roughness: 0.25
+        });
+
+        // 端子座上的絕緣礙子色環
+        const insulator = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.18, 0.18, 0.45, 20),
+          coilMat
+        );
+        insulator.rotation.z = Math.PI / 2;
+        insulator.position.set(termX + 0.15, ph.outY, 0);
+        gen3D.statorGroup.add(insulator);
+        const phaseExtraMeshes = [insulator];
+
+        for (let pair = 0; pair < polePairs; pair++) {
+          const baseDeg = (pair * 360) / polePairs;
+          const a1 = ((baseDeg + ph.offsetDeg / polePairs) * Math.PI) / 180;
+          const a2 = ((baseDeg + (ph.offsetDeg + 180) / polePairs) * Math.PI) / 180;
+
+          // 為一對線圈 (Coil 1 在 a1, Coil 2 在對面 180° 電氣角 a2) 各建置矽鋼鐵芯齒極與多匝立體繞組
+          [a1, a2].forEach((ang, idxInPair) => {
+            // 定子矽鋼鐵芯齒極 (讓線圈實體纏繞在鐵芯上)
+            const toothMesh = new THREE.Mesh(
+              new THREE.BoxGeometry(axialHalfLen * 1.85, 0.96, tanHalfW * 1.45),
+              toothMat
+            );
+            const tPos = localToRadialWorld(0, 2.34, 0, ang);
+            toothMesh.position.copy(tPos);
+            toothMesh.rotation.x = ang;
+            gen3D.statorGroup.add(toothMesh);
+            phaseExtraMeshes.push(toothMesh);
+
+            // 多匝線圈繞組 (成對之兩顆線圈纏繞方向配合 N/S 極感應同向串聯)
+            const wPts = buildToothWindingPoints(ang, 1.88, 2.74, turnsPerCoil, axialHalfLen, tanHalfW, idxInPair === 1);
+            const wCurve = new THREE.CatmullRomCurve3(wPts, false, 'catmullrom', 0.12);
+            const wGeo = new THREE.TubeGeometry(wCurve, polePairs === 1 ? 72 : 36, tubeR, 10, false);
+            const wMesh = new THREE.Mesh(wGeo, coilMat);
+            gen3D.statorGroup.add(wMesh);
+
+            // 每顆線圈上的感應電流流動粒子
+            const dots = [];
+            const dotGeo = new THREE.SphereGeometry(tubeR * 1.75, 10, 10);
+            const dotMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+            const dotNum = polePairs === 1 ? 5 : 2;
+            for (let d = 0; d < dotNum; d++) {
+              const dm = new THREE.Mesh(dotGeo, dotMat);
+              gen3D.statorGroup.add(dm);
+              dots.push({ mesh: dm, offset: d / dotNum });
+            }
+
+            gen3D.coilEntries.push({
+              phaseKey: ph.key,
+              mesh: wMesh,
+              mat: coilMat,
+              curve: wCurve,
+              dots,
+              extraMeshes: (pair === 0 && idxInPair === 0) ? phaseExtraMeshes : []
+            });
+          });
+
+          // 成對線圈 (a1 <-> a2) 之間的同心外環串聯跨接線 (位於各自的 busR，絕不穿過轉軸！)
+          const jumperPts = [];
+          const arcSteps = 12;
+          jumperPts.push(localToRadialWorld(-axialHalfLen, 2.74, 0, a1));
+          jumperPts.push(localToRadialWorld(ph.jumperX, ph.busR, 0, a1));
+          for (let s = 1; s < arcSteps; s++) {
+            const angInterp = a1 + ((a2 - a1) * s) / arcSteps;
+            jumperPts.push(localToRadialWorld(ph.jumperX, ph.busR, 0, angInterp));
+          }
+          jumperPts.push(localToRadialWorld(ph.jumperX, ph.busR, 0, a2));
+          jumperPts.push(localToRadialWorld(-axialHalfLen, 2.74, 0, a2));
+
+          const jCurve = new THREE.CatmullRomCurve3(jumperPts, false, 'catmullrom', 0.1);
+          const jGeo = new THREE.TubeGeometry(jCurve, 36, tubeR * 0.9, 10, false);
+          const jMesh = new THREE.Mesh(jGeo, coilMat);
+          gen3D.statorGroup.add(jMesh);
+
+          const jDots = [];
+          const jDotGeo = new THREE.SphereGeometry(tubeR * 1.75, 10, 10);
+          const jDotMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+          const jDotCount = polePairs === 1 ? 4 : 1;
+          for (let d = 0; d < jDotCount; d++) {
+            const dm = new THREE.Mesh(jDotGeo, jDotMat);
+            gen3D.statorGroup.add(dm);
+            jDots.push({ mesh: dm, offset: d / jDotCount });
+          }
+          gen3D.coilEntries.push({
+            phaseKey: ph.key,
+            mesh: jMesh,
+            mat: coilMat,
+            curve: jCurve,
+            dots: jDots,
+            extraMeshes: []
+          });
+
+          // 第一對極 (pair === 0) 的兩端實體引出：頭端往右側 R/S/T 輸出端，尾端往左側 Y 接中性點銅環
+          if (pair === 0) {
+            // (1) 頭端引出線：Coil 1 前側 -> 外環 busR -> 右側端子座 -> R/S/T 外部匯流排
+            const outLeadPts = [
+              localToRadialWorld(axialHalfLen, 2.74, -tanHalfW, a1),
+              localToRadialWorld(1.75, ph.busR, 0, a1),
+              new THREE.Vector3(2.65, ph.outY, Math.sin(a1) * 0.6),
+              new THREE.Vector3(termX, ph.outY, 0),
+              new THREE.Vector3(5.35, ph.outY, 0)
+            ];
+            const outCurve = new THREE.CatmullRomCurve3(outLeadPts, false, 'catmullrom', 0.12);
+            const outMesh = new THREE.Mesh(new THREE.TubeGeometry(outCurve, 40, tubeR * 1.05, 10, false), coilMat);
+            gen3D.statorGroup.add(outMesh);
+
+            const outDots = [];
+            for (let d = 0; d < 4; d++) {
+              const dm = new THREE.Mesh(new THREE.SphereGeometry(tubeR * 1.9, 10, 10), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+              gen3D.statorGroup.add(dm);
+              outDots.push({ mesh: dm, offset: d / 4 });
+            }
+            gen3D.coilEntries.push({ phaseKey: ph.key, mesh: outMesh, mat: coilMat, curve: outCurve, dots: outDots, extraMeshes: [] });
+
+            // (2) 尾端引出線：Coil 2 後側 -> 外側繞至左側 Y 接中性點銅環 (不穿透轉子)
+            const neuLeadPts = [
+              localToRadialWorld(-axialHalfLen, 2.74, tanHalfW, a2),
+              localToRadialWorld(-1.95, ph.busR * 0.92, 0, a2),
+              localToRadialWorld(neutralX, 1.35, 0, a2),
+              localToRadialWorld(neutralX, 0.55, 0, a2)
+            ];
+            const neuCurve = new THREE.CatmullRomCurve3(neuLeadPts, false, 'catmullrom', 0.12);
+            const neuMesh = new THREE.Mesh(new THREE.TubeGeometry(neuCurve, 32, tubeR * 0.95, 10, false), coilMat);
+            gen3D.statorGroup.add(neuMesh);
+
+            const neuDots = [];
+            for (let d = 0; d < 3; d++) {
+              const dm = new THREE.Mesh(new THREE.SphereGeometry(tubeR * 1.75, 10, 10), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+              gen3D.statorGroup.add(dm);
+              neuDots.push({ mesh: dm, offset: d / 3 });
+            }
+            gen3D.coilEntries.push({ phaseKey: ph.key, mesh: neuMesh, mat: coilMat, curve: neuCurve, dots: neuDots, extraMeshes: [] });
+          }
+        }
+      });
+    }
+
+    function setGenCameraPreset(mode) {
+      if (mode === 'front') {
+        gen3D.orbit.theta = Math.PI / 2;
+        gen3D.orbit.phi = Math.PI / 2;
+        gen3D.orbit.radius = 12.2;
+      } else if (mode === 'side') {
+        gen3D.orbit.theta = 0.02;
+        gen3D.orbit.phi = Math.PI / 2;
+        gen3D.orbit.radius = 12.8;
+      } else {
+        gen3D.orbit.theta = 0.65;
+        gen3D.orbit.phi = 1.05;
+        gen3D.orbit.radius = 13.0;
+      }
+      updateOrbitCamera(gen3D.camera, gen3D.orbit);
+    }
+
+    function updateGen3DScene(dtSec) {
+      if (!gen3D.renderer || activeTab !== 'gen') return;
+      const gen = engine.getGenMetrics();
+      const polePairs = Math.max(1, gen.spec.poles / 2);
+
+      if (!gen.spec.isDC && gen3D.rotorGroup) {
+        gen3D.rotorGroup.rotation.x = engine.electricalAngleRad / polePairs;
+      }
+
+      // 依示波器所選的量測模式與通道，同步決定左側 3D 定子顯示哪些線圈
+      const ch = engine.scopeChannels;
+      const visiblePhase = engine.scopeMeasureMode === 'line'
+        ? {
+            u: ch.u || ch.w, // U-V 或 W-U 皆需顯示 U 相線圈
+            v: ch.u || ch.v, // U-V 或 V-W 皆需顯示 V 相線圈
+            w: ch.v || ch.w  // V-W 或 W-U 皆需顯示 W 相線圈
+          }
+        : { u: ch.u, v: ch.v, w: ch.w };
+
+      gen3D.coilEntries.forEach(entry => {
+        const visible = !!visiblePhase[entry.phaseKey];
+        entry.mesh.visible = visible;
+        if (entry.extraMeshes && entry.extraMeshes.length > 0) {
+          entry.extraMeshes.forEach(m => { m.visible = visible; });
+        }
+        const waveVal = gen.currentWave[entry.phaseKey] || 0;
+        entry.mat.emissiveIntensity = 0.18 + Math.abs(waveVal) * 0.65;
+
+        entry.dots.forEach(d => {
+          d.mesh.visible = visible;
+          if (visible) {
+            d.offset = (d.offset + dtSec * waveVal * 0.45) % 1;
+            if (d.offset < 0) d.offset += 1;
+            const pt = entry.curve.getPointAt(d.offset);
+            d.mesh.position.copy(pt);
+          }
+        });
+      });
+
+      gen3D.renderer.render(gen3D.scene, gen3D.camera);
+    }
+
+    /**
+     * 通用 3D 軌道相機與點擊射線偵測工具
+     */
+    function updateOrbitCamera(camera, orbit) {
+      const sinPhi = Math.sin(orbit.phi);
+      camera.position.x = orbit.target.x + orbit.radius * sinPhi * Math.sin(orbit.theta);
+      camera.position.y = orbit.target.y + orbit.radius * Math.cos(orbit.phi);
+      camera.position.z = orbit.target.z + orbit.radius * sinPhi * Math.cos(orbit.theta);
+      camera.lookAt(orbit.target);
+    }
+
+    function attachOrbitAndClickEvents(canvas, state3D, onPick) {
+      const startDrag = (x, y) => {
+        state3D.orbit.isDragging = true;
+        state3D.orbit.prevX = x;
+        state3D.orbit.prevY = y;
+        state3D.orbit.moved = false;
+      };
+      const moveDrag = (x, y) => {
+        if (!state3D.orbit.isDragging) return;
+        const dx = x - state3D.orbit.prevX;
+        const dy = y - state3D.orbit.prevY;
+        if (Math.abs(dx) > 3 || Math.abs(dy) > 3) state3D.orbit.moved = true;
+        state3D.orbit.theta -= dx * 0.008;
+        state3D.orbit.phi = Math.max(0.08, Math.min(Math.PI / 2 - 0.04, state3D.orbit.phi - dy * 0.008));
+        state3D.orbit.prevX = x;
+        state3D.orbit.prevY = y;
+        updateOrbitCamera(state3D.camera, state3D.orbit);
+      };
+      const endDrag = (clientX, clientY) => {
+        const wasMoved = state3D.orbit.moved;
+        state3D.orbit.isDragging = false;
+        if (!wasMoved && onPick && state3D.interactables) {
+          const rect = canvas.getBoundingClientRect();
+          state3D.mouse.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+          state3D.mouse.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+          state3D.raycaster.setFromCamera(state3D.mouse, state3D.camera);
+          const hits = state3D.raycaster.intersectObjects(state3D.interactables);
+          if (hits.length > 0) onPick(hits[0].object);
+        }
+      };
+
+      canvas.addEventListener('mousedown', e => startDrag(e.clientX, e.clientY));
+      window.addEventListener('mousemove', e => moveDrag(e.clientX, e.clientY));
+      canvas.addEventListener('mouseup', e => endDrag(e.clientX, e.clientY));
+
+      canvas.addEventListener('touchstart', e => {
+        if (e.touches.length === 1) startDrag(e.touches[0].clientX, e.touches[0].clientY);
+      }, { passive: true });
+      canvas.addEventListener('touchmove', e => {
+        if (e.touches.length === 1) moveDrag(e.touches[0].clientX, e.touches[0].clientY);
+      }, { passive: true });
+      canvas.addEventListener('touchend', e => {
+        if (e.changedTouches.length === 1) endDrag(e.changedTouches[0].clientX, e.changedTouches[0].clientY);
+      });
+
+      canvas.addEventListener('wheel', e => {
+        e.preventDefault();
+        state3D.orbit.radius = Math.max(6, Math.min(55, state3D.orbit.radius + e.deltaY * 0.02));
+        updateOrbitCamera(state3D.camera, state3D.orbit);
+      }, { passive: false });
+    }
+
+    /**
+     * ============================================================================
+     * 第四部分：Three.js 3D 多級變電站地理分布場景 (模組 2 升級版)
+     * ============================================================================
+     */
+    const trans3D = {
+      scene: null,
+      camera: null,
+      renderer: null,
+      orbit: { theta: 0.12, phi: 0.78, radius: 32, target: new THREE.Vector3(0, 0.5, 0), isDragging: false, prevX: 0, prevY: 0, moved: false },
+      interactables: [],
+      flowSegments: [],
+      labelAnchors: [],
+      selectionRing: null,
+      raycaster: new THREE.Raycaster(),
+      mouse: new THREE.Vector2()
+    };
+
+    function initTrans3D() {
+      const container = document.getElementById('wrap-trans-3d');
+      const canvas = document.getElementById('canvas-trans-3d');
+      const labelContainer = document.getElementById('labels-trans-3d');
+
+      trans3D.scene = new THREE.Scene();
+      trans3D.scene.background = new THREE.Color(0x08111e);
+      trans3D.scene.fog = new THREE.FogExp2(0x08111e, 0.012);
+
+      trans3D.camera = new THREE.PerspectiveCamera(42, Math.max(1, container.clientWidth) / Math.max(1, container.clientHeight), 0.1, 200);
+      updateOrbitCamera(trans3D.camera, trans3D.orbit);
+
+      trans3D.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+      trans3D.renderer.setSize(Math.max(1, container.clientWidth), Math.max(1, container.clientHeight));
+      trans3D.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+      trans3D.scene.add(new THREE.AmbientLight(0x94a3b8, 0.9));
+      const sun = new THREE.DirectionalLight(0xffffff, 1.15);
+      sun.position.set(18, 28, 16);
+      trans3D.scene.add(sun);
+
+      const landGeo = new THREE.PlaneGeometry(44, 28, 36, 24);
+      const posAttr = landGeo.attributes.position;
+      for (let i = 0; i < posAttr.count; i++) {
+        const vx = posAttr.getX(i);
+        const vy = posAttr.getY(i);
+        let elev = 0;
+        if (vx > -5 && vx < 4) {
+          elev = Math.cos(((vx + 0.5) / 4.5) * (Math.PI / 2)) * 2.4 * (0.7 + 0.3 * Math.cos(vy * 0.25));
+        }
+        posAttr.setZ(i, Math.max(0, elev));
+      }
+      landGeo.computeVertexNormals();
+      const landMat = new THREE.MeshStandardMaterial({ color: 0x132a24, roughness: 0.85, metalness: 0.1 });
+      const landMesh = new THREE.Mesh(landGeo, landMat);
+      landMesh.rotation.x = -Math.PI / 2;
+      trans3D.scene.add(landMesh);
+
+      const seaMesh = new THREE.Mesh(
+        new THREE.PlaneGeometry(14, 28, 8, 8),
+        new THREE.MeshStandardMaterial({ color: 0x0c4a6e, roughness: 0.25, metalness: 0.45 })
+      );
+      seaMesh.rotation.x = -Math.PI / 2;
+      seaMesh.position.set(-18, 0.02, 0);
+      trans3D.scene.add(seaMesh);
+
+      [[-8, -7], [-6, 6], [-2, -8], [1, 7], [5, -6], [7, 8], [13, -7], [15, 6]].forEach(([tx, tz]) => {
+        const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.12, 0.45, 10), new THREE.MeshStandardMaterial({ color: 0x78350f }));
+        trunk.position.set(tx, 0.22, tz);
+        const crown = new THREE.Mesh(new THREE.IcosahedronGeometry(0.45, 2), new THREE.MeshStandardMaterial({ color: 0x15803d }));
+        crown.position.set(tx, 0.65, tz);
+        trans3D.scene.add(trunk, crown);
+      });
+
+      const addMapLabel = (pos, text, cls) => {
+        const el = document.createElement('div');
+        el.className = `label-3d px-2 py-0.5 rounded border text-[10px] font-bold ${cls}`;
+        el.textContent = text;
+        labelContainer.appendChild(el);
+        const anchor = { pos: pos.clone(), el };
+        trans3D.labelAnchors.push(anchor);
+        return anchor;
+      };
+
+      const nodes = {
+        plant:   new THREE.Vector3(-12.5, 0.2, -5.5),
+        stepup:  new THREE.Vector3(-8.5,  0.2, -3.5),
+        tower1:  new THREE.Vector3(-1.0,  2.3, -1.8),
+        primary: new THREE.Vector3( 4.8,  0.4, -4.8),
+        tower2:  new THREE.Vector3( 7.2,  0.3,  0.2),
+        dist:    new THREE.Vector3( 8.5,  0.2,  4.8),
+        feeder1: new THREE.Vector3(10.1,  0.2,  4.1), // 市區高壓配電電桿 (線路分段開關)
+        feeder2: new THREE.Vector3(11.6,  0.2,  3.3), // 巷口分歧電桿 (熔絲鏈開關與避雷器)
+        pole:    new THREE.Vector3(12.9,  0.2,  2.4),
+        home:    new THREE.Vector3(15.5,  0.2, -2.5)
+      };
+
+      trans3D.selectionRing = new THREE.Mesh(
+        new THREE.RingGeometry(1.35, 1.7, 36),
+        new THREE.MeshBasicMaterial({ color: 0xfacc15, side: THREE.DoubleSide })
+      );
+      trans3D.selectionRing.rotation.x = -Math.PI / 2;
+      trans3D.selectionRing.position.set(nodes.stepup.x, 0.28, nodes.stepup.z);
+      trans3D.scene.add(trans3D.selectionRing);
+
+      const pGrp = new THREE.Group();
+      pGrp.position.copy(nodes.plant);
+      const pBody = new THREE.Mesh(new THREE.BoxGeometry(2.2, 1.1, 1.6, 4, 2, 4), new THREE.MeshStandardMaterial({ color: 0x334155 }));
+      pBody.position.y = 0.55;
+      pGrp.add(pBody);
+      trans3D.scene.add(pGrp);
+      const plantAnchor = addMapLabel(nodes.plant.clone().add(new THREE.Vector3(0, 1.8, 0)), '🏭 沿海發電廠 (出口 22 kV)', 'bg-amber-950/90 border-amber-500/70 text-amber-200');
+      plantAnchor.isPlant = true;
+
+      [nodes.tower1, nodes.tower2].forEach(tp => {
+        const tg = new THREE.Group();
+        tg.position.copy(tp);
+        const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.36, 2.5, 12, 4), new THREE.MeshStandardMaterial({ color: 0x94a3b8, metalness: 0.7 }));
+        mast.position.y = 1.25;
+        const arm = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.08, 0.12), new THREE.MeshStandardMaterial({ color: 0x94a3b8 }));
+        arm.position.y = 2.1;
+        tg.add(mast, arm);
+        trans3D.scene.add(tg);
+      });
+
+      // 配電變電所 -> 社區變壓器之間的「市區高壓配電電線桿 + 分段開關 + 熔絲鏈開關與避雷器」
+      const buildUtilityPole = (pos, hasCutoutFuse) => {
+        const pg = new THREE.Group();
+        pg.position.copy(pos);
+        // 水泥電線桿主體
+        const poleCyl = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.08, 0.12, 1.85, 14),
+          new THREE.MeshStandardMaterial({ color: 0x94a3b8, roughness: 0.8 })
+        );
+        poleCyl.position.y = 0.92;
+        pg.add(poleCyl);
+        // 高壓橫擔
+        const crossArm = new THREE.Mesh(
+          new THREE.BoxGeometry(0.95, 0.07, 0.08),
+          new THREE.MeshStandardMaterial({ color: 0x64748b, metalness: 0.5 })
+        );
+        crossArm.position.y = 1.68;
+        crossArm.rotation.y = 0.5;
+        pg.add(crossArm);
+
+        if (hasCutoutFuse) {
+          // 白色瓷瓶熔絲鏈開關 (高壓保險絲) 與避雷器
+          [-0.26, 0.26].forEach((ox, idx) => {
+            const insulator = new THREE.Mesh(
+              new THREE.CylinderGeometry(0.045, 0.055, 0.28, 10),
+              new THREE.MeshStandardMaterial({ color: idx === 0 ? 0xf8fafc : 0xfacc15, emissive: idx === 1 ? 0xca8a04 : 0x000000, emissiveIntensity: 0.35 })
+            );
+            insulator.position.set(ox, 1.52, 0.06);
+            insulator.rotation.z = idx === 0 ? 0.25 : -0.25;
+            pg.add(insulator);
+          });
+        } else {
+          // 線路分段開關箱
+          const swBox = new THREE.Mesh(
+            new THREE.BoxGeometry(0.28, 0.22, 0.22),
+            new THREE.MeshStandardMaterial({ color: 0x38bdf8, emissive: 0x0284c7, emissiveIntensity: 0.3 })
+          );
+          swBox.position.set(0, 1.48, 0.1);
+          pg.add(swBox);
+        }
+        trans3D.scene.add(pg);
+      };
+
+      buildUtilityPole(nodes.feeder1, false);
+      buildUtilityPole(nodes.feeder2, true);
+      addMapLabel(nodes.feeder2.clone().add(new THREE.Vector3(-0.3, 2.25, 0.3)), '⚡ 市區電桿 · 分段/熔絲鏈開關', 'bg-slate-900/90 border-yellow-400/70 text-yellow-200');
+
+      // 4 座分布於不同地理位置的 3D 變電所（點擊可直接切換電壓）
+      const subSpecs = [
+        { key: 'stepup',  pos: nodes.stepup,  title: '① 升壓變電站', color: 0x38bdf8 },
+        { key: 'primary', pos: nodes.primary, title: '② 一次變電所', color: 0xa855f7 },
+        { key: 'dist',    pos: nodes.dist,    title: '③ 配電變電所', color: 0xf59e0b },
+        { key: 'pole',    pos: nodes.pole,    title: '④ 社區變壓器', color: 0x10b981 }
+      ];
+
+      subSpecs.forEach(s => {
+        const grp = new THREE.Group();
+        grp.position.copy(s.pos);
+
+        const pad = new THREE.Mesh(
+          new THREE.BoxGeometry(2.0, 0.22, 1.6, 2, 1, 2),
+          new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.7 })
+        );
+        pad.position.y = 0.11;
+        grp.add(pad);
+
+        [-0.42, 0.42].forEach((tx, idx) => {
+          const tank = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.35, 0.35, 1.0, 24, 2),
+            new THREE.MeshStandardMaterial({
+              color: idx === 0 ? 0x64748b : s.color,
+              emissive: s.color,
+              emissiveIntensity: 0.3,
+              metalness: 0.55,
+              roughness: 0.3
+            })
+          );
+          tank.position.set(tx, 0.72, 0);
+          grp.add(tank);
+
+          const bushing = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.06, 0.1, 0.42, 12),
+            new THREE.MeshStandardMaterial({ color: 0xe2e8f0 })
+          );
+          bushing.position.set(tx, 1.4, 0);
+          grp.add(bushing);
+        });
+
+        trans3D.scene.add(grp);
+
+        const anchor = addMapLabel(
+          s.pos.clone().add(new THREE.Vector3(0, 2.05, 0)),
+          s.title,
+          'bg-slate-900/90 border-sky-400/70 text-sky-200'
+        );
+        anchor.subKey = s.key;
+        anchor.baseTitle = s.title;
+
+        const hitMesh = new THREE.Mesh(
+          new THREE.BoxGeometry(2.6, 2.2, 2.2),
+          new THREE.MeshBasicMaterial({ visible: false })
+        );
+        hitMesh.position.set(s.pos.x, s.pos.y + 0.9, s.pos.z);
+        hitMesh.userData = { subKey: s.key, pos: s.pos.clone() };
+        trans3D.scene.add(hitMesh);
+        trans3D.interactables.push(hitMesh);
+      });
+
+      // 社區低壓住宅群
+      const hGrp = new THREE.Group();
+      hGrp.position.copy(nodes.home);
+      for (let i = 0; i < 3; i++) {
+        const bh = 0.75 + (i % 2) * 0.55;
+        const b = new THREE.Mesh(
+          new THREE.BoxGeometry(0.7, bh, 0.7),
+          new THREE.MeshStandardMaterial({ color: 0x334155, emissive: 0x10b981, emissiveIntensity: 0.25 })
+        );
+        b.position.set((i - 1) * 0.85, bh / 2, (i % 2) * 0.35 - 0.15);
+        hGrp.add(b);
+      }
+      trans3D.scene.add(hGrp);
+      addMapLabel(nodes.home.clone().add(new THREE.Vector3(0, 1.9, 0)), '🏘️ 社區住宅 (110V/220V)', 'bg-emerald-950/90 border-emerald-500/70 text-emerald-200');
+
+      // 建立各區段 3D 輸配電導線與即時流動能量球（含市區高壓電線桿與熔絲鏈開關路徑）
+      const addMapFlowSeg = (segKey, pts, defaultColor, radius = 0.08, dotCount = 5) => {
+        const curve = new THREE.CatmullRomCurve3(pts, false, 'catmullrom', 0.12);
+        const geo = new THREE.TubeGeometry(curve, 36, radius, 10, false);
+        const mat = new THREE.MeshStandardMaterial({
+          color: defaultColor,
+          emissive: defaultColor,
+          emissiveIntensity: 0.45
+        });
+        trans3D.scene.add(new THREE.Mesh(geo, mat));
+
+        const dots = [];
+        const dotGeo = new THREE.SphereGeometry(radius * 2.1, 10, 10);
+        const dotMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+        for (let i = 0; i < dotCount; i++) {
+          const dm = new THREE.Mesh(dotGeo, dotMat);
+          trans3D.scene.add(dm);
+          dots.push({ mesh: dm, offset: i / dotCount });
+        }
+        trans3D.flowSegments.push({ segKey, curve, mat, defaultColor, dots });
+      };
+
+      const lift = (v, dy) => v.clone().add(new THREE.Vector3(0, dy, 0));
+
+      // seg0: 發電廠 -> ① 升壓變電站
+      addMapFlowSeg('seg0', [lift(nodes.plant, 1.1), lift(nodes.stepup, 1.3)], 0xfbbf24, 0.085, 3);
+      // seg1: ① 升壓變電站 -> 跨山脈超高壓鐵塔 -> ② 一次變電所
+      addMapFlowSeg('seg1', [lift(nodes.stepup, 1.4), lift(nodes.tower1, 2.1), lift(nodes.primary, 1.4)], 0x38bdf8, 0.09, 6);
+      // seg2: ② 一次變電所 -> 區域鐵塔 -> ③ 配電變電所
+      addMapFlowSeg('seg2', [lift(nodes.primary, 1.4), lift(nodes.tower2, 2.1), lift(nodes.dist, 1.3)], 0xa855f7, 0.085, 5);
+      // seg3: ③ 配電變電所 -> 市區配電電桿(分段開關) -> 巷口電桿(熔絲鏈開關) -> ④ 社區變壓器
+      addMapFlowSeg('seg3', [
+        lift(nodes.dist, 1.3),
+        lift(nodes.feeder1, 1.7),
+        lift(nodes.feeder2, 1.7),
+        lift(nodes.pole, 1.3)
+      ], 0xf59e0b, 0.075, 5);
+      // seg4: ④ 社區變壓器 -> 社區低壓住宅
+      addMapFlowSeg('seg4', [lift(nodes.pole, 1.2), lift(nodes.home, 1.0)], 0x10b981, 0.075, 4);
+
+      // 點擊 3D 地圖上的任一變電所即可選中並循環切換該站輸出電壓
+      attachOrbitAndClickEvents(canvas, trans3D, (hit) => {
+        if (!hit || !hit.userData || !hit.userData.subKey) return;
+        const key = hit.userData.subKey;
+        const sub = engine.substations[key];
+        if (!sub) return;
+        trans3D.selectionRing.position.set(hit.userData.pos.x, 0.28, hit.userData.pos.z);
+        if (engine.selectedSubstation === key) {
+          const curIdx = sub.options.findIndex(o => Math.abs(o.val - sub.voltageKV) < 0.001);
+          const nextOpt = sub.options[(curIdx + 1) % sub.options.length];
+          sub.voltageKV = nextOpt.val;
+        } else {
+          engine.selectedSubstation = key;
+        }
+        syncUI();
+      });
+    }
+
+    function setTransCameraPreset(mode) {
+      if (mode === 'top') {
+        trans3D.orbit.theta = 0.0;
+        trans3D.orbit.phi = 0.08;
+        trans3D.orbit.radius = 36;
+      } else if (mode === 'tower') {
+        trans3D.orbit.theta = -0.45;
+        trans3D.orbit.phi = 1.18;
+        trans3D.orbit.radius = 22;
+      } else {
+        trans3D.orbit.theta = 0.12;
+        trans3D.orbit.phi = 0.78;
+        trans3D.orbit.radius = 32;
+      }
+      updateOrbitCamera(trans3D.camera, trans3D.orbit);
+    }
+
+    function updateTrans3DScene(dtSec) {
+      if (!trans3D.renderer || activeTab !== 'trans') return;
+      const trans = engine.getTransMetrics();
+
+      const segConfig = {
+        seg0: { spd: 0.45, hot: false },
+        seg1: { spd: Math.min(1.5, Math.max(0.25, trans.i1 / 450)), hot: trans.loss1MW > trans.transmittedMW * 0.12 },
+        seg2: { spd: Math.min(1.5, Math.max(0.25, trans.i2 / 900)), hot: trans.loss2MW > trans.transmittedMW * 0.08 },
+        seg3: { spd: Math.min(1.5, Math.max(0.25, trans.i3 / 3500)), hot: trans.loss3MW > trans.transmittedMW * 0.05 },
+        seg4: { spd: 0.55, hot: trans.actualHomeV110 < 100 }
+      };
+
+      trans3D.flowSegments.forEach(seg => {
+        const cfg = segConfig[seg.segKey] || { spd: 0.4, hot: false };
+        const col = cfg.hot ? 0xf43f5e : seg.defaultColor;
+        seg.mat.color.setHex(col);
+        seg.mat.emissive.setHex(col);
+
+        seg.dots.forEach(d => {
+          d.offset = (d.offset + dtSec * cfg.spd * 0.3) % 1;
+          d.mesh.position.copy(seg.curve.getPointAt(d.offset));
+        });
+      });
+
+      const container = document.getElementById('wrap-trans-3d');
+      const cw = container.clientWidth;
+      const ch = container.clientHeight;
+      const gen = engine.getGenMetrics();
+      trans3D.labelAnchors.forEach(item => {
+        if (item.isPlant) {
+          item.el.textContent = `🏭 ${gen.spec.name}廠 [發電機出口 ${gen.spec.genVoltageText}]`;
+        } else if (item.subKey) {
+          const sub = engine.substations[item.subKey];
+          const vStr = sub.voltageKV >= 1 ? `${sub.voltageKV} kV` : `${Math.round(sub.voltageKV * 1000)}V/${Math.round(sub.voltageKV * 2000)}V`;
+          item.el.textContent = `${item.baseTitle} [${vStr}]`;
+        }
+        const v = item.pos.clone().project(trans3D.camera);
+        if (v.z > 1) {
+          item.el.style.opacity = '0';
+        } else {
+          item.el.style.opacity = '1';
+          item.el.style.left = `${(v.x * 0.5 + 0.5) * cw}px`;
+          item.el.style.top = `${(-v.y * 0.5 + 0.5) * ch}px`;
+        }
+      });
+
+      trans3D.renderer.render(trans3D.scene, trans3D.camera);
+    }
+
+    /**
+     * ============================================================================
+     * 第五部分：2D 示波器與低壓配電箱渲染
+     * ============================================================================
+     */
+    function switchTab(tab) {
+      activeTab = tab;
+      document.querySelectorAll('.view-section').forEach(sec => sec.classList.add('hidden'));
+      const target = document.getElementById(`view-${tab}`);
+      if (target) target.classList.remove('hidden');
+
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        if (btn.dataset.tab === tab) {
+          btn.className = 'tab-btn px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all bg-sky-500 text-slate-950 font-bold shadow-lg shadow-sky-500/25';
+        } else {
+          btn.className = 'tab-btn px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all bg-slate-800 text-slate-300 hover:bg-slate-700';
+        }
+      });
+      resizeAllCanvases();
+    }
+
+    function resizeCanvas(canvas) {
+      if (!canvas) return null;
+      const rect = canvas.parentElement.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) return null;
+      const dpr = window.devicePixelRatio || 1;
+      const targetW = Math.floor(rect.width * dpr);
+      const targetH = Math.floor(rect.height * dpr);
+      if (canvas.width !== targetW || canvas.height !== targetH) {
+        canvas.width = targetW;
+        canvas.height = targetH;
+      }
+      const ctx = canvas.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      return { ctx, w: rect.width, h: rect.height };
+    }
+
+    function resizeAllCanvases() {
+      const pWrap = document.getElementById('wrap-panorama-3d');
+      if (pano3D.renderer && pWrap && pWrap.clientWidth > 0) {
+        pano3D.camera.aspect = pWrap.clientWidth / pWrap.clientHeight;
+        pano3D.camera.updateProjectionMatrix();
+        pano3D.renderer.setSize(pWrap.clientWidth, pWrap.clientHeight);
+      }
+      const gWrap = document.getElementById('wrap-gen-3d');
+      if (gen3D.renderer && gWrap && gWrap.clientWidth > 0) {
+        gen3D.camera.aspect = gWrap.clientWidth / gWrap.clientHeight;
+        gen3D.camera.updateProjectionMatrix();
+        gen3D.renderer.setSize(gWrap.clientWidth, gWrap.clientHeight);
+      }
+      const tWrap = document.getElementById('wrap-trans-3d');
+      if (trans3D.renderer && tWrap && tWrap.clientWidth > 0) {
+        trans3D.camera.aspect = tWrap.clientWidth / tWrap.clientHeight;
+        trans3D.camera.updateProjectionMatrix();
+        trans3D.renderer.setSize(tWrap.clientWidth, tWrap.clientHeight);
+      }
+      ['canvas-gen-scope', 'canvas-home', 'canvas-home-scope'].forEach(id => {
+        resizeCanvas(document.getElementById(id));
+      });
+    }
+
+    function drawFlowLine(ctx, x1, y1, x2, y2, color, speed, dotCount = 4, lineWidth = 3, dotRadius = 3) {
+      ctx.save();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = lineWidth;
+      ctx.globalAlpha = 0.35;
+      ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+
+      if (Math.abs(speed) > 0.001 && dotCount > 0) {
+        ctx.globalAlpha = 0.95;
+        ctx.fillStyle = color;
+        for (let i = 0; i < dotCount; i++) {
+          let t = ((i / dotCount) + flowOffset * speed * 0.45) % 1;
+          if (t < 0) t += 1;
+          const px = x1 + (x2 - x1) * t;
+          const py = y1 + (y2 - y1) * t;
+          ctx.beginPath(); ctx.arc(px, py, dotRadius, 0, Math.PI * 2); ctx.fill();
+        }
+      }
+      ctx.restore();
+    }
+
+    function renderGenScope() {
+      const res = resizeCanvas(document.getElementById('canvas-gen-scope'));
+      if (!res) return;
+      const { ctx, w, h } = res;
+      const gen = engine.getGenMetrics();
+      const isLine = engine.scopeMeasureMode === 'line';
+      const isDCOnly = gen.spec.isDC && !engine.inverterEnabled;
+
+      ctx.clearRect(0, 0, w, h);
+
+      const padL = 46, padR = 22, padT = 56, padB = 34;
+      const plotW = w - padL - padR;
+      const plotH = h - padT - padB;
+      const midY = padT + plotH / 2;
+      // 保留縱向餘裕，使線電壓 (√3 ≈ 1.732 倍振幅) 與無 AVR 升速過壓清楚呈現而不爆框
+      const phaseScale = plotH * 0.24;
+      const ratedRefAmp = 0.72;
+
+      ctx.strokeStyle = '#1e293b';
+      ctx.lineWidth = 1;
+      for (let i = 0; i <= 4; i++) {
+        const y = padT + (plotH * i) / 4;
+        ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(w - padR, y); ctx.stroke();
+      }
+      ctx.strokeStyle = '#475569';
+      ctx.beginPath(); ctx.moveTo(padL, midY); ctx.lineTo(w - padR, midY); ctx.stroke();
+
+      // 額定電壓 (±100%) 參考虛線，方便觀察 AVR OFF 時轉速變化造成波形高於或低於額定值
+      const refDy = ratedRefAmp * (isLine ? phaseScale * 1.732 : phaseScale);
+      ctx.save();
+      ctx.strokeStyle = 'rgba(250, 204, 21, 0.35)';
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      ctx.moveTo(padL, midY - refDy); ctx.lineTo(w - padR, midY - refDy);
+      ctx.moveTo(padL, midY + refDy); ctx.lineTo(w - padR, midY + refDy);
+      ctx.stroke();
+      ctx.restore();
+
+      // 縱軸參考刻度
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = '10px "JetBrains Mono", sans-serif';
+      ctx.textAlign = 'right';
+      ctx.fillText(isLine ? '+√3E' : '+E', padL - 6, midY - refDy + 3);
+      ctx.fillText('0V', padL - 6, midY + 3);
+      ctx.fillText(isLine ? '-√3E' : '-E', padL - 6, midY + refDy + 3);
+
+      const drawWaveCurve = (getter, color, label) => {
+        if (engine.scopeHistory.length < 2) return;
+        ctx.save();
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2.4;
+        ctx.beginPath();
+        engine.scopeHistory.forEach((pt, idx) => {
+          const x = padL + (idx / (engine.maxHistoryPoints - 1)) * plotW;
+          const y = midY - getter(pt) * phaseScale;
+          if (idx === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+
+        const last = engine.scopeHistory[engine.scopeHistory.length - 1];
+        const lx = padL + plotW;
+        const ly = midY - getter(last) * phaseScale;
+        ctx.fillStyle = color;
+        ctx.beginPath(); ctx.arc(lx, ly, 4.5, 0, Math.PI * 2); ctx.fill();
+        ctx.font = 'bold 10px "JetBrains Mono", sans-serif';
+        ctx.textAlign = 'right';
+        ctx.fillText(label, lx - 8, ly - 6);
+        ctx.restore();
+      };
+
+      if (isDCOnly) {
+        drawWaveCurve(pt => pt.u, '#ff2a2a', 'DC');
+      } else if (isLine) {
+        if (engine.scopeChannels.u) drawWaveCurve(pt => pt.u - pt.v, '#ff2a2a', 'U-V');
+        if (engine.scopeChannels.v) drawWaveCurve(pt => pt.v - pt.w, '#00e676', 'V-W');
+        if (engine.scopeChannels.w) drawWaveCurve(pt => pt.w - pt.u, '#2979ff', 'W-U');
+      } else {
+        if (engine.scopeChannels.u) drawWaveCurve(pt => pt.u, '#ff2a2a', 'U-N');
+        if (engine.scopeChannels.v) drawWaveCurve(pt => pt.v, '#00e676', 'V-N');
+        if (engine.scopeChannels.w) drawWaveCurve(pt => pt.w, '#2979ff', 'W-N');
+      }
+
+      const deg = Math.round(((engine.electricalAngleRad * 180) / Math.PI) % 360 + 360) % 360;
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = '11px "JetBrains Mono", sans-serif';
+      ctx.textAlign = 'left';
+      const modeText = isDCOnly ? '純直流 DC' : (isLine ? '線電壓(√3倍)' : '相電壓(對N)');
+      const avrTag = gen.spec.isDC ? '' : (engine.avrEnabled ? ` | 出口 ${gen.liveVoltageStr} [AVR穩壓]` : ` | 出口 ${gen.liveVoltageStr} (${Math.round(gen.voltageRatio * 100)}%)`);
+      ctx.fillText(`${modeText} | ${gen.outputFreqHz.toFixed(1)}Hz${avrTag} | θ=${deg}°`, padL, h - 10);
+    }
+
+    function renderHome() {
+      const res = resizeCanvas(document.getElementById('canvas-home'));
+      if (!res) return;
+      const { ctx, w, h } = res;
+      const home = engine.getHomeMetrics();
+      const br = engine.breakers;
+      const dw = engine.disconnectedWires;
+      const wf = engine.homeWireFilter;
+      engine.homeHitBoxes = [];
+
+      ctx.clearRect(0, 0, w, h);
+
+      // 交流電電子來回震盪繪製工具：
+      // 位移 Δs = -cos(θ) * amp * acDir，故速度 v = d(Δs)/dt = +sin(θ) * amp * acDir，與下方示波器完全同步！
+      // acDir = +1 (L1 同相) / -1 (L2 反相 180°)，currentA = 0 時不繪製震盪電子。
+      const drawACPolyFlow = (pts, color, currentA, wireGroup = 'main', acDir = 1, width = 2.4, dashed = false) => {
+        const isVisible = wireGroup === 'main' ? true : !!wf[wireGroup];
+        ctx.save();
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+
+        if (!isVisible) {
+          ctx.strokeStyle = '#334155';
+          ctx.lineWidth = Math.max(1.2, width * 0.65);
+          ctx.globalAlpha = 0.16;
+          if (dashed) ctx.setLineDash([4, 4]);
+          ctx.beginPath();
+          pts.forEach((p, idx) => idx === 0 ? ctx.moveTo(p[0], p[1]) : ctx.lineTo(p[0], p[1]));
+          ctx.stroke();
+          ctx.restore();
+          return;
+        }
+
+        const hasCurrent = !dashed && currentA > 0.01;
+        ctx.strokeStyle = color;
+        ctx.lineWidth = width;
+        if (dashed) ctx.setLineDash([5, 4]);
+        // 接地線 (E) 即使平時無電流 (0A) 也應在啟用顯色時保持清晰亮起；漏電時加上發光效果
+        ctx.globalAlpha = hasCurrent ? 0.95 : (wireGroup === 'e' ? 0.9 : 0.36);
+        if (wireGroup === 'e' && hasCurrent) {
+          ctx.shadowColor = '#34d399';
+          ctx.shadowBlur = 8;
+        }
+        ctx.beginPath();
+        pts.forEach((p, idx) => idx === 0 ? ctx.moveTo(p[0], p[1]) : ctx.lineTo(p[0], p[1]));
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+
+        // 僅在有實際電流且非斷線時繪製來回震盪的交流電子點
+        if (hasCurrent) {
+          ctx.setLineDash([]);
+          const spacing = 22;
+          const ampPx = Math.min(8.5, 3.2 + currentA * 0.42);
+          const oscDisp = -Math.cos(engine.electricalAngleRad) * ampPx * acDir;
+
+          // 沿整條折線弧長均勻分布並同步震盪
+          let accLen = 0;
+          const segs = [];
+          for (let s = 0; s < pts.length - 1; s++) {
+            const [x1, y1] = pts[s], [x2, y2] = pts[s + 1];
+            const len = Math.hypot(x2 - x1, y2 - y1);
+            if (len > 0.5) {
+              segs.push({ x1, y1, x2, y2, len, start: accLen, end: accLen + len });
+              accLen += len;
+            }
+          }
+
+          ctx.globalAlpha = 1;
+          for (let baseD = spacing * 0.5; baseD < accLen; baseD += spacing) {
+            const d = baseD + oscDisp;
+            if (d <= 2 || d >= accLen - 2) continue;
+            for (const seg of segs) {
+              if (d >= seg.start && d <= seg.end) {
+                const t = (d - seg.start) / seg.len;
+                const px = seg.x1 + (seg.x2 - seg.x1) * t;
+                const py = seg.y1 + (seg.y2 - seg.y1) * t;
+                ctx.fillStyle = color;
+                ctx.beginPath();
+                ctx.arc(px, py, Math.max(2.6, width * 1.1), 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#ffffff';
+                ctx.beginPath();
+                ctx.arc(px, py, Math.max(1.5, width * 0.6), 0, Math.PI * 2);
+                ctx.fill();
+                break;
+              }
+            }
+          }
+        }
+        ctx.restore();
+      };
+
+      // 可點擊斷開/重接的電線接點端子 (插入 hitBoxes 最前確保點擊優先命中)
+      const drawTerminalNode = (x, y, wireId, color, wireGroup) => {
+        const isVisible = wireGroup === 'main' ? true : !!wf[wireGroup];
+        const isDisc = !!dw[wireId];
+        ctx.save();
+        if (!isVisible && !isDisc) {
+          ctx.globalAlpha = 0.2;
+        }
+        ctx.fillStyle = isDisc ? '#450a0a' : '#0f172a';
+        ctx.strokeStyle = isDisc ? '#f43f5e' : color;
+        ctx.lineWidth = isDisc ? 2 : 1.6;
+        ctx.beginPath();
+        ctx.arc(x, y, isDisc ? 5.2 : 4.0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        if (isDisc) {
+          ctx.strokeStyle = '#fda4af';
+          ctx.lineWidth = 1.6;
+          ctx.beginPath();
+          ctx.moveTo(x - 2.6, y - 2.6); ctx.lineTo(x + 2.6, y + 2.6);
+          ctx.moveTo(x + 2.6, y - 2.6); ctx.lineTo(x - 2.6, y + 2.6);
+          ctx.stroke();
+        } else {
+          ctx.fillStyle = color;
+          ctx.beginPath();
+          ctx.arc(x, y, 1.8, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.restore();
+
+        engine.homeHitBoxes.unshift({
+          x1: x - 8, y1: y - 8, x2: x + 8, y2: y + 8,
+          action: () => {
+            engine.disconnectedWires[wireId] = !engine.disconnectedWires[wireId];
+            syncUI();
+          }
+        });
+      };
+
+      // 依 KCL 逐段繪製垂直幹線：每個線段僅承載其下游實際開啟電器的總電流，無負載末端嚴格 0A
+      const drawKclTrunk = (x, yEntry, nodeList, color, wireGroup, acDir, width = 2.0, dashed = false) => {
+        if (nodeList.length === 0) return;
+        const above = nodeList.filter(n => n.y < yEntry).sort((a, b) => b.y - a.y); // 由近到遠 (往上)
+        const below = nodeList.filter(n => n.y >= yEntry).sort((a, b) => a.y - b.y); // 由近到遠 (往下)
+
+        let prevY = yEntry;
+        for (let i = 0; i < above.length; i++) {
+          let segCurrent = 0;
+          for (let j = i; j < above.length; j++) segCurrent += above[j].currentA;
+          drawACPolyFlow([[x, prevY], [x, above[i].y]], color, segCurrent, wireGroup, acDir, width, dashed);
+          prevY = above[i].y;
+        }
+
+        prevY = yEntry;
+        for (let i = 0; i < below.length; i++) {
+          let segCurrent = 0;
+          for (let j = i; j < below.length; j++) segCurrent += below[j].currentA;
+          drawACPolyFlow([[x, prevY], [x, below[i].y]], color, segCurrent, wireGroup, acDir, width, dashed);
+          prevY = below[i].y;
+        }
+      };
+
+      // ==================== 1. 左側：台電桿上變壓器 & 瓦時計 ====================
+      const leftX = w * 0.075;
+      const xfmrY = h * 0.25;
+      const meterY = h * 0.68;
+
+      // 桿上變壓器
+      ctx.fillStyle = '#0f172a';
+      ctx.strokeStyle = '#10b981';
+      ctx.lineWidth = 1.8;
+      ctx.beginPath(); ctx.roundRect(leftX - 48, xfmrY - 48, 96, 96, 10); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#34d399'; ctx.font = 'bold 10px "Noto Sans TC", sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText('台電桿上變壓器', leftX, xfmrY - 30);
+      ctx.fillStyle = '#facc15'; ctx.font = '9px "JetBrains Mono", sans-serif';
+      ctx.fillText('6.6kV → 220V', leftX, xfmrY - 16);
+      ctx.strokeStyle = '#facc15'; ctx.lineWidth = 2;
+      for (let i = 0; i < 4; i++) {
+        ctx.beginPath(); ctx.arc(leftX - 4, xfmrY - 4 + i * 11, 5.5, -Math.PI / 2, Math.PI / 2); ctx.stroke();
+      }
+      ctx.font = 'bold 8.5px "JetBrains Mono", sans-serif'; ctx.textAlign = 'left';
+      ctx.fillStyle = '#ef4444'; ctx.fillText('L1 (+110)', leftX + 7, xfmrY - 4);
+      ctx.fillStyle = '#e2e8f0'; ctx.fillText('N ⏚ (0V)', leftX + 7, xfmrY + 13);
+      ctx.fillStyle = '#38bdf8'; ctx.fillText('L2 (-110)', leftX + 7, xfmrY + 30);
+
+      // 台電瓦時計 (kWh)
+      ctx.fillStyle = '#0f172a';
+      ctx.strokeStyle = '#38bdf8';
+      ctx.lineWidth = 1.8;
+      ctx.beginPath(); ctx.roundRect(leftX - 48, meterY - 52, 96, 104, 10); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#38bdf8'; ctx.font = 'bold 10px "Noto Sans TC", sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText('台電瓦時計 kWh', leftX, meterY - 34);
+      ctx.fillStyle = '#020617'; ctx.fillRect(leftX - 38, meterY - 24, 76, 20);
+      ctx.fillStyle = '#34d399'; ctx.font = 'bold 11px "JetBrains Mono", sans-serif';
+      ctx.fillText(engine.kwhMeterReading.toFixed(2), leftX, meterY - 10);
+      ctx.fillStyle = '#1e293b'; ctx.fillRect(leftX - 34, meterY + 4, 68, 10);
+      ctx.fillStyle = '#f43f5e'; ctx.fillRect(leftX + Math.sin(engine.meterDiscAngle) * 26 - 4, meterY + 4, 8, 10);
+      ctx.fillStyle = '#94a3b8'; ctx.font = '9.5px "Noto Sans TC", sans-serif';
+      ctx.fillText(`${(home.totalWatts / 1000).toFixed(2)} kW`, leftX, meterY + 32);
+
+      // 變壓器 -> 瓦時計三線 (L1 與 L2 交流震盪方向相反: +1 vs -1；N 依兩側差值決定方向)
+      const mainNDir = home.i110A >= home.i110B ? -1 : 1; // 沿 變壓器->瓦時計->N排 方向
+      drawACPolyFlow([[leftX - 18, xfmrY + 48], [leftX - 18, meterY - 52]], engine.faultL1Open ? '#475569' : '#ef4444', engine.faultL1Open ? 0 : home.iL1, 'main', +1, 2.5, engine.faultL1Open);
+      drawACPolyFlow([[leftX,      xfmrY + 48], [leftX,      meterY - 52]], engine.faultNOpen  ? '#475569' : '#e2e8f0', engine.faultNOpen  ? 0 : home.iN,  'main', mainNDir, 2.2, engine.faultNOpen);
+      drawACPolyFlow([[leftX + 18, xfmrY + 48], [leftX + 18, meterY - 52]], engine.faultL2Open ? '#475569' : '#38bdf8', engine.faultL2Open ? 0 : home.iL2, 'main', -1, 2.5, engine.faultL2Open);
+
+      // 台電進屋線手動切斷接點 (L1 / N / L2)
+      const drawIncomingFaultNode = (x, y, isOpen, color, onToggle) => {
+        ctx.save();
+        ctx.fillStyle = isOpen ? '#450a0a' : '#0f172a';
+        ctx.strokeStyle = isOpen ? '#f43f5e' : color;
+        ctx.lineWidth = isOpen ? 2.2 : 1.8;
+        ctx.beginPath();
+        ctx.arc(x, y, isOpen ? 6.2 : 5.0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        if (isOpen) {
+          ctx.strokeStyle = '#fda4af';
+          ctx.lineWidth = 1.8;
+          ctx.beginPath();
+          ctx.moveTo(x - 3, y - 3); ctx.lineTo(x + 3, y + 3);
+          ctx.moveTo(x + 3, y - 3); ctx.lineTo(x - 3, y + 3);
+          ctx.stroke();
+        } else {
+          ctx.fillStyle = color;
+          ctx.beginPath();
+          ctx.arc(x, y, 2.1, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.restore();
+
+        engine.homeHitBoxes.unshift({
+          x1: x - 9, y1: y - 9, x2: x + 9, y2: y + 9,
+          action: onToggle
+        });
+      };
+
+      const midFaultY = (xfmrY + 48 + meterY - 52) / 2;
+      drawIncomingFaultNode(leftX - 18, midFaultY, engine.faultL1Open, '#ef4444', () => {
+        engine.faultL1Open = !engine.faultL1Open;
+        syncUI();
+      });
+      drawIncomingFaultNode(leftX, midFaultY, engine.faultNOpen, '#e2e8f0', () => {
+        engine.faultNOpen = !engine.faultNOpen;
+        syncUI();
+      });
+      drawIncomingFaultNode(leftX + 18, midFaultY, engine.faultL2Open, '#38bdf8', () => {
+        engine.faultL2Open = !engine.faultL2Open;
+        syncUI();
+      });
+
+      ctx.fillStyle = (engine.faultL1Open || engine.faultNOpen || engine.faultL2Open) ? '#fcd34d' : '#94a3b8';
+      ctx.font = 'bold 8.5px "Noto Sans TC", sans-serif';
+      ctx.textAlign = 'center';
+      const incStatus = [
+        engine.faultL1Open ? 'L1斷' : '',
+        engine.faultNOpen ? 'N斷' : '',
+        engine.faultL2Open ? 'L2斷' : ''
+      ].filter(Boolean).join('·');
+      ctx.fillText(incStatus ? `✂️ ${incStatus}` : '● 點擊切斷進屋線', leftX, midFaultY + 18);
+
+      // ==================== 2. 中央：家用新式銅排配電盤 ====================
+      const pLeft = w * 0.165;
+      const pTop = h * 0.04;
+      const pW = w * 0.465;
+      const pH = h * 0.92;
+
+      ctx.fillStyle = '#0f172a';
+      ctx.strokeStyle = engine.nfbTripped ? '#f43f5e' : '#475569';
+      ctx.lineWidth = 2.2;
+      ctx.beginPath(); ctx.roundRect(pLeft, pTop, pW, pH, 12); ctx.fill(); ctx.stroke();
+
+      ctx.fillStyle = '#e2e8f0'; ctx.font = 'bold 11px "Noto Sans TC", sans-serif'; ctx.textAlign = 'left';
+      ctx.fillText('家用新式銅排配電盤（交流電電子同步震盪 · 點擊開關或 ● 接點）', pLeft + 12, pTop + 18);
+
+      const mainW = 140, mainH = 52;
+      const mainX = pLeft + pW * 0.24 - mainW / 2;
+      const mainY = pTop + 30;
+
+      const l1InX = mainX + 34;
+      const l2InX = mainX + mainW - 34;
+      const barL1Y = mainY + mainH + 18;
+      const barL2Y = barL1Y + 21;
+
+      const subY = barL2Y + 25;
+      const subH = 62;
+
+      const barNY = subY + subH + 34;
+      const barEY = barNY + 24;
+
+      // 瓦時計 -> 配電盤進線
+      drawACPolyFlow([[leftX + 48, meterY - 22], [pLeft - 14, meterY - 22], [pLeft - 14, pTop + 22], [l1InX, pTop + 22], [l1InX, mainY]], engine.faultL1Open ? '#475569' : '#ef4444', engine.faultL1Open ? 0 : home.iL1, 'main', +1, 2.4, engine.faultL1Open);
+      drawACPolyFlow([[leftX + 48, meterY + 22], [pLeft - 8,  meterY + 22], [pLeft - 8,  pTop + 26], [l2InX, pTop + 26], [l2InX, mainY]], engine.faultL2Open ? '#475569' : '#38bdf8', engine.faultL2Open ? 0 : home.iL2, 'main', -1, 2.4, engine.faultL2Open);
+      // 中性線 N 白線沿箱體左側繞過總開關，直達子開關下方的 N 銅排
+      drawACPolyFlow([[leftX + 48, meterY], [pLeft - 20, meterY], [pLeft - 20, barNY], [pLeft + 14, barNY]], engine.faultNOpen ? '#475569' : '#e2e8f0', engine.faultNOpen ? 0 : home.iN, 'n', mainNDir, 2.2, engine.faultNOpen);
+
+      // 繪製單一斷路器卡片
+      const drawBreakerCard = (key, x, y, bw, bh, title, sub, accent, isElcb = false) => {
+        const b = br[key];
+        const statusText = b.tripped ? (b.leakTripped ? '漏電跳脫' : '過載TRIP') : (b.on ? 'ON 通電' : 'OFF 切斷');
+        const bgCol = b.tripped ? '#7f1d1d' : (b.on ? '#1e293b' : '#090d16');
+        const bdCol = b.tripped ? '#f43f5e' : (b.on ? accent : '#475569');
+
+        ctx.fillStyle = bgCol;
+        ctx.strokeStyle = bdCol;
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.roundRect(x, y, bw, bh, 8); ctx.fill(); ctx.stroke();
+
+        ctx.fillStyle = '#f8fafc'; ctx.font = 'bold 10px "Noto Sans TC", sans-serif'; ctx.textAlign = 'center';
+        ctx.fillText(title, x + bw / 2, y + 15);
+        ctx.fillStyle = '#94a3b8'; ctx.font = '9px "JetBrains Mono", sans-serif';
+        ctx.fillText(sub, x + bw / 2, y + 29);
+
+        const badgeW = isElcb ? bw * 0.54 : bw * 0.68;
+        const badgeX = isElcb ? x + 5 : x + (bw - badgeW) / 2;
+        ctx.fillStyle = b.tripped ? '#e11d48' : (b.on ? '#10b981' : '#334155');
+        ctx.beginPath(); ctx.roundRect(badgeX, y + bh - 21, badgeW, 15, 4); ctx.fill();
+        ctx.fillStyle = '#ffffff'; ctx.font = 'bold 9px "Noto Sans TC", sans-serif';
+        ctx.fillText(statusText, badgeX + badgeW / 2, y + bh - 10.5);
+
+        engine.homeHitBoxes.push({
+          x1: x, y1: y, x2: x + bw, y2: y + bh,
+          action: () => {
+            if (b.tripped) {
+              b.tripped = false;
+              b.leakTripped = false;
+              b.on = true;
+              if (key === 'b110B') engine.faultLeakage = false;
+              document.getElementById('system-banner').classList.add('hidden');
+            } else {
+              b.on = !b.on;
+            }
+            syncUI();
+          }
+        });
+
+        if (isElcb) {
+          const tx = x + bw - 39, ty = y + bh - 21, tw = 34, th = 15;
+          ctx.fillStyle = '#eab308';
+          ctx.beginPath(); ctx.roundRect(tx, ty, tw, th, 4); ctx.fill();
+          ctx.fillStyle = '#0f172a'; ctx.font = 'bold 8.5px "JetBrains Mono", sans-serif';
+          ctx.fillText('TEST', tx + tw / 2, ty + 10.5);
+
+          engine.homeHitBoxes.unshift({
+            x1: tx, y1: ty, x2: tx + tw, y2: ty + th,
+            action: () => {
+              if (br.main.on && b.on) {
+                b.on = false;
+                b.tripped = true;
+                b.leakTripped = true;
+                const banner = document.getElementById('system-banner');
+                const bannerText = document.getElementById('system-banner-text');
+                if (banner && bannerText) {
+                  banner.className = 'rounded-xl px-4 py-2 text-xs font-medium border flex items-center justify-between gap-3 bg-amber-950/90 border-amber-500 text-amber-100';
+                  bannerText.textContent = '🧪 ELCB TEST 測試成功！每月定期按壓測試鈕可確認漏電斷路器機構正常跳脫。';
+                }
+                syncUI();
+              }
+            }
+          });
+        }
+      };
+
+      drawBreakerCard('main', mainX, mainY, mainW, mainH, '總開關 (2P 50A)', '控 L1/L2 (N不經開關)', '#38bdf8');
+
+      // 右上角：交流震盪與實務註解
+      const noteX = mainX + mainW + 10;
+      const noteW = pLeft + pW - noteX - 12;
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
+      ctx.strokeStyle = '#334155';
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.roundRect(noteX, mainY, noteW, mainH, 8); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#cbd5e1'; ctx.font = 'bold 9px "Noto Sans TC", sans-serif'; ctx.textAlign = 'left';
+      ctx.fillText('📌 交流電相位與銅排配置：', noteX + 7, mainY + 14);
+      ctx.fillStyle = '#94a3b8'; ctx.font = '8.5px "Noto Sans TC", sans-serif';
+      ctx.fillText('• L1(紅)與L2(藍)震盪反相180°', noteX + 7, mainY + 28);
+      ctx.fillText(`• 總中性線抵消 I_N = ${home.iN.toFixed(1)}A`, noteX + 7, mainY + 42);
+
+      // 總開關下端 -> 上層 L1 / L2 火線配電銅排
+      drawACPolyFlow([[l1InX, mainY + mainH], [l1InX, barL1Y]], (br.main.on && !engine.faultL1Open) ? '#ef4444' : '#475569', home.iL1, 'l1', +1, 2.8);
+      drawACPolyFlow([[l2InX, mainY + mainH], [l2InX, barL2Y]], (br.main.on && !engine.faultL2Open) ? '#38bdf8' : '#475569', home.iL2, 'l2', -1, 2.8);
+
+      // ==================== 3. 上層：L1 / L2 主火線配電銅排 ====================
+      const barLeft = pLeft + 14;
+      const barRight = pLeft + pW - 14;
+      const barW = barRight - barLeft;
+
+      const drawBusbar = (y, color, textCol, label, rightVal, wireGroup) => {
+        const isVis = !!wf[wireGroup];
+        ctx.save();
+        ctx.globalAlpha = isVis ? 1 : 0.2;
+        ctx.fillStyle = isVis ? color : '#334155';
+        ctx.beginPath(); ctx.roundRect(barLeft, y - 7, barW, 14, 3); ctx.fill();
+        ctx.fillStyle = isVis ? textCol : '#94a3b8';
+        ctx.font = 'bold 9px "JetBrains Mono", sans-serif';
+        ctx.textAlign = 'left'; ctx.fillText(label, barLeft + 7, y + 3.2);
+        ctx.textAlign = 'right'; ctx.fillText(rightVal, barRight - 7, y + 3.2);
+        ctx.restore();
+      };
+
+      drawBusbar(barL1Y, (br.main.on && !engine.faultL1Open) ? '#dc2626' : '#334155', '#ffffff', 'L1 主火線配電銅排 (紅 → 子開關上端)', `I_L1=${home.iL1.toFixed(1)}A`, 'l1');
+      drawBusbar(barL2Y, (br.main.on && !engine.faultL2Open) ? '#0284c7' : '#334155', '#ffffff', 'L2 主火線配電銅排 (藍 → 子開關上端)', `I_L2=${home.iL2.toFixed(1)}A`, 'l2');
+
+      // ==================== 4. 中層：三組子開關 (220V / 110V-A / 110V-B ELCB) ====================
+      const subGap = 8;
+      const subW = (barW - subGap * 2) / 3;
+      const sub1X = barLeft;
+      const sub2X = sub1X + subW + subGap;
+      const sub3X = sub2X + subW + subGap;
+
+      // 上層火線銅排 -> 三組子開關上端進線
+      drawACPolyFlow([[sub1X + subW * 0.3, barL1Y + 7], [sub1X + subW * 0.3, subY]], '#ef4444', home.i220,  'l1', +1, 2.3);
+      drawACPolyFlow([[sub1X + subW * 0.7, barL2Y + 7], [sub1X + subW * 0.7, subY]], '#38bdf8', home.i220,  'l2', -1, 2.3);
+      drawACPolyFlow([[sub2X + subW * 0.5, barL1Y + 7], [sub2X + subW * 0.5, subY]], '#ef4444', home.i110A, 'l1', +1, 2.3);
+      drawACPolyFlow([[sub3X + subW * 0.28, barL2Y + 7], [sub3X + subW * 0.28, subY]], '#38bdf8', home.i110B, 'l2', -1, 2.3);
+
+      drawBreakerCard('b220',  sub1X, subY, subW, subH, '① 220V 專用', `2P 20A · ${home.i220.toFixed(1)}A`,  '#f59e0b');
+      drawBreakerCard('b110A', sub2X, subY, subW, subH, '② 110V-A 一般', `1P 20A · ${home.i110A.toFixed(1)}A`, '#ef4444');
+      drawBreakerCard('b110B', sub3X, subY, subW, subH, '③ 110V-B ELCB', `20A/30mA · ${home.i110B.toFixed(1)}A`, '#38bdf8', true);
+
+      // ==================== 4.5 下層：N 中性線銅排與 E 設備接地銅排 ====================
+      const eLeaking = home.iE > 0.01;
+      const nFloatingSeries = engine.faultNOpen && home.i110A > 0.01 && home.i110B > 0.01;
+      const indoorNCol = nFloatingSeries ? '#facc15' : '#e2e8f0';
+      drawBusbar(
+        barNY,
+        nFloatingSeries ? '#d97706' : (engine.faultNOpen ? '#64748b' : '#e2e8f0'),
+        nFloatingSeries ? '#ffffff' : '#0f172a',
+        nFloatingSeries ? 'N 銅排 (⚠️浮動帶電! L1與L2經此串聯)' : 'N 中性線銅排 (白 · 不經總開關)',
+        nFloatingSeries ? `串聯=${home.i110A.toFixed(1)}A` : `I_N=|I_A-I_B|=${home.iN.toFixed(1)}A`,
+        'n'
+      );
+      // 若台電進屋 N 斷線且兩側 110V 皆有負載，直接繪製屋內 N 銅排上「110V-A 與 110V-B 串聯連通」的交流電子震盪
+      if (nFloatingSeries) {
+        drawACPolyFlow([[barRight, barNY], [sub3X + subW * 0.82, barNY]], '#fde047', home.i110A, 'n', +1, 2.4, false);
+      }
+      drawBusbar(barEY, eLeaking ? '#34d399' : '#10b981', '#022c22', 'E 設備接地銅排 (綠 · 直連大地 ⏚)', eLeaking ? '⚡漏電80mA!' : 'I_E=0.0A(安全)', 'e');
+
+      // 大地接地極 (⏚)
+      const gndX = barLeft + 24;
+      const gndTopY = barEY + 7;
+      const gndBaseY = Math.min(pTop + pH - 16, barEY + 24);
+      drawACPolyFlow([[gndX, gndTopY], [gndX, gndBaseY]], eLeaking ? '#4ade80' : '#22c55e', eLeaking ? 4.0 : 0, 'e', -1, eLeaking ? 2.6 : 2.1);
+      ctx.save();
+      ctx.globalAlpha = wf.e ? 1 : 0.2;
+      ctx.strokeStyle = eLeaking ? '#34d399' : '#10b981';
+      ctx.lineWidth = 2;
+      [13, 8, 3.5].forEach((hw, gi) => {
+        const gy = gndBaseY + gi * 4;
+        ctx.beginPath(); ctx.moveTo(gndX - hw, gy); ctx.lineTo(gndX + hw, gy); ctx.stroke();
+      });
+      ctx.fillStyle = '#34d399';
+      ctx.font = 'bold 9px "Noto Sans TC", sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText('⏚ 大地接地極（漏電保護導流）', gndX + 16, gndBaseY + 6);
+      ctx.restore();
+
+      // 潮濕區 ELCB 中性線接地側：從下層 N 銅排連入子開關 ③ (ELCB 比對 L2 與 N 電流差；台電 N 斷線時屋內此段仍導通串聯電流)
+      drawACPolyFlow(
+        [[sub3X + subW * 0.82, subY + subH], [sub3X + subW * 0.82, barNY - 7]],
+        indoorNCol,
+        home.i110B,
+        'n', -1, 2.0, false
+      );
+
+      // ==================== 5. 右側：獨立不重疊幹線 + KCL 分段電流 + 電器群 ====================
+      const pRight = pLeft + pW;
+      const appLeft = w * 0.748;
+      const appW = w * 0.236;
+      const gutterW = appLeft - pRight;
+      const rowH = (pH - 12) / engine.appliances.length;
+      const cardH = Math.max(24, rowH - 5);
+      const getAppMidY = (idx) => pTop + 6 + idx * rowH + cardH / 2;
+
+      // 7 條完全獨立、絕不重疊的垂直幹線 X 座標
+      const xL1_220  = pRight + gutterW * 0.10;
+      const xL2_220  = pRight + gutterW * 0.22;
+      const xL1_110A = pRight + gutterW * 0.36;
+      const xL2_110B = pRight + gutterW * 0.50;
+      const xN_110A  = pRight + gutterW * 0.64;
+      const xN_110B  = pRight + gutterW * 0.76;
+      const xE_all   = pRight + gutterW * 0.89;
+
+      // 收集各分路電器節點與實際電流 (嚴格 KCL)
+      const nodes220L1 = [], nodes220L2 = [], nodes110AL1 = [], nodes110AN = [], nodes110BL2 = [], nodes110BN = [], nodesE = [];
+      engine.appliances.forEach((app, idx) => {
+        const midY = getAppMidY(idx);
+        const st = home.appStates[app.id];
+        const iApp = st ? st.currentA : 0;
+        if (app.branch === '220') {
+          nodes220L1.push({ y: midY - 6, currentA: iApp });
+          nodes220L2.push({ y: midY,     currentA: iApp });
+          nodesE.push({ y: midY + 6, currentA: 0 });
+        } else if (app.branch === '110A') {
+          nodes110AL1.push({ y: midY - 6, currentA: iApp });
+          nodes110AN.push({  y: midY,     currentA: iApp });
+          nodesE.push({ y: midY + 6, currentA: 0 });
+        } else {
+          nodes110BL2.push({ y: midY - 6, currentA: iApp });
+          nodes110BN.push({  y: midY,     currentA: iApp });
+          // 若潮濕區漏電，最後一台或開啟中的潮濕區電器導出 80mA 漏電電流
+          nodesE.push({ y: midY + 6, currentA: (eLeaking && idx === engine.appliances.length - 1) ? 4.0 : 0 });
+        }
+      });
+
+      // (A) 子開關下端出線 -> 各自的獨立垂直幹線（含可點擊斷開接點）
+      const out220Y1  = subY + subH + 7;
+      const out220Y2  = subY + subH + 13;
+      const out110AY  = subY + subH + 19;
+      const out110BY  = subY + subH + 25;
+      const out110BNY = subY + subH + 20;
+
+      // ① 220V (L1紅 +1, L2藍 -1)
+      drawACPolyFlow([[sub1X + subW * 0.3, subY + subH], [sub1X + subW * 0.3, out220Y1], [xL1_220, out220Y1]], dw['brk_220_l1'] ? '#475569' : '#ef4444', home.i220, 'l1', +1, 2.0, !!dw['brk_220_l1']);
+      drawKclTrunk(xL1_220, out220Y1, nodes220L1, dw['brk_220_l1'] ? '#475569' : '#ef4444', 'l1', +1, 2.0, !!dw['brk_220_l1']);
+      drawTerminalNode(sub1X + subW * 0.3, subY + subH + 2, 'brk_220_l1', '#ef4444', 'l1');
+
+      drawACPolyFlow([[sub1X + subW * 0.7, subY + subH], [sub1X + subW * 0.7, out220Y2], [xL2_220, out220Y2]], dw['brk_220_l2'] ? '#475569' : '#38bdf8', home.i220, 'l2', -1, 2.0, !!dw['brk_220_l2']);
+      drawKclTrunk(xL2_220, out220Y2, nodes220L2, dw['brk_220_l2'] ? '#475569' : '#38bdf8', 'l2', -1, 2.0, !!dw['brk_220_l2']);
+      drawTerminalNode(sub1X + subW * 0.7, subY + subH + 2, 'brk_220_l2', '#38bdf8', 'l2');
+
+      // ② 110V-A (L1紅 +1)
+      drawACPolyFlow([[sub2X + subW * 0.5, subY + subH], [sub2X + subW * 0.5, out110AY], [xL1_110A, out110AY]], dw['brk_110A_l1'] ? '#475569' : '#ef4444', home.i110A, 'l1', +1, 2.0, !!dw['brk_110A_l1']);
+      drawKclTrunk(xL1_110A, out110AY, nodes110AL1, dw['brk_110A_l1'] ? '#475569' : '#ef4444', 'l1', +1, 2.0, !!dw['brk_110A_l1']);
+      drawTerminalNode(sub2X + subW * 0.5, subY + subH + 2, 'brk_110A_l1', '#ef4444', 'l1');
+
+      // ③ 110V-B ELCB (L2藍 -1 與 N白 經 ELCB 出線)
+      drawACPolyFlow([[sub3X + subW * 0.28, subY + subH], [sub3X + subW * 0.28, out110BY], [xL2_110B, out110BY]], dw['brk_110B_l2'] ? '#475569' : '#38bdf8', home.i110B, 'l2', -1, 2.0, !!dw['brk_110B_l2']);
+      drawKclTrunk(xL2_110B, out110BY, nodes110BL2, dw['brk_110B_l2'] ? '#475569' : '#38bdf8', 'l2', -1, 2.0, !!dw['brk_110B_l2']);
+      drawTerminalNode(sub3X + subW * 0.28, subY + subH + 2, 'brk_110B_l2', '#38bdf8', 'l2');
+
+      // 110V-B 的 N 線回流至 ELCB 偵測端子 (與 L2 同進同出 ELCB；屋內線並未斷開)
+      const n110BOpen = !!dw['brk_110B_n'];
+      drawACPolyFlow([[xN_110B, out110BNY], [sub3X + subW * 0.62, out110BNY], [sub3X + subW * 0.62, subY + subH]], n110BOpen ? '#475569' : indoorNCol, n110BOpen ? 0 : home.i110B, 'n', -1, 1.9, n110BOpen);
+      drawKclTrunk(xN_110B, out110BNY, nodes110BN, n110BOpen ? '#475569' : indoorNCol, 'n', +1, 1.9, n110BOpen);
+      drawTerminalNode(sub3X + subW * 0.62, subY + subH + 2, 'brk_110B_n', indoorNCol, 'n');
+
+      // (B) 110V-A 的 N 中性線直接匯回下層 N 銅排 (台電 N 斷線時屋內此段仍完整連通至 N 銅排！)
+      drawACPolyFlow([[xN_110A, barNY], [barRight, barNY]], indoorNCol, home.i110A, 'n', +1, 1.9, false);
+      drawKclTrunk(xN_110A, barNY, nodes110AN, indoorNCol, 'n', -1, 1.9, false);
+
+      // (C) 全戶 E 設備接地線垂直幹線 -> 匯回下層 E 銅排
+      drawACPolyFlow([[xE_all, barEY], [barRight, barEY]], eLeaking ? '#4ade80' : '#22c55e', eLeaking ? 4.0 : 0, 'e', -1, eLeaking ? 2.5 : 2.0);
+      drawKclTrunk(xE_all, barEY, nodesE, eLeaking ? '#4ade80' : '#22c55e', 'e', +1, eLeaking ? 2.5 : 2.0);
+
+      // ==================== 6. 繪製右側電器卡片與各水平支線 + 可點擊斷線接點 ====================
+      engine.appliances.forEach((app, idx) => {
+        const ay = pTop + 6 + idx * rowH;
+        const midY = ay + cardH / 2;
+        const st = home.appStates[app.id];
+        const iApp = st.currentA;
+        const isRunning = st.running;
+        const isOverV = isRunning && st.brV > st.nomV * 1.18;
+        const isUnderV = isRunning && st.brV < st.nomV * 0.82;
+
+        const hotId = `app_${app.id}_hot`;
+        const retId = `app_${app.id}_ret`;
+        const hotDisc = !!dw[hotId];
+        const retDisc = !!dw[retId];
+        const termX = appLeft - 11;
+
+        if (app.branch === '220') {
+          // 220V：L1 (紅 +1) + L2 (藍 -1) + E (綠)
+          drawACPolyFlow([[xL1_220, midY - 6], [appLeft, midY - 6]], hotDisc ? '#475569' : '#ef4444', iApp, 'l1', +1, 2.0, hotDisc);
+          drawACPolyFlow([[xL2_220, midY],     [appLeft, midY]],     retDisc ? '#475569' : '#38bdf8', iApp, 'l2', -1, 2.0, retDisc);
+          drawACPolyFlow([[appLeft, midY + 6], [xE_all,  midY + 6]], '#22c55e', 0, 'e', -1, 1.8);
+          drawTerminalNode(termX, midY - 6, hotId, '#ef4444', 'l1');
+          drawTerminalNode(termX, midY,     retId, '#38bdf8', 'l2');
+        } else if (app.branch === '110A') {
+          // 110V-A：L1 (紅 +1) + N (白/帶電黃 回流 +1) + E (綠)
+          drawACPolyFlow([[xL1_110A, midY - 6], [appLeft, midY - 6]], hotDisc ? '#475569' : '#ef4444', iApp, 'l1', +1, 2.0, hotDisc);
+          drawACPolyFlow([[appLeft, midY], [xN_110A, midY]], retDisc ? '#475569' : indoorNCol, iApp, 'n', +1, 1.9, retDisc);
+          drawACPolyFlow([[appLeft, midY + 6], [xE_all, midY + 6]], '#22c55e', 0, 'e', -1, 1.8);
+          drawTerminalNode(termX, midY - 6, hotId, '#ef4444', 'l1');
+          drawTerminalNode(termX, midY,     retId, indoorNCol, 'n');
+        } else {
+          // 110V-B ELCB：L2 (藍 -1) + N (白/帶電黃 回流至 ELCB -1) + E (綠 漏電保護)
+          const isLeakApp = eLeaking && idx === engine.appliances.length - 1;
+          drawACPolyFlow([[xL2_110B, midY - 6], [appLeft, midY - 6]], hotDisc ? '#475569' : '#38bdf8', iApp, 'l2', -1, 2.0, hotDisc);
+          drawACPolyFlow([[appLeft, midY], [xN_110B, midY]], retDisc ? '#475569' : indoorNCol, iApp, 'n', -1, 1.9, retDisc);
+          drawACPolyFlow([[appLeft, midY + 6], [xE_all, midY + 6]], isLeakApp ? '#4ade80' : '#22c55e', isLeakApp ? 4.0 : 0, 'e', -1, isLeakApp ? 2.5 : 1.8);
+          drawTerminalNode(termX, midY - 6, hotId, '#38bdf8', 'l2');
+          drawTerminalNode(termX, midY,     retId, indoorNCol, 'n');
+        }
+
+        ctx.fillStyle = isOverV ? 'rgba(225, 29, 72, 0.25)' : (isRunning ? 'rgba(16, 185, 129, 0.14)' : '#0f172a');
+        ctx.strokeStyle = isOverV ? '#f43f5e' : (isUnderV ? '#f59e0b' : (isRunning ? '#10b981' : '#334155'));
+        ctx.lineWidth = isOverV ? 2 : 1.4;
+        ctx.beginPath(); ctx.roundRect(appLeft, ay, appW, cardH, 6); ctx.fill(); ctx.stroke();
+
+        ctx.fillStyle = isRunning ? '#f8fafc' : '#64748b';
+        ctx.font = '10px "Noto Sans TC", sans-serif'; ctx.textAlign = 'left';
+        ctx.fillText(`${app.icon} ${app.name}`, appLeft + 6, ay + cardH * 0.65);
+
+        ctx.fillStyle = (!st.wired || !st.brWired) ? '#f87171' : (isOverV ? '#fda4af' : (isUnderV ? '#fcd34d' : (isRunning ? '#34d399' : '#475569')));
+        ctx.font = 'bold 9px "JetBrains Mono", sans-serif'; ctx.textAlign = 'right';
+        const statusStr = (!st.wired || !st.brWired)
+          ? '斷線'
+          : (!app.on ? `${app.watts}W OFF` : (isOverV ? `${st.brV.toFixed(0)}V 過壓!` : (isUnderV ? `${st.brV.toFixed(0)}V 昏暗` : (isRunning ? `${st.currentA.toFixed(1)}A ON` : '無電'))));
+        ctx.fillText(statusStr, appLeft + appW - 6, ay + cardH * 0.65);
+
+        // 點擊畫布上的電器卡片直接開關
+        engine.homeHitBoxes.push({
+          x1: appLeft, y1: ay, x2: appLeft + appW, y2: ay + cardH,
+          action: () => {
+            app.on = !app.on;
+            renderApplianceButtons();
+            syncUI();
+          }
+        });
+      });
+    }
+
+    /**
+     * 渲染 3B：家庭單相三線 (110V / 220V) 雙通道同步示波器 (連動欠相與 N 斷線異常)
+     */
+    function renderHomeScope() {
+      const res = resizeCanvas(document.getElementById('canvas-home-scope'));
+      if (!res) return;
+      const { ctx, w, h } = res;
+      const home = engine.getHomeMetrics();
+      const v110 = home.v110;
+      const v220 = home.v220;
+
+      ctx.clearRect(0, 0, w, h);
+
+      const padL = 54, padR = 72, padT = 46, padB = 26;
+      const plotW = w - padL - padR;
+      const plotH = h - padT - padB;
+      const midY = padT + plotH / 2;
+      const amp110Px = plotH * 0.22;
+
+      ctx.strokeStyle = '#1e293b';
+      ctx.lineWidth = 1;
+      for (let i = 0; i <= 4; i++) {
+        const y = padT + (plotH * i) / 4;
+        ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(w - padR, y); ctx.stroke();
+      }
+      ctx.strokeStyle = '#64748b';
+      ctx.beginPath(); ctx.moveTo(padL, midY); ctx.lineTo(w - padR, midY); ctx.stroke();
+
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = '9.5px "JetBrains Mono", sans-serif';
+      ctx.textAlign = 'right';
+      ctx.fillText(`+${v220}V`, padL - 6, midY - amp110Px * 2 + 3);
+      ctx.fillText(`+${v110}V`, padL - 6, midY - amp110Px + 3);
+      ctx.fillText('N (0V)', padL - 6, midY + 3);
+      ctx.fillText(`-${v110}V`, padL - 6, midY + amp110Px + 3);
+      ctx.fillText(`-${v220}V`, padL - 6, midY + amp110Px * 2 + 3);
+
+      // 依總開關與故障狀態決定示波器各通道振幅倍率
+      const mainScale = engine.breakers.main.on ? 1 : 0;
+      const l1Mult = engine.faultL1Open ? 0 : (engine.faultNOpen && home.v110A > 0 ? (home.v110A / v110) : 1) * mainScale;
+      const l2Mult = engine.faultL2Open ? 0 : (engine.faultNOpen && home.v110B > 0 ? -(home.v110B / v110) : -1) * mainScale;
+      const l12Mult = (engine.faultL1Open || engine.faultL2Open ? 0 : 2) * mainScale;
+
+      const drawHomeCurve = (mult, color, label, dashed = false) => {
+        if (engine.scopeHistory.length < 2) return;
+        ctx.save();
+        ctx.strokeStyle = color;
+        ctx.lineWidth = dashed ? 2.4 : 2.2;
+        if (dashed) ctx.setLineDash([6, 4]);
+        ctx.beginPath();
+        engine.scopeHistory.forEach((pt, idx) => {
+          const norm = Math.sin(engine.electricalAngleRad - (engine.maxHistoryPoints - 1 - idx) * (2 * Math.PI * 60) * (0.016 / 60));
+          const x = padL + (idx / (engine.maxHistoryPoints - 1)) * plotW;
+          const y = midY - norm * mult * amp110Px;
+          if (idx === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+
+        const nowVal = Math.sin(engine.electricalAngleRad);
+        const lx = padL + plotW;
+        const ly = midY - nowVal * mult * amp110Px;
+        ctx.setLineDash([]);
+        ctx.fillStyle = color;
+        ctx.beginPath(); ctx.arc(lx, ly, 4, 0, Math.PI * 2); ctx.fill();
+        ctx.font = 'bold 10px "JetBrains Mono", sans-serif';
+        ctx.textAlign = 'left';
+        ctx.fillText(label, lx + 8, ly + 3);
+        ctx.restore();
+      };
+
+      const ch = engine.homeScopeChannels;
+      if (ch.l1) drawHomeCurve(l1Mult, '#ef4444', engine.faultL1Open ? 'L1 欠相' : 'L1-N');
+      if (ch.l2) drawHomeCurve(l2Mult, '#38bdf8', engine.faultL2Open ? 'L2 欠相' : 'L2-N');
+      if (ch.l12) drawHomeCurve(l12Mult, '#facc15', (engine.faultL1Open || engine.faultL2Open) ? '220V失效' : 'L1-L2', true);
+
+      if (ch.l1 && ch.l2 && !engine.faultL1Open && !engine.faultL2Open && engine.breakers.main.on) {
+        const nowVal = Math.sin(engine.electricalAngleRad);
+        const lx = padL + plotW;
+        const y1 = midY - nowVal * l1Mult * amp110Px;
+        const y2 = midY - nowVal * l2Mult * amp110Px;
+        ctx.save();
+        ctx.strokeStyle = 'rgba(250, 204, 21, 0.7)';
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([3, 2]);
+        ctx.beginPath(); ctx.moveTo(lx, y1); ctx.lineTo(lx, y2); ctx.stroke();
+        ctx.restore();
+      }
+
+      ctx.fillStyle = (engine.faultL1Open || engine.faultL2Open || engine.faultNOpen) ? '#fcd34d' : '#94a3b8';
+      ctx.font = '10.5px "Noto Sans TC", sans-serif';
+      ctx.textAlign = 'left';
+      const footerMsg = engine.faultL1Open
+        ? '⚠️ L1 欠相狀態：L1 波形歸零，220V 迴路與 110V-A 斷電，僅接在 L2 的 110V-B 迴路維持供電！'
+        : engine.faultL2Open
+          ? '⚠️ L2 欠相狀態：L2 波形歸零，220V 迴路與 110V-B 斷電，僅接在 L1 的 110V-A 迴路維持供電！'
+          : engine.faultNOpen
+            ? `⚠️ 中性線 N 斷線：兩側 110V 透過屋內 N 銅排串聯分壓 (110V-A: ${home.v110A.toFixed(0)}V / 110V-B: ${home.v110B.toFixed(0)}V)，輕載側嚴重過壓！`
+            : `同一組變壓器線圈：L1 與 L2 同時過零點（單相），對中間抽頭 N 剛好反相 180°，兩端相減即得 ${v220}V`;
+      ctx.fillText(footerMsg, padL, h - 8);
+    }
+
+    function syncUI() {
+      const gen = engine.getGenMetrics();
+      const trans = engine.getTransMetrics();
+      const home = engine.getHomeMetrics();
+
+      document.getElementById('hud-input-power').textContent = `${engine.inputPowerMW.toFixed(1)} MW`;
+      document.getElementById('hud-gen-type-label').textContent = `${gen.spec.name} (出口 ${gen.spec.genVoltageText})`;
+      document.getElementById('hud-gen-eff').textContent = `${(gen.spec.efficiency * 100).toFixed(0)}%`;
+      document.getElementById('hud-gen-out').textContent = `${gen.outputPowerMW.toFixed(1)} MW`;
+      document.getElementById('hud-gen-freq').textContent = gen.outputFreqHz > 0 ? `電網頻率: ${gen.outputFreqHz.toFixed(1)} Hz` : '輸出類型: DC 直流';
+
+      const genVBadge = document.getElementById('gen-3d-voltage-badge');
+      if (genVBadge) {
+        genVBadge.textContent = gen.spec.isDC
+          ? gen.spec.stepUpNote
+          : `出口: ${gen.liveVoltageStr} (${Math.round(gen.voltageRatio * 100)}%) · ${engine.avrEnabled ? 'AVR 穩壓' : 'E∝轉速'}`;
+      }
+
+      document.getElementById('hud-line-loss').textContent = `${trans.lossMW.toFixed(1)} MW (${trans.lossPercent.toFixed(1)}%)`;
+      document.getElementById('hud-line-params').textContent = `${trans.v1}→${trans.v2}→${trans.v3}kV`;
+      document.getElementById('hud-community-demand').textContent = `${home.communityDemandMW.toFixed(1)} MW`;
+      document.getElementById('hud-home-kw').textContent = `低壓用戶示範: ${(home.totalWatts / 1000).toFixed(2)} kW`;
+
+      const totalEff = engine.inputPowerMW > 0 ? (gen.spec.efficiency * (1 - trans.lossPercent / 100) * 100) : 0;
+      document.getElementById('hud-total-eff').textContent = `${totalEff.toFixed(1)}%`;
+
+      const statusEl = document.getElementById('hud-grid-status');
+      if (engine.nfbTripped) {
+        statusEl.innerHTML = '<span class="text-rose-400 font-bold">⚠️ 低壓配電跳脫斷電</span>';
+      } else if (trans.lossPercent > 20) {
+        statusEl.innerHTML = '<span class="text-amber-400">▲ 輸電線損過高警告</span>';
+      } else {
+        statusEl.innerHTML = '<span class="text-emerald-400">● 供電穩定 (三段系統正常)</span>';
+      }
+
+      document.getElementById('pano-selected-node-title').textContent = engine.panoSelectedNode.title;
+      document.getElementById('pano-selected-node-desc').textContent = engine.panoSelectedNode.desc;
+
+      document.querySelectorAll('.gen-type-btn').forEach(btn => {
+        if (btn.dataset.gentype === engine.genType) {
+          btn.className = 'gen-type-btn px-2 py-1.5 rounded-lg text-[11px] font-bold bg-amber-500 text-slate-950 transition-all';
+        } else {
+          btn.className = 'gen-type-btn px-2 py-1.5 rounded-lg text-[11px] font-medium bg-slate-800 text-slate-300 hover:bg-slate-700 transition-all';
+        }
+      });
+
+      const phaseBtn = document.getElementById('btn-phase-mode');
+      const allThreeOn = engine.scopeChannels.u && engine.scopeChannels.v && engine.scopeChannels.w;
+      engine.showThreePhase = allThreeOn;
+      if (phaseBtn) {
+        if (allThreeOn) {
+          phaseBtn.textContent = '三相全波 (U/V/W)';
+          phaseBtn.className = 'px-2 py-0.5 rounded bg-sky-500 text-slate-950 text-[11px] font-bold';
+        } else {
+          const activeNames = ['u', 'v', 'w'].filter(k => engine.scopeChannels[k]).map(k => k.toUpperCase()).join('/');
+          phaseBtn.textContent = activeNames === 'U' ? '單相交流 (U相)' : `自選通道 (${activeNames})`;
+          phaseBtn.className = 'px-2 py-0.5 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] font-bold';
+        }
+      }
+
+      const invBox = document.getElementById('inverter-control-box');
+      const invBtn = document.getElementById('btn-toggle-inverter');
+      const invLabel = document.getElementById('inverter-label');
+      if (gen.spec.hasInverter) {
+        invBox.className = 'flex items-center justify-between bg-slate-900 px-2.5 py-1.5 rounded-lg border border-purple-500/60';
+        invBtn.disabled = false;
+        invLabel.className = 'text-[11px] text-purple-300 font-bold';
+        invLabel.textContent = gen.spec.isDC ? '太陽能逆變器：' : '風機變頻器：';
+        if (engine.inverterEnabled) {
+          invBtn.textContent = 'ON (60.0Hz)';
+          invBtn.className = 'px-2 py-0.5 rounded bg-emerald-600 text-white text-[11px] font-bold cursor-pointer';
+        } else {
+          invBtn.textContent = gen.spec.isDC ? 'OFF (DC)' : `OFF (${gen.rawFreqHz.toFixed(1)}Hz)`;
+          invBtn.className = 'px-2 py-0.5 rounded bg-amber-600 text-white text-[11px] font-bold cursor-pointer';
+        }
+      } else {
+        invBox.className = 'flex items-center justify-between bg-slate-900 px-2.5 py-1.5 rounded-lg border border-slate-800';
+        invBtn.disabled = true;
+        invLabel.className = 'text-[11px] text-slate-500';
+        invLabel.textContent = '併網變頻器：';
+        invBtn.textContent = '同步直連';
+        invBtn.className = 'px-2 py-0.5 rounded bg-slate-800 text-slate-500 text-[11px] cursor-not-allowed';
+      }
+
+      // 同步 AVR 自動穩壓開關 (右側面板與示波器上方按鈕)
+      const avrBox = document.getElementById('avr-control-box');
+      const avrBtn = document.getElementById('btn-toggle-avr');
+      const avrLabel = document.getElementById('avr-label');
+      const scopeAvrBtn = document.getElementById('btn-scope-avr');
+      if (avrBox && avrBtn && avrLabel) {
+        if (gen.spec.isDC) {
+          avrBox.className = 'flex items-center justify-between bg-slate-900 px-2.5 py-1.5 rounded-lg border border-slate-800';
+          avrBtn.disabled = true;
+          avrLabel.className = 'text-[11px] text-slate-500';
+          avrBtn.textContent = '無旋轉激磁';
+          avrBtn.className = 'px-2 py-0.5 rounded bg-slate-800 text-slate-500 text-[11px] cursor-not-allowed';
+          if (scopeAvrBtn) {
+            scopeAvrBtn.disabled = true;
+            scopeAvrBtn.textContent = 'AVR: N/A';
+            scopeAvrBtn.className = 'ml-1 px-2 py-0.5 rounded text-[11px] font-medium bg-slate-800 text-slate-500 cursor-not-allowed';
+          }
+        } else {
+          avrBtn.disabled = false;
+          if (scopeAvrBtn) scopeAvrBtn.disabled = false;
+          if (engine.avrEnabled) {
+            avrBox.className = 'flex items-center justify-between bg-slate-900 px-2.5 py-1.5 rounded-lg border border-emerald-500/60';
+            avrLabel.className = 'text-[11px] text-emerald-300 font-bold';
+            avrBtn.textContent = 'ON (電廠穩壓)';
+            avrBtn.className = 'px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold cursor-pointer transition';
+            if (scopeAvrBtn) {
+              scopeAvrBtn.textContent = 'AVR: ON';
+              scopeAvrBtn.className = 'ml-1 px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer transition';
+            }
+          } else {
+            avrBox.className = 'flex items-center justify-between bg-slate-900 px-2.5 py-1.5 rounded-lg border border-amber-500/60';
+            avrLabel.className = 'text-[11px] text-amber-300 font-bold';
+            avrBtn.textContent = 'OFF (E∝轉速)';
+            avrBtn.className = 'px-2 py-0.5 rounded bg-amber-600 hover:bg-amber-500 text-white text-[11px] font-bold cursor-pointer transition';
+            if (scopeAvrBtn) {
+              scopeAvrBtn.textContent = 'AVR: OFF';
+              scopeAvrBtn.className = 'ml-1 px-2 py-0.5 rounded text-[11px] font-bold bg-amber-600 hover:bg-amber-500 text-white cursor-pointer transition';
+            }
+          }
+        }
+      }
+
+      // 同步發電機示波器探棒按鈕樣式與標籤
+      const isLineMode = engine.scopeMeasureMode === 'line';
+      document.querySelectorAll('.gen-scope-mode-btn').forEach(btn => {
+        if (btn.dataset.smode === engine.scopeMeasureMode) {
+          btn.className = 'gen-scope-mode-btn px-2 py-0.5 rounded text-[11px] font-bold bg-sky-500 text-slate-950 transition';
+        } else {
+          btn.className = 'gen-scope-mode-btn px-2 py-0.5 rounded text-[11px] font-medium bg-slate-800 text-slate-300 hover:bg-slate-700 transition';
+        }
+      });
+
+      const genChStyles = {
+        u: { on: 'bg-[#ff2a2a] text-white font-bold', labelPhase: 'U-N', labelLine: 'U-V' },
+        v: { on: 'bg-[#00e676] text-slate-950 font-bold', labelPhase: 'V-N', labelLine: 'V-W' },
+        w: { on: 'bg-[#2979ff] text-white font-bold', labelPhase: 'W-N', labelLine: 'W-U' }
+      };
+      ['u', 'v', 'w'].forEach(k => {
+        const b = document.getElementById(`btn-gen-ch-${k}`);
+        if (!b) return;
+        const st = genChStyles[k];
+        b.textContent = isLineMode ? st.labelLine : st.labelPhase;
+        b.className = `gen-scope-ch-btn px-2 py-0.5 rounded text-[11px] font-mono-num transition ${
+          engine.scopeChannels[k] ? st.on : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+        }`;
+      });
+
+      // 同步家庭單相三線示波器探棒按鈕樣式
+      const homeChStyles = {
+        l1:  { on: 'bg-red-500 text-white font-bold', text: `L1-N (${home.v110}V)` },
+        l2:  { on: 'bg-sky-500 text-slate-950 font-bold', text: `L2-N (反相${home.v110}V)` },
+        l12: { on: 'bg-amber-400 text-slate-950 font-bold', text: `L1-L2 (${home.v220}V)` }
+      };
+      ['l1', 'l2', 'l12'].forEach(k => {
+        const b = document.getElementById(`btn-home-ch-${k}`);
+        if (!b) return;
+        b.textContent = homeChStyles[k].text;
+        b.className = `home-scope-ch-btn px-2 py-0.5 rounded text-[11px] font-mono-num transition ${
+          engine.homeScopeChannels[k] ? homeChStyles[k].on : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+        }`;
+      });
+
+      const rpmSlider = document.getElementById('slider-gen-rpm');
+      document.getElementById('gen-rpm-label').textContent = gen.spec.rpmLabel;
+      if (gen.spec.isDC) {
+        rpmSlider.disabled = true;
+        document.getElementById('gen-rpm-val').textContent = '0 RPM (DC)';
+        document.getElementById('gen-rpm-min').textContent = '0';
+        document.getElementById('gen-rpm-max').textContent = '0';
+        document.getElementById('gen-formula-live').textContent = engine.inverterEnabled ? 'DC 經逆變器 → 60.0 Hz AC' : '純直流輸出 (0 Hz)';
+      } else {
+        rpmSlider.disabled = false;
+        rpmSlider.min = gen.spec.minRpm;
+        rpmSlider.max = gen.spec.maxRpm;
+        rpmSlider.step = gen.spec.rpmStep;
+        rpmSlider.value = engine.rpm;
+        document.getElementById('gen-rpm-min').textContent = `${gen.spec.minRpm}`;
+        document.getElementById('gen-rpm-max').textContent = `${gen.spec.maxRpm}`;
+        document.getElementById('gen-rpm-val').textContent = `${engine.rpm} RPM → ${gen.outputFreqHz.toFixed(1)}Hz`;
+        document.getElementById('gen-formula-live').textContent = `f = ${gen.rawFreqHz.toFixed(1)}Hz · E = ${gen.liveVoltageStr} (${Math.round(gen.voltageRatio * 100)}%)`;
+      }
+
+      document.getElementById('gen-fuel-label').textContent = gen.spec.fuelLabel;
+      document.getElementById('gen-fuel-val').textContent = `${engine.inputPowerMW} MW → ${gen.outputPowerMW.toFixed(0)} MW`;
+      document.getElementById('slider-gen-input').value = engine.inputPowerMW;
+
+      document.getElementById('timescale-fraction-text').textContent = `1 / ${engine.timeScaleDenom} x`;
+      document.querySelectorAll('.snap-ts-btn').forEach(btn => {
+        if (Number(btn.dataset.denom) === engine.timeScaleDenom) {
+          btn.className = 'snap-ts-btn px-1.5 py-1 rounded text-[10px] font-mono-num bg-purple-600 text-white font-bold';
+        } else {
+          btn.className = 'snap-ts-btn px-1.5 py-1 rounded text-[10px] font-mono-num bg-slate-800 text-slate-300';
+        }
+      });
+
+      const playBtn = document.getElementById('btn-play-pause');
+      if (playBtn) playBtn.textContent = engine.isPlaying ? '⏸ 暫停' : '▶ 播放';
+
+      const subObj = engine.substations[engine.selectedSubstation];
+      if (subObj) {
+        document.getElementById('selected-substation-title').textContent = `📍 ${subObj.name} (${subObj.role})`;
+        const optContainer = document.getElementById('substation-voltage-options');
+        optContainer.innerHTML = '';
+        subObj.options.forEach(opt => {
+          const isCurrent = Math.abs(subObj.voltageKV - opt.val) < 0.001;
+          const btn = document.createElement('button');
+          btn.className = isCurrent
+            ? 'px-2.5 py-1.5 rounded-lg text-[11px] font-mono-num font-bold bg-amber-400 text-slate-950 transition-all'
+            : 'px-2.5 py-1.5 rounded-lg text-[11px] font-mono-num bg-slate-800 text-slate-300 border border-slate-700 hover:border-amber-400 transition-all';
+          btn.textContent = opt.label;
+          btn.onclick = () => {
+            subObj.voltageKV = opt.val;
+            syncUI();
+          };
+          optContainer.appendChild(btn);
+        });
+      }
+
+      document.querySelectorAll('.wire-btn').forEach(btn => {
+        if (btn.dataset.wire === engine.wireType) {
+          btn.className = 'wire-btn py-1.5 px-1 rounded text-[10px] bg-sky-500 text-slate-950 font-bold border border-sky-400';
+        } else {
+          btn.className = 'wire-btn py-1.5 px-1 rounded text-[10px] bg-slate-800 text-slate-300 border border-slate-700';
+        }
+      });
+      document.getElementById('trans-dist-val').textContent = `${engine.transDistanceKm} km`;
+      document.getElementById('calc-trans-i').textContent = `${trans.i1.toFixed(1)} A (${trans.v1}kV)`;
+      document.getElementById('calc-trans-i-down').textContent = `${trans.i2.toFixed(0)}A · ${trans.i3.toFixed(0)}A`;
+      document.getElementById('calc-trans-loss').textContent = `${trans.lossMW.toFixed(2)} MW (${trans.lossPercent.toFixed(1)}%)`;
+
+      const actualVEl = document.getElementById('calc-home-actual-v');
+      if (actualVEl) actualVEl.textContent = `${trans.actualHomeV110.toFixed(1)}V / ${trans.actualHomeV220.toFixed(1)}V`;
+
+      // 同步家庭新式銅排配電盤電流與故障按鈕狀態
+      const setTxt = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
+      setTxt('home-il1-amp', `${home.iL1.toFixed(1)}A`);
+      setTxt('home-il2-amp', `${home.iL2.toFixed(1)}A`);
+      setTxt('home-in-amp',  `${home.iN.toFixed(1)}A`);
+      setTxt('home-220v-amp', `${home.i220.toFixed(1)} A`);
+      setTxt('home-110a-amp', `${home.i110A.toFixed(1)} A`);
+      setTxt('home-110b-amp', `${home.i110B.toFixed(1)} A`);
+
+      const btnLeak = document.getElementById('btn-fault-leak');
+      const btnL1   = document.getElementById('btn-fault-l1');
+      const btnN    = document.getElementById('btn-fault-n');
+      if (btnLeak) btnLeak.className = engine.faultLeakage
+        ? 'px-2.5 py-1 rounded-lg bg-emerald-500 text-slate-950 font-bold text-[11px] shadow-lg shadow-emerald-500/30 transition'
+        : 'px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-emerald-600/80 border border-slate-700 text-emerald-300 font-bold text-[11px] transition';
+      if (btnL1) btnL1.className = engine.faultL1Open
+        ? 'px-2.5 py-1 rounded-lg bg-amber-500 text-slate-950 font-bold text-[11px] shadow-lg shadow-amber-500/30 transition'
+        : 'px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-amber-600/80 border border-slate-700 text-amber-300 font-bold text-[11px] transition';
+      if (btnN) btnN.className = engine.faultNOpen
+        ? 'px-2.5 py-1 rounded-lg bg-rose-500 text-white font-bold text-[11px] shadow-lg shadow-rose-500/30 transition'
+        : 'px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-rose-600/80 border border-slate-700 text-rose-300 font-bold text-[11px] transition';
+
+      // 同步下層線路顯色濾鏡按鈕樣式
+      const wfStyles = {
+        l1: 'bg-red-600 text-white font-bold',
+        l2: 'bg-sky-500 text-slate-950 font-bold',
+        n:  'bg-slate-200 text-slate-950 font-bold',
+        e:  'bg-emerald-500 text-slate-950 font-bold'
+      };
+      ['l1', 'l2', 'n', 'e'].forEach(k => {
+        const b = document.getElementById(`btn-wfilter-${k}`);
+        if (!b) return;
+        b.className = `home-wfilter-btn px-2 py-0.5 rounded text-[11px] transition ${
+          engine.homeWireFilter[k] ? wfStyles[k] : 'bg-slate-800 text-slate-500 border border-slate-700 hover:text-slate-300'
+        }`;
+      });
+
+      const resetBtn = document.getElementById('btn-nfb-reset');
+      if (engine.nfbTripped) resetBtn.classList.remove('hidden');
+      else resetBtn.classList.add('hidden');
+    }
+
+    function renderApplianceButtons() {
+      const box220  = document.getElementById('appliances-220v');
+      const box110A = document.getElementById('appliances-110a');
+      const box110B = document.getElementById('appliances-110b');
+      if (!box220 || !box110A || !box110B) return;
+      box220.innerHTML = '';
+      box110A.innerHTML = '';
+      box110B.innerHTML = '';
+
+      engine.appliances.forEach(app => {
+        const btn = document.createElement('button');
+        btn.className = `w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg border text-[11px] transition-all ${
+          app.on
+            ? 'bg-emerald-950/50 border-emerald-500/60 text-slate-100'
+            : 'bg-slate-900 border-slate-800 text-slate-400 hover:border-slate-600'
+        }`;
+        btn.innerHTML = `
+          <span>${app.icon} ${app.name}</span>
+          <span class="font-mono-num font-bold ${app.on ? 'text-emerald-400' : 'text-slate-500'}">${app.watts}W</span>
+        `;
+        btn.onclick = () => {
+          app.on = !app.on;
+          renderApplianceButtons();
+          syncUI();
+        };
+        if (app.branch === '220') box220.appendChild(btn);
+        else if (app.branch === '110A') box110A.appendChild(btn);
+        else box110B.appendChild(btn);
+      });
+    }
+
+    function initEvents() {
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+      });
+
+      document.getElementById('btn-toggle-sidebar').addEventListener('click', () => {
+        const sb = document.getElementById('right-sidebar');
+        const icon = document.getElementById('sidebar-toggle-icon');
+        sb.classList.toggle('sidebar-collapsed');
+        icon.textContent = sb.classList.contains('sidebar-collapsed') ? '⇤' : '⇥ 收合';
+        setTimeout(resizeAllCanvases, 260);
+      });
+
+      document.querySelectorAll('.collapsible-toggle').forEach(toggle => {
+        toggle.addEventListener('click', () => {
+          const card = toggle.closest('.collapsible-card');
+          if (card) card.classList.toggle('collapsible-collapsed');
+        });
+      });
+
+      document.querySelectorAll('.gen-type-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          engine.setGeneratorType(btn.dataset.gentype);
+          syncUI();
+        });
+      });
+
+      document.getElementById('btn-toggle-inverter').addEventListener('click', () => {
+        engine.inverterEnabled = !engine.inverterEnabled;
+        engine.prefillScopeHistory();
+        syncUI();
+      });
+
+      const toggleAvr = () => {
+        if (engine.generatorSpecs[engine.genType].isDC) return;
+        engine.avrEnabled = !engine.avrEnabled;
+        syncUI();
+      };
+      document.getElementById('btn-toggle-avr').addEventListener('click', toggleAvr);
+      document.getElementById('btn-scope-avr').addEventListener('click', toggleAvr);
+
+      document.getElementById('btn-phase-mode').addEventListener('click', () => {
+        const allThreeOn = engine.scopeChannels.u && engine.scopeChannels.v && engine.scopeChannels.w;
+        if (allThreeOn) {
+          engine.scopeChannels = { u: true, v: false, w: false };
+          engine.showThreePhase = false;
+        } else {
+          engine.scopeChannels = { u: true, v: true, w: true };
+          engine.showThreePhase = true;
+        }
+        syncUI();
+      });
+
+      // 發電機示波器：量測端點切換（相電壓 vs 線電壓）
+      document.querySelectorAll('.gen-scope-mode-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          engine.scopeMeasureMode = btn.dataset.smode;
+          syncUI();
+        });
+      });
+
+      // 發電機示波器：U / V / W 通道獨立複選（至少保留 1 通道開啟）
+      document.querySelectorAll('.gen-scope-ch-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const k = btn.dataset.sch;
+          const activeCount = Object.values(engine.scopeChannels).filter(Boolean).length;
+          if (engine.scopeChannels[k] && activeCount <= 1) return;
+          engine.scopeChannels[k] = !engine.scopeChannels[k];
+          syncUI();
+        });
+      });
+
+      // 家庭單相三線示波器：L1-N / L2-N / L1-L2 探棒獨立複選
+      document.querySelectorAll('.home-scope-ch-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const k = btn.dataset.hch;
+          const activeCount = Object.values(engine.homeScopeChannels).filter(Boolean).length;
+          if (engine.homeScopeChannels[k] && activeCount <= 1) return;
+          engine.homeScopeChannels[k] = !engine.homeScopeChannels[k];
+          syncUI();
+        });
+      });
+
+      document.getElementById('slider-gen-rpm').addEventListener('input', e => {
+        engine.rpm = Number(e.target.value);
+        syncUI();
+      });
+
+      document.getElementById('btn-snap-60hz').addEventListener('click', () => {
+        const spec = engine.generatorSpecs[engine.genType];
+        engine.rpm = spec.ratedRpm;
+        engine.prefillScopeHistory();
+        syncUI();
+      });
+
+      document.getElementById('slider-gen-input').addEventListener('input', e => {
+        engine.inputPowerMW = Number(e.target.value);
+        syncUI();
+      });
+
+      const denomStops = [240, 210, 180, 150, 120, 100, 90, 75, 60, 50, 40, 30, 20, 15, 10];
+      document.getElementById('slider-timescale').addEventListener('input', e => {
+        const pct = Number(e.target.value) / 100;
+        const idx = Math.min(denomStops.length - 1, Math.round(pct * (denomStops.length - 1)));
+        engine.timeScaleDenom = denomStops[idx];
+        syncUI();
+      });
+
+      document.querySelectorAll('.snap-ts-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          engine.timeScaleDenom = Number(btn.dataset.denom);
+          const idx = denomStops.indexOf(engine.timeScaleDenom);
+          if (idx >= 0) {
+            document.getElementById('slider-timescale').value = Math.round((idx / (denomStops.length - 1)) * 100);
+          }
+          syncUI();
+        });
+      });
+
+      document.getElementById('btn-play-pause').addEventListener('click', () => {
+        engine.isPlaying = !engine.isPlaying;
+        syncUI();
+      });
+      document.getElementById('btn-step-back').addEventListener('click', () => {
+        engine.manualStepAngle(-15);
+        syncUI();
+      });
+      document.getElementById('btn-step-forward').addEventListener('click', () => {
+        engine.manualStepAngle(15);
+        syncUI();
+      });
+
+      document.getElementById('slider-trans-dist').addEventListener('input', e => {
+        engine.transDistanceKm = Number(e.target.value);
+        syncUI();
+      });
+      document.querySelectorAll('.wire-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          engine.wireType = btn.dataset.wire;
+          syncUI();
+        });
+      });
+
+      const resetHomeAll = () => {
+        Object.values(engine.breakers).forEach(b => {
+          b.on = true;
+          b.tripped = false;
+          if ('leakTripped' in b) b.leakTripped = false;
+        });
+        engine.faultL1Open = false;
+        engine.faultL2Open = false;
+        engine.faultNOpen = false;
+        engine.faultLeakage = false;
+        engine.disconnectedWires = {};
+        engine.homeWireFilter = { l1: true, l2: true, n: true, e: true };
+        engine.nfbTripped = false;
+        engine.leakageTimer = 0;
+        engine.overloadTimers = { main: 0, b220: 0, b110A: 0, b110B: 0 };
+        document.getElementById('system-banner').classList.add('hidden');
+        syncUI();
+      };
+
+      document.getElementById('btn-nfb-reset').addEventListener('click', resetHomeAll);
+      document.getElementById('btn-home-reset-all').addEventListener('click', resetHomeAll);
+
+      // 下層線路顯色濾鏡按鈕事件
+      document.getElementById('btn-wfilter-all').addEventListener('click', () => {
+        engine.homeWireFilter = { l1: true, l2: true, n: true, e: true };
+        syncUI();
+      });
+      document.querySelectorAll('.home-wfilter-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const k = btn.dataset.wfilter;
+          engine.homeWireFilter[k] = !engine.homeWireFilter[k];
+          syncUI();
+        });
+      });
+
+      // 故障模擬按鈕事件
+      document.getElementById('btn-fault-leak').addEventListener('click', () => {
+        engine.faultLeakage = !engine.faultLeakage;
+        if (engine.faultLeakage && !engine.breakers.b110B.on) {
+          engine.breakers.b110B.on = true;
+          engine.breakers.b110B.tripped = false;
+          engine.breakers.b110B.leakTripped = false;
+        }
+        syncUI();
+      });
+
+      document.getElementById('btn-fault-l1').addEventListener('click', () => {
+        engine.faultL1Open = !engine.faultL1Open;
+        syncUI();
+      });
+
+      document.getElementById('btn-fault-n').addEventListener('click', () => {
+        engine.faultNOpen = !engine.faultNOpen;
+        syncUI();
+      });
+
+      // 家庭配電盤畫布點擊互動 (直接點擊總開關 / 三個子開關 / ELCB TEST 鈕 / 電器)
+      document.getElementById('canvas-home').addEventListener('click', e => {
+        const rect = e.target.getBoundingClientRect();
+        const cx = e.clientX - rect.left;
+        const cy = e.clientY - rect.top;
+        for (const box of engine.homeHitBoxes) {
+          if (cx >= box.x1 && cx <= box.x2 && cy >= box.y1 && cy <= box.y2) {
+            box.action();
+            break;
+          }
+        }
+      });
+
+      window.addEventListener('resize', resizeAllCanvases);
+    }
+
+    let lastTimestamp = performance.now();
+    function animate(now) {
+      const dtSec = Math.min(0.05, (now - lastTimestamp) / 1000);
+      lastTimestamp = now;
+
+      engine.step(dtSec);
+      flowOffset = (flowOffset + dtSec) % 100;
+
+      if (activeTab === 'panorama') {
+        updatePano3DScene(dtSec);
+      } else if (activeTab === 'gen') {
+        updateGen3DScene(dtSec);
+        renderGenScope();
+      } else if (activeTab === 'trans') {
+        updateTrans3DScene(dtSec);
+      } else if (activeTab === 'home') {
+        renderHome();
+        renderHomeScope();
+      }
+
+      if (activeTab === 'home' && engine.nfbTripped) syncUI();
+
+      requestAnimationFrame(animate);
+    }
+
+    window.onload = function () {
+      renderApplianceButtons();
+      initEvents();
+      initPano3D();
+      initGen3D();
+      initTrans3D();
+      syncUI();
+      resizeAllCanvases();
+      requestAnimationFrame(animate);
+    };
+  </script>
+</body>
+</html>
