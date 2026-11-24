@@ -1,4 +1,4 @@
-<title>光學實驗台V17</title>
+<title>光學實驗台V18</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
@@ -2021,12 +2021,14 @@ function renderPanel(){
     const box=el('div','selbox');box.appendChild(el('div','ttl',DRAW_NAMES[dr.t]+'（已選取，可直接拖移）'));
     const cs=[{type:'swatches',key:'c',label:'顏色',options:DRAW_COLORS.concat(['#ff9f43','#b28cff'])},
       {type:'slider',key:'w',label:'線條粗細',min:1,max:8,step:0.5,fmt:v=>(+v).toFixed(1)}];
-    if(dr.t!=='ruler') cs.push({type:'toggle',key:'dash',label:'虛線'});
+    if(dr.t!=='ruler'&&dr.t!=='protractor') cs.push({type:'toggle',key:'dash',label:'虛線'});
+    if(dr.t==='protractor'){cs.splice(1,1);cs.push({type:'toggle',key:'full',label:'全圓量角器（0°～360°）'});cs.push({type:'slider',key:'ca',label:'指針角度',min:0,max:360,step:0.5,fmt:v=>(+v).toFixed(1)+'°'});}
     if(dr.t==='line') cs.push({type:'toggle',key:'arrow',label:'顯示箭頭'});
     cs.push({type:'buttons',items:[{label:'複製一份',onClick:()=>dupDraw(dr)},{label:'刪除',onClick:()=>deleteSel()}]});
     for(const c of cs) box.appendChild(makeControl(c,dr));
     if(dr.t==='ruler'){const n=el('div','note-sm');box.appendChild(n);const upd=()=>{n.textContent='長度 '+f1(len(sub(dr.b,dr.a)))+' cm　·　拖曳兩端的方塊可調整';};upd();app.sync.push(upd);}
     else if(dr.t==='line') box.appendChild(el('div','note-sm','拖曳兩端的方塊可調整起點與終點'));
+    else if(dr.t==='protractor') box.appendChild(el('div','note-sm','拖曳中心的方塊移動量角器；拖曳基準線端點的方塊旋轉或放大；拖曳黃色指針端點讀出角度。把中心對準入射點、基準線對準法線，就能量入射角和折射角。'));
     els.controls.appendChild(box);
   }
   if(frozen()){const tk=taskOf(),fb=el('div','frozenbox'+(tk.freezeHide?' hidevals':''));
@@ -2098,6 +2100,7 @@ const ICON={
   eye:'<path d="M1.5 10S5 4.5 10 4.5 18.5 10 18.5 10 15 15.5 10 15.5 1.5 10 1.5 10z"/><circle cx="10" cy="10" r="2.6"/>',
   pen:'<path d="M3 17l1-4L13.5 3.5l3 3L7 16z"/><path d="M11.5 5.5l3 3"/>',
   line:'<path d="M3 16L16 5"/><path d="M10.5 4.5H16.5V10.5"/>',
+  protractor:'<path d="M2.5 14.5a7.5 7.5 0 0 1 15 0z"/><path d="M10 14.5V9.5M10 14.5l4.2-3.6M5.6 9.8l.9.9M14.4 9.8l-.9.9"/>',
   ruler:'<rect x="2" y="7" width="16" height="6" rx="1"/><path d="M5 7v3M8 7v2M11 7v3M14 7v2"/>',
   undo:'<path d="M7 4L3 8l4 4"/><path d="M3 8h9a4.5 4.5 0 010 9H8"/>',
   clear:'<path d="M8 17h9"/><path d="M3.5 12.5l7-7a1.5 1.5 0 012 0l3 3a1.5 1.5 0 010 2L10 16H6.5z"/><path d="M7 9l5 5"/>',
@@ -2117,12 +2120,12 @@ const ICON={
   eyeOpen:'<path d="M1.5 10S5 4.5 10 4.5 18.5 10 18.5 10 15 15.5 10 15.5 1.5 10 1.5 10z"/><circle cx="10" cy="10" r="2.6"/>'
 };
 const SVG=k=>`<svg viewBox="0 0 20 20" aria-hidden="true">${ICON[k]}</svg>`;
-const DRAW_NAMES={pen:'手繪線條',line:'手繪光線',ruler:'量尺'};
+const DRAW_NAMES={pen:'手繪線條',line:'手繪光線',ruler:'量尺',protractor:'量角器'};
 const TOOLBAR=[
   [['select','mode','選取／移動　Esc'],['fold','action','收合工具列']],
   [['point','mode','自訂發光點：點畫面放置'],['laser','mode','自訂光線（雷射）：點畫面放置'],['beam','mode','平行光源：點畫面放置'],['delete','action','刪除選取的光源或繪圖　Delete']],
   [['top','toggle','頂端光線'],['bottom','toggle','底部光線'],['r1','toggle','平行主軸光線'],['r2','toggle','穿過鏡心光線'],['r3','toggle','通過焦點光線'],['image','toggle','成像'],['screen','toggle','屏幕'],['eye','toggle','觀察者眼睛']],
-  [['pen','mode','畫筆'],['line','mode','手繪光線（拖曳畫出箭頭）'],['ruler','mode','量尺（拖曳量距離）'],['color','action','畫筆顏色（點一下換色）'],['clear','action','清除所有繪圖']],
+  [['pen','mode','畫筆'],['line','mode','手繪光線（拖曳畫出箭頭）'],['ruler','mode','量尺（拖曳量距離）'],['protractor','mode','量角器（從中心拖向基準線方向）'],['color','action','畫筆顏色（點一下換色）'],['clear','action','清除所有繪圖']],
   [['undo','action','復原　Ctrl+Z'],['redo','action','重做　Ctrl+Shift+Z'],['snap','action','儲存情境快照'],['png','action','匯出畫面為 PNG 圖片']]
 ];
 const tbtns={};
@@ -2175,7 +2178,7 @@ function deleteSel(){const st=S(),s=selSource(),d=selDraw(),sc=cur();if(s)st.sou
 function selDraw(){const s=app.selObj;if(!s||!String(s).startsWith('d'))return null;return S().draw.find(x=>'d'+x.id===s)||null;}
 function dupDraw(d){const c=JSON.parse(JSON.stringify(d));c.id=app.drawId++;const o=[2,-2];if(c.pts)c.pts=c.pts.map(p=>add(p,o));else{c.a=add(c.a,o);c.b=add(c.b,o);}
   S().draw.push(c);app.selObj='d'+c.id;renderPanel();commit();}
-function newDraw(t,w){const it={id:app.drawId++,t,c:app.color,w:t==='ruler'?1.6:2.4,dash:false};if(t==='pen')it.pts=[w];else{it.a=w;it.b=w;if(t==='line')it.arrow=true;}return it;}
+function newDraw(t,w){const it={id:app.drawId++,t,c:t==='protractor'?'#ffffff':app.color,w:t==='ruler'||t==='protractor'?1.6:2.4,dash:false};if(t==='protractor'){it.ca=60;it.full=false;}if(t==='pen')it.pts=[w];else{it.a=w;it.b=w;if(t==='line')it.arrow=true;}return it;}
 // light-path reversibility: put a new laser on the last segment of this laser's path, aimed straight back
 function reverseLaser(src){
   const out=app.out; if(!out||!out.optics){toast('這個場景沒有可以反射或折射的物體');return;}
@@ -2330,7 +2333,11 @@ function buildHandles(){
       drag:(wx,wy,s0,ev)=>{let ang=Math.atan2(wy-s0.y,wx-s0.x);const stp=(ev&&ev.shiftKey?15:0.1)*D2R;ang=Math.round(ang/stp)*stp;o.rotate(ang);}});}
   }
   const d=selDraw();
-  if(d&&d.t!=='pen') for(const key of ['a','b']) H.push({x:d[key][0],y:d[key][1],dh:true,cursor:'crosshair',drag:(wx,wy)=>{d[key]=[wx,wy];}});
+  if(d&&d.t==='protractor'){const R=len(sub(d.b,d.a)),b0=Math.atan2(d.b[1]-d.a[1],d.b[0]-d.a[0]),tip=add(d.a,mul(dirOf(b0+d.ca*D2R),R*1.12));
+    H.push({x:d.a[0],y:d.a[1],dh:true,cursor:'move',rel:true,o0:()=>({a:d.a,b:d.b}),drag:(dx,dy,s0)=>{d.a=add(s0.a,[dx,dy]);d.b=add(s0.b,[dx,dy]);}});
+    H.push({x:d.b[0],y:d.b[1],dh:true,cursor:'crosshair',drag:(wx,wy)=>{const v=sub([wx,wy],d.a);if(len(v)>2)d.b=[wx,wy];}});
+    H.push({x:tip[0],y:tip[1],dh:true,cursor:'crosshair',drag:(wx,wy)=>{let a=(Math.atan2(wy-d.a[1],wx-d.a[0])-b0)*R2D;while(a<0)a+=360;while(a>=360)a-=360;if(!d.full&&a>270)a=0;else if(!d.full&&a>180)a=180;d.ca=Math.round(a*2)/2;}});}
+  else if(d&&d.t!=='pen') for(const key of ['a','b']) H.push({x:d[key][0],y:d[key][1],dh:true,cursor:'crosshair',drag:(wx,wy)=>{d[key]=[wx,wy];}});
   app.handles=H;
 }
 
@@ -2404,6 +2411,29 @@ function drawGizmo2D(o,T){
   if(o.label){ctx.fillStyle=C.text;ctx.font='12px "Noto Sans TC",sans-serif';ctx.textAlign='left';ctx.fillText(o.label,x+10,y+20);}
   ctx.restore();
 }
+// protractor: semicircle (or full circle) on the left of the baseline a→b; 1° ticks, labels every 10°, arm shows the reading
+function drawProtractor(d,T,sel){
+  const cx=T.X(d.a[0]),cy=T.Y(d.a[1]),ex=T.X(d.b[0]),ey=T.Y(d.b[1]),R=Math.hypot(ex-cx,ey-cy);if(R<4)return;
+  const th0=Math.atan2(ey-cy,ex-cx), span=d.full?360:180, A=deg=>th0-deg*D2R, col=d.c||'#ffffff';
+  ctx.save();ctx.setLineDash([]);
+  ctx.beginPath();if(d.full)ctx.arc(cx,cy,R,0,7);else{ctx.moveTo(cx+R*Math.cos(th0),cy+R*Math.sin(th0));ctx.arc(cx,cy,R,th0,th0-Math.PI,true);ctx.closePath();}
+  ctx.fillStyle='rgba(120,190,255,0.10)';ctx.fill();ctx.strokeStyle=col;ctx.globalAlpha=0.9;ctx.lineWidth=1.4;ctx.stroke();
+  ctx.beginPath();ctx.arc(cx,cy,R*0.62,A(0),A(span),true);ctx.globalAlpha=0.35;ctx.stroke();ctx.globalAlpha=0.9;
+  const fine=R*D2R>3.2, mid=R*5*D2R>4;
+  for(let k=0;k<=span;k++){if(!fine&&k%5)continue;if(!mid&&k%10)continue;const t=k%10===0?0.12:k%5===0?0.08:0.045,a=A(k),c=Math.cos(a),s2=Math.sin(a);
+    ctx.lineWidth=k%10===0?1.2:0.8;ctx.beginPath();ctx.moveTo(cx+R*c,cy+R*s2);ctx.lineTo(cx+R*(1-t)*c,cy+R*(1-t)*s2);ctx.stroke();}
+  const step=R>130?10:R>70?30:90, fs=Math.max(9,Math.min(12,R*0.07));ctx.font=fs+'px "IBM Plex Mono",monospace';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle=col;
+  for(let k=0;k<=span;k+=step){if(d.full&&k===360)continue;const a=A(k);ctx.globalAlpha=0.95;ctx.fillText(String(k),cx+R*0.8*Math.cos(a),cy+R*0.8*Math.sin(a));
+    if(!d.full){ctx.globalAlpha=0.5;ctx.fillText(String(180-k),cx+R*0.69*Math.cos(a),cy+R*0.69*Math.sin(a));}}
+  ctx.globalAlpha=0.9;ctx.lineWidth=1.2;ctx.beginPath();ctx.moveTo(cx-R*Math.cos(th0)*(d.full?1:1),cy-R*Math.sin(th0));ctx.lineTo(ex,ey);ctx.stroke();
+  ctx.beginPath();ctx.arc(cx,cy,3,0,7);ctx.fill();
+  // measuring arm and reading
+  const aa=A(d.ca),ax=cx+R*1.12*Math.cos(aa),ay=cy+R*1.12*Math.sin(aa);
+  ctx.strokeStyle='#ffd166';ctx.lineWidth=2;ctx.globalAlpha=1;ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(ax,ay);ctx.stroke();
+  ctx.beginPath();ctx.arc(cx,cy,Math.min(R*0.25,26),A(0),aa,true);ctx.stroke();
+  const t=(Math.round(d.ca*10)/10).toFixed(1)+'°';ctx.font='bold 13px "IBM Plex Mono",monospace';const tw=ctx.measureText(t).width,mx=ax+Math.cos(aa)*16,my=ay+Math.sin(aa)*16;
+  ctx.fillStyle='rgba(7,11,18,0.85)';ctx.fillRect(mx-tw/2-5,my-10,tw+10,20);ctx.fillStyle='#ffd166';ctx.fillText(t,mx,my);
+  ctx.restore();}
 function drawDrawings(T){const st=S(),selD=app.capturing?null:selDraw();
   for(const d of st.draw){ctx.save();const w=d.w||2.4,gp=d.t==='pen'?d.pts:[d.a,d.b];ctx.lineCap='round';ctx.lineJoin='round';
     if(d===selD){ctx.strokeStyle='rgba(67,195,207,0.45)';ctx.lineWidth=w+9;path(gp,T);ctx.stroke();}
@@ -2411,6 +2441,7 @@ function drawDrawings(T){const st=S(),selD=app.capturing?null:selDraw();
     if(d.t==='pen'){path(d.pts,T);ctx.stroke();}
     else if(d.t==='line'){const x1=T.X(d.a[0]),y1=T.Y(d.a[1]),x2=T.X(d.b[0]),y2=T.Y(d.b[1]),L=Math.hypot(x2-x1,y2-y1);path([d.a,d.b],T);ctx.stroke();ctx.setLineDash([]);
       if(L>8&&d.arrow!==false){const an=Math.atan2(y2-y1,x2-x1),hs=6+w;drawArrowHead(x2,y2,an,hs);if(L>60)drawArrowHead((x1+x2)/2,(y1+y2)/2,an,hs*0.85);}}
+    else if(d.t==='protractor') drawProtractor(d,T,d===selD);
     else if(d.t==='ruler'){const x1=T.X(d.a[0]),y1=T.Y(d.a[1]),x2=T.X(d.b[0]),y2=T.Y(d.b[1]),an=Math.atan2(y2-y1,x2-x1),nx=-Math.sin(an)*7,ny=Math.cos(an)*7;
       ctx.strokeStyle=d.c||'#ffffff';ctx.lineWidth=w;ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.moveTo(x1-nx,y1-ny);ctx.lineTo(x1+nx,y1+ny);ctx.moveTo(x2-nx,y2-ny);ctx.lineTo(x2+nx,y2+ny);ctx.stroke();
       const t=f1(len(sub(d.b,d.a)))+' cm';ctx.font='bold 12px "IBM Plex Mono",monospace';const tw=ctx.measureText(t).width;const mx=(x1+x2)/2+nx*2,my=(y1+y2)/2+ny*2;
@@ -2709,6 +2740,10 @@ function build3DOverlay(span){
     if(d.t==='pen'&&d.pts.length>1){if(w>3&&!d.dash){for(let i=1;i<d.pts.length;i++)tube(d.pts[i-1],d.pts[i],d.c,0.95,k*w*0.5);}else line3(d.pts,d.c,!!d.dash,1,0.3);}
     else if(d.t==='line'){const a=d.a,b=d.b,L=len(sub(b,a));if(L<0.01)continue;if(d.dash)line3([a,b],d.c,true,1,0.3);else tube(a,b,d.c,0.95,k*w*0.5);
       if(d.arrow!==false){const u=nrm(sub(b,a));const cn=mesh(new THREE.ConeGeometry(k*(3+w),k*(8+2*w),12),new THREE.MeshBasicMaterial({color:hexOnly(d.c)}));orient(cn,sub(b,mul(u,k*(8+2*w))),b);}}
+    else if(d.t==='protractor'){const R=len(sub(d.b,d.a)),b0=Math.atan2(d.b[1]-d.a[1],d.b[0]-d.a[0]),span=d.full?360:180,P=(r,deg)=>add(d.a,mul(dirOf(b0+deg*D2R),r));
+      line3(lin(0,span,73).map(g=>P(R,g)).concat(d.full?[]:[P(R,0)]),d.c||'#ffffff',false,0.9,0.3);
+      for(let g=0;g<=span;g+=10) line3([P(R,g),P(R*0.88,g)],d.c||'#ffffff',false,0.8,0.3);
+      line3([d.a,P(R*1.12,d.ca)],'#ffd166',false,1,0.35);sprite((Math.round(d.ca*10)/10).toFixed(1)+'°','#ffd166',P(R*1.3,d.ca)[0],P(R*1.3,d.ca)[1],0.35,k*16);}
     else if(d.t==='ruler'){line3([d.a,d.b],d.c||'#ffffff',false,1,0.3);sprite(f1(len(sub(d.b,d.a)))+' cm',d.c||'#ffffff',(d.a[0]+d.b[0])/2,(d.a[1]+d.b[1])/2+k*14,0.3,k*16);}
   }
   T3.hm=[];
@@ -2770,7 +2805,9 @@ function hitHandle(px,py){let best=-1,bd=1e9;const lim=matchMedia('(pointer:coar
 function worldPx(p){if(app.mode==='2d'){const T=makeT();return [T.X(p[0]),T.Y(p[1])];}const q=project3(p[0],p[1]);return [q[0],q[1]];}
 function segDist(p,a,b){const ab=sub(b,a),t=clamp(dot(sub(p,a),ab)/(dot(ab,ab)||1),0,1);return len(sub(p,add(a,mul(ab,t))));}
 function hitDrawing(px,py){const st=S(),lim=matchMedia('(pointer:coarse)').matches?14:7;
-  for(let i=st.draw.length-1;i>=0;i--){const d=st.draw[i],pp=(d.t==='pen'?d.pts:[d.a,d.b]).map(worldPx);
+  for(let i=st.draw.length-1;i>=0;i--){const d=st.draw[i];
+    if(d.t==='protractor'){const c=worldPx(d.a),e=worldPx(d.b),R=Math.hypot(e[0]-c[0],e[1]-c[1]);if(Math.hypot(px-c[0],py-c[1])<=R+lim)return d;continue;}
+    const pp=(d.t==='pen'?d.pts:[d.a,d.b]).map(worldPx);
     for(let k=0;k<pp.length;k++){if(segDist([px,py],pp[k],pp[k+1]||pp[k])<lim+(d.w||2.4)/2) return d;}}
   return null;}
 const pdist=()=>{const a=[...ptrs.values()];return Math.hypot(a[0][0]-a[1][0],a[0][1]-a[1][1]);};
@@ -2783,7 +2820,7 @@ function onDown(e){
   const w=toWorld(px,py), st=S(), tool=app.tool;
   if(['point','laser','beam'].includes(tool)){if(w){placeSource(tool,w);setTool('select');commit();}return;}
   if(tool==='pen'&&w){const it=newDraw('pen',w);st.draw.push(it);gesture={type:'draw',it,lp:[px,py]};return;}
-  if((tool==='line'||tool==='ruler')&&w){const it=newDraw(tool,w);st.draw.push(it);gesture={type:'draw',it};return;}
+  if((tool==='line'||tool==='ruler'||tool==='protractor')&&w){const it=newDraw(tool,w);st.draw.push(it);gesture={type:'draw',it};return;}
   let i=hitHandle(px,py);
   if(i>=0&&!handleAllowed(app.handles[i])){toast('任務進行中，物體位置已鎖定');i=-1;}
   if(i>=0&&w){const h=app.handles[i];let changed=false;
@@ -2830,6 +2867,9 @@ function onUp(e){
     if(gesture&&(gesture.type==='pan'||gesture.type==='orbit')&&!gesture.moved&&app.selObj){app.selObj=null;renderPanel();refresh();}
     // gesture is cleared BEFORE commit(): taskAfter() skips judging while a gesture is in progress
     const g=gesture; gesture=null; let fbIt=null;
+    if(g&&g.type==='draw'&&g.it.t==='protractor'){if(len(sub(g.it.b,g.it.a))<3) g.it.b=add(g.it.a,[12,0]);
+      // switch straight to selection so the arm and baseline handles can be used
+      setTool('select');app.selObj='d'+g.it.id;renderPanel();}
     if(g&&g.type==='draw'){const it=g.it;if((it.t!=='pen'&&len(sub(it.b,it.a))<0.3)||(it.t==='pen'&&it.pts.length<2)){S().draw.pop();}else fbIt=it;commit();}
     if(g&&(g.type==='drag'||(g.type==='moveDraw'&&g.moved))){if(g.type==='moveDraw')fbIt=g.it;else if(g.h&&g.h.dh)fbIt=selDraw();commit();}
     if(fbIt) drawFeedback(fbIt);
@@ -2869,12 +2909,15 @@ function stamp(d=new Date()){const p=n=>String(n).padStart(2,'0');return `${d.ge
 let toastT=null;
 function toast(msg,undo){const t=document.getElementById('toast'),b=document.getElementById('toastUndo');document.getElementById('toastMsg').textContent=msg;
   b.hidden=!undo;b.onclick=()=>{t.hidden=true;if(undo)undo();};t.hidden=false;clearTimeout(toastT);toastT=setTimeout(()=>{t.hidden=true;},undo?6000:2600);}
-// save a generated file: downloads capability → share sheet (iPad) → browser download
+// save a generated file. Inside the Claude artifact viewer: downloads capability (share sheet only as a fallback).
+// Opened as a downloaded .html file in a normal browser: a plain browser download, so it is saved, not shared.
+const STANDALONE=(()=>{try{return window.top===window;}catch(err){return false;}})();
+function blobDownload(name,blob){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),4000);}
 async function saveBlob(name,blob,okMsg){
   if(DL){try{await DL.save({filename:name,data:blob});toast(okMsg);return true;}catch(err){const c=err&&err.code;if(c==='declined')return false;if(c==='rate_limited'){toast('上一個儲存視窗還沒關閉，請稍後再試');return false;}}}
-  try{const f=new File([blob],name,{type:blob.type});if(navigator.canShare&&navigator.canShare({files:[f]})){await navigator.share({files:[f],title:name});return true;}}catch(err){if(err&&err.name==='AbortError')return false;}
-  try{const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),4000);toast(okMsg);return true;}
-  catch(err){toast('這個檢視不允許直接下載');return false;}}
+  if(STANDALONE){try{blobDownload(name,blob);toast(okMsg);return true;}catch(err){}}
+  else{try{const f=new File([blob],name,{type:blob.type});if(navigator.canShare&&navigator.canShare({files:[f]})){await navigator.share({files:[f],title:name});return true;}}catch(err){if(err&&err.name==='AbortError')return false;}}
+  try{blobDownload(name,blob);toast(okMsg);return true;}catch(err){toast('這個檢視不允許直接下載');return false;}}
 // export the stage (2D or 3D, without handles) as a PNG with a caption strip
 // small chooser under the toolbar button: dark background with caption, or transparent background
 function pngMenu(){
@@ -2940,6 +2983,7 @@ function restoreSnap(s){
 async function exportSnaps(list,name){
   if(!list.length) return;
   const data=JSON.stringify({format:'optics-lab-snapshots',version:1,app:'光學實驗台',exported:new Date().toISOString(),snaps:list});
+  if(!DL&&STANDALONE){try{blobDownload(name,new Blob([data],{type:'application/json'}));toast('已匯出 '+list.length+' 個快照');return;}catch(err){}}
   if(DL){try{await DL.save({filename:name,data});toast('已匯出 '+list.length+' 個快照');return;}
     catch(err){const c=err&&err.code;if(c==='declined')return;if(c==='rate_limited'){toast('上一個儲存視窗還沒關閉，請稍後再試');return;}}}
   app.jsonName=name; document.getElementById('jsonSave').hidden=false;
@@ -2951,11 +2995,7 @@ function closeJson(){els.modal.hidden=true;}
 // save the JSON as a real .json file: downloads capability → share sheet (iPad) → browser download
 document.getElementById('jsonSave').onclick=async()=>{
   const data=document.getElementById('jsonText').value, name=app.jsonName||'optics-lab-snapshots.json';
-  if(DL){try{await DL.save({filename:name,data});toast('已下載 '+name);closeJson();return;}catch(err){const c=err&&err.code;if(c==='declined')return;if(c==='rate_limited'){toast('上一個儲存視窗還沒關閉，請稍後再試');return;}}}
-  try{const f=new File([data],name,{type:'application/json'});
-    if(navigator.canShare&&navigator.canShare({files:[f]})){await navigator.share({files:[f],title:name});closeJson();return;}}catch(err){if(err&&err.name==='AbortError')return;}
-  try{const url=URL.createObjectURL(new Blob([data],{type:'application/json'})),a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),4000);toast('已下載 '+name+'；若沒有出現檔案，請改用「複製」');}
-  catch(err){toast('這個檢視不允許直接下載，請改用「複製」');}
+  if(await saveBlob(name,new Blob([data],{type:'application/json'}),'已下載 '+name)) closeJson();
 };
 document.getElementById('jsonClose').onclick=closeJson;
 els.modal.addEventListener('click',e=>{if(e.target===els.modal)closeJson();});
@@ -3179,6 +3219,7 @@ document.getElementById('certSave').onclick=()=>{
   cv.toBlob(async blob=>{
     if(!blob){fallback();return;}
     if(DL){try{await DL.save({filename:fname,data:blob});toast('已儲存任務證書');return;}catch(err){const c=err&&err.code;if(c==='declined')return;if(c==='rate_limited'){toast('上一個儲存視窗還沒關閉，請稍後再試');return;}}}
+    if(STANDALONE){try{blobDownload(fname,blob);toast('已儲存任務證書');return;}catch(err){}}
     fallback();
   },'image/png');
 };
