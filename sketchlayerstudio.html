@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-<title>SketchLayer StudioV8</title>
+<title>SketchLayer StudioV9</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@400;700&display=swap');
@@ -760,6 +760,7 @@
     highlighter: '<path d="M7 12.5l6.8-8.3 3 2.6-6.6 8.4z"/><path d="M7 12.5l-1.6 2.7 2.3.2 2.5-.6"/><path d="M3 17.5h8" stroke-width="3" opacity=".55"/>',
     line: '<path d="M4 16L16 4"/>',
     arrow: '<path d="M4 16L15.5 4.5"/><path d="M9 4.5h6.5V11"/>',
+    axis: '<path d="M3 10h14M10 17V3"/><path d="M14.5 7.5L17 10l-2.5 2.5M7.5 5.5L10 3l2.5 2.5"/><path d="M6.5 8.6v2.8M13.5 8.6v2.8M8.6 6.5h2.8M8.6 13.5h2.8"/>',
     bezier: '<path d="M3.5 15.5C5 4 12 18 16.5 4.5"/><circle cx="3.5" cy="15.5" r="1.3" fill="currentColor" stroke="none"/><circle cx="16.5" cy="4.5" r="1.3" fill="currentColor" stroke="none"/>',
     ellipse: '<ellipse cx="10" cy="10" rx="7.2" ry="5.2"/>',
     point: '<circle cx="8" cy="12" r="2.6" fill="currentColor"/><path d="M12 8.5l1.6-4.5 1.6 4.5M12.6 7h2"/>',
@@ -789,6 +790,7 @@
     highlighter: { name: '螢光筆', key: 'H', hint: '半透明粗線，用來強調區域' },
     line:        { name: '直線', key: 'L', hint: 'Shift：鎖定 15° 倍數；端點會吸附重要位置' },
     arrow:       { name: '箭頭／光線', key: 'A', hint: 'Shift：鎖定 15° 倍數；樣式列可切換「中段箭頭」畫光線' },
+    axis:        { name: '座標軸', key: 'X', hint: '點一下放置（原點自動對齊方格紙格線）；拖曳黃色圓點移動原點、拖曳方塊端點調整長度；樣式列可切換數線／平面座標、設定每刻度格數、刻度值與原點值' },
     bezier:      { name: '貝茲曲線', key: 'B', hint: '拖曳畫出曲線；放開後拖曳兩個圓形控制點調整弧度，拖曳方塊端點可移動端點' },
     ellipse:     { name: '圓／橢圓', key: 'O', hint: '拖曳畫出橢圓；Shift：正圓' },
     point:       { name: '描點', key: 'D', hint: '自動標 A、B、C…；靠近端點或中心時會吸附' },
@@ -816,7 +818,7 @@
     collapsed: false,
     rememberCollapsed: false,
     storageKey: 'sketch-layer',
-    tools: ['select', 'pen', 'highlighter', 'line', 'arrow', 'bezier', 'ellipse', 'point', 'text', 'ruler', 'protractor', 'laser', 'eraser'],
+    tools: ['select', 'pen', 'highlighter', 'line', 'arrow', 'bezier', 'ellipse', 'point', 'text', 'ruler', 'protractor', 'axis', 'laser', 'eraser'],
     colors: ['#facc15', '#f8fafc', '#f87171', '#4ade80', '#22d3ee', '#e879f9', '#fb923c', '#1e293b'],
     customColor: true,
     widths: [[2, '細'], [3.5, '中'], [6, '粗']],
@@ -897,7 +899,7 @@
     document.head.appendChild(s);
   }
 
-  const DRAW_TOOLS = ['pen', 'highlighter', 'line', 'arrow', 'bezier', 'ellipse', 'point', 'text', 'ruler', 'protractor'];
+  const DRAW_TOOLS = ['pen', 'highlighter', 'line', 'arrow', 'bezier', 'ellipse', 'point', 'text', 'ruler', 'protractor', 'axis'];
   const clone = o => JSON.parse(JSON.stringify(o));
   const hypot = Math.hypot;
   const fontCss = id => (FONT_LIST.find(f => f.id === id) || FONT_LIST[0]).css;
@@ -916,6 +918,10 @@
   function bezierEndAngle(A, C1, C2, B) {
     for (const P of [C2, C1, A]) if (hypot(B.x - P.x, B.y - P.y) > 0.5) return Math.atan2(B.y - P.y, B.x - P.x);
     return 0;
+  }
+  function fmtAxisNum(v) {   // 消除浮點誤差（0.1×3 → 0.3）並避免 -0
+    const r = parseFloat(Number(v).toPrecision(10));
+    return String(Object.is(r, -0) ? 0 : r);
   }
   function distToSeg(p, a, b) {
     const vx = b.x - a.x, vy = b.y - a.y, L2 = vx * vx + vy * vy;
@@ -939,7 +945,7 @@
 
     const st = {
       items: [], nextId: 1, tool: 'select', selId: null, visible: true,
-      style: { color: opt.colors[0], width: opt.widths[1] ? opt.widths[1][0] : opt.widths[0][0], size: opt.textSizes[1] ? opt.textSizes[1][0] : opt.textSizes[0][0], dash: false, head: 1, bhead: 0, ff: 'sans', bold: true, italic: false, pMode: 'semi', labelBg: 'rgba(7,11,18,0.88)' },
+      style: { color: opt.colors[0], width: opt.widths[1] ? opt.widths[1][0] : opt.widths[0][0], size: opt.textSizes[1] ? opt.textSizes[1][0] : opt.textSizes[0][0], dash: false, head: 1, bhead: 0, ff: 'sans', bold: true, italic: false, axMode: 'plane', axN: 1, axU: 1, axUY: 1, axNum: true, axFs: 14, axFf: 'mono', axB: false, axI: false, pMode: 'semi', labelBg: 'rgba(7,11,18,0.88)' },
       current: null, gesture: null, eraser: null, laser: [], sawPen: false, space: false,
       touches: new Map(), pinch: null, hist: { stack: ['[]'], idx: 0 }, lastTap: { id: null, t: 0 },
       collapsed: opt.collapsed, cursorSet: false
@@ -1117,6 +1123,79 @@
         };
         mkToggle('<b>B</b>', '粗體', curB, d => { if (d) d.b = !curB; else st.style.bold = !curB; });
         mkToggle('<i style="font-family:serif">I</i>', '斜體', curI, d => { if (d) d.i = !curI; else st.style.italic = !curI; });
+      }
+      if (t === 'axis') {
+        styleBar.appendChild(sep());
+        const g0 = k => (cur ? cur[k] : undefined);
+        const curMode = cur ? cur.mode : st.style.axMode;
+        const curN = cur ? (g0('n') || 1) : st.style.axN;
+        const curU = cur ? (g0('u') > 0 ? g0('u') : 1) : st.style.axU;
+        const curUY = cur ? (g0('uy') > 0 ? g0('uy') : curU) : st.style.axUY;
+        const curNum = cur ? cur.num !== false : st.style.axNum;
+        [['plane', '平面座標'], ['line', '數線']].forEach(([v, label]) => {
+          const b = document.createElement('button');
+          b.type = 'button'; b.className = 'sk-chip'; b.textContent = label;
+          b.setAttribute('aria-pressed', String(curMode === v));
+          b.onclick = () => apply(d => { if (d) d.mode = v; else st.style.axMode = v; });
+          styleBar.appendChild(b);
+        });
+        styleBar.appendChild(sep());
+        const numInput = (title, val, min, step, fn) => {
+          const lab = document.createElement('span'); lab.className = 'sk-unit'; lab.textContent = title;
+          const inp = document.createElement('input');
+          inp.type = 'number'; inp.className = 'sk-num'; inp.step = step; if (min != null) inp.min = String(min);
+          inp.value = String(val); inp.title = title; inp.setAttribute('aria-label', title);
+          inp.onkeydown = e => { e.stopPropagation(); if (e.key === 'Enter') inp.blur(); };
+          inp.onchange = () => { const v = parseFloat(inp.value); if (isFinite(v)) fn(v); };
+          styleBar.appendChild(lab); styleBar.appendChild(inp);
+        };
+        numInput('每刻度', curN, 1, '1', v => apply(d => { const iv = Math.max(1, Math.min(20, Math.round(v))); if (d) d.n = iv; else st.style.axN = iv; }));
+        const gu = document.createElement('span'); gu.className = 'sk-unit'; gu.textContent = '格'; styleBar.appendChild(gu);
+        numInput(curMode === 'plane' ? 'x 刻度值' : '刻度值', curU, null, 'any', v => { if (v > 0) apply(d => { if (d) { d.u = v; } else st.style.axU = v; }); });
+        if (curMode === 'plane') numInput('y 刻度值', curUY, null, 'any', v => { if (v > 0) apply(d => { if (d) d.uy = v; else st.style.axUY = v; }); });
+        if (cur) {
+          numInput(curMode === 'plane' ? '原點 x 值' : '原點值', cur.vx || 0, null, 'any', v => apply(d => { d.vx = v; }));
+          if (curMode === 'plane') numInput('原點 y 值', cur.vy || 0, null, 'any', v => apply(d => { d.vy = v; }));
+        }
+        numInput('字級', cur ? (cur.fs > 0 ? cur.fs : 14) : st.style.axFs, 6, '1', v => apply(d => { const iv = Math.max(6, Math.min(80, Math.round(v))); if (d) d.fs = iv; else st.style.axFs = iv; }));
+        const fsu = document.createElement('span'); fsu.className = 'sk-unit'; fsu.textContent = 'px'; styleBar.appendChild(fsu);
+        const curAf = cur ? (cur.ff || 'mono') : st.style.axFf;
+        const afSel = document.createElement('select');
+        afSel.className = 'sk-sel'; afSel.title = '數字字型'; afSel.setAttribute('aria-label', '數字字型');
+        [{ id: 'mono', name: '等寬數字' }, ...FONT_LIST].forEach(f => {
+          const o = document.createElement('option'); o.value = f.id; o.textContent = f.name;
+          if (f.css) o.style.fontFamily = f.css; if (f.id === curAf) o.selected = true; afSel.appendChild(o);
+        });
+        afSel.onchange = () => { const v = afSel.value; if (v !== 'mono') loadFont(v); apply(d => { if (d) d.ff = v; else st.style.axFf = v; }); };
+        styleBar.appendChild(afSel);
+        [['b', 'B', '粗體', true], ['i', 'I', '斜體', false]].forEach(([k, label, title, def]) => {
+          const on = cur ? !!cur[k] : (k === 'b' ? st.style.axB : st.style.axI);
+          const bt = document.createElement('button');
+          bt.type = 'button'; bt.className = 'sk-chip'; bt.textContent = label; bt.title = title; bt.setAttribute('aria-label', title);
+          bt.style.fontWeight = k === 'b' ? '800' : '400'; bt.style.fontStyle = k === 'i' ? 'italic' : 'normal';
+          bt.setAttribute('aria-pressed', String(on));
+          bt.onclick = () => apply(d => { if (d) d[k] = !on; else if (k === 'b') st.style.axB = !on; else st.style.axI = !on; });
+          styleBar.appendChild(bt);
+        });
+        const nb = document.createElement('button');
+        nb.type = 'button'; nb.className = 'sk-chip'; nb.textContent = '數字';
+        nb.setAttribute('aria-pressed', String(curNum));
+        nb.onclick = () => apply(d => { if (d) d.num = !(d.num !== false); else st.style.axNum = !st.style.axNum; });
+        styleBar.appendChild(nb);
+        if (cur) {
+          const mk = (label, title, fn) => {
+            const b = document.createElement('button');
+            b.type = 'button'; b.className = 'sk-chip'; b.textContent = label; b.title = title;
+            b.onclick = fn; styleBar.appendChild(b);
+          };
+          mk('原點置中', '把原點移到頁面中央（對齊格線）並重新鋪滿頁面', () => {
+            const pb = H.pageBounds && H.pageBounds(); if (!pb) return;
+            const gs = H.gridSize || 40;
+            cur.ox = Math.round(((pb.x0 + pb.x1) / 2) / gs) * gs; cur.oy = Math.round(((pb.y0 + pb.y1) / 2) / gs) * gs;
+            fitAxis(cur); commit('edit', cur); refreshUI(); render();
+          });
+          mk('鋪滿頁面', '依目前頁面大小重新調整四個方向的長度', () => { fitAxis(cur); commit('edit', cur); refreshUI(); render(); });
+        }
       }
       if (['pen', 'line', 'arrow', 'ellipse', 'bezier'].includes(t)) {
         const b = document.createElement('button');
@@ -1331,10 +1410,32 @@
       const d = selItem(); if (!d) return;
       const c = clone(d); c.id = st.nextId++;
       const o = H.toWorld(18, 18), z = H.toWorld(0, 0), dx = o.x - z.x, dy = o.y - z.y;
-      moveItem(c, dx, dy);
+      if (c.t === 'axis') { const gs = H.gridSize || 40; c.ox += gs; c.oy += gs; } else moveItem(c, dx, dy);
       if (c.t === 'point') c.label = nextPointLabel();
       st.items.push(c); st.selId = c.id; commit('duplicate', c); render();
     }
+    /* 座標軸：所有長度與原點都吸附在方格紙的格線（H.gridSize，預設 40）上，
+       刻度間距 = gridSize × 每刻度格數，因此一定與底圖方格對齊 */
+    function fitAxis(d) {
+      const g = H.gridSize || 40, pb = H.pageBounds ? H.pageBounds() : null, m = 20;
+      if (!pb) { d.L = d.R = 8 * g; d.U = d.D = 6 * g; return; }
+      const f = v => Math.max(g, Math.floor(v / g) * g);
+      d.L = f(d.ox - pb.x0 - m); d.R = f(pb.x1 - d.ox - m);
+      d.U = f(d.oy - pb.y0 - m); d.D = f(pb.y1 - d.oy - m);
+    }
+    function makeAxis(ox, oy) {
+      const s = st.style;
+      const d = { id: st.nextId++, t: 'axis', mode: s.axMode, ox, oy, L: 0, R: 0, U: 0, D: 0,
+        n: s.axN, u: s.axU, uy: s.axUY, vx: 0, vy: 0, num: s.axNum, fs: s.axFs, ff: s.axFf, b: s.axB, i: s.axI, c: s.color, w: s.width };
+      fitAxis(d);
+      return d;
+    }
+    function axisHandles(d) {
+      const o = { o: scr([d.ox, d.oy]), xr: scr([d.ox + d.R, d.oy]), xl: scr([d.ox - d.L, d.oy]) };
+      if (d.mode !== 'line') { o.yu = scr([d.ox, d.oy - d.U]); o.yd = scr([d.ox, d.oy + d.D]); }
+      return o;
+    }
+
     function bezierDefaults(it) {
       const vx = it.b[0] - it.a[0], vy = it.b[1] - it.a[1], k = 0.28, nx = -vy * k, ny = vx * k;
       it.c1 = [it.a[0] + vx / 3 + nx, it.a[1] + vy / 3 + ny];
@@ -1344,6 +1445,7 @@
       if (d.pts) d.pts = d.pts.map(p => [p[0] + dx, p[1] + dy].concat(p.length > 2 ? [p[2]] : []));
       if (d.a) { d.a = [d.a[0] + dx, d.a[1] + dy]; d.b = [d.b[0] + dx, d.b[1] + dy]; }
       if (d.c1) { d.c1 = [d.c1[0] + dx, d.c1[1] + dy]; d.c2 = [d.c2[0] + dx, d.c2[1] + dy]; }
+      if (d.t === 'axis') { d.ox += dx; d.oy += dy; }
       if (d.cPt) {
         d.cPt = [d.cPt[0] + dx, d.cPt[1] + dy];
         if (d.p1) d.p1 = [d.p1[0] + dx, d.p1[1] + dy];
@@ -1436,6 +1538,12 @@
         return false;
       }
       if (d.t === 'line' || d.t === 'ruler') return distToSeg(p, scr(d.a), scr(d.b)) < tol + d.w * k / 2;
+      if (d.t === 'axis') {
+        const O = scr([d.ox, d.oy]), ext = tol + (d.w || 2) * k / 2;
+        if (distToSeg(p, scr([d.ox - d.L, d.oy]), scr([d.ox + d.R, d.oy])) < ext) return true;
+        if (d.mode !== 'line' && distToSeg(p, scr([d.ox, d.oy + d.D]), scr([d.ox, d.oy - d.U])) < ext) return true;
+        return hypot(p.x - O.x, p.y - O.y) < tol + 8;
+      }
       if (d.t === 'bezier') {
         const poly = bezierPts(scr(d.a), scr(d.c1), scr(d.c2), scr(d.b));
         for (let i = 1; i < poly.length; i++) if (distToSeg(p, poly[i - 1], poly[i]) < tol + d.w * k / 2) return true;
@@ -1488,6 +1596,11 @@
     function handleHit(p) {
       const d = selItem(); if (!d) return null;
       const lim = coarse() ? 22 : 12;
+      if (d.t === 'axis') {
+        const hs = axisHandles(d);
+        for (const key of ['o', 'xr', 'xl', 'yu', 'yd']) { const q = hs[key]; if (q && hypot(q.x - p.x, q.y - p.y) < lim) return key; }
+        return null;
+      }
       if (d.a) {
         for (const key of (d.t === 'bezier' ? ['c1', 'c2', 'b', 'a'] : ['b', 'a'])) { const s = scr(d[key]); if (hypot(s.x - p.x, s.y - p.y) < lim) return key; }
       }
@@ -1577,8 +1690,7 @@
       c.closePath(); c.fill();
     }
     function outlinedText(c, text, x, y, size) {
-      c.lineWidth = Math.max(3, size / 5); c.strokeStyle = 'rgba(2,6,23,.85)';
-      c.strokeText(text, x, y); c.fillText(text, x, y);
+      c.fillText(text, x, y);
     }
 
     function drawItem(c, d, k, mapFn) {
@@ -1614,6 +1726,7 @@
         if (d.head === 2 && L > 70) arrowHead(c, (A.x + B.x) / 2 + Math.cos(ang) * hs / 2, (A.y + B.y) / 2 + Math.sin(ang) * hs / 2, ang, hs * 0.85);
         return;
       }
+      if (d.t === 'axis') { drawAxisItem(c, d, k, toS); return; }
       if (d.t === 'bezier') {
         const A = toS(d.a), B = toS(d.b), C1 = toS(d.c1), C2 = toS(d.c2);
         c.lineWidth = w; dashOn();
@@ -1665,8 +1778,97 @@
         const fs = textFontStr(d, size);
         ensureFont(fs, String(d.text));
         c.font = fs; c.textAlign = 'left'; c.textBaseline = 'top';
-        String(d.text).split('\n').forEach((line, i) => outlinedText(c, line, s.x, s.y + i * size * 1.25, size));
+        String(d.text).split('\n').forEach((line, i) => c.fillText(line, s.x, s.y + i * size * 1.25));
       }
+    }
+
+    function axText(c, text, x, y, size) {
+      c.fillText(text, x, y);
+    }
+    function drawAxisItem(c, d, k, toS) {
+      const col = d.c || '#facc15', w = Math.max(1.5, (d.w || 2) * k);
+      const g = H.gridSize || 40, stepW = g * Math.max(1, d.n || 1), isLine = d.mode === 'line';
+      const P = (x, y) => toS([x, y]);
+      const O = P(d.ox, d.oy), S1 = P(d.ox + stepW, d.oy);
+      const stepPx = hypot(S1.x - O.x, S1.y - O.y);
+      const fsw = d.fs > 0 ? d.fs : 14, ffId = d.ff || 'mono';
+      const fs = Math.max(8, Math.round(fsw * k)), tl = Math.max(4, 5.5 * fsw / 14 * Math.max(0.85, Math.min(1.5, k)));
+      const famCss = ffId === 'mono' ? 'ui-monospace,"IBM Plex Mono",Menlo,Consolas,monospace' : fontCss(ffId);
+      if (ffId !== 'mono') loadFont(ffId);
+      const stride = Math.max(1, Math.ceil((fs * 3.3) / Math.max(stepPx, 1)));
+      const u = d.u > 0 ? d.u : 1, uy = d.uy > 0 ? d.uy : u, vx = d.vx || 0, vy = d.vy || 0;
+      const nL = Math.floor(d.L / stepW + 1e-6), nR = Math.floor(d.R / stepW + 1e-6);
+      const nU = Math.floor(d.U / stepW + 1e-6), nD = Math.floor(d.D / stepW + 1e-6);
+
+      c.save();
+      c.strokeStyle = col; c.fillStyle = col; c.setLineDash([]); c.lineCap = 'round'; c.lineJoin = 'round';
+      // 軸線與箭頭
+      const XL = P(d.ox - d.L, d.oy), XR = P(d.ox + d.R, d.oy);
+      let YU = null, YD = null;
+      c.lineWidth = w;
+      c.beginPath(); c.moveTo(XL.x, XL.y); c.lineTo(XR.x, XR.y);
+      if (!isLine) { YU = P(d.ox, d.oy - d.U); YD = P(d.ox, d.oy + d.D); c.moveTo(YD.x, YD.y); c.lineTo(YU.x, YU.y); }
+      c.stroke();
+      const hs = 8 + w * 2;
+      arrowHead(c, XR.x, XR.y, Math.atan2(XR.y - XL.y, XR.x - XL.x), hs);
+      if (isLine) arrowHead(c, XL.x, XL.y, Math.atan2(XL.y - XR.y, XL.x - XR.x), hs);
+      else arrowHead(c, YU.x, YU.y, Math.atan2(YU.y - YD.y, YU.x - YD.x), hs);
+
+      // 刻度線（軸端不畫，避免與箭頭重疊；平面座標的原點不畫）
+      c.lineWidth = Math.max(1.2, w * 0.7);
+      c.beginPath();
+      for (let i = -nL; i <= nR; i++) {
+        if (i === 0 && !isLine) continue;
+        if (i > 0 && i * stepW >= d.R - 1) continue;
+        if (i < 0 && -i * stepW >= d.L - 1) continue;
+        const q = P(d.ox + i * stepW, d.oy);
+        c.moveTo(q.x, q.y - tl); c.lineTo(q.x, q.y + tl);
+      }
+      if (!isLine) for (let j = -nD; j <= nU; j++) {
+        if (j === 0) continue;
+        if (j > 0 && j * stepW >= d.U - 1) continue;
+        if (j < 0 && -j * stepW >= d.D - 1) continue;
+        const q = P(d.ox, d.oy - j * stepW);
+        c.moveTo(q.x - tl, q.y); c.lineTo(q.x + tl, q.y);
+      }
+      c.stroke();
+
+      // 數字
+      const fW = d.b ? 700 : 500, fI = d.i ? 'italic ' : '';
+      c.font = `${fI}${fW} ${fs}px ${famCss}`;
+      if (d.num !== false) {
+        c.textAlign = 'center'; c.textBaseline = 'top';
+        for (let i = -nL; i <= nR; i++) {
+          if (i % stride !== 0) continue;
+          if (i === 0 && !isLine) continue;
+          if (i > 0 && i * stepW >= d.R - 1) continue;
+          if (i < 0 && -i * stepW >= d.L - 1) continue;
+          const q = P(d.ox + i * stepW, d.oy);
+          axText(c, fmtAxisNum(vx + i * u), q.x, q.y + tl + 2, fs);
+        }
+        if (!isLine) {
+          c.textAlign = 'right'; c.textBaseline = 'middle';
+          for (let j = -nD; j <= nU; j++) {
+            if (j % stride !== 0 || j === 0) continue;
+            if (j > 0 && j * stepW >= d.U - 1) continue;
+            if (j < 0 && -j * stepW >= d.D - 1) continue;
+            const q = P(d.ox, d.oy - j * stepW);
+            axText(c, fmtAxisNum(vy + j * uy), q.x - tl - 3, q.y, fs);
+          }
+        }
+      }
+      if (!isLine) {
+        c.textAlign = 'right'; c.textBaseline = 'top';
+        if (vx === 0 && vy === 0) axText(c, 'O', O.x - 5, O.y + 4, fs);
+        else if (d.num !== false) {
+          axText(c, fmtAxisNum(vy), O.x - tl - 3, O.y - fs * 0.5, fs);
+          c.textAlign = 'center'; axText(c, fmtAxisNum(vx), O.x + fs * 0.9, O.y + tl + 2, fs);
+        }
+        c.font = `italic ${fW} ${fs + 1}px ${famCss}`;
+        c.textAlign = 'right'; c.textBaseline = 'bottom'; axText(c, 'x', XR.x - 2, XR.y - 8, fs);
+        c.textAlign = 'left'; c.textBaseline = 'middle'; axText(c, 'y', YU.x + 9, YU.y + 6, fs);
+      }
+      c.restore();
     }
 
     function drawProtractorItem(c, d, k, toS) {
@@ -1922,6 +2124,12 @@
       c.save();
       c.strokeStyle = 'rgba(34,211,238,.45)'; c.lineCap = 'round'; c.lineJoin = 'round';
       if (d.t === 'pen' || d.t === 'highlighter') { c.lineWidth = (d.t === 'highlighter' ? d.w * 4 : d.w) * k + 9; strokeSmooth(c, d.pts.map(scr)); c.stroke(); }
+      else if (d.t === 'axis') {
+        const hs = axisHandles(d); c.lineWidth = (d.w || 2) * k + 8; c.beginPath();
+        c.moveTo(hs.xl.x, hs.xl.y); c.lineTo(hs.xr.x, hs.xr.y);
+        if (hs.yu) { c.moveTo(hs.yd.x, hs.yd.y); c.lineTo(hs.yu.x, hs.yu.y); }
+        c.stroke();
+      }
       else if (d.t === 'bezier') { const A = scr(d.a), B = scr(d.b), C1 = scr(d.c1), C2 = scr(d.c2); c.lineWidth = d.w * k + 9; c.beginPath(); c.moveTo(A.x, A.y); c.bezierCurveTo(C1.x, C1.y, C2.x, C2.y, B.x, B.y); c.stroke(); }
       else if (d.t === 'line' || d.t === 'ruler') { const A = scr(d.a), B = scr(d.b); c.lineWidth = d.w * k + 9; c.beginPath(); c.moveTo(A.x, A.y); c.lineTo(B.x, B.y); c.stroke(); }
       else if (d.t === 'ellipse') { const A = scr(d.a), B = scr(d.b); c.setLineDash([4, 4]); c.lineWidth = 1.5; c.strokeStyle = '#22d3ee'; c.strokeRect(Math.min(A.x, B.x), Math.min(A.y, B.y), Math.abs(B.x - A.x), Math.abs(B.y - A.y)); }
@@ -1955,7 +2163,12 @@
           c.fillRect(s.x - 5.5, s.y - 5.5, 11, 11); c.strokeRect(s.x - 5.5, s.y - 5.5, 11, 11);
         }
       };
-      if (d.t === 'bezier') {
+      if (d.t === 'axis') {
+        const hs = axisHandles(d);
+        drawSq(hs.xr); drawSq(hs.xl);
+        if (hs.yu) { drawSq(hs.yu); drawSq(hs.yd); }
+        drawSq(hs.o, true, '#facc15');
+      } else if (d.t === 'bezier') {
         const A = scr(d.a), B = scr(d.b), C1 = scr(d.c1), C2 = scr(d.c2);
         c.save(); c.setLineDash([4, 4]); c.lineWidth = 1.2; c.strokeStyle = 'rgba(250,204,21,.85)';
         c.beginPath(); c.moveTo(A.x, A.y); c.lineTo(C1.x, C1.y); c.moveTo(B.x, B.y); c.lineTo(C2.x, C2.y); c.stroke(); c.restore();
@@ -2134,6 +2347,12 @@
           st.current = { id: st.nextId++, t: 'protractor', mode, cPt: q.slice(), p1, p2, c: s.color, w: s.width, labelBg: s.labelBg };
           st.gesture = { type: 'draw-prot', pid: e.pointerId };
         }
+      } else if (t === 'axis') {
+        // 原點永遠吸附到最近的方格紙格線交點
+        const gs = H.gridSize || 40, w0 = wld(p.x, p.y);
+        const it = makeAxis(Math.round(w0[0] / gs) * gs, Math.round(w0[1] / gs) * gs);
+        st.items.push(it); st.selId = it.id; st.tool = 'select'; canvas.style.cursor = ''; st.cursorSet = false;
+        commit('add', it);
       } else if (t === 'point') {
         const q = snapScreen(p);
         const it = { id: st.nextId++, t: 'point', x: q[0], y: q[1], c: s.color, label: nextPointLabel() };
@@ -2228,6 +2447,7 @@
         const w = wld(p.x, p.y), it = g.item, o = g.orig;
         const dx = w[0] - g.start[0], dy = w[1] - g.start[1];
         Object.assign(it, clone(o)); moveItem(it, dx, dy);
+        if (it.t === 'axis') { const gs = H.gridSize || 40; it.ox = Math.round(it.ox / gs) * gs; it.oy = Math.round(it.oy / gs) * gs; }
         if (Math.abs(dx) + Math.abs(dy) > 0) g.moved = true;
       } else if (g.type === 'handle') {
         const it = g.item;
@@ -2262,6 +2482,19 @@
             it.p2 = wld(C.x + R * Math.cos(ang2), C.y + R * Math.sin(ang2));
           }
           buildStyleBar();
+        } else if (it.t === 'axis') {
+          const gs = H.gridSize || 40, wp = wld(p.x, p.y), sn = v => Math.round(v / gs) * gs;
+          if (g.key === 'o') {
+            // 移動原點：軸的兩端保持不動，只有原點（與刻度起點）改變，且一律對齊格線
+            const xlE = it.ox - it.L, xrE = it.ox + it.R, yuE = it.oy - it.U, ydE = it.oy + it.D;
+            const nx = Math.min(xrE - gs, Math.max(xlE + gs, sn(wp[0])));
+            const ny = it.mode === 'line' ? sn(wp[1]) : Math.min(ydE - gs, Math.max(yuE + gs, sn(wp[1])));
+            it.ox = nx; it.oy = ny; it.L = nx - xlE; it.R = xrE - nx;
+            if (it.mode !== 'line') { it.U = ny - yuE; it.D = ydE - ny; }
+          } else if (g.key === 'xr') it.R = Math.max(gs, sn(wp[0] - it.ox));
+          else if (g.key === 'xl') it.L = Math.max(gs, sn(it.ox - wp[0]));
+          else if (g.key === 'yu') it.U = Math.max(gs, sn(it.oy - wp[1]));
+          else if (g.key === 'yd') it.D = Math.max(gs, sn(wp[1] - it.oy));
         } else if (it.t === 'bezier' && (g.key === 'c1' || g.key === 'c2')) {
           it[g.key] = snapScreen(p);
         } else {
@@ -4814,6 +5047,53 @@
     return `${x.toFixed(2)},${y.toFixed(2)} ${x1.toFixed(2)},${y1.toFixed(2)} ${x2.toFixed(2)},${y2.toFixed(2)}`;
   }
 
+  function axisSvgParts(d, col, w) {
+    const out = [], g = 40, stepW = g * Math.max(1, d.n || 1), isLine = d.mode === 'line';
+    const fs = d.fs > 0 ? d.fs : 14, tl = Math.max(4, 5.5 * fs / 14), stride = Math.max(1, Math.ceil(fs * 3.3 / stepW));
+    const fl = SketchLayer.FONT_LIST, ffId = d.ff || 'mono';
+    const fam = ffId === 'mono' ? "ui-monospace,Menlo,Consolas,monospace" : (fl.find(f => f.id === ffId) || fl[0]).css.replace(/"/g, "'");
+    const u = d.u > 0 ? d.u : 1, uy = d.uy > 0 ? d.uy : u, vx = d.vx || 0, vy = d.vy || 0;
+    const fmt = v => { const r = parseFloat(Number(v).toPrecision(10)); return String(Object.is(r, -0) ? 0 : r); };
+    const nL = Math.floor(d.L / stepW + 1e-6), nR = Math.floor(d.R / stepW + 1e-6);
+    const nU = Math.floor(d.U / stepW + 1e-6), nD = Math.floor(d.D / stepW + 1e-6);
+    const x0 = d.ox - d.L, x1 = d.ox + d.R, y0 = d.oy - d.U, y1 = d.oy + d.D;
+    let ln = `M ${x0} ${d.oy} L ${x1} ${d.oy}`;
+    if (!isLine) ln += ` M ${d.ox} ${y1} L ${d.ox} ${y0}`;
+    out.push(`<path d="${ln}" fill="none" stroke="${col}" stroke-width="${w}"/>`);
+    const hs = 8 + w * 2;
+    out.push(`<polygon points="${arrowPolygonPoints(x1, d.oy, 0, hs)}" fill="${col}"/>`);
+    if (isLine) out.push(`<polygon points="${arrowPolygonPoints(x0, d.oy, Math.PI, hs)}" fill="${col}"/>`);
+    else out.push(`<polygon points="${arrowPolygonPoints(d.ox, y0, -Math.PI / 2, hs)}" fill="${col}"/>`);
+    let tk = '';
+    for (let i = -nL; i <= nR; i++) {
+      if ((i === 0 && !isLine) || (i > 0 && i * stepW >= d.R - 1) || (i < 0 && -i * stepW >= d.L - 1)) continue;
+      const x = d.ox + i * stepW; tk += `M ${x} ${d.oy - tl} L ${x} ${d.oy + tl} `;
+    }
+    if (!isLine) for (let j = -nD; j <= nU; j++) {
+      if (j === 0 || (j > 0 && j * stepW >= d.U - 1) || (j < 0 && -j * stepW >= d.D - 1)) continue;
+      const y = d.oy - j * stepW; tk += `M ${d.ox - tl} ${y} L ${d.ox + tl} ${y} `;
+    }
+    out.push(`<path d="${tk}" fill="none" stroke="${col}" stroke-width="${Math.max(1.2, w * 0.7)}"/>`);
+    const tx = (t, x, y, anchor, base, extra = '') => out.push(`<text x="${x}" y="${y}" text-anchor="${anchor}" dominant-baseline="${base}" font-family="${escapeXml(fam)}" font-size="${fs}" font-weight="${d.b ? 700 : 500}"${d.i || extra ? ' font-style="italic"' : ''} fill="${col}">${escapeXml(t)}</text>`);
+    if (d.num !== false) {
+      for (let i = -nL; i <= nR; i++) {
+        if (i % stride !== 0 || (i === 0 && !isLine) || (i > 0 && i * stepW >= d.R - 1) || (i < 0 && -i * stepW >= d.L - 1)) continue;
+        tx(fmt(vx + i * u), d.ox + i * stepW, d.oy + tl + 2, 'middle', 'hanging');
+      }
+      if (!isLine) for (let j = -nD; j <= nU; j++) {
+        if (j % stride !== 0 || j === 0 || (j > 0 && j * stepW >= d.U - 1) || (j < 0 && -j * stepW >= d.D - 1)) continue;
+        tx(fmt(vy + j * uy), d.ox - tl - 3, d.oy - j * stepW, 'end', 'central');
+      }
+    }
+    if (!isLine) {
+      if (vx === 0 && vy === 0) tx('O', d.ox - 5, d.oy + 4, 'end', 'hanging');
+      else if (d.num !== false) { tx(fmt(vy), d.ox - tl - 3, d.oy - fs * 0.5, 'end', 'central'); tx(fmt(vx), d.ox + fs * 0.9, d.oy + tl + 2, 'middle', 'hanging'); }
+      tx('x', x1 - 2, d.oy - 8, 'end', 'text-after-edge', ' font-style="italic"');
+      tx('y', d.ox + 9, y0 + 6, 'start', 'central', ' font-style="italic"');
+    }
+    return out;
+  }
+
   function generatePageSVG(page) {
     const Wp = page.width, Hp = page.height;
     const cfg = BG_PALETTE[page.bgStyle] || BG_PALETTE['chalkboard'];
@@ -4886,6 +5166,8 @@
           const my = (ay + by) / 2 + Math.sin(ang) * hs / 2;
           parts.push(`<polygon points="${arrowPolygonPoints(mx, my, ang, hs * 0.85)}" fill="${col}"/>`);
         }
+      } else if (d.t === 'axis') {
+        for (const x of axisSvgParts(d, col, w)) parts.push(x);
       } else if (d.t === 'bezier') {
         const [ax, ay] = d.a, [bx, by] = d.b, [c1x, c1y] = d.c1, [c2x, c2y] = d.c2;
         parts.push(`<path d="M ${ax} ${ay} C ${c1x} ${c1y} ${c2x} ${c2y} ${bx} ${by}" fill="none" stroke="${col}" stroke-width="${w}"${dashAttr}/>`);
@@ -4919,7 +5201,7 @@
           parts.push(`<rect x="${(mx - lblW / 2).toFixed(1)}" y="${my - 10}" width="${lblW.toFixed(1)}" height="20" rx="4" fill="${lbg}"/>`);
           parts.push(`<text x="${mx}" y="${my + 4}" fill="${col}" font-family="monospace" font-size="12" font-weight="bold" text-anchor="middle">${escapeXml(label)}</text>`);
         } else {
-          parts.push(`<text x="${mx}" y="${my + 4}" fill="${col}" stroke="rgba(2,6,23,0.85)" stroke-width="3" paint-order="stroke" font-family="monospace" font-size="12" font-weight="bold" text-anchor="middle">${escapeXml(label)}</text>`);
+          parts.push(`<text x="${mx}" y="${my + 4}" fill="${col}" font-family="monospace" font-size="12" font-weight="bold" text-anchor="middle">${escapeXml(label)}</text>`);
         }
       } else if (d.t === 'protractor') {
         const lbg = d.labelBg !== undefined ? d.labelBg : 'rgba(7,11,18,0.88)';
@@ -4946,7 +5228,7 @@
               parts.push(`<rect x="${(lx - 26).toFixed(1)}" y="${(ly - 10).toFixed(1)}" width="52" height="20" rx="4" fill="${lbg}"/>`);
               parts.push(`<text x="${lx.toFixed(1)}" y="${(ly + 4).toFixed(1)}" fill="${col}" font-family="monospace" font-size="12" font-weight="bold" text-anchor="middle">${deg.toFixed(1)}°</text>`);
             } else {
-              parts.push(`<text x="${lx.toFixed(1)}" y="${(ly + 4).toFixed(1)}" fill="${col}" stroke="rgba(2,6,23,0.85)" stroke-width="3" paint-order="stroke" font-family="monospace" font-size="12" font-weight="bold" text-anchor="middle">${deg.toFixed(1)}°</text>`);
+              parts.push(`<text x="${lx.toFixed(1)}" y="${(ly + 4).toFixed(1)}" fill="${col}" font-family="monospace" font-size="12" font-weight="bold" text-anchor="middle">${deg.toFixed(1)}°</text>`);
             }
           }
           d.pts.forEach(p => {
@@ -4972,13 +5254,13 @@
             parts.push(`<rect x="${(cx - 30).toFixed(1)}" y="${(cy - 32).toFixed(1)}" width="60" height="22" rx="4" fill="${lbg}" stroke="${col}" stroke-width="1"/>`);
             parts.push(`<text x="${cx.toFixed(1)}" y="${(cy - 17).toFixed(1)}" fill="${col}" font-family="monospace" font-size="13" font-weight="bold" text-anchor="middle">${deg.toFixed(1)}°</text>`);
           } else {
-            parts.push(`<text x="${cx.toFixed(1)}" y="${(cy - 17).toFixed(1)}" fill="${col}" stroke="rgba(2,6,23,0.85)" stroke-width="3" paint-order="stroke" font-family="monospace" font-size="13" font-weight="bold" text-anchor="middle">${deg.toFixed(1)}°</text>`);
+            parts.push(`<text x="${cx.toFixed(1)}" y="${(cy - 17).toFixed(1)}" fill="${col}" font-family="monospace" font-size="13" font-weight="bold" text-anchor="middle">${deg.toFixed(1)}°</text>`);
           }
         }
       } else if (d.t === 'point') {
         parts.push(`<circle cx="${d.x}" cy="${d.y}" r="5" fill="${col}" stroke="#020617" stroke-width="1.5"/>`);
         if (d.label) {
-          parts.push(`<text x="${d.x + 7}" y="${d.y - 5}" fill="${col}" stroke="#020617" stroke-width="3" paint-order="stroke" font-family="sans-serif" font-size="16" font-weight="bold">${escapeXml(d.label)}</text>`);
+          parts.push(`<text x="${d.x + 7}" y="${d.y - 5}" fill="${col}" font-family="sans-serif" font-size="16" font-weight="bold">${escapeXml(d.label)}</text>`);
         }
       } else if (d.t === 'text') {
         const size = d.size || 22;
@@ -4988,7 +5270,7 @@
         const isBold = d.b === undefined ? true : !!d.b;
         lines.forEach((line, i) => {
           const ly = d.y + i * size * 1.25 + size * 0.86;
-          parts.push(`<text x="${d.x}" y="${ly.toFixed(2)}" fill="${col}" stroke="rgba(2,6,23,0.85)" stroke-width="${Math.max(3, size / 5)}" paint-order="stroke" font-family="${escapeXml(fam)}" font-size="${size}" font-weight="${isBold ? 700 : 400}" font-style="${d.i ? 'italic' : 'normal'}">${escapeXml(line)}</text>`);
+          parts.push(`<text x="${d.x}" y="${ly.toFixed(2)}" fill="${col}" font-family="${escapeXml(fam)}" font-size="${size}" font-weight="${isBold ? 700 : 400}" font-style="${d.i ? 'italic' : 'normal'}">${escapeXml(line)}</text>`);
         });
       }
     }
@@ -5402,6 +5684,7 @@
       toScreen,
       zoom: () => view.scale,
       gridSize: 40,
+      pageBounds: () => { const p = curPage(); return p ? { x0: 0, y0: 0, x1: p.width, y1: p.height } : null; },
       snapPoints: () => {
         const p = curPage();
         if (!p) return [];
