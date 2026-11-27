@@ -1,5 +1,5 @@
 <!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
-<title>槓桿力矩實驗台V11</title>
+<title>槓桿力矩實驗台V12</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Noto+Sans+TC:wght@400;500;700&display=swap">
@@ -522,12 +522,12 @@ function preset(name){
     case 'seesaw':S.mode='lever';S.rod={L:100,pivotPos:50,theta:0};
       addForce({kind:'weight',s:-30,rel:270,mag:30,role:'施力'});addForce({kind:'weight',s:20,rel:270,mag:45,role:'抗力'});break;
     case 'opener':S.mode='lever';S.rod={L:60,pivotPos:0,theta:0};
-      addForce({s:52,rel:90,mag:20,role:'施力'});addForce({s:16,rel:270,mag:60,role:'抗力'});break;
+      addForce({kind:'rspring',name:'瓶蓋',s:10,rel:270,mag:0,role:'抗力',cap:80,openMsg:'瓶蓋打開了！'});setTool('draw');break;
     case 'drawlever':S.rod={L:0,pivotPos:0,theta:0,bent:true,arms:[]};setTool('lever');break;
-    case 'nailpuller':S.mode='lever';S.rod={L:58,pivotPos:0,theta:0,bent:true,arms:[{ang:90,len:50},{ang:180,len:8}]};addForce({s:50,arm:0,rel:0,mag:10,role:'施力'});addForce({s:8,arm:1,rel:270,mag:50,role:'抗力'});break;
+    case 'nailpuller':S.mode='lever';S.rod={L:58,pivotPos:0,theta:0,bent:true,arms:[{ang:90,len:50},{ang:180,len:8}]};addForce({kind:'rspring',name:'釘子',s:8,arm:1,rel:270,mag:0,role:'抗力',cap:100,openMsg:'釘子拔出來了！'});setTool('draw');break;
     case 'balance':S.mode='lever';S.rod={L:80,pivotPos:40,theta:0};S.balance=true;S.wtool='add';break;
     case 'tweezers':S.mode='lever';S.rod={L:60,pivotPos:0,theta:0};
-      addForce({s:15,rel:90,mag:80,role:'施力'});addForce({s:50,rel:270,mag:24,role:'抗力'});break;
+      addForce({kind:'rspring',name:'夾住的物體',s:50,rel:270,mag:0,role:'抗力',cap:null});setTool('draw');break;
     default:S.mode=keepMode;S.rod={L:80,pivotPos:40,theta:0};
   }
   applyMode();renderCards();render();syncPanel();if(S.anim.playing)kick();commit();
@@ -659,9 +659,9 @@ function render(){updateSprings();
     if(f.kind==='weight'){const bx=sH.x+sd.x*20,by=sH.y+sd.y*20;
       g+=`<line x1="${f1(sT.x)}" y1="${f1(sT.y)}" x2="${f1(bx)}" y2="${f1(by-13)}" style="stroke:var(--muted);stroke-width:1.2px"/>`;
       g+=`<rect x="${f1(bx-19)}" y="${f1(by-13)}" width="38" height="26" rx="3" style="fill:var(--weight);stroke:var(--ink);stroke-width:1.5px"/>`+txt(bx,by,esc(f.name),'var(--ink)',{cls:'sm'})}
-    g+=arrow(sT.x,sT.y,sH.x,sH.y,col,sel?6:5,{op:f.kind==='spring'?.4:f.attached?null:.45});if(f.kind==='spring')g+=springSVG(f,sT,unitOf({x:sH.x-sT.x,y:sH.y-sT.y}));
+    g+=arrow(sT.x,sT.y,sH.x,sH.y,col,sel?6:5,{op:f.kind==='spring'?.4:f.kind==='rspring'?.5:f.attached?null:.45});if(f.kind==='spring')g+=springSVG(f,sT,unitOf({x:sH.x-sT.x,y:sH.y-sT.y}));if(f.kind==='rspring'&&f.attached){const P=rodPt(f.s,f.arm),dd=dirV(fAbs(f));g+=rspringSVG(f,{x:X(P.x),y:Y(P.y)},{x:dd.x,y:-dd.y})}
     if(f.attached)g+=`<circle cx="${f1(X(e.P.x))}" cy="${f1(Y(e.P.y))}" r="4.5" style="fill:${col};stroke:var(--paper);stroke-width:1.5px"/>`;
-    const lbl=f.kind==='spring'&&f.bad?`${esc(f.name)}：${f.bad==='push'?'這個方向拉不動，請改變方向':f.bad==='zero'?'力臂是 0，拉不平衡':f.bad==='off'?'要掛在桿子上':'超出量程'}`:`${esc(f.name)}${S.mode==='lever'&&f.role?' '+f.role:''} ${ff(f.mag)} ${uu.f}${f.attached?'':'（未作用）'}`;
+    const lbl=f.kind==='rspring'&&rsLabel(f)?rsLabel(f):f.kind==='spring'&&f.sat?`${esc(f.name)} ${ff(f.mag)} gw（已達上限，拉不住）`:f.kind==='spring'&&f.bad?`${esc(f.name)}：${f.bad==='push'?'這個方向拉不動，請改變方向':f.bad==='zero'?'力臂是 0，拉不平衡':f.bad==='off'?'要掛在桿子上':'超出量程'}`:`${esc(f.name)}${S.mode==='lever'&&f.role?' '+f.role:''} ${ff(f.mag)} ${uu.f}${f.attached?'':'（未作用）'}`;
     if(f.kind==='weight'){const bx=sH.x+sd.x*20,by=sH.y+sd.y*20;g+=txt(bx+26,by,lbl.replace(esc(f.name)+' ',''),col,{anchor:'start'})}
     else{const lx=free.x+sd.x*24,ly=free.y+sd.y*24;g+=txt(lx,ly,lbl,col,{anchor:sd.x>0.5?'start':sd.x<-0.5?'end':'middle'})}
     g+=`<line data-hit="fb:${f.id}" x1="${f1(sT.x)}" y1="${f1(sT.y)}" x2="${f1(sH.x)}" y2="${f1(sH.y)}" style="stroke:transparent;stroke-width:26px;stroke-linecap:round"/>`;
@@ -747,6 +747,7 @@ function renderCards(){
       <div class="frow"><label for="f${id}_mag">大小</label><div class="inl"><input id="f${id}_mag" type="number" min="0.1" step="1" inputmode="decimal" data-f="${id}" data-k="mag"><span data-unit="f">gw</span></div></div>
       <div class="frow"><label for="f${id}_angSel">方向角</label><div class="inl"><select id="f${id}_angSel" class="in" data-f="${id}" data-k="angSel">${opts}</select><input id="f${id}_rel" type="number" step="1" inputmode="decimal" data-f="${id}" data-k="rel" aria-label="方向角數值"><span>°</span></div></div>
       <p class="note">以桿子向右為 0°、逆時針增加。改大小或角度時，${f.attached?'吸附在桿子上的點不動':'箭尾不動'}。</p>`;
+    if(f.kind==='spring'||f.kind==='rspring')body+=`<div class="frow"><label for="f${id}_cap">彈力上限</label><div class="inl"><input id="f${id}_cap" type="number" min="0" step="1" inputmode="decimal" placeholder="無上限" data-f="${id}" data-k="cap" value="${f.cap??''}"><span data-unit="f">gw</span></div></div><p class="note">${f.kind==='rspring'?'抗力會自動跟施力平衡，但不會超過上限；超過時放鬆支點，槓桿就會轉動。':'空白表示無上限；拉力超過上限時就拉不住，放鬆支點後槓桿會轉動。'}</p>`;
     if(f.attached){body+=`<div class="frow"><label for="f${id}_arm">力臂</label><div class="inl"><input id="f${id}_arm" type="number" min="0" step="0.5" inputmode="decimal" data-f="${id}" data-k="arm"><span data-unit="l">cm</span></div></div>
       <p class="note" id="f${id}_armMsg">輸入力臂：力垂直桿臂時移動作用點，不垂直時轉動力的方向。</p>
       <div class="frow"><label for="f${id}_s">作用點</label><div class="inl"><input id="f${id}_s" type="number" step="1" inputmode="decimal" data-f="${id}" data-k="s"><span data-unit="l">cm</span></div></div>
@@ -905,7 +906,7 @@ svg.addEventListener('pointerdown',e=>{
   if(S.balance&&S.tool==='select'&&balDown(kind,id,p,e)){render();return}
   let d=null;
   if(S.tool==='lever'&&kind!=='armEnd'){if(Math.hypot(p.x,p.y)*K<=34){touch();d={type:'armdraw'}}else d={type:'pan',x0:e.clientX,y0:e.clientY,px0:V.px,py0:V.py,p}}
-  else if(kind==='armEnd'){touch();d={type:'armend',k:id}}
+  else if(kind==='armEnd'&&(S.tool==='select'||S.tool==='lever')){touch();d={type:'armend',k:id}}
   else if(kind==='fh'){touch();d={type:'handle',id,which};select(id,false)}
   else if(kind==='fb'&&(S.tool==='select'||S.selected===id)){touch();const f=byId(id),en=fEnds(f);d={type:'body',id,p0:p,T0:en.T,H0:en.H,P0:en.P,abs:fAbs(f),end:f.end,wasAttached:f.attached};select(id,false)}
   else if(S.tool==='spring'){touch();const s=nearRod(p,thrPx());if(s!==null){const T=rodPt(snapS(s));d={type:'draw',T,H:T,onRod:true,spring:true}}else d={type:'pan',x0:e.clientX,y0:e.clientY,px0:V.px,py0:V.py,p}}
@@ -1006,6 +1007,7 @@ function onPanel(e){const el=e.target;const num=parseFloat(el.value),ok=isFinite
     else if(k==='rel'){if(ok){if(f.attached)f.rel=norm(num);else f.abs=S.rod.theta+num}}
     else if(k==='angSel'){if(el.value!=='custom'){const v=+el.value;if(f.attached)f.rel=v;else f.abs=S.rod.theta+v}}
     else if(k==='s'){if(e.type!=='change')return;if(ok){if(S.rod.bent)f.s=clamp(num/U().lk,0,(ARMS()[f.arm||0]||{len:0}).len);else{const{a,b}=ext();f.s=clamp(num/U().lk,a,b)}}}
+    else if(k==='cap'){if(e.type!=='change')return;f.cap=el.value.trim()===''||!(num>0)?null:num}
     else if(k==='arm'){if(e.type!=='change')return;if(ok&&num>=0){const m=setArmLen(f,num/U().lk),n=$(`#f${f.id}_armMsg`);if(n){n.textContent=m||'已調整力臂。';n.style.color=m?'var(--cw)':''}}}
     else if(k==='follow')f.follow=el.checked;
     else if(k==='role'){f.role=el.value;render();syncPanel();commit();return}}
@@ -1542,12 +1544,12 @@ function taskOnlySVG(){if(!TK.on)return'';let g='';
   if(S.drag&&S.drag.type==='armline')g+=wline(S.drag.A,S.drag.B,'stroke:var(--accent);stroke-width:3px;stroke-linecap:round');
   return`<g style="pointer-events:none">${g}</g>`}
 function delState(){const f=S.selected!=null?byId(S.selected):null;$('#delBtn').disabled=!f||!!(TK.on&&f.given)}
-function taskChrome(){{const sb=$('[data-tool-btn="spring"]');sb.disabled=TK.on;$('[data-tool-btn="lever"]').disabled=TK.on;if(TK.on&&(S.tool==='spring'||S.tool==='lever')){S.tool='select';$$('[data-tool-btn]').forEach(x=>x.setAttribute('aria-pressed',x.dataset.toolBtn==='select'))}}$('#wbar').hidden=!S.balance;$$('[data-wt]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.wt===(S.wtool||'add')));delState();$('#exitTaskBtn').hidden=!TK.on;const lk=predLocked();$('#tkLock').hidden=!lk;readout.hidden=TK.on&&(lk||TK.hideInfo);
+function taskChrome(){{const sb=$('[data-tool-btn="spring"]');sb.disabled=TK.on||S.forces.some(f=>f.kind==='rspring');if(sb.disabled&&S.tool==='spring'){S.tool='draw';$$('[data-tool-btn]').forEach(x=>x.setAttribute('aria-pressed',x.dataset.toolBtn==='draw'))}$('[data-tool-btn="lever"]').disabled=TK.on;if(TK.on&&(S.tool==='spring'||S.tool==='lever')){S.tool='select';$$('[data-tool-btn]').forEach(x=>x.setAttribute('aria-pressed',x.dataset.toolBtn==='select'))}}$('#wbar').hidden=!S.balance;$$('[data-wt]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.wt===(S.wtool||'add')));delState();$('#exitTaskBtn').hidden=!TK.on;const lk=predLocked();$('#tkLock').hidden=!lk;readout.hidden=TK.on&&(lk||TK.hideInfo);
   $('#preset').disabled=TK.on;$$('[data-mode-btn]').forEach(b=>b.disabled=TK.on);$('#relBtn').disabled=relBlocked()}
 function taskPanelLocks(){delState();const lk=predLocked();$$('[data-show]').forEach(b=>b.disabled=TK.on&&(lk||TK.lockShow.includes(b.dataset.show)));
   $$('[data-r]').forEach(el=>el.disabled=(TK.on&&!!TK.freeze.rod)||(!!S.rod.bent&&el.dataset.r!=='theta'));
   S.forces.forEach(f=>{const c=$(`[data-card="${f.id}"]`);if(!c)return;c.hidden=!!(TK.on&&f.unknown);c.querySelectorAll('.fbody input,.fbody select,.fbody button').forEach(el=>{const k=el.dataset.k;
-    el.disabled=(TK.on&&k==='arm')||(f.kind==='spring'&&k==='mag')||TK.on&&!!(f.given||(TK.freeze.pos&&(k==='s'||el.dataset.act==='end'||el.dataset.act==='del'))||(TK.forceLock&&k==='mag'))})})}
+    el.disabled=(TK.on&&k==='arm')||((f.kind==='spring'||f.kind==='rspring')&&k==='mag')||TK.on&&!!(f.given||(TK.freeze.pos&&(k==='s'||el.dataset.act==='end'||el.dataset.act==='del'))||(TK.forceLock&&k==='mag'))})})}
 function toolBtns(tools){const lk=predLocked()?' disabled':'';return'<div class="tk-tools">'+tools.map(k=>{
   if(k==='arm')return`<button class="btn sm${S.show.arm?' tog':''}" data-tk="tool" data-v="arm" aria-pressed="${S.show.arm}"${lk}>${S.show.arm?'關閉力臂':'打開力臂'}</button>`;
   if(k==='equiv')return`<button class="btn sm" data-tk="tool" data-v="equiv"${lk}>播放等效力臂</button>`;
@@ -1714,7 +1716,7 @@ function extraSVG(){let g='';
   return g}
 
 /* ---------- spring scale (auto-balancing pull) ---------- */
-function updateSprings(){const sp=S.forces.filter(f=>f.kind==='spring');if(!sp.length)return;const f=sp[0];
+function updateSpringsOld(){const sp=S.forces.filter(f=>f.kind==='spring');if(!sp.length)return;const f=sp[0];
   if(!f.attached){f.bad='off';return}
   const other=S.forces.reduce((a,g)=>g.kind==='spring'?a:a+tau(g),0)+rodTau(),unit=crossPF(f);
   if(Math.abs(unit)<1e-6){f.mag=0;f.bad=Math.abs(other)<1e-9?'':'zero';return}
@@ -1804,9 +1806,9 @@ ops:`<h4>兩種模式</h4><ul><li><b>力矩教學</b>：桿子＋中間的轉軸
 <li><b>放鬆支點</b>：桿子依力矩開始轉動，讀數框顯示角速度和最大角速度；槓桿模式還會畫出施力點和抗力點移動的距離。按「重設角度」回到放鬆前。</li></ul>
 <h4>設定面板</h4><ul><li><b>顯示</b>：力矩、合力矩、力臂、分力、等效力臂可個別開關；「播放」會示範力沿作用線滑到垂足、再轉到桿上。</li>
 <li><b>力矩計算</b>：列出每個力的「力 × 力臂」，以及逆時針、順時針力矩總和。</li>
-<li><b>力量卡片</b>：可輸入名稱、大小、方向角（含「垂直槓桿」「平行槓桿」選項）、力臂、作用點、推或拉、施力或抗力。<br>輸入力臂時：力垂直桿臂會移動作用點，不垂直會轉動力的方向。</li>
+<li><b>力量卡片</b>：可輸入名稱、大小、方向角（含「垂直槓桿」「平行槓桿」選項）、力臂、作用點、推或拉、施力或抗力。<br>輸入力臂時：力垂直桿臂會移動作用點，不垂直會轉動力的方向。<br>彈簧秤和抗力彈簧可以設定「彈力上限」，空白表示無上限。</li>
 <li><b>進階設定</b>：公式顯示（r·F·sinθ、向量外積）、單位、網格、空氣阻尼、桿子質量、模擬速度等。</li></ul>
-<h4>畫面</h4><ul><li>滾輪或雙指捏合縮放；右下角「100%」回到原始大小與位置。</li><li>點力臂的數字，會直接打開那個力的卡片，可以手動輸入力臂。</li><li>「範例」選單可一鍵載入蹺蹺板、開瓶器、鑷子、拔釘器、天平等情境。</li></ul>`,
+<h4>畫面</h4><ul><li>滾輪或雙指捏合縮放；右下角「100%」回到原始大小與位置。</li><li>點力臂的數字，會直接打開那個力的卡片，可以手動輸入力臂。</li><li>「範例」選單可一鍵載入蹺蹺板、開瓶器、鑷子、拔釘器、天平等情境。開瓶器、鑷子、拔釘器的抗力點是一個<b>抗力彈簧</b>：一開始沒有力，請用「畫力」自己施力，抗力會自動跟著平衡；超過彈力上限（瓶蓋打開、釘子拔出）時，放鬆支點槓桿就會轉動。</li></ul>`,
 tasks:`<h4>開始之前</h4><ul><li>先按任務分頁的<b>「紀錄管理」</b>，輸入姓名建立或開啟自己的紀錄，進度和證書才會記在你的名下。</li><li>每次打開網頁都從訪客開始。訪客時的進度，開啟紀錄後可以選擇併入。</li><li>換平板時，用「換機碼」把紀錄帶過去，匯入時要輸入姓名驗證。</li></ul>
 <h4>探究步驟卡（A）</h4><ul><li>流程：<b>先預測</b>（選好之前畫面不能操作）→ 照指示動手 → 完成打勾條件 → 按「看結果」。</li><li>預測答錯可以重選；可以自由切換步驟，也可以「重設這一步」。</li>
 <li>A1 力矩和什麼有關？　A2 斜著拉，力臂是什麼？　A3 三種槓桿　A4 多點施力（天平）</li></ul>
@@ -1831,6 +1833,29 @@ function openHelp(tab){const m=modal('helpModal');tab=tab||'ops';
   <div class="helpc">${HELP[tab]}</div></div>`;
   m.onclick=e=>{if(e.target===m||e.target.closest('[data-hclose]')){m.hidden=true;return}const b=e.target.closest('[data-htab]');if(b)openHelp(b.dataset.htab)}}
 $('#helpBtn').addEventListener('click',()=>openHelp());
+
+/* ---------- resistance spring (auto, one-way, with limit) ---------- */
+function capOK(f,k){if(f.cap!=null&&f.cap>0&&k>f.cap){f.mag=f.cap;return false}f.mag=Math.round(k*10)/10;return true}
+function updateSprings(){
+  const other=g=>g.kind!=='spring'&&g.kind!=='rspring';
+  S.forces.filter(f=>f.kind==='rspring').forEach(f=>{f.sat=false;f.bad='';if(!f.attached){f.mag=0;return}
+    const T=S.forces.reduce((a,g)=>other(g)?a+tau(g):a,0)+rodTau(),u=crossPF(f);
+    if(Math.abs(u)<1e-6){f.mag=0;return}const k=-T/u;if(k<=1e-9){f.mag=0;f.bad=Math.abs(T)>1e-6?'slack':'';return}
+    f.sat=!capOK(f,k)});
+  const sp=S.forces.find(f=>f.kind==='spring');if(!sp)return;sp.sat=false;
+  if(!sp.attached){sp.bad='off';return}
+  const T=S.forces.reduce((a,g)=>g.kind==='spring'?a:a+tau(g),0)+rodTau(),u=crossPF(sp);
+  if(Math.abs(u)<1e-6){sp.mag=0;sp.bad=Math.abs(T)<1e-9?'':'zero';return}
+  const k=-T/u;if(k<-1e-9){sp.mag=0;sp.bad='push';return}
+  sp.bad='';sp.sat=!capOK(sp,Math.min(9999,Math.max(0,k)))}
+function rspringSVG(f,P,u){const nx=-u.y,ny=u.x,at=(d,o=0)=>({x:P.x+u.x*d+nx*o,y:P.y+u.y*d+ny*o}),col=f.sat?'var(--cw)':'var(--ink)';
+  const cl=26+Math.min(f.mag,300)*0.25;let d=`M${f1(P.x)},${f1(P.y)}`;const nz=12;
+  for(let i=1;i<=nz;i++){const q=at(cl*i/nz,i===nz?0:(i%2?7:-7));d+=`L${f1(q.x)},${f1(q.y)}`}
+  let g=`<path d="${d}" style="fill:none;stroke:${col};stroke-width:1.8px;stroke-linejoin:round;pointer-events:none"/>`;
+  const a=at(cl,-16),b=at(cl,16);g+=`<line x1="${f1(a.x)}" y1="${f1(a.y)}" x2="${f1(b.x)}" y2="${f1(b.y)}" style="stroke:${col};stroke-width:3px;pointer-events:none"/>`;
+  for(let i=0;i<5;i++){const c=at(cl,-14+i*7),e=at(cl+7,-14+i*7-5);g+=`<line x1="${f1(c.x)}" y1="${f1(c.y)}" x2="${f1(e.x)}" y2="${f1(e.y)}" style="stroke:${col};stroke-width:1px;pointer-events:none"/>`}
+  return g}
+function rsLabel(f){if(f.sat)return`${esc(f.name)} ${ff(f.mag)} gw（已達上限${f.openMsg?'，'+f.openMsg:''}）`;if(f.bad==='slack')return`${esc(f.name)} 0 gw（這個方向不會讓抗力出現）`;return null}
 
 preset('blank');
 taskInit();
