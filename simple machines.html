@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-<title>簡單機械實驗台V3</title>
+<title>簡單機械實驗台V4</title>
 <style>
 :root{--bg:#eef2f6;--card:#fff;--ink:#0f172a;--ink2:#334155;--dim:#64748b;--line:#dbe2ea;--acc:#0e7490;--accs:#cffafe;--o:#ea580c;--b:#2563eb;--g:#16a34a;--warn:#b45309}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -1857,6 +1857,11 @@ function drawBench(m) {
   const lw = 1 / V.s;
   for (let x = 0; x <= W + 1e-6; x += m.grid) { const major = Math.abs(Math.round(x * 100) % 25) < 0.5; c.strokeStyle = COL.chalk + (major ? '.22)' : '.09)'); c.lineWidth = lw * (major ? 1.4 : 1); c.beginPath(); c.moveTo(x, 0); c.lineTo(x, H); c.stroke(); }
   for (let y = 0; y <= H + 1e-6; y += m.grid) { const major = Math.abs(Math.round(y * 100) % 25) < 0.5; c.strokeStyle = COL.chalk + (major ? '.22)' : '.09)'); c.lineWidth = lw * (major ? 1.4 : 1); c.beginPath(); c.moveTo(0, y); c.lineTo(W, y); c.stroke(); }
+  // 半格虛線（2.5 cm）：磁吸也會對到這裡
+  c.strokeStyle = COL.chalk + '.07)'; c.lineWidth = lw; c.setLineDash([3 * lw, 4 * lw]); c.beginPath();
+  for (let x = m.grid / 2; x <= W + 1e-6; x += m.grid) { c.moveTo(x, 0); c.lineTo(x, H); }
+  for (let y = m.grid / 2; y <= H + 1e-6; y += m.grid) { c.moveTo(0, y); c.lineTo(W, y); }
+  c.stroke(); c.setLineDash([]);
   // 桌面
   c.fillStyle = '#d6a66d'; c.fillRect(-F, -0.012, W + 2 * F, 0.012);
   c.fillStyle = 'rgba(0,0,0,.18)'; c.fillRect(0, 0, W, 0.004);
@@ -2281,7 +2286,10 @@ function draw() {
     if (isSel && !app.world) for (const p of [G.segs[0].T1, G.segs[G.segs.length - 1].T2]) { c.strokeStyle = COL.sel; c.lineWidth = 2.4 / V.s; c.fillStyle = 'rgba(0,0,0,.3)'; circ(c, p[0], p[1], 0.014); c.fill(); c.stroke(); }
     // 調整繩子時標出每一段和水平的夾角
     const gst = app.gesture, adj = !app.world && (isSel || (gst && ((gst.type === 'ropeEnd' && gst.id === r.id) || (gst.type === 'move' && (gst.id === r.a.part || gst.id === r.b.part)))));
-    if (adj) for (const s of G.segs) if (s.len > 0.04) { const lowFirst = s.T1[1] <= s.T2[1], p0 = lowFirst ? s.T1 : s.T2, u = lowFirst ? s.u : [-s.u[0], -s.u[1]]; drawAngleMark(p0, u); }
+    if (adj) G.segs.forEach((s, i) => { if (s.len <= 0.04) return;
+      // 角度標在繩子端點那一頭（不擠在滑輪旁）；兩頭都是滑輪時標在較低的一頭
+      const n = G.segs.length; let atT1 = i === 0 ? true : i === n - 1 ? false : s.T1[1] <= s.T2[1]; if (n === 1) atT1 = s.T1[1] <= s.T2[1];
+      drawAngleMark(atT1 ? s.T1 : s.T2, atT1 ? s.u : [-s.u[0], -s.u[1]]); });
   }
   // 元件：黑板元件在下，物體在上
   const order = ['pulley', 'pivot', 'incline', 'wheel', 'plank', 'block', 'mpulley', 'handle'];
@@ -2303,6 +2311,18 @@ function draw() {
   if (pv && pv.kind === 'force') { drawArrow(pv.a, pv.b, COL.force, 3.4, false); const L = Math.hypot(pv.b[0] - pv.a[0], pv.b[1] - pv.a[1]); label(fmtF(L / app.fScale * KGW), pv.b[0], pv.b[1], { px: 13, color: '#1c1917', bg: 'rgba(253,230,138,.95)', dy: -16 }); }
   if (pv && pv.kind === 'scale') drawSpringScale(pv.b, pv.a, 0.15, 0, true, '彈簧秤');
   if (pv && pv.kind === 'rope') { c.strokeStyle = COL.rope; c.lineWidth = 2.4 / V.s; c.setLineDash([5 / V.s, 4 / V.s]); c.beginPath(); pv.pts.forEach((q, i) => i ? c.lineTo(q[0], q[1]) : c.moveTo(q[0], q[1])); c.stroke(); c.setLineDash([]); }
+  // 拉繩子、選取繩子時，標出每個滑輪圓周上的 8 個接點
+  const gg = app.gesture;
+  if (!app.world && (app.tool === 'rope' || (sel && sel.kind === 'rope') || (gg && (gg.type === 'drawRope' || gg.type === 'ropeMid' || gg.type === 'ropeEnd')))) {
+    for (const q of m.parts) { if (!isPulleyPart(q)) continue; const cq = poseOf(q.id);
+      // 中心的連接點（橘色方框）：繩子端點放這裡＝綁在滑輪上
+      const hs = 0.0055; c.fillStyle = 'rgba(251,146,60,.95)'; c.strokeStyle = '#7c2d12'; c.lineWidth = 1.2 / V.s; c.fillRect(cq.x - hs, cq.y - hs, 2 * hs, 2 * hs); c.strokeRect(cq.x - hs, cq.y - hs, 2 * hs, 2 * hs);
+      for (let k = 0; k < RIM_N; k++) { const a = k * 2 * Math.PI / RIM_N; c.fillStyle = 'rgba(255,255,255,.9)'; c.strokeStyle = '#0f766e'; c.lineWidth = 1.2 / V.s; circ(c, cq.x + q.r * Math.cos(a), cq.y + q.r * Math.sin(a), 0.0045); c.fill(); c.stroke(); } }
+    const hot = gg && (gg.type === 'drawRope' || gg.type === 'ropeMid') && app.lastW ? rimHit(app.lastW) : null;
+    const hotC = gg && (gg.type === 'drawRope' || gg.type === 'ropeEnd') && app.lastW ? centerHit(app.lastW) : null;
+    if (hotC) { const cq = poseOf(hotC.id), hs = 0.009; c.fillStyle = '#86efac'; c.strokeStyle = '#14532d'; c.lineWidth = 1.8 / V.s; c.fillRect(cq.x - hs, cq.y - hs, 2 * hs, 2 * hs); c.strokeRect(cq.x - hs, cq.y - hs, 2 * hs, 2 * hs); }
+    if (hot && !hotC) { c.fillStyle = '#facc15'; c.strokeStyle = '#78350f'; c.lineWidth = 1.6 / V.s; circ(c, hot.p[0], hot.p[1], 0.008); c.fill(); c.stroke(); }
+  }
   if (pv && pv.snap) { c.strokeStyle = '#86efac'; c.lineWidth = 2 / V.s; circ(c, pv.snap[0], pv.snap[1], 0.012); c.stroke(); }
   // 時間與提示
   screenTf();
@@ -2355,6 +2375,58 @@ function fixConflict(c) {
   toast('已改成由彈簧秤等速拉；按 ▶ 播放');
 }
 // 拖曳繩子的端點（或拉環）時，繩長就是目前的路徑長：拉長、縮短都保持拉直
+/* ---------- 滑輪圓周上的 8 個接點：繩子經過哪幾個點，就決定從哪一側繞過 ---------- */
+const RIM_N = 8;
+const isPulleyPart = q => q && (q.type === 'pulley' || q.type === 'mpulley');
+const centerTol = q => Math.max(q.r * 0.5, px(coarse() ? 10 : 7));
+function centerHit(w) {   // 滑輪中心的「連接點」：繩子端點放在這裡就是綁在滑輪（軸）上
+  let best = null, bd = Infinity;
+  for (const q of app.model.parts) { if (!isPulleyPart(q)) continue; const c = poseOf(q.id), d = Math.hypot(w[0] - c.x, w[1] - c.y); if (d < centerTol(q) && d < bd) { bd = d; best = q; } }
+  return best;
+}
+function rimHit(w) {   // 手指附近的滑輪，以及最近的圓周接點（中心的連接點不算）
+  let best = null;
+  for (const q of app.model.parts) {
+    if (!isPulleyPart(q)) continue; const c = poseOf(q.id), d = Math.hypot(w[0] - c.x, w[1] - c.y);
+    if (d > q.r + px(coarse() ? 22 : 16) || d < centerTol(q)) continue;
+    const k = ((Math.round(Math.atan2(w[1] - c.y, w[0] - c.x) / (2 * Math.PI / RIM_N)) % RIM_N) + RIM_N) % RIM_N, a = k * 2 * Math.PI / RIM_N;
+    if (!best || d < best.d) best = { q, k, a, d, p: [c.x + q.r * Math.cos(a), c.y + q.r * Math.sin(a)] };
+  }
+  return best;
+}
+function sideByDots(prev, c, r, next, angs) {   // 兩種繞法中，哪一種的接觸弧包含使用者經過的接點
+  if (!angs || !angs.length) return null;
+  let mx = 0, my = 0; angs.forEach(a => { mx += Math.cos(a); my += Math.sin(a); }); const am = Math.atan2(my, mx);
+  const angD = (x, y) => Math.abs(Math.atan2(Math.sin(x - y), Math.cos(x - y)));
+  const cand = [1, -1].map(s => {
+    const G = Phys.ropeGeom({ nodes: [{ body: Phys.WORLD, lp: prev, r: 0 }, { body: Phys.WORLD, lp: [c[0], c[1]], r, s }, { body: Phys.WORLD, lp: next, r: 0 }] });
+    const t1 = G.segs[0].T2, t2 = G.segs[1].T1, a1 = Math.atan2(t1[1] - c[1], t1[0] - c[0]), a2 = Math.atan2(t2[1] - c[1], t2[0] - c[0]);
+    // 繩子沿著前進方向繞滑輪：由進入點 t1 的前進方向判斷順／逆時針，接觸弧就是 t1 → t2 這一段
+    const norm = x => ((x % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+    const ccw = (t1[0] - c[0]) * (t1[1] - prev[1]) - (t1[1] - c[1]) * (t1[0] - prev[0]) > 0;
+    const d = ccw ? norm(a2 - a1) : -norm(a1 - a2), mid = a1 + d / 2, half = Math.abs(d) / 2;
+    const inside = angs.filter(a => angD(a, mid) <= half + 0.2).length;
+    // 兩段繩子交叉（繩子打結繞一圈）不合理，不選
+    const crs = (o, p1, p2) => (p1[0] - o[0]) * (p2[1] - o[1]) - (p1[1] - o[1]) * (p2[0] - o[0]);
+    const cross2 = crs(prev, t1, t2) * crs(prev, t1, next) < 0 && crs(t2, next, prev) * crs(t2, next, t1) < 0;
+    return { s, score: (cross2 ? -1000 : 0) + inside * 10 - angD(mid, am) };
+  });
+  return cand[0].score >= cand[1].score ? cand[0].s : cand[1].s;
+}
+function ropeNodePts(r) {   // 繩子各節點的位置：兩端點、經過的滑輪中心
+  const G = ropeGeomModel(app.model, r), pts = [G.segs[0].T1];
+  for (const v of r.via) { const c = poseOf(v.part); if (c) pts.push([c.x, c.y]); }
+  pts.push(G.segs[G.segs.length - 1].T2); return pts;
+}
+function ropeBodyHit(w) {   // 已選取的繩子：點到哪一段直線，或點到繞在哪個滑輪上的部分
+  const s = app.sel; if (!s || s.kind !== 'rope' || app.world) return null;
+  const r = app.model.ropes.find(x => x.id === s.id); if (!r) return null;
+  const tol = px(coarse() ? 14 : 9);
+  for (let j = 0; j < r.via.length; j++) { const q = partOf(app.model, r.via[j].part), c = poseOf(r.via[j].part); if (q && c && Math.abs(Math.hypot(w[0] - c.x, w[1] - c.y) - q.r) < tol) return { r, via: j }; }
+  const G = ropeGeomModel(app.model, r);
+  for (let i = 0; i < G.segs.length; i++) if (segDist(w, G.segs[i].T1, G.segs[i].T2) < tol) return { r, seg: i };
+  return null;
+}
 function fitRope(r) { r.L = ropeGeomModel(app.model, r).total; }
 function fitRopesAt(partId) { for (const r of app.model.ropes) if (r.a.part === partId || r.b.part === partId) fitRope(r); }
 function extendRopes() { for (const r of app.model.ropes) { const L = ropeGeomModel(app.model, r).total; if (!r.L || L > r.L) r.L = L; } }
@@ -2439,7 +2511,7 @@ function snapOnBody(w, p) {
   }
   return { l: best, w: poseW(p.id, best) };
 }
-const gridSnap = (v) => app.snap ? Math.round(v / app.model.grid) * app.model.grid : v;
+const gridSnap = (v) => { const st = app.model.grid / 2; return app.snap ? Math.round(v / st) * st : v; };   // 磁吸到半格（2.5 cm），物體才能對齊動滑輪正下方
 
 function snapAngle(ang) {
   const cands = [];
@@ -2491,6 +2563,8 @@ function onDown(e) {
   // 選取工具
   const re = ropeEndHit(w);
   if (re) { app.gesture = { type: 'ropeEnd', id: re.r.id, end: re.end, moved: false }; return; }
+  const rb = ropeBodyHit(w);
+  if (rb) { app.gesture = { type: 'ropeMid', id: rb.r.id, seg: rb.seg, via: rb.via, start: w, moved: false }; return; }
   const hs = hitScale(w);
   if (hs) {
     app.sel = { kind: 'scale', id: hs.s.id }; renderPanel();
@@ -2528,7 +2602,7 @@ function onDown(e) {
 }
 function onMove(e) {
   const { s, w } = evW(e); if (ptrs.has(e.pointerId)) ptrs.set(e.pointerId, s);
-  const g = app.gesture, m = app.model;
+  const g = app.gesture, m = app.model; app.lastW = w;
   if (!g) { if (e.pointerType === 'mouse') cv.style.cursor = app.tool !== 'select' ? 'crosshair' : (hitForce(w) || hitPart(w)) ? 'pointer' : ''; return; }
   if (g.type === 'pinch') { if (ptrs.size < 2) return; const [a, b] = [...ptrs.values()]; app.zoom = clamp(g.z * Math.hypot(a[0] - b[0], a[1] - b[1]) / g.d, 0.7, 3); fitView(); return; }
   if (g.type === 'pan') { app.panX = g.px - (s[0] - g.s0[0]) / V.s; app.panY = g.py + (s[1] - g.s0[1]) / V.s; fitView(); return; }
@@ -2547,6 +2621,12 @@ function onMove(e) {
     return;
   }
   if (g.type === 'scaleHook') { const s = m.scales.find(x => x.id === g.id); const p = hitPart(w, isBody); app.preview = { kind: 'snap', snap: p ? snapOnBody(w, p).w : null }; s._drag = w; return; }
+  if (g.type === 'ropeMid') {
+    if (Math.hypot(w[0] - g.start[0], w[1] - g.start[1]) > px(6)) g.moved = true; if (!g.moved) return;
+    const r = m.ropes.find(x => x.id === g.id), pts = ropeNodePts(r), i = g.via != null ? g.via : g.seg, j = g.via != null ? g.via + 2 : g.seg + 1;
+    g.tgt = rimHit(w); const mid = g.tgt ? g.tgt.p : w;
+    app.preview = { kind: 'rope', pts: [pts[i], mid, pts[j]], dot: g.tgt ? g.tgt.p : null }; return;
+  }
   if (g.type === 'ropeEnd') {
     const r = m.ropes.find(x => x.id === g.id);
     if (!g.moved) { g.moved = true; g.orig = deep(r[g.end]); const hp = r[g.end].part && partOf(m, r[g.end].part); g.handle = hp && hp.type === 'handle' ? hp.id : null; }
@@ -2557,9 +2637,11 @@ function onMove(e) {
   if (g.type === 'drawRope') {
     g.pts.push(w);
     for (const q of m.parts) {
-      if ((q.type !== 'pulley' && q.type !== 'mpulley') || g.via.some(v => v.part === q.id)) continue;
+      if ((q.type !== 'pulley' && q.type !== 'mpulley') || g.via.some(v => v.part === q.id) || g.a.e.part === q.id) continue;
       const pq = poseOf(q.id); if (Math.hypot(w[0] - pq.x, w[1] - pq.y) < q.r + px(14)) g.via.push({ part: q.id });
     }
+    const rh = rimHit(w); g.dots = g.dots || {};
+    if (rh && g.via.some(v => v.part === rh.q.id)) { const L = (g.dots[rh.q.id] = g.dots[rh.q.id] || []); if (L[L.length - 1] !== rh.a) L.push(rh.a); }
     const en = ropeEndAt(w, true);
     app.preview.pts = [g.a.w].concat(g.via.map(v => { const q = poseOf(v.part); return [q.x, q.y]; })).concat([en ? en.w : w]); app.preview.snap = en ? en.w : null; return;
   }
@@ -2623,16 +2705,35 @@ function onUp(e) {
     const p = hitPart(w, isBody); if (p) { const sp = snapOnBody(w, p); s.hook = { part: p.id, lx: sp.l[0], ly: sp.l[1] }; commit(); toast('掛勾已改接'); }
     renderPanel(); return;
   }
+  if (g.type === 'ropeMid') {
+    app.preview = null; if (!g.moved) return;
+    const r = m.ropes.find(x => x.id === g.id), t = g.tgt;
+    const sideFor = (vIdx, q, ang) => { const pts = ropeNodePts(r), c = poseOf(q.id); return sideByDots(pts[vIdx], [c.x, c.y], q.r, pts[vIdx + 2], [ang]); };
+    if (t) {
+      const have = r.via.findIndex(v => v.part === t.q.id);
+      if (g.via != null && have === g.via) { r.via[g.via].s = sideFor(g.via, t.q, t.a); toast('已改成從這一側繞過滑輪'); }
+      else if (have >= 0) { toast('這條繩子已經繞過這個滑輪了'); return; }
+      else {
+        let idx;
+        if (g.via != null) { r.via.splice(g.via, 1, { part: t.q.id, s: 1 }); idx = g.via; toast('已把繩子改繞到這個滑輪'); }
+        else { r.via.splice(g.seg, 0, { part: t.q.id, s: 1 }); idx = g.seg; toast('已把繩子掛到滑輪上'); }
+        r.via[idx].s = sideFor(idx, t.q, t.a);
+      }
+    } else if (g.via != null) { r.via.splice(g.via, 1); toast('已把繩子從滑輪上解開'); }
+    else { toast('把繩子拖到滑輪圓周上的點，就能掛上去'); return; }
+    fitRope(r); commit(); renderPanel(); return;
+  }
   if (g.type === 'ropeEnd') {
     app.preview = null; const r = m.ropes.find(x => x.id === g.id);
     if (!g.moved) return;
     let en;
     if (g.handle) {             // 拖的是拉環：拉環跟著走；放到物體上才改接，沒有力或彈簧秤時移除拉環
-      const tgt = hitPart(w, q => q.type !== 'pulley' && q.id !== g.handle);
+      const tgt = centerHit(w) || hitPart(w, q => !isPulleyPart(q) && q.id !== g.handle);
       if (!tgt) { fitRopesAt(g.handle); commit(); renderPanel(); return; }
       en = ropeEndAt(w, false, false); r[g.end] = en.e;
       if (!m.forces.some(f => f.part === g.handle) && !m.scales.some(s => s.hook.part === g.handle) && !m.ropes.some(x => x !== r && (x.a.part === g.handle || x.b.part === g.handle))) m.parts = m.parts.filter(p => p.id !== g.handle);
     } else { en = ropeEndAt(w, false, true); r[g.end] = en.e; }
+    if (en.e.part) r.via = r.via.filter(v => v.part !== en.e.part);
     fitRope(r);
     if (en.e.wind) {
       const viaPt = v => { const q = poseOf(v.part); return [q.x, q.y]; };
@@ -2651,11 +2752,12 @@ function onUp(e) {
   if (g.type === 'drawRope') {
     app.preview = null;
     const en = ropeEndAt(w, false, true);
+    if (en.e.part) g.via = g.via.filter(v => v.part !== en.e.part);   // 端點綁在滑輪中心：這個滑輪不是繞過去的
     if (Math.hypot(en.w[0] - g.a.w[0], en.w[1] - g.a.w[1]) < 0.02 && !g.via.length) { toast('從一個接點拖到另一個接點，就能拉一條繩子'); return; }
     const pts = [g.a.w].concat(g.via.map(v => { const q = poseOf(v.part); return [q.x, q.y]; })).concat([en.w]);
-    g.via.forEach((v, i) => { const q = partOf(m, v.part), pq = poseOf(v.part), c = [pq.x, pq.y]; c.r = q.r; v.s = sideOver(m, pts[i], c, pts[i + 2], q.type === 'mpulley' && pts[i][1] > pq.y && pts[i + 2][1] > pq.y); });
+    g.via.forEach((v, i) => { const q = partOf(m, v.part), pq = poseOf(v.part), c = [pq.x, pq.y]; c.r = q.r; v.s = sideByDots(pts[i], c, q.r, pts[i + 2], (g.dots || {})[v.part]) || sideOver(m, pts[i], c, pts[i + 2], q.type === 'mpulley' && pts[i][1] > pq.y && pts[i + 2][1] > pq.y); });
     const r = { id: uid(m, 'r'), a: g.a.e, via: g.via, b: en.e };
-    resolveWind(r, pts);
+    resolveWind(r, pts); fitRope(r);
     m.ropes.push(r); app.sel = { kind: 'rope', id: r.id }; setTool('select'); commit(); renderPanel(); toast('已加上繩子' + (g.via.length ? `，繞過 ${g.via.length} 個滑輪` : '')); return;
   }
   if (g.type === 'forceEdit') { const f = m.forces.find(x => x.id === g.id); if (f && !f.part && g.part === 'tail') toast('這個力沒有接觸任何物體，播放時不會作用；把橘色圓點拖回物體上就會重新施力'); commit(); renderPanel(); return; }
@@ -2725,7 +2827,9 @@ function resolveWind(r, pts) {
 function setHandTarget(id, w) { const wf = app.world && app.world.forces.find(x => x.id === id); if (wf) wf.target = w; }
 // 繩子端點：物體上的點、黑板元件，或黑板上的格點
 function ropeEndAt(w, peek, makeHandle) {
-  const m = app.model, p = hitPart(w, q => q.type !== 'pulley');
+  const m = app.model, cq = centerHit(w);
+  if (cq) { const c = poseOf(cq.id); return { e: cq.type === 'pulley' ? { part: cq.id } : { part: cq.id, lx: 0, ly: 0 }, w: [c.x, c.y], center: true }; }
+  const p = hitPart(w, q => !isPulleyPart(q));
   if (p && p.type === 'wheel') {
     const q = poseOf(p.id), d = Math.hypot(w[0] - q.x, w[1] - q.y), r = d < (p.R + p.r) / 2 ? p.r : p.R, k = r / (d || 1);
     const at = [q.x + (w[0] - q.x) * k, q.y + (w[1] - q.y) * k];
@@ -3114,7 +3218,7 @@ function renderSel() {
     const r = it, G = ropeGeomModel(m, r);
     box.appendChild(el('h3', null, `<span>〰 繩子</span><span class="sub">繞過 ${r.via.length} 個滑輪</span>`));
     box.appendChild(slider('繩長', Math.ceil(G.total * 200) / 200, Math.max(G.total + 0.6, r.L), 0.005, () => r.L, v => r.L = Math.max(v, G.total), v => cm(v) + (v > G.total + 0.002 ? `（鬆 ${cm(v - G.total)}）` : '（拉直）')));
-    box.appendChild(el('p', 'note', '繩長固定，不會自己變短。拖曳繩子兩端的圓圈可以改接到別的地方，往外拉會把繩子拉長；繩子只能拉、不能推。'));
+    box.appendChild(el('p', 'note', '拖曳兩端的圓圈可以改接到別的地方。滑輪<b>中心的橘色方框</b>是連接點：繩子端點放在這裡就是綁在滑輪（軸）上；<b>圓周上的白點</b>是繞過用的。<b>掛上滑輪</b>：把繩子中段拖到滑輪圓周上的小圓點放開，經過上方的點就從上方繞、經過下方的點就從下方繞。<b>解開</b>：把繞在滑輪上的那一段拖到空白處放開；拖到同一個滑輪的另一個點，就改從那一側繞。繩子只能拉、不能推。'));
     const row = el('div', 'btnrow'); const x = el('button', 'btn danger', '刪除繩子'); x.type = 'button'; x.onclick = deleteSel; row.appendChild(x); box.appendChild(row);
   } else if (s.kind === 'scale') {
     const sc = it;
